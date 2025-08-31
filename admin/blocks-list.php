@@ -1,180 +1,163 @@
 <?php
 /**
- * Container Block Designer - Blocks List
- * Version: 2.3.0 - FIXED
+ * Container Block Designer - Blocks-Liste
+ * 
+ * @package ContainerBlockDesigner
+ * @since 2.5.0
  */
 
-// Security check
+// Sicherheit: Direkten Zugriff verhindern
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Get blocks from database
-global $wpdb;
-$table_name = CBD_TABLE_BLOCKS;
-
-// Ensure table exists
-$table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
-
-if (!$table_exists) {
-    echo '<div class="notice notice-error"><p>Die Datenbanktabelle existiert nicht. Bitte deaktivieren und reaktivieren Sie das Plugin.</p></div>';
-    return;
-}
-
-$blocks = $wpdb->get_results("SELECT * FROM $table_name ORDER BY created DESC");
+// Blocks aus der Datenbank abrufen
+$blocks = CBD_Database::get_blocks();
 ?>
 
 <div class="wrap">
-    <h1 class="wp-heading-inline">Container Blocks</h1>
-    <a href="?page=cbd-new-block" class="page-title-action">Neuen Block erstellen</a>
+    <h1 class="wp-heading-inline">
+        <?php _e('Container Blocks', 'container-block-designer'); ?>
+    </h1>
+    
+    <a href="<?php echo admin_url('admin.php?page=cbd-new-block'); ?>" class="page-title-action">
+        <?php _e('Neuer Block', 'container-block-designer'); ?>
+    </a>
+    
     <hr class="wp-header-end">
-
-    <table class="wp-list-table widefat fixed striped">
-        <thead>
-            <tr>
-                <th style="width: 50px;">ID</th>
-                <th>Name</th>
-                <th>Slug</th>
-                <th>Beschreibung</th>
-                <th style="width: 200px;">Styles</th>
-                <th style="width: 150px;">Features</th>
-                <th>Status</th>
-                <th>Erstellt</th>
-                <th>Aktionen</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php if ($blocks): ?>
+    
+    <?php if (empty($blocks)): ?>
+        <div class="cbd-empty-state">
+            <h2><?php _e('Keine Blocks gefunden', 'container-block-designer'); ?></h2>
+            <p><?php _e('Erstellen Sie Ihren ersten Container-Block, um loszulegen.', 'container-block-designer'); ?></p>
+            <a href="<?php echo admin_url('admin.php?page=cbd-new-block'); ?>" class="button button-primary">
+                <?php _e('Ersten Block erstellen', 'container-block-designer'); ?>
+            </a>
+        </div>
+    <?php else: ?>
+        <table class="wp-list-table widefat fixed striped">
+            <thead>
+                <tr>
+                    <th width="5%"><?php _e('ID', 'container-block-designer'); ?></th>
+                    <th width="20%"><?php _e('Name', 'container-block-designer'); ?></th>
+                    <th width="20%"><?php _e('Titel', 'container-block-designer'); ?></th>
+                    <th width="25%"><?php _e('Beschreibung', 'container-block-designer'); ?></th>
+                    <th width="10%"><?php _e('Status', 'container-block-designer'); ?></th>
+                    <th width="10%"><?php _e('Erstellt', 'container-block-designer'); ?></th>
+                    <th width="10%"><?php _e('Aktionen', 'container-block-designer'); ?></th>
+                </tr>
+            </thead>
+            <tbody>
                 <?php foreach ($blocks as $block): ?>
-                    <?php 
-                    // Parse config and features
-                    $config = json_decode($block->config, true) ?: array();
-                    $styles = isset($config['styles']) ? $config['styles'] : array();
-                    $features = json_decode($block->features, true) ?: array();
-                    
-                    // Style preview
-                    $style_preview = array();
-                    if (!empty($styles['background']['color'])) {
-                        $style_preview[] = 'BG: ' . $styles['background']['color'];
-                    }
-                    if (!empty($styles['padding'])) {
-                        $padding_values = array_filter($styles['padding']);
-                        if (!empty($padding_values)) {
-                            $style_preview[] = 'Padding: ' . implode('/', $padding_values) . 'px';
-                        }
-                    }
-                    if (!empty($styles['border']['width']) && $styles['border']['width'] > 0) {
-                        $style_preview[] = 'Border: ' . $styles['border']['width'] . 'px';
-                    }
-                    
-                    // Features preview
-                    $active_features = array();
-                    foreach ($features as $feature_key => $feature_data) {
-                        if (!empty($feature_data['enabled'])) {
-                            $feature_names = array(
-                                'icon' => 'Icon',
-                                'collapse' => 'Collapse',
-                                'numbering' => 'Nummerierung',
-                                'copyText' => 'Text kopieren',
-                                'screenshot' => 'Screenshot'
-                            );
-                            $active_features[] = $feature_names[$feature_key] ?? $feature_key;
-                        }
-                    }
-                    ?>
                     <tr>
-                        <td><?php echo esc_html($block->id); ?></td>
-                        <td><strong><?php echo esc_html($block->name); ?></strong></td>
-                        <td><code><?php echo esc_html($block->slug); ?></code></td>
-                        <td><?php echo esc_html($block->description ?: '-'); ?></td>
+                        <td><?php echo esc_html($block['id']); ?></td>
                         <td>
-                            <?php if (!empty($style_preview)): ?>
-                                <small><?php echo esc_html(implode(' | ', $style_preview)); ?></small>
+                            <strong>
+                                <a href="<?php echo admin_url('admin.php?page=cbd-edit-block&id=' . $block['id']); ?>">
+                                    <?php echo esc_html($block['name']); ?>
+                                </a>
+                            </strong>
+                        </td>
+                        <td><?php echo esc_html($block['title']); ?></td>
+                        <td><?php echo esc_html($block['description']); ?></td>
+                        <td>
+                            <?php if ($block['status'] === 'active'): ?>
+                                <span class="cbd-status-badge cbd-status-active">
+                                    <?php _e('Aktiv', 'container-block-designer'); ?>
+                                </span>
+                            <?php elseif ($block['status'] === 'inactive'): ?>
+                                <span class="cbd-status-badge cbd-status-inactive">
+                                    <?php _e('Inaktiv', 'container-block-designer'); ?>
+                                </span>
                             <?php else: ?>
-                                <small style="color: #999;">Keine Styles</small>
+                                <span class="cbd-status-badge cbd-status-draft">
+                                    <?php _e('Entwurf', 'container-block-designer'); ?>
+                                </span>
                             <?php endif; ?>
                         </td>
+                        <td><?php echo date_i18n(get_option('date_format'), strtotime($block['created'])); ?></td>
                         <td>
-                            <?php if (!empty($active_features)): ?>
-                                <small><?php echo esc_html(implode(', ', $active_features)); ?></small>
-                            <?php else: ?>
-                                <small style="color: #999;">Keine Features</small>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <span class="status-badge status-<?php echo esc_attr($block->status); ?>">
-                                <?php echo $block->status === 'active' ? 'Aktiv' : 'Inaktiv'; ?>
-                            </span>
-                        </td>
-                        <td><?php echo date_i18n('d.m.Y', strtotime($block->created)); ?></td>
-                        <td>
-                            <a href="?page=cbd-edit-block&id=<?php echo $block->id; ?>" class="button button-small">Bearbeiten</a>
-                            <button class="button button-small cbd-delete-block" data-id="<?php echo $block->id; ?>">Löschen</button>
+                            <div class="row-actions">
+                                <span class="edit">
+                                    <a href="<?php echo admin_url('admin.php?page=cbd-edit-block&id=' . $block['id']); ?>">
+                                        <?php _e('Bearbeiten', 'container-block-designer'); ?>
+                                    </a>
+                                </span> |
+                                <span class="duplicate">
+                                    <a href="<?php echo wp_nonce_url(
+                                        admin_url('admin.php?page=container-block-designer&action=duplicate&block_id=' . $block['id']),
+                                        'cbd_duplicate_block_' . $block['id']
+                                    ); ?>">
+                                        <?php _e('Duplizieren', 'container-block-designer'); ?>
+                                    </a>
+                                </span> |
+                                <span class="delete">
+                                    <a href="<?php echo wp_nonce_url(
+                                        admin_url('admin.php?page=container-block-designer&action=delete&block_id=' . $block['id']),
+                                        'cbd_delete_block_' . $block['id']
+                                    ); ?>" 
+                                    onclick="return confirm('<?php esc_attr_e('Sind Sie sicher, dass Sie diesen Block löschen möchten?', 'container-block-designer'); ?>');"
+                                    class="cbd-delete-link">
+                                        <?php _e('Löschen', 'container-block-designer'); ?>
+                                    </a>
+                                </span>
+                            </div>
                         </td>
                     </tr>
                 <?php endforeach; ?>
-            <?php else: ?>
-                <tr>
-                    <td colspan="9" style="text-align: center; padding: 20px;">
-                        Keine Blocks gefunden. <a href="?page=cbd-new-block">Erstellen Sie Ihren ersten Block</a>
-                    </td>
-                </tr>
-            <?php endif; ?>
-        </tbody>
-    </table>
+            </tbody>
+        </table>
+    <?php endif; ?>
 </div>
 
 <style>
-.status-badge {
+.cbd-empty-state {
+    margin-top: 40px;
+    text-align: center;
+    padding: 40px;
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.cbd-empty-state h2 {
+    font-size: 1.5em;
+    margin-bottom: 10px;
+}
+
+.cbd-empty-state p {
+    color: #666;
+    margin-bottom: 20px;
+}
+
+.cbd-status-badge {
     display: inline-block;
     padding: 3px 8px;
     border-radius: 3px;
     font-size: 12px;
     font-weight: 600;
 }
-.status-badge.status-active {
+
+.cbd-status-active {
     background: #d4f4dd;
     color: #1e8e3e;
 }
-.status-badge.status-inactive {
+
+.cbd-status-inactive {
     background: #fce8e6;
     color: #d33b27;
 }
-</style>
 
-<script>
-jQuery(document).ready(function($) {
-    $('.cbd-delete-block').on('click', function(e) {
-        e.preventDefault();
-        
-        if (!confirm('Sind Sie sicher, dass Sie diesen Block löschen möchten?')) {
-            return;
-        }
-        
-        var blockId = $(this).data('id');
-        var $row = $(this).closest('tr');
-        
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'cbd_delete_block',
-                block_id: blockId,
-                nonce: '<?php echo wp_create_nonce('cbd_delete_block'); ?>'
-            },
-            success: function(response) {
-                if (response.success) {
-                    $row.fadeOut(400, function() {
-                        $(this).remove();
-                    });
-                } else {
-                    alert('Fehler: ' + (response.data || 'Unbekannter Fehler'));
-                }
-            },
-            error: function() {
-                alert('Ein Fehler ist aufgetreten.');
-            }
-        });
-    });
-});
-</script>
+.cbd-status-draft {
+    background: #f0f0f0;
+    color: #666;
+}
+
+.cbd-delete-link {
+    color: #b32d2e !important;
+}
+
+.cbd-delete-link:hover {
+    color: #dc3232 !important;
+}
+</style>

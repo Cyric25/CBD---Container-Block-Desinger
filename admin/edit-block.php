@@ -1,496 +1,437 @@
 <?php
 /**
- * Container Block Designer - Edit Block Page
- * Version: 2.2.2 - WITH INLINE FIX
+ * Container Block Designer - Block bearbeiten
  * 
  * @package ContainerBlockDesigner
+ * @since 2.5.0
  */
 
-// Security check
+// Sicherheit: Direkten Zugriff verhindern
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Get block ID
+// Block-ID abrufen
 $block_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 if (!$block_id) {
-    ?>
-    <div class="wrap">
-        <h1><?php echo esc_html__('Fehler', 'container-block-designer'); ?></h1>
-        <div class="notice notice-error">
-            <p><?php echo esc_html__('Ungültige Block-ID.', 'container-block-designer'); ?></p>
-        </div>
-        <a href="<?php echo admin_url('admin.php?page=container-block-designer'); ?>" class="button">
-            <?php echo esc_html__('Zurück zur Übersicht', 'container-block-designer'); ?>
-        </a>
-    </div>
-    <?php
-    return;
+    wp_die(__('Ungültige Block-ID', 'container-block-designer'));
 }
 
-// Get block data
-global $wpdb;
-$block = $wpdb->get_row($wpdb->prepare(
-    "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
-    $block_id
-));
+// Block-Daten laden
+$block = CBD_Database::get_block($block_id);
 
 if (!$block) {
-    ?>
-    <div class="wrap">
-        <h1><?php echo esc_html__('Fehler', 'container-block-designer'); ?></h1>
-        <div class="notice notice-error">
-            <p><?php echo esc_html__('Block nicht gefunden.', 'container-block-designer'); ?></p>
-        </div>
-        <a href="<?php echo admin_url('admin.php?page=container-block-designer'); ?>" class="button">
-            <?php echo esc_html__('Zurück zur Übersicht', 'container-block-designer'); ?>
-        </a>
-    </div>
-    <?php
-    return;
+    wp_die(__('Block nicht gefunden', 'container-block-designer'));
 }
 
-// Parse config and features
-$config = json_decode($block->config, true) ?: [];
-$styles = isset($config['styles']) ? $config['styles'] : [];
-$features = json_decode($block->features, true) ?: [];
+// Standardwerte setzen
+$styles = $block['styles'] ?: array(
+    'padding' => array('top' => 20, 'right' => 20, 'bottom' => 20, 'left' => 20),
+    'background' => array('color' => '#ffffff'),
+    'text' => array('color' => '#333333', 'alignment' => 'left'),
+    'border' => array('width' => 1, 'color' => '#e0e0e0', 'style' => 'solid', 'radius' => 4)
+);
+
+$features = $block['features'] ?: array(
+    'icon' => array('enabled' => false, 'value' => 'dashicons-admin-generic'),
+    'collapse' => array('enabled' => false, 'defaultState' => 'expanded'),
+    'numbering' => array('enabled' => false, 'format' => 'numeric'),
+    'copyText' => array('enabled' => false, 'buttonText' => 'Text kopieren'),
+    'screenshot' => array('enabled' => false, 'buttonText' => 'Screenshot')
+);
+
+$config = $block['config'] ?: array(
+    'allowInnerBlocks' => true,
+    'templateLock' => false
+);
 ?>
 
 <div class="wrap cbd-admin-wrap">
     <h1 class="wp-heading-inline">
-        <?php echo esc_html__('Block bearbeiten:', 'container-block-designer'); ?> 
-        <?php echo esc_html($block->name); ?>
+        <?php _e('Block bearbeiten:', 'container-block-designer'); ?> 
+        <?php echo esc_html($block['title']); ?>
     </h1>
     
     <a href="<?php echo admin_url('admin.php?page=container-block-designer'); ?>" class="page-title-action">
-        <?php echo esc_html__('← Zurück zur Übersicht', 'container-block-designer'); ?>
+        <?php _e('← Zurück zur Übersicht', 'container-block-designer'); ?>
     </a>
     
     <hr class="wp-header-end">
     
-    <div class="cbd-edit-container">
-        <div class="cbd-edit-main">
-            <form id="cbd-block-form" method="post">
-                <!-- Hidden fields -->
-                <input type="hidden" id="block-id" name="block_id" value="<?php echo esc_attr($block_id); ?>">
-                <input type="hidden" id="cbd-nonce" name="cbd_nonce" value="<?php echo wp_create_nonce('cbd-admin'); ?>">
-                <?php wp_nonce_field('cbd-admin', 'cbd_nonce'); ?>
-                
-                <!-- Basic Information -->
-                <div class="cbd-card">
-                    <h2><?php echo esc_html__('Grundeinstellungen', 'container-block-designer'); ?></h2>
+    <div id="cbd-edit-container">
+        <form id="cbd-block-form" method="post">
+            <?php wp_nonce_field('cbd-admin', 'cbd_nonce'); ?>
+            <input type="hidden" name="block_id" value="<?php echo esc_attr($block_id); ?>">
+            
+            <div class="cbd-form-grid">
+                <div class="cbd-main-content">
                     
-                    <div class="cbd-form-field">
-                        <label for="block-name">
-                            <?php echo esc_html__('Name', 'container-block-designer'); ?> *
-                        </label>
-                        <input type="text" id="block-name" name="name" value="<?php echo esc_attr($block->name); ?>" required class="regular-text">
+                    <!-- Grundeinstellungen -->
+                    <div class="cbd-card">
+                        <h2><?php _e('Grundeinstellungen', 'container-block-designer'); ?></h2>
+                        
+                        <table class="form-table">
+                            <tr>
+                                <th scope="row">
+                                    <label for="block-name"><?php _e('Name', 'container-block-designer'); ?></label>
+                                </th>
+                                <td>
+                                    <input type="text" id="block-name" name="name" 
+                                           value="<?php echo esc_attr($block['name']); ?>" 
+                                           class="regular-text" required>
+                                    <p class="description"><?php _e('Eindeutiger Name (nur Kleinbuchstaben und Bindestriche)', 'container-block-designer'); ?></p>
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <th scope="row">
+                                    <label for="block-title"><?php _e('Titel', 'container-block-designer'); ?></label>
+                                </th>
+                                <td>
+                                    <input type="text" id="block-title" name="title" 
+                                           value="<?php echo esc_attr($block['title']); ?>" 
+                                           class="regular-text" required>
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <th scope="row">
+                                    <label for="block-description"><?php _e('Beschreibung', 'container-block-designer'); ?></label>
+                                </th>
+                                <td>
+                                    <textarea id="block-description" name="description" 
+                                              rows="3" class="large-text"><?php echo esc_textarea($block['description']); ?></textarea>
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <th scope="row">
+                                    <label for="block-status"><?php _e('Status', 'container-block-designer'); ?></label>
+                                </th>
+                                <td>
+                                    <select id="block-status" name="status">
+                                        <option value="active" <?php selected($block['status'], 'active'); ?>><?php _e('Aktiv', 'container-block-designer'); ?></option>
+                                        <option value="inactive" <?php selected($block['status'], 'inactive'); ?>><?php _e('Inaktiv', 'container-block-designer'); ?></option>
+                                        <option value="draft" <?php selected($block['status'], 'draft'); ?>><?php _e('Entwurf', 'container-block-designer'); ?></option>
+                                    </select>
+                                </td>
+                            </tr>
+                        </table>
                     </div>
                     
-                    <div class="cbd-form-field">
-                        <label for="block-slug">
-                            <?php echo esc_html__('Slug', 'container-block-designer'); ?>
-                        </label>
-                        <input type="text" id="block-slug" name="slug" value="<?php echo esc_attr($block->slug); ?>" class="regular-text">
+                    <!-- Styles -->
+                    <div class="cbd-card">
+                        <h2><?php _e('Styles', 'container-block-designer'); ?></h2>
+                        
+                        <table class="form-table">
+                            <!-- Padding -->
+                            <tr>
+                                <th scope="row"><?php _e('Padding', 'container-block-designer'); ?></th>
+                                <td>
+                                    <div class="cbd-spacing-inputs">
+                                        <input type="number" name="styles[padding][top]" 
+                                               value="<?php echo esc_attr($styles['padding']['top'] ?? 20); ?>" 
+                                               min="0" max="100" class="small-text">
+                                        <label><?php _e('Oben', 'container-block-designer'); ?></label>
+                                        
+                                        <input type="number" name="styles[padding][right]" 
+                                               value="<?php echo esc_attr($styles['padding']['right'] ?? 20); ?>" 
+                                               min="0" max="100" class="small-text">
+                                        <label><?php _e('Rechts', 'container-block-designer'); ?></label>
+                                        
+                                        <input type="number" name="styles[padding][bottom]" 
+                                               value="<?php echo esc_attr($styles['padding']['bottom'] ?? 20); ?>" 
+                                               min="0" max="100" class="small-text">
+                                        <label><?php _e('Unten', 'container-block-designer'); ?></label>
+                                        
+                                        <input type="number" name="styles[padding][left]" 
+                                               value="<?php echo esc_attr($styles['padding']['left'] ?? 20); ?>" 
+                                               min="0" max="100" class="small-text">
+                                        <label><?php _e('Links', 'container-block-designer'); ?></label>
+                                    </div>
+                                </td>
+                            </tr>
+                            
+                            <!-- Background -->
+                            <tr>
+                                <th scope="row">
+                                    <label for="bg-color"><?php _e('Hintergrundfarbe', 'container-block-designer'); ?></label>
+                                </th>
+                                <td>
+                                    <input type="text" id="bg-color" name="styles[background][color]" 
+                                           value="<?php echo esc_attr($styles['background']['color'] ?? '#ffffff'); ?>" 
+                                           class="cbd-color-picker">
+                                </td>
+                            </tr>
+                            
+                            <!-- Text -->
+                            <tr>
+                                <th scope="row">
+                                    <label for="text-color"><?php _e('Textfarbe', 'container-block-designer'); ?></label>
+                                </th>
+                                <td>
+                                    <input type="text" id="text-color" name="styles[text][color]" 
+                                           value="<?php echo esc_attr($styles['text']['color'] ?? '#333333'); ?>" 
+                                           class="cbd-color-picker">
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <th scope="row">
+                                    <label for="text-alignment"><?php _e('Textausrichtung', 'container-block-designer'); ?></label>
+                                </th>
+                                <td>
+                                    <select id="text-alignment" name="styles[text][alignment]">
+                                        <option value="left" <?php selected($styles['text']['alignment'] ?? 'left', 'left'); ?>><?php _e('Links', 'container-block-designer'); ?></option>
+                                        <option value="center" <?php selected($styles['text']['alignment'] ?? 'left', 'center'); ?>><?php _e('Zentriert', 'container-block-designer'); ?></option>
+                                        <option value="right" <?php selected($styles['text']['alignment'] ?? 'left', 'right'); ?>><?php _e('Rechts', 'container-block-designer'); ?></option>
+                                        <option value="justify" <?php selected($styles['text']['alignment'] ?? 'left', 'justify'); ?>><?php _e('Blocksatz', 'container-block-designer'); ?></option>
+                                    </select>
+                                </td>
+                            </tr>
+                            
+                            <!-- Border -->
+                            <tr>
+                                <th scope="row"><?php _e('Rahmen', 'container-block-designer'); ?></th>
+                                <td>
+                                    <div class="cbd-border-inputs">
+                                        <input type="number" name="styles[border][width]" 
+                                               value="<?php echo esc_attr($styles['border']['width'] ?? 1); ?>" 
+                                               min="0" max="10" class="small-text">
+                                        <label><?php _e('Breite (px)', 'container-block-designer'); ?></label>
+                                        
+                                        <select name="styles[border][style]">
+                                            <option value="solid" <?php selected($styles['border']['style'] ?? 'solid', 'solid'); ?>><?php _e('Durchgezogen', 'container-block-designer'); ?></option>
+                                            <option value="dashed" <?php selected($styles['border']['style'] ?? 'solid', 'dashed'); ?>><?php _e('Gestrichelt', 'container-block-designer'); ?></option>
+                                            <option value="dotted" <?php selected($styles['border']['style'] ?? 'solid', 'dotted'); ?>><?php _e('Gepunktet', 'container-block-designer'); ?></option>
+                                        </select>
+                                        
+                                        <input type="text" name="styles[border][color]" 
+                                               value="<?php echo esc_attr($styles['border']['color'] ?? '#e0e0e0'); ?>" 
+                                               class="cbd-color-picker">
+                                        
+                                        <input type="number" name="styles[border][radius]" 
+                                               value="<?php echo esc_attr($styles['border']['radius'] ?? 4); ?>" 
+                                               min="0" max="50" class="small-text">
+                                        <label><?php _e('Radius (px)', 'container-block-designer'); ?></label>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
                     </div>
                     
-                    <div class="cbd-form-field">
-                        <label for="block-description">
-                            <?php echo esc_html__('Beschreibung', 'container-block-designer'); ?>
-                        </label>
-                        <textarea id="block-description" name="description" rows="3" class="large-text"><?php echo esc_textarea($block->description); ?></textarea>
+                    <!-- Features -->
+                    <div class="cbd-card">
+                        <h2><?php _e('Features', 'container-block-designer'); ?></h2>
+                        
+                        <table class="form-table">
+                            <!-- Icon -->
+                            <tr>
+                                <th scope="row"><?php _e('Icon', 'container-block-designer'); ?></th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="features[icon][enabled]" value="1" 
+                                               <?php checked($features['icon']['enabled'] ?? false, true); ?>>
+                                        <?php _e('Icon anzeigen', 'container-block-designer'); ?>
+                                    </label>
+                                    <br><br>
+                                    <input type="text" name="features[icon][value]" 
+                                           value="<?php echo esc_attr($features['icon']['value'] ?? 'dashicons-admin-generic'); ?>" 
+                                           class="regular-text" 
+                                           placeholder="dashicons-admin-generic">
+                                    <p class="description"><?php _e('Dashicon-Klasse eingeben', 'container-block-designer'); ?></p>
+                                </td>
+                            </tr>
+                            
+                            <!-- Collapse -->
+                            <tr>
+                                <th scope="row"><?php _e('Einklappen', 'container-block-designer'); ?></th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="features[collapse][enabled]" value="1" 
+                                               <?php checked($features['collapse']['enabled'] ?? false, true); ?>>
+                                        <?php _e('Einklappen ermöglichen', 'container-block-designer'); ?>
+                                    </label>
+                                    <br><br>
+                                    <select name="features[collapse][defaultState]">
+                                        <option value="expanded" <?php selected($features['collapse']['defaultState'] ?? 'expanded', 'expanded'); ?>><?php _e('Ausgeklappt', 'container-block-designer'); ?></option>
+                                        <option value="collapsed" <?php selected($features['collapse']['defaultState'] ?? 'expanded', 'collapsed'); ?>><?php _e('Eingeklappt', 'container-block-designer'); ?></option>
+                                    </select>
+                                </td>
+                            </tr>
+                            
+                            <!-- Numbering -->
+                            <tr>
+                                <th scope="row"><?php _e('Nummerierung', 'container-block-designer'); ?></th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="features[numbering][enabled]" value="1" 
+                                               <?php checked($features['numbering']['enabled'] ?? false, true); ?>>
+                                        <?php _e('Nummerierung anzeigen', 'container-block-designer'); ?>
+                                    </label>
+                                    <br><br>
+                                    <select name="features[numbering][format]">
+                                        <option value="numeric" <?php selected($features['numbering']['format'] ?? 'numeric', 'numeric'); ?>><?php _e('Numerisch (1, 2, 3)', 'container-block-designer'); ?></option>
+                                        <option value="alphabetic" <?php selected($features['numbering']['format'] ?? 'numeric', 'alphabetic'); ?>><?php _e('Alphabetisch (A, B, C)', 'container-block-designer'); ?></option>
+                                        <option value="roman" <?php selected($features['numbering']['format'] ?? 'numeric', 'roman'); ?>><?php _e('Römisch (I, II, III)', 'container-block-designer'); ?></option>
+                                    </select>
+                                </td>
+                            </tr>
+                        </table>
                     </div>
                     
-                    <div class="cbd-form-field">
-                        <label for="block-status">
-                            <input type="checkbox" id="block-status" name="status" value="1" <?php checked($block->status, 1); ?>>
-                            <?php echo esc_html__('Block aktiviert', 'container-block-designer'); ?>
-                        </label>
-                    </div>
                 </div>
                 
-                <!-- Style Settings -->
-                <div class="cbd-card">
-                    <h2><?php echo esc_html__('Style-Einstellungen', 'container-block-designer'); ?></h2>
-                    
-                    <div class="cbd-form-grid">
-                        <div class="cbd-form-field">
-                            <label for="background-color"><?php echo esc_html__('Hintergrundfarbe', 'container-block-designer'); ?></label>
-                            <input type="text" id="background-color" name="background-color" 
-                                   value="<?php echo esc_attr($styles['backgroundColor'] ?? '#ffffff'); ?>" 
-                                   class="cbd-color-picker">
-                        </div>
+                <!-- Sidebar -->
+                <div class="cbd-sidebar">
+                    <div class="cbd-card">
+                        <h3><?php _e('Aktionen', 'container-block-designer'); ?></h3>
                         
-                        <div class="cbd-form-field">
-                            <label for="text-color"><?php echo esc_html__('Textfarbe', 'container-block-designer'); ?></label>
-                            <input type="text" id="text-color" name="text-color" 
-                                   value="<?php echo esc_attr($styles['color'] ?? '#000000'); ?>" 
-                                   class="cbd-color-picker">
-                        </div>
-                        
-                        <div class="cbd-form-field">
-                            <label for="padding"><?php echo esc_html__('Innenabstand', 'container-block-designer'); ?></label>
-                            <input type="number" id="padding" name="padding" 
-                                   value="<?php echo esc_attr($styles['padding'] ?? 20); ?>" 
-                                   min="0" class="small-text">
-                            <span class="description">px</span>
-                        </div>
-                        
-                        <div class="cbd-form-field">
-                            <label for="border-radius"><?php echo esc_html__('Eckenradius', 'container-block-designer'); ?></label>
-                            <input type="number" id="border-radius" name="border-radius" 
-                                   value="<?php echo esc_attr($styles['borderRadius'] ?? 0); ?>" 
-                                   min="0" class="small-text">
-                            <span class="description">px</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Features -->
-                <div class="cbd-card">
-                    <div class="cbd-card-header">
-                        <h2><?php echo esc_html__('Erweiterte Features', 'container-block-designer'); ?></h2>
-                        <button type="button" class="button cbd-features-btn" 
-                                data-block-id="<?php echo esc_attr($block_id); ?>" 
-                                data-name="<?php echo esc_attr($block->name); ?>"
-                                id="cbd-open-features-btn">
-                            <span class="dashicons dashicons-admin-settings"></span>
-                            <?php echo esc_html__('Features konfigurieren', 'container-block-designer'); ?>
+                        <button type="submit" class="button button-primary button-large" id="cbd-save-block">
+                            <?php _e('Änderungen speichern', 'container-block-designer'); ?>
                         </button>
+                        
+                        <hr>
+                        
+                        <a href="<?php echo wp_nonce_url(
+                            admin_url('admin.php?page=container-block-designer&action=duplicate&block_id=' . $block_id),
+                            'cbd_duplicate_block_' . $block_id
+                        ); ?>" class="button button-secondary">
+                            <?php _e('Block duplizieren', 'container-block-designer'); ?>
+                        </a>
+                        
+                        <hr>
+                        
+                        <a href="<?php echo wp_nonce_url(
+                            admin_url('admin.php?page=container-block-designer&action=delete&block_id=' . $block_id),
+                            'cbd_delete_block_' . $block_id
+                        ); ?>" 
+                        class="button button-link-delete"
+                        onclick="return confirm('<?php esc_attr_e('Sind Sie sicher, dass Sie diesen Block löschen möchten?', 'container-block-designer'); ?>');">
+                            <?php _e('Block löschen', 'container-block-designer'); ?>
+                        </a>
                     </div>
                     
-                    <div class="cbd-features-info">
-                        <?php if (!empty($features) && is_array($features)): ?>
-                            <div class="cbd-active-features">
-                                <p><strong><?php echo esc_html__('Aktive Features:', 'container-block-designer'); ?></strong></p>
-                                <ul>
-                                    <?php if (!empty($features['customIcon']['enabled'])): ?>
-                                        <li>✅ Icon: <?php echo esc_html($features['customIcon']['icon'] ?? 'dashicons-admin-generic'); ?></li>
-                                    <?php endif; ?>
-                                    <?php if (!empty($features['collapse']['enabled'])): ?>
-                                        <li>✅ Ein-/Ausklappbar (Standard: <?php echo esc_html($features['collapse']['defaultState'] ?? 'expanded'); ?>)</li>
-                                    <?php endif; ?>
-                                    <?php if (!empty($features['numbering']['enabled'])): ?>
-                                        <li>✅ Nummerierung (Format: <?php echo esc_html($features['numbering']['format'] ?? 'numeric'); ?>)</li>
-                                    <?php endif; ?>
-                                    <?php if (!empty($features['copyText']['enabled'])): ?>
-                                        <li>✅ Text kopieren Button</li>
-                                    <?php endif; ?>
-                                    <?php if (!empty($features['screenshot']['enabled'])): ?>
-                                        <li>✅ Screenshot Button</li>
-                                    <?php endif; ?>
-                                </ul>
-                            </div>
-                        <?php else: ?>
-                            <p class="cbd-no-features">
-                                <?php echo esc_html__('Keine Features aktiviert', 'container-block-designer'); ?>
-                            </p>
-                        <?php endif; ?>
-                    </div>
-                </div>
-                
-                <!-- Actions -->
-                <div class="cbd-form-actions">
-                    <button type="submit" id="cbd-save-block" name="cbd-save-block" class="button button-primary button-large">
-                        <?php echo esc_html__('Änderungen speichern', 'container-block-designer'); ?>
-                    </button>
-                    <a href="<?php echo admin_url('admin.php?page=container-block-designer'); ?>" class="button button-large">
-                        <?php echo esc_html__('Abbrechen', 'container-block-designer'); ?>
-                    </a>
-                </div>
-            </form>
-        </div>
-        
-        <!-- Preview Sidebar -->
-        <div class="cbd-edit-sidebar">
-            <div class="cbd-card">
-                <h3><?php echo esc_html__('Vorschau', 'container-block-designer'); ?></h3>
-                <div id="cbd-preview-wrapper">
-                    <div id="cbd-preview-content">
-                        <h3><?php echo esc_html__('Container Block', 'container-block-designer'); ?></h3>
-                        <p><?php echo esc_html__('Dies ist eine Vorschau Ihres Container Blocks.', 'container-block-designer'); ?></p>
+                    <div class="cbd-card">
+                        <h3><?php _e('Informationen', 'container-block-designer'); ?></h3>
+                        
+                        <p>
+                            <strong><?php _e('Erstellt:', 'container-block-designer'); ?></strong><br>
+                            <?php echo date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($block['created'])); ?>
+                        </p>
+                        
+                        <p>
+                            <strong><?php _e('Aktualisiert:', 'container-block-designer'); ?></strong><br>
+                            <?php echo date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($block['updated'])); ?>
+                        </p>
+                        
+                        <p>
+                            <strong><?php _e('Block-ID:', 'container-block-designer'); ?></strong><br>
+                            <?php echo esc_html($block['id']); ?>
+                        </p>
                     </div>
                 </div>
             </div>
-        </div>
+        </form>
     </div>
 </div>
 
-<!-- Inline JavaScript Fix für Features Button -->
-<script type="text/javascript">
-jQuery(document).ready(function($) {
-    console.log('🚀 CBD Edit Block Page - Initializing inline fix...');
-    
-    // Debug: Check if button exists
-    const $button = $('.cbd-features-btn, #cbd-open-features-btn');
-    console.log('Features button found:', $button.length > 0 ? 'Yes' : 'No');
-    
-    // Ensure ajaxurl is available
-    if (typeof ajaxurl === 'undefined') {
-        window.ajaxurl = '<?php echo admin_url('admin-ajax.php'); ?>';
-    }
-    
-    // Create minimal features modal if CBDFeatures not loaded
-    function createMinimalFeaturesModal() {
-        if ($('#cbd-features-modal').length === 0) {
-            const modalHTML = `
-                <div id="cbd-features-modal" class="cbd-modal" style="display: none;">
-                    <div class="cbd-modal-backdrop"></div>
-                    <div class="cbd-modal-content">
-                        <div class="cbd-modal-header">
-                            <h2 id="cbd-modal-title">Block Features konfigurieren</h2>
-                            <button type="button" class="cbd-modal-close">&times;</button>
-                        </div>
-                        
-                        <div class="cbd-modal-body">
-                            <input type="hidden" id="features-block-id" value="">
-                            
-                            <form id="cbd-features-form">
-                                <!-- Feature 1: Custom Icon -->
-                                <div class="cbd-feature-item">
-                                    <label class="cbd-feature-toggle">
-                                        <input type="checkbox" id="feature-icon-enabled">
-                                        <span>Custom Icon</span>
-                                    </label>
-                                    <div class="cbd-feature-settings" id="feature-icon-settings" style="display: none;">
-                                        <label>Icon auswählen:</label>
-                                        <input type="text" id="block-icon-value" placeholder="dashicons-admin-generic" class="regular-text">
-                                    </div>
-                                </div>
-                                
-                                <!-- Feature 2: Collapsible -->
-                                <div class="cbd-feature-item">
-                                    <label class="cbd-feature-toggle">
-                                        <input type="checkbox" id="feature-collapse-enabled">
-                                        <span>Ein-/Ausklappbar</span>
-                                    </label>
-                                    <div class="cbd-feature-settings" id="feature-collapse-settings" style="display: none;">
-                                        <label>Standardzustand:</label>
-                                        <select id="collapse-default-state">
-                                            <option value="expanded">Ausgeklappt</option>
-                                            <option value="collapsed">Eingeklappt</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                
-                                <!-- Other features... -->
-                            </form>
-                        </div>
-                        
-                        <div class="cbd-modal-footer">
-                            <button type="button" id="cbd-save-features" class="button button-primary">Speichern</button>
-                            <button type="button" id="cbd-modal-cancel" class="button">Abbrechen</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-            $('body').append(modalHTML);
-        }
-    }
-    
-    // Direct button handler - GUARANTEED TO WORK
-    $(document).on('click', '.cbd-features-btn, #cbd-open-features-btn', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        console.log('✅ Features button clicked!');
-        
-        const $btn = $(this);
-        const blockId = $btn.data('block-id') || $('#block-id').val();
-        const blockName = $btn.data('name') || $('#block-name').val();
-        
-        console.log('Block ID:', blockId);
-        console.log('Block Name:', blockName);
-        
-        // Try to use CBDFeatures if available
-        if (typeof CBDFeatures !== 'undefined' && CBDFeatures.openFeaturesModal) {
-            console.log('Using CBDFeatures.openFeaturesModal');
-            CBDFeatures.openFeaturesModal(blockId, blockName);
-        } else {
-            console.log('CBDFeatures not available, using fallback');
-            
-            // Create and show minimal modal
-            createMinimalFeaturesModal();
-            
-            $('#features-block-id').val(blockId);
-            $('#cbd-modal-title').text('Features für "' + blockName + '" konfigurieren');
-            $('#cbd-features-modal').fadeIn(200);
-            $('body').addClass('cbd-modal-open');
-            
-            // Load features via AJAX
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'cbd_get_block_features',
-                    block_id: blockId,
-                    nonce: '<?php echo wp_create_nonce('cbd-admin'); ?>'
-                },
-                success: function(response) {
-                    console.log('Features loaded:', response);
-                    if (response.success && response.data) {
-                        // Populate form with features data
-                        const features = response.data;
-                        if (features.customIcon) {
-                            $('#feature-icon-enabled').prop('checked', features.customIcon.enabled);
-                            $('#block-icon-value').val(features.customIcon.icon || 'dashicons-admin-generic');
-                        }
-                        if (features.collapse) {
-                            $('#feature-collapse-enabled').prop('checked', features.collapse.enabled);
-                            $('#collapse-default-state').val(features.collapse.defaultState || 'expanded');
-                        }
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Error loading features:', error);
-                }
-            });
-        }
-    });
-    
-    // Modal close handlers
-    $(document).on('click', '.cbd-modal-close, .cbd-modal-backdrop, #cbd-modal-cancel', function() {
-        $('#cbd-features-modal').fadeOut(200);
-        $('body').removeClass('cbd-modal-open');
-    });
-    
-    // Feature toggle handlers
-    $(document).on('change', '#cbd-features-form input[type="checkbox"]', function() {
-        const $settings = $(this).closest('.cbd-feature-item').find('.cbd-feature-settings');
-        if ($(this).prop('checked')) {
-            $settings.slideDown(200);
-        } else {
-            $settings.slideUp(200);
-        }
-    });
-    
-    // Save features handler
-    $(document).on('click', '#cbd-save-features', function() {
-        const blockId = $('#features-block-id').val();
-        
-        const featuresData = {
-            customIcon: {
-                enabled: $('#feature-icon-enabled').is(':checked'),
-                icon: $('#block-icon-value').val() || 'dashicons-admin-generic'
-            },
-            collapse: {
-                enabled: $('#feature-collapse-enabled').is(':checked'),
-                defaultState: $('#collapse-default-state').val() || 'expanded'
-            }
-            // Add other features as needed
-        };
-        
-        console.log('Saving features:', featuresData);
-        
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'cbd_save_block_features',
-                block_id: blockId,
-                features: JSON.stringify(featuresData),
-                nonce: '<?php echo wp_create_nonce('cbd-admin'); ?>'
-            },
-            success: function(response) {
-                console.log('Features saved:', response);
-                if (response.success) {
-                    location.reload();
-                } else {
-                    alert('Fehler beim Speichern: ' + (response.data || 'Unbekannter Fehler'));
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Save error:', error);
-                alert('Fehler beim Speichern der Features.');
-            }
-        });
-    });
-    
-    console.log('✅ Inline fix initialized - Features button should work now!');
-});
-</script>
-
-<!-- Minimal CSS for modal -->
 <style>
-.cbd-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 100000;
+.cbd-admin-wrap {
+    margin-right: 20px;
 }
-.cbd-modal-backdrop {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0,0,0,0.5);
+
+.cbd-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 20px;
+    margin-top: 20px;
 }
-.cbd-modal-content {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: white;
-    border-radius: 4px;
-    width: 90%;
-    max-width: 600px;
-    max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-}
-.cbd-modal-header {
-    padding: 15px 20px;
-    border-bottom: 1px solid #ddd;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.cbd-modal-header h2 {
-    margin: 0;
-}
-.cbd-modal-close {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    padding: 0;
-    width: 30px;
-    height: 30px;
-}
-.cbd-modal-body {
+
+.cbd-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
     padding: 20px;
+    margin-bottom: 20px;
 }
-.cbd-modal-footer {
-    padding: 15px 20px;
-    border-top: 1px solid #ddd;
+
+.cbd-card h2,
+.cbd-card h3 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.cbd-spacing-inputs,
+.cbd-border-inputs {
     display: flex;
     gap: 10px;
-    justify-content: flex-end;
-}
-.cbd-feature-item {
-    margin-bottom: 20px;
-    padding: 15px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-.cbd-feature-toggle {
-    display: flex;
     align-items: center;
-    cursor: pointer;
+    flex-wrap: wrap;
 }
-.cbd-feature-toggle input {
-    margin-right: 10px;
+
+.cbd-spacing-inputs label,
+.cbd-border-inputs label {
+    margin-right: 15px;
 }
-.cbd-feature-settings {
-    margin-top: 15px;
-    padding-top: 15px;
-    border-top: 1px solid #eee;
+
+.cbd-sidebar .button {
+    width: 100%;
+    margin-bottom: 10px;
 }
-body.cbd-modal-open {
-    overflow: hidden;
+
+.cbd-sidebar hr {
+    margin: 15px 0;
+}
+
+@media (max-width: 782px) {
+    .cbd-form-grid {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
+
+<script>
+jQuery(document).ready(function($) {
+    // Color Picker initialisieren
+    $('.cbd-color-picker').wpColorPicker();
+    
+    // Form Submit Handler
+    $('#cbd-block-form').on('submit', function(e) {
+        e.preventDefault();
+        
+        var $form = $(this);
+        var $button = $('#cbd-save-block');
+        var originalText = $button.text();
+        
+        // Button deaktivieren
+        $button.prop('disabled', true).text('<?php esc_attr_e('Speichern...', 'container-block-designer'); ?>');
+        
+        // Daten sammeln
+        var formData = $form.serialize();
+        formData += '&action=cbd_save_block';
+        
+        // AJAX Request
+        $.post(ajaxurl, formData, function(response) {
+            if (response.success) {
+                // Erfolg
+                $button.text('<?php esc_attr_e('Gespeichert!', 'container-block-designer'); ?>');
+                
+                // Nach 2 Sekunden zurücksetzen
+                setTimeout(function() {
+                    $button.prop('disabled', false).text(originalText);
+                }, 2000);
+            } else {
+                // Fehler
+                alert(response.data.message || '<?php esc_attr_e('Ein Fehler ist aufgetreten', 'container-block-designer'); ?>');
+                $button.prop('disabled', false).text(originalText);
+            }
+        }).fail(function() {
+            alert('<?php esc_attr_e('Verbindungsfehler', 'container-block-designer'); ?>');
+            $button.prop('disabled', false).text(originalText);
+        });
+    });
+});
+</script>
