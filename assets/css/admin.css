@@ -1,0 +1,767 @@
+/**
+ * Container Block Designer - Admin Styles
+ * Version: 2.3.1 - Complete Version
+ */
+
+/* ========================================
+   General Admin Styles
+   ======================================== */
+
+.cbd-admin-wrap {
+    margin-top: 20px;
+    max-width: 1400px;
+}
+
+.cbd-admin-wrap .page-title-action {
+    margin-left: 10px;
+    text-decoration: none;
+}
+
+.cbd-admin-wrap .wp-heading-inline {
+    margin-right: 15px;
+}
+
+/* Required field indicator */
+.required {
+    color: #d63638;
+    font-weight: bold;
+}
+
+/* ========================================
+   Notices and Messages
+   ======================================== */
+
+.cbd-notice {
+    margin: 15px 0;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.cbd-notice.notice-success {
+    border-left-color: #00a32a;
+}
+
+.cbd-notice.notice-error {
+    border-left-color: #d63638;
+}
+
+.cbd-notice.notice-warning {
+    border-left-color: #dba617;
+}
+
+.cbd-notice.notice-info {
+    border-left-color: #2271b1;
+}
+
+/* ========================================
+   Edit Container Layout
+   ======================================== */
+
+.cbd-edit-container {
+    display: flex;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.cbd-edit-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.cbd-edit-sidebar {
+    width: 350px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 1200px) {
+    .cbd-edit-container {
+        flex-direction: column;
+    }
+    
+    .cbd-edit-sidebar {
+        width: 100%;
+    }
+}
+
+/* ========================================
+   Cards
+   ======================================== */
+
+.cbd-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.cbd-card h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e0e0e0;
+    font-size: 1.3em;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.cbd-card h3 {
+    margin-top: 20px;
+    margin-bottom: 15px;
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.cbd-card-sticky {
+    position: sticky;
+    top: 32px;
+}
+
+/* ========================================
+   Form Fields
+   ======================================== */
+
+.cbd-form-field {
+    margin-bottom: 20px;
+}
+
+.cbd-form-field label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.cbd-form-field input[type="text"],
+.cbd-form-field input[type="number"],
+.cbd-form-field input[type="email"],
+.cbd-form-field textarea,
+.cbd-form-field select {
+    width: 100%;
+    max-width: 100%;
+}
+
+.cbd-form-field .description,
+.cbd-form-field p.description {
+    margin-top: 5px;
+    color: #646970;
+    font-size: 13px;
+    font-style: normal;
+}
+
+.cbd-form-field small {
+    display: block;
+    margin-top: 5px;
+    color: #646970;
+    font-size: 12px;
+}
+
+/* ========================================
+   Style Sections
+   ======================================== */
+
+.cbd-style-section {
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #f0f0f1;
+}
+
+.cbd-style-section:last-child {
+    border-bottom: none;
+}
+
+/* Spacing Controls */
+.cbd-spacing-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 15px;
+}
+
+.cbd-spacing-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.cbd-spacing-field label {
+    font-size: 13px;
+    margin-bottom: 5px;
+    color: #646970;
+}
+
+.cbd-spacing-sync {
+    margin-top: 10px;
+    text-align: center;
+}
+
+/* Color Controls */
+.cbd-color-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.cbd-color-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.cbd-color-picker-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cbd-color-picker {
+    width: 50px;
+    height: 35px;
+    padding: 0;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.cbd-color-text {
+    flex: 1;
+    font-family: monospace;
+    font-size: 13px;
+}
+
+.cbd-color-preset {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Border Controls */
+.cbd-border-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+}
+
+.cbd-border-field {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Input Groups */
+.cbd-input-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.cbd-input-group input {
+    flex: 1;
+    min-width: 60px;
+}
+
+.cbd-input-group span {
+    color: #646970;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+/* Range Inputs */
+.cbd-range {
+    flex: 1;
+}
+
+.cbd-range-value {
+    width: 60px;
+}
+
+/* ========================================
+   Preview Container
+   ======================================== */
+
+.cbd-preview-container {
+    background: #f0f0f1;
+    border-radius: 4px;
+    padding: 20px;
+    min-height: 200px;
+}
+
+.cbd-preview-frame {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.cbd-container-preview {
+    min-height: 150px;
+    padding: 20px;
+    transition: all 0.3s ease;
+}
+
+.cbd-container-preview h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+.cbd-container-preview p {
+    margin-bottom: 15px;
+}
+
+.cbd-container-preview p:last-child {
+    margin-bottom: 0;
+}
+
+.cbd-preview-icon {
+    margin-bottom: 10px;
+}
+
+.cbd-preview-icon .dashicons {
+    font-size: 32px;
+    width: 32px;
+    height: 32px;
+    color: #2271b1;
+}
+
+.cbd-preview-features {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    display: flex;
+    gap: 10px;
+}
+
+.cbd-preview-info {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e0e0e0;
+    text-align: center;
+    color: #666;
+}
+
+/* ========================================
+   Features Summary
+   ======================================== */
+
+.cbd-features-summary {
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.cbd-features-summary p {
+    margin: 0 0 10px 0;
+    font-weight: 600;
+}
+
+.cbd-features-list {
+    margin: 10px 0;
+    padding-left: 0;
+    list-style: none;
+}
+
+.cbd-features-list li {
+    padding: 5px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cbd-features-list .dashicons {
+    color: #00a32a;
+    font-size: 16px;
+}
+
+.cbd-features-list code {
+    background: #e0e0e0;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    margin-left: 5px;
+}
+
+.cbd-features-list em {
+    color: #646970;
+    font-size: 12px;
+    margin-left: 5px;
+}
+
+.cbd-no-features {
+    color: #646970;
+    font-style: italic;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cbd-no-features .dashicons {
+    color: #dba617;
+}
+
+/* ========================================
+   Form Actions
+   ======================================== */
+
+.cbd-form-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cbd-form-actions hr {
+    margin: 10px 0;
+    border: none;
+    border-top: 1px solid #e0e0e0;
+}
+
+.cbd-form-actions .button {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+}
+
+.cbd-form-actions .button .dashicons {
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+.button-link-delete {
+    color: #d63638 !important;
+}
+
+.button-link-delete:hover {
+    color: #a02222 !important;
+    background: #fef1f1 !important;
+}
+
+/* ========================================
+   Info Table
+   ======================================== */
+
+.cbd-info-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.cbd-info-table th,
+.cbd-info-table td {
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f1;
+    font-size: 13px;
+}
+
+.cbd-info-table th {
+    text-align: left;
+    color: #646970;
+    font-weight: 600;
+    width: 40%;
+}
+
+.cbd-info-table td {
+    color: #1d2327;
+}
+
+.cbd-info-table tr:last-child th,
+.cbd-info-table tr:last-child td {
+    border-bottom: none;
+}
+
+.cbd-info-table code {
+    background: #f0f0f1;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    word-break: break-all;
+}
+
+/* ========================================
+   Quick Features
+   ======================================== */
+
+.cbd-quick-features {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cbd-quick-feature {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+.cbd-quick-feature:hover {
+    background: #f0f0f1;
+}
+
+.cbd-quick-feature input[type="checkbox"] {
+    margin: 0;
+}
+
+.cbd-quick-feature span {
+    font-size: 14px;
+}
+
+/* ========================================
+   Template Buttons
+   ======================================== */
+
+.cbd-template-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 15px;
+}
+
+.cbd-template-btn {
+    min-width: 80px;
+}
+
+.cbd-template-btn:hover {
+    background: #f0f6fc !important;
+    border-color: #2271b1 !important;
+}
+
+/* ========================================
+   Alignment Buttons
+   ======================================== */
+
+.cbd-alignment-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.cbd-alignment-btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #8c8f94;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cbd-alignment-btn:hover {
+    background: #f0f0f1;
+    border-color: #2271b1;
+}
+
+.cbd-alignment-btn.active {
+    background: #2271b1;
+    border-color: #2271b1;
+    color: white;
+}
+
+.cbd-alignment-btn .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+/* ========================================
+   Help Content
+   ======================================== */
+
+.cbd-help-content {
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 15px;
+}
+
+.cbd-help-content p {
+    margin-top: 0;
+}
+
+.cbd-help-content ul {
+    margin: 10px 0 0 20px;
+    list-style: disc;
+}
+
+.cbd-help-content li {
+    margin: 5px 0;
+    font-size: 13px;
+    color: #646970;
+}
+
+/* ========================================
+   Loading States
+   ======================================== */
+
+.cbd-loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #2271b1;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-left: 10px;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* ========================================
+   Responsive Design
+   ======================================== */
+
+@media (max-width: 782px) {
+    .cbd-admin-wrap {
+        margin-top: 10px;
+    }
+    
+    .cbd-card {
+        padding: 15px;
+    }
+    
+    .cbd-spacing-controls,
+    .cbd-color-controls,
+    .cbd-border-controls {
+        grid-template-columns: 1fr;
+    }
+    
+    .cbd-template-buttons {
+        flex-direction: column;
+    }
+    
+    .cbd-template-btn {
+        width: 100%;
+    }
+    
+    .cbd-form-actions .button {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+}
+
+/* ========================================
+   WordPress Admin Overrides
+   ======================================== */
+
+.cbd-admin-wrap .form-table th {
+    padding-left: 0;
+}
+
+.cbd-admin-wrap .regular-text {
+    max-width: 100%;
+}
+
+.cbd-admin-wrap .large-text {
+    width: 100%;
+}
+
+/* Fix for WordPress color picker */
+.cbd-admin-wrap .wp-picker-container {
+    display: inline-block;
+}
+
+.cbd-admin-wrap .wp-picker-container .wp-color-result {
+    margin: 0;
+}
+
+/* ========================================
+   Animations
+   ======================================== */
+
+.cbd-fade-in {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.cbd-slide-in {
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* ========================================
+   Utility Classes
+   ======================================== */
+
+.cbd-text-center {
+    text-align: center;
+}
+
+.cbd-text-right {
+    text-align: right;
+}
+
+.cbd-mt-10 {
+    margin-top: 10px;
+}
+
+.cbd-mt-20 {
+    margin-top: 20px;
+}
+
+.cbd-mb-10 {
+    margin-bottom: 10px;
+}
+
+.cbd-mb-20 {
+    margin-bottom: 20px;
+}
+
+.cbd-hidden {
+    display: none;
+}
+
+.cbd-flex {
+    display: flex;
+}
+
+.cbd-flex-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cbd-gap-10 {
+    gap: 10px;
+}
+
+.cbd-gap-20 {
+    gap: 20px;
+}

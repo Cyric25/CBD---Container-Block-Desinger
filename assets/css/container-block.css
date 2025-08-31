@@ -1,0 +1,131 @@
+/**
+ * Container Block Designer - Block Editor Styles
+ * Version: 2.2.0
+ */
+
+/* Features Header in Block Editor */
+.cbd-features-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.02);
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.cbd-features-header .dashicons {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+    margin-right: 10px;
+}
+
+/* Features Actions */
+.cbd-features-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.02);
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.cbd-features-actions .components-button {
+    font-size: 12px;
+}
+
+/* Container with CSS Variables */
+.cbd-container {
+    padding: var(--cbd-padding-top, 20px) 
+             var(--cbd-padding-right, 20px) 
+             var(--cbd-padding-bottom, 20px) 
+             var(--cbd-padding-left, 20px);
+    background-color: var(--cbd-background-color, #ffffff);
+    color: var(--cbd-text-color, #000000);
+    text-align: var(--cbd-text-alignment, left);
+    border: var(--cbd-border-width, 0px) solid var(--cbd-border-color, #dddddd);
+    border-radius: var(--cbd-border-radius, 0px);
+    min-height: 100px;
+    position: relative;
+}
+
+/* Selected State */
+.wp-block-container-block-designer-container.is-selected .cbd-container {
+    outline: 2px solid #007cba;
+    outline-offset: 2px;
+}
+
+/* Features Panel in Inspector */
+.components-panel__body .cbd-features-list {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.components-panel__body .cbd-features-list li {
+    padding: 6px 0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.components-panel__body .cbd-features-list strong {
+    font-weight: 600;
+}
+
+.components-panel__body .cbd-features-list span {
+    color: #666;
+    font-size: 12px;
+}
+
+/* Placeholder State */
+.cbd-container-placeholder {
+    min-height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f0f0f1;
+    border: 2px dashed #ccc;
+    border-radius: 4px;
+}
+
+/* InnerBlocks */
+.cbd-container .block-editor-inner-blocks {
+    min-height: 50px;
+}
+
+.cbd-container .block-editor-block-list__layout {
+    min-height: 50px;
+}
+
+/* Empty State */
+.cbd-container .block-editor-default-block-appender {
+    margin: 0;
+    padding: 10px;
+}
+
+/* Block Appender Button */
+.cbd-container .block-list-appender {
+    margin-top: 10px;
+}
+
+/* Fix for validation error */
+.wp-block-container-block-designer-container[style*="--cbd"] {
+    /* Ensure CSS variables are properly applied */
+    position: relative;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .cbd-features-header,
+    .cbd-features-actions {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .cbd-features-actions .components-button {
+        width: 100%;
+        justify-content: center;
+    }
+}

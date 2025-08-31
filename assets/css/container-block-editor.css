@@ -1,0 +1,724 @@
+/**
+ * Container Block Designer - Block Editor CSS
+ * Styles für den Gutenberg Block Editor
+ * Version: 2.4.0
+ * 
+ * Datei speichern als: assets/css/container-block-editor.css
+ */
+
+/* ========================================
+   Base Block Editor Styles
+   ======================================== */
+
+.cbd-container-editor {
+    position: relative;
+    min-height: 60px;
+    margin: 20px 0;
+    transition: all 0.2s ease;
+}
+
+.cbd-container-editor:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ========================================
+   Block Placeholder
+   ======================================== */
+
+.cbd-block-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    border: 2px dashed #ccd0d4;
+    border-radius: 8px;
+    background: #f9f9f9;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.cbd-block-placeholder:hover {
+    border-color: #2271b1;
+    background: #f0f6fc;
+}
+
+.cbd-placeholder-content {
+    max-width: 400px;
+    padding: 40px 20px;
+}
+
+.cbd-placeholder-icon {
+    margin-bottom: 20px;
+}
+
+.cbd-placeholder-icon .dashicons {
+    width: 64px;
+    height: 64px;
+    font-size: 64px;
+    color: #2271b1;
+    opacity: 0.8;
+}
+
+.cbd-placeholder-content h3 {
+    margin: 0 0 10px 0;
+    color: #1e1e1e;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.cbd-placeholder-content p {
+    margin: 0 0 20px 0;
+    color: #646970;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* ========================================
+   Container Preview in Editor
+   ======================================== */
+
+.cbd-container-editor .cbd-container {
+    position: relative;
+    min-height: 100px;
+    padding: 20px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    background: #ffffff;
+    overflow: visible;
+    transition: all 0.2s ease;
+}
+
+.cbd-container-editor .cbd-container:hover {
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px #2271b1;
+}
+
+.cbd-container-content {
+    position: relative;
+    z-index: 1;
+}
+
+/* ========================================
+   Positioned Elements in Editor
+   ======================================== */
+
+.cbd-editor-positioned {
+    position: absolute;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border: 1px solid transparent !important;
+}
+
+.cbd-editor-positioned:hover {
+    transform: scale(1.1);
+    border-color: #2271b1 !important;
+    box-shadow: 0 2px 8px rgba(34, 113, 177, 0.3) !important;
+}
+
+.cbd-editor-positioned:after {
+    content: attr(data-position-info);
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+    z-index: 1000;
+}
+
+.cbd-editor-positioned:hover:after {
+    opacity: 1;
+}
+
+/* Icon specific styles in editor */
+.cbd-container-icon.cbd-editor-positioned {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 32px !important;
+    height: 32px !important;
+    background: rgba(0, 123, 255, 0.1) !important;
+    border: 2px solid rgba(0, 123, 255, 0.3) !important;
+    border-radius: 50% !important;
+    color: #007cba !important;
+    font-size: 18px !important;
+}
+
+.cbd-container-icon.cbd-editor-positioned .dashicons {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+}
+
+/* Numbering specific styles in editor */
+.cbd-container-number.cbd-editor-positioned {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    padding: 4px 8px !important;
+    background: #4caf50 !important;
+    border: 2px solid #43a047 !important;
+    border-radius: 50% !important;
+    color: #fff !important;
+    font-weight: bold !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+}
+
+/* ========================================
+   Inspector Controls Styling
+   ======================================== */
+
+.components-panel__body.is-opened .cbd-feature-list {
+    margin: 15px 0;
+    padding: 0;
+    list-style: none;
+}
+
+.cbd-feature-list li {
+    margin-bottom: 10px;
+    padding: 8px 12px;
+    background: #f6f7f7;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.cbd-feature-list li strong {
+    display: block;
+    color: #1e1e1e;
+    margin-bottom: 2px;
+}
+
+.cbd-feature-list li span {
+    color: #646970;
+}
+
+/* ========================================
+   Loading States
+   ======================================== */
+
+.cbd-loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: #646970;
+}
+
+.cbd-loading-spinner .components-spinner {
+    margin-bottom: 15px;
+}
+
+/* ========================================
+   Notice Enhancements
+   ======================================== */
+
+.cbd-block-placeholder .components-notice {
+    margin-top: 20px;
+    text-align: left;
+}
+
+.cbd-block-placeholder .components-notice p {
+    margin-bottom: 10px;
+}
+
+.cbd-block-placeholder .components-notice .components-button {
+    margin-top: 10px;
+}
+
+/* ========================================
+   Block Variations
+   ======================================== */
+
+.block-editor-inserter__variation.cbd-variation {
+    position: relative;
+}
+
+.block-editor-inserter__variation.cbd-variation:before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #2271b1, #0073aa);
+    border-radius: 4px;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.block-editor-inserter__variation.cbd-variation:hover:before {
+    opacity: 1;
+}
+
+/* ========================================
+   Position Indicators
+   ======================================== */
+
+.cbd-position-indicator {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    background: #2271b1;
+    border: 1px solid #fff;
+    border-radius: 50%;
+    z-index: 100;
+    pointer-events: none;
+    opacity: 0.7;
+    transition: all 0.2s ease;
+}
+
+.cbd-container-editor:hover .cbd-position-indicator {
+    opacity: 1;
+    transform: scale(1.2);
+}
+
+/* Position indicator locations */
+.cbd-position-indicator.top-left {
+    top: 5px;
+    left: 5px;
+}
+
+.cbd-position-indicator.top-center {
+    top: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-position-indicator.top-right {
+    top: 5px;
+    right: 5px;
+}
+
+.cbd-position-indicator.middle-left {
+    top: 50%;
+    left: 5px;
+    transform: translateY(-50%);
+}
+
+.cbd-position-indicator.middle-center {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.cbd-position-indicator.middle-right {
+    top: 50%;
+    right: 5px;
+    transform: translateY(-50%);
+}
+
+.cbd-position-indicator.bottom-left {
+    bottom: 5px;
+    left: 5px;
+}
+
+.cbd-position-indicator.bottom-center {
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-position-indicator.bottom-right {
+    bottom: 5px;
+    right: 5px;
+}
+
+/* Outside position indicators */
+.cbd-position-indicator.outside {
+    background: #d63638;
+}
+
+.cbd-position-indicator.outside.top-left {
+    top: -8px;
+    left: -8px;
+}
+
+.cbd-position-indicator.outside.top-center {
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-position-indicator.outside.top-right {
+    top: -8px;
+    right: -8px;
+}
+
+.cbd-position-indicator.outside.bottom-left {
+    bottom: -8px;
+    left: -8px;
+}
+
+.cbd-position-indicator.outside.bottom-center {
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-position-indicator.outside.bottom-right {
+    bottom: -8px;
+    right: -8px;
+}
+
+.cbd-position-indicator.outside.left-middle {
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.cbd-position-indicator.outside.right-middle {
+    right: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+/* ========================================
+   Responsive Editor Styles
+   ======================================== */
+
+@media (max-width: 782px) {
+    .cbd-placeholder-content {
+        padding: 20px 15px;
+    }
+    
+    .cbd-placeholder-icon .dashicons {
+        width: 48px;
+        height: 48px;
+        font-size: 48px;
+    }
+    
+    .cbd-placeholder-content h3 {
+        font-size: 18px;
+    }
+    
+    .cbd-container-editor .cbd-container {
+        padding: 15px;
+    }
+    
+    .cbd-editor-positioned {
+        transform: scale(0.9);
+    }
+    
+    .cbd-editor-positioned:hover {
+        transform: scale(1);
+    }
+}
+
+/* ========================================
+   Block Selected State
+   ======================================== */
+
+.cbd-container-editor.has-block-selected .cbd-container {
+    position: relative;
+}
+
+.cbd-container-editor.has-block-selected .cbd-container:before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    border: 2px solid #2271b1;
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
+    animation: fadeInBorder 0.3s ease forwards;
+}
+
+@keyframes fadeInBorder {
+    to {
+        opacity: 0.5;
+    }
+}
+
+.cbd-container-editor.no-block-selected .cbd-block-placeholder {
+    animation: pulseGlow 2s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(34, 113, 177, 0.1);
+    }
+    50% {
+        box-shadow: 0 0 0 10px rgba(34, 113, 177, 0);
+    }
+}
+
+/* ========================================
+   Feature Preview Styles
+   ======================================== */
+
+.cbd-feature-preview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #f0f6fc;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+.cbd-feature-preview .dashicons {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+    color: #2271b1;
+}
+
+.cbd-feature-preview-info {
+    flex: 1;
+}
+
+.cbd-feature-preview-info strong {
+    display: block;
+    color: #1e1e1e;
+    margin-bottom: 2px;
+}
+
+.cbd-feature-preview-info span {
+    color: #646970;
+}
+
+.cbd-feature-preview-position {
+    font-size: 10px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ========================================
+   Animation & Transitions
+   ======================================== */
+
+.cbd-container-editor * {
+    transition: all 0.2s ease;
+}
+
+.cbd-editor-positioned {
+    animation: positionedElementFadeIn 0.5s ease;
+}
+
+@keyframes positionedElementFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* ========================================
+   High Contrast Support
+   ======================================== */
+
+@media (prefers-contrast: high) {
+    .cbd-block-placeholder {
+        border-width: 3px;
+        border-color: #000;
+    }
+    
+    .cbd-container-editor .cbd-container {
+        border-width: 2px;
+        border-color: #000;
+    }
+    
+    .cbd-editor-positioned {
+        border-width: 2px !important;
+        border-color: #000 !important;
+    }
+    
+    .cbd-position-indicator {
+        background: #000;
+        border-color: #fff;
+        border-width: 2px;
+    }
+}
+
+/* ========================================
+   Reduced Motion Support
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    .cbd-container-editor,
+    .cbd-editor-positioned,
+    .cbd-position-indicator,
+    .cbd-block-placeholder {
+        transition: none;
+        animation: none;
+    }
+    
+    .cbd-editor-positioned:hover {
+        transform: none;
+    }
+}
+
+/* ========================================
+   Focus States for Accessibility
+   ======================================== */
+
+.cbd-container-editor:focus-within {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+.cbd-editor-positioned:focus {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+/* ========================================
+   Block Toolbar Enhancements
+   ======================================== */
+
+.block-editor-block-toolbar .cbd-position-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 8px;
+    border-left: 1px solid #e0e0e0;
+    margin-left: 8px;
+}
+
+.cbd-position-toolbar-button {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cbd-position-toolbar-button:hover {
+    background: #f0f0f0;
+    border-color: #c3c4c7;
+}
+
+.cbd-position-toolbar-button.is-active {
+    background: #2271b1;
+    color: #fff;
+}
+
+/* ========================================
+   Custom Block Controls
+   ======================================== */
+
+.cbd-block-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.cbd-control-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: #f6f7f7;
+    border: 1px solid #c3c4c7;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    color: #2c3338;
+}
+
+.cbd-control-button:hover {
+    background: #2271b1;
+    border-color: #2271b1;
+    color: #fff;
+}
+
+.cbd-control-button .dashicons {
+    width: 14px;
+    height: 14px;
+    font-size: 14px;
+}
+
+/* ========================================
+   Block Variation Previews
+   ======================================== */
+
+.cbd-variation-preview {
+    width: 100%;
+    height: 80px;
+    background: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+}
+
+.cbd-variation-preview:before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 60px;
+    height: 40px;
+    background: rgba(34, 113, 177, 0.1);
+    border: 1px solid rgba(34, 113, 177, 0.3);
+    border-radius: 3px;
+    transform: translate(-50%, -50%);
+}
+
+.cbd-variation-preview .dashicons {
+    position: relative;
+    z-index: 1;
+    color: #2271b1;
+    opacity: 0.8;
+}
+
+/* ========================================
+   WordPress 6.0+ Compatibility
+   ======================================== */
+
+.is-root-container .cbd-container-editor {
+    margin-top: 0;
+}
+
+.is-root-container .cbd-container-editor:first-child {
+    margin-top: 28px;
+}
+
+/* Block spacing controls compatibility */
+.cbd-container-editor[style*="margin"],
+.cbd-container-editor[style*="padding"] {
+    box-sizing: border-box;
+}
+
+/* Template part compatibility */
+.wp-block-template-part .cbd-container-editor {
+    margin: 0;
+}
+
+.wp-block-template-part .cbd-container-editor .cbd-container {
+    margin: 0;
+}

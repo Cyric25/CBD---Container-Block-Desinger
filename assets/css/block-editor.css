@@ -1,0 +1,150 @@
+/**
+ * Container Block Designer - Block Editor Styles
+ * Version: 3.0.0
+ */
+
+/* Container Block in Editor */
+.wp-block-container-block-designer-container {
+    position: relative;
+    min-height: 100px;
+}
+
+.wp-block-container-block-designer-container.is-selected {
+    outline: 2px solid #007cba;
+    outline-offset: -2px;
+}
+
+/* Container Base */
+.cbd-container {
+    position: relative;
+    min-height: 80px;
+}
+
+/* Placeholder */
+.cbd-container .components-placeholder {
+    min-height: 120px;
+}
+
+/* Inspector Controls */
+.cbd-inspector-features {
+    margin-top: 15px;
+    padding: 10px;
+    background: #f0f0f1;
+    border-radius: 4px;
+}
+
+.cbd-inspector-features strong {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 13px;
+}
+
+.cbd-inspector-features ul {
+    margin: 5px 0 0 20px;
+    padding: 0;
+    font-size: 12px;
+}
+
+.cbd-inspector-features li {
+    margin: 3px 0;
+}
+
+/* Feature Indicators in Editor */
+.cbd-features-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+}
+
+.cbd-features-header .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    margin-right: 10px;
+}
+
+.cbd-features-header .cbd-collapse-indicator {
+    margin-left: auto;
+    font-size: 11px;
+    background: #fff;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #ddd;
+    color: #666;
+}
+
+/* InnerBlocks */
+.cbd-container .block-editor-inner-blocks {
+    min-height: 50px;
+}
+
+.cbd-container .block-editor-block-list__layout {
+    min-height: 50px;
+}
+
+/* Empty State */
+.cbd-container .block-editor-default-block-appender {
+    margin: 0;
+    padding: 10px;
+}
+
+.cbd-container .block-list-appender {
+    margin-top: 10px;
+}
+
+/* Style Preview Panel */
+.cbd-style-preview {
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.cbd-style-preview p {
+    margin: 5px 0;
+}
+
+.cbd-style-preview strong {
+    font-weight: 600;
+}
+
+.cbd-color-preview {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-left: 5px;
+}
+
+/* Block Variations */
+.cbd-container-hero {
+    min-height: 200px;
+}
+
+.cbd-container-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.cbd-container-alert {
+    border-left: 4px solid #007cba;
+    background: #f0f8ff;
+    padding: 15px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .cbd-features-header {
+        flex-wrap: wrap;
+    }
+    
+    .cbd-features-header .cbd-collapse-indicator {
+        margin-left: 0;
+        margin-top: 5px;
+    }
+}

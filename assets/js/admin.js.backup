@@ -1,0 +1,626 @@
+/**
+ * Container Block Designer - Admin JavaScript
+ * Version: 1.0.0
+ * 
+ * Vollständige admin.js Datei mit allen Funktionen
+ */
+
+(function($) {
+    'use strict';
+
+    // Warte bis DOM geladen ist
+    $(document).ready(function() {
+        
+        // ====================
+        // INITIALISIERUNG
+        // ====================
+        
+        console.log('CBD Admin Script loaded');
+        
+        // Color Picker initialisieren
+        if ($.fn.wpColorPicker) {
+            $('.cbd-color-picker').wpColorPicker();
+        }
+        
+        // ====================
+        // BULK ACTIONS
+        // ====================
+        
+        let selectedBlocks = [];
+        
+        // Bulk Actions Button Toggle
+        $('#cbd-bulk-actions-btn').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $('#cbd-bulk-actions-menu').toggle();
+        });
+        
+        // Schließe Dropdown wenn außerhalb geklickt wird
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('#cbd-bulk-actions-btn, #cbd-bulk-actions-menu').length) {
+                $('#cbd-bulk-actions-menu').hide();
+            }
+        });
+        
+        // Select All Checkbox
+        $('#cbd-select-all').on('change', function() {
+            const isChecked = $(this).prop('checked');
+            $('.cbd-block-checkbox').prop('checked', isChecked);
+            updateSelectedBlocks();
+            updateBulkActionsVisibility();
+        });
+        
+        // Individual Checkboxes
+        $(document).on('change', '.cbd-block-checkbox', function() {
+            updateSelectedBlocks();
+            updateSelectAllCheckbox();
+            updateBulkActionsVisibility();
+        });
+        
+        // Update selected blocks array
+        function updateSelectedBlocks() {
+            selectedBlocks = [];
+            $('.cbd-block-checkbox:checked').each(function() {
+                selectedBlocks.push($(this).val());
+            });
+        }
+        
+        // Update "Select All" checkbox state
+        function updateSelectAllCheckbox() {
+            const totalCheckboxes = $('.cbd-block-checkbox').length;
+            const checkedCheckboxes = $('.cbd-block-checkbox:checked').length;
+            
+            if (checkedCheckboxes === 0) {
+                $('#cbd-select-all').prop('checked', false);
+                $('#cbd-select-all').prop('indeterminate', false);
+            } else if (checkedCheckboxes === totalCheckboxes) {
+                $('#cbd-select-all').prop('checked', true);
+                $('#cbd-select-all').prop('indeterminate', false);
+            } else {
+                $('#cbd-select-all').prop('checked', false);
+                $('#cbd-select-all').prop('indeterminate', true);
+            }
+        }
+        
+        // Show/Hide bulk actions button
+        function updateBulkActionsVisibility() {
+            if (selectedBlocks.length > 0) {
+                $('#cbd-bulk-actions-btn').show();
+            } else {
+                $('#cbd-bulk-actions-btn').hide();
+            }
+        }
+        
+        // Handle bulk action clicks
+        $('#cbd-bulk-actions-menu a').on('click', function(e) {
+            e.preventDefault();
+            
+            const action = $(this).data('action');
+            
+            if (selectedBlocks.length === 0) {
+                alert('Bitte wählen Sie mindestens einen Block aus.');
+                return;
+            }
+            
+            // Bestätigungsdialog für Löschen
+            if (action === 'delete') {
+                if (!confirm(`Sind Sie sicher, dass Sie ${selectedBlocks.length} Block(s) löschen möchten?`)) {
+                    $('#cbd-bulk-actions-menu').hide();
+                    return;
+                }
+            }
+            
+            // Führe Bulk Action aus
+            performBulkAction(action, selectedBlocks);
+            
+            // Verstecke Dropdown
+            $('#cbd-bulk-actions-menu').hide();
+        });
+        
+        // Perform bulk action via AJAX
+        function performBulkAction(action, blockIds) {
+            showLoadingIndicator();
+            
+            $.ajax({
+                url: cbdAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'cbd_bulk_action',
+                    bulk_action: action,
+                    block_ids: blockIds,
+                    nonce: cbdAdmin.nonce
+                },
+                success: function(response) {
+                    hideLoadingIndicator();
+                    
+                    if (response.success) {
+                        showNotice('success', response.data.message || 'Aktion erfolgreich ausgeführt.');
+                        
+                        // Bei Löschung: Entferne Zeilen aus der Tabelle
+                        if (action === 'delete') {
+                            blockIds.forEach(function(id) {
+                                $(`tr[data-block-id="${id}"]`).fadeOut(400, function() {
+                                    $(this).remove();
+                                    updateSelectAllCheckbox();
+                                });
+                            });
+                        }
+                        
+                        // Bei Status-Änderung: Update UI
+                        if (action === 'activate' || action === 'deactivate') {
+                            const newStatus = action === 'activate' ? 'active' : 'inactive';
+                            blockIds.forEach(function(id) {
+                                const $row = $(`tr[data-block-id="${id}"]`);
+                                const $statusCell = $row.find('.column-status');
+                                
+                                // Update Status Badge
+                                if (newStatus === 'active') {
+                                    $statusCell.html('<span class="cbd-badge cbd-badge-success">Aktiv</span>');
+                                } else {
+                                    $statusCell.html('<span class="cbd-badge cbd-badge-secondary">Inaktiv</span>');
+                                }
+                                
+                                // Update Toggle Button
+                                const $toggleBtn = $row.find('.cbd-toggle-status');
+                                if ($toggleBtn.length) {
+                                    $toggleBtn.data('status', newStatus);
+                                    if (newStatus === 'active') {
+                                        $toggleBtn.removeClass('dashicons-hidden').addClass('dashicons-visibility');
+                                        $toggleBtn.attr('title', 'Deaktivieren');
+                                    } else {
+                                        $toggleBtn.removeClass('dashicons-visibility').addClass('dashicons-hidden');
+                                        $toggleBtn.attr('title', 'Aktivieren');
+                                    }
+                                }
+                            });
+                        }
+                        
+                        // Reset Checkboxes
+                        $('.cbd-block-checkbox').prop('checked', false);
+                        $('#cbd-select-all').prop('checked', false);
+                        updateSelectedBlocks();
+                        updateBulkActionsVisibility();
+                        
+                    } else {
+                        showNotice('error', response.data.message || 'Fehler bei der Ausführung der Aktion.');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    hideLoadingIndicator();
+                    console.error('AJAX Error:', error);
+                    showNotice('error', 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.');
+                }
+            });
+        }
+        
+        // ====================
+        // EINZELAKTIONEN
+        // ====================
+        
+        // Toggle Status für einzelne Blocks
+        $(document).on('click', '.cbd-toggle-status', function(e) {
+            e.preventDefault();
+            
+            const $button = $(this);
+            const blockId = $button.data('id');
+            const currentStatus = $button.data('status');
+            
+            $button.addClass('disabled');
+            
+            $.ajax({
+                url: cbdAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'cbd_toggle_status',
+                    block_id: blockId,
+                    nonce: cbdAdmin.nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        const newStatus = response.data.new_status;
+                        
+                        $button.data('status', newStatus);
+                        if (newStatus === 'active') {
+                            $button.removeClass('dashicons-hidden').addClass('dashicons-visibility');
+                            $button.attr('title', 'Deaktivieren');
+                        } else {
+                            $button.removeClass('dashicons-visibility').addClass('dashicons-hidden');
+                            $button.attr('title', 'Aktivieren');
+                        }
+                        
+                        const $statusCell = $button.closest('tr').find('.column-status');
+                        if (newStatus === 'active') {
+                            $statusCell.html('<span class="cbd-badge cbd-badge-success">Aktiv</span>');
+                        } else {
+                            $statusCell.html('<span class="cbd-badge cbd-badge-secondary">Inaktiv</span>');
+                        }
+                        
+                        showNotice('success', 'Status erfolgreich geändert.');
+                    } else {
+                        showNotice('error', response.data.message || 'Fehler beim Ändern des Status.');
+                    }
+                },
+                error: function() {
+                    showNotice('error', 'Ein Fehler ist aufgetreten.');
+                },
+                complete: function() {
+                    $button.removeClass('disabled');
+                }
+            });
+        });
+        
+        // Delete einzelner Block
+        $(document).on('click', '.cbd-delete-block', function(e) {
+            e.preventDefault();
+            
+            if (!confirm(cbdAdmin.i18n.confirmDelete)) {
+                return;
+            }
+            
+            const $button = $(this);
+            const blockId = $button.data('id');
+            const $row = $button.closest('tr');
+            
+            $.ajax({
+                url: cbdAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'cbd_delete_block',
+                    block_id: blockId,
+                    nonce: cbdAdmin.nonce
+                },
+                success: function(response) {
+                    if (response.success) {
+                        showNotice('success', 'Block erfolgreich gelöscht.');
+                        $row.fadeOut(400, function() {
+                            $(this).remove();
+                        });
+                    } else {
+                        showNotice('error', response.data.message || 'Fehler beim Löschen.');
+                    }
+                },
+                error: function() {
+                    showNotice('error', 'Ein Fehler ist aufgetreten.');
+                }
+            });
+        });
+        
+        // Duplicate Block
+        $(document).on('click', '.cbd-duplicate-block', function(e) {
+            e.preventDefault();
+            
+            const $button = $(this);
+            const blockId = $button.data('id');
+            
+            showLoadingIndicator();
+            
+            $.ajax({
+                url: cbdAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'cbd_duplicate_block',
+                    block_id: blockId,
+                    nonce: cbdAdmin.nonce
+                },
+                success: function(response) {
+                    hideLoadingIndicator();
+                    
+                    if (response.success) {
+                        showNotice('success', 'Block erfolgreich dupliziert. Seite wird neu geladen...');
+                        setTimeout(function() {
+                            window.location.reload();
+                        }, 1500);
+                    } else {
+                        showNotice('error', response.data.message || 'Fehler beim Duplizieren.');
+                    }
+                },
+                error: function() {
+                    hideLoadingIndicator();
+                    showNotice('error', 'Ein Fehler ist aufgetreten.');
+                }
+            });
+        });
+        
+        // ====================
+        // FILTER & SUCHE
+        // ====================
+        
+        let searchTimer;
+        $('#cbd-search').on('input', function() {
+            clearTimeout(searchTimer);
+            const searchTerm = $(this).val().toLowerCase();
+            
+            searchTimer = setTimeout(function() {
+                filterBlocks();
+            }, 300);
+        });
+        
+        $('#cbd-filter-status').on('change', function() {
+            filterBlocks();
+        });
+        
+        function filterBlocks() {
+            const searchTerm = $('#cbd-search').val().toLowerCase();
+            const statusFilter = $('#cbd-filter-status').val();
+            
+            $('#cbd-blocks-tbody tr').each(function() {
+                const $row = $(this);
+                const name = $row.find('.column-name').text().toLowerCase();
+                const description = $row.find('.column-description').text().toLowerCase();
+                const status = $row.data('status');
+                
+                let showRow = true;
+                
+                if (searchTerm && !name.includes(searchTerm) && !description.includes(searchTerm)) {
+                    showRow = false;
+                }
+                
+                if (statusFilter && status !== statusFilter) {
+                    showRow = false;
+                }
+                
+                if (showRow) {
+                    $row.show();
+                } else {
+                    $row.hide();
+                }
+            });
+            
+            const visibleRows = $('#cbd-blocks-tbody tr:visible').length;
+            if (visibleRows === 0) {
+                if ($('#cbd-no-results').length === 0) {
+                    $('#cbd-blocks-tbody').append(
+                        '<tr id="cbd-no-results"><td colspan="6" style="text-align: center; padding: 20px;">Keine Blocks gefunden.</td></tr>'
+                    );
+                }
+            } else {
+                $('#cbd-no-results').remove();
+            }
+        }
+        
+        // ====================
+        // BLOCK EDITOR
+        // ====================
+        
+        // Save Block
+        $('#cbd-save-block').on('click', function(e) {
+            e.preventDefault();
+            
+            const $form = $('#cbd-block-form');
+            const formData = new FormData($form[0]);
+            formData.append('action', 'cbd_save_block');
+            formData.append('nonce', cbdAdmin.nonce);
+            
+            // Collect features
+            const features = {};
+            $('.cbd-feature-item').each(function() {
+                const feature = $(this).data('feature');
+                const enabled = $(this).find('.cbd-feature-enabled').prop('checked');
+                features[feature] = { enabled: enabled };
+                
+                // Zusätzliche Feature-Optionen sammeln
+                $(this).find('.cbd-feature-option').each(function() {
+                    const optionName = $(this).data('option');
+                    const optionValue = $(this).val();
+                    if (!features[feature].options) {
+                        features[feature].options = {};
+                    }
+                    features[feature].options[optionName] = optionValue;
+                });
+            });
+            
+            formData.append('features', JSON.stringify(features));
+            
+            showLoadingIndicator();
+            $(this).text(cbdAdmin.i18n.saving);
+            
+            $.ajax({
+                url: cbdAdmin.ajaxUrl,
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    hideLoadingIndicator();
+                    
+                    if (response.success) {
+                        $('#cbd-save-block').text(cbdAdmin.i18n.saved);
+                        showNotice('success', response.data.message || 'Block erfolgreich gespeichert.');
+                        
+                        // Wenn neuer Block, redirect zur Edit-Seite
+                        if (response.data.redirect) {
+                            setTimeout(function() {
+                                window.location.href = response.data.redirect;
+                            }, 1000);
+                        }
+                    } else {
+                        showNotice('error', response.data.message || cbdAdmin.i18n.error);
+                    }
+                },
+                error: function() {
+                    hideLoadingIndicator();
+                    showNotice('error', cbdAdmin.i18n.error);
+                },
+                complete: function() {
+                    setTimeout(function() {
+                        $('#cbd-save-block').text('Speichern');
+                    }, 2000);
+                }
+            });
+        });
+        
+        // ====================
+        // FEATURES MANAGEMENT
+        // ====================
+        
+        // Toggle Feature
+        $('.cbd-feature-enabled').on('change', function() {
+            const $feature = $(this).closest('.cbd-feature-item');
+            const $options = $feature.find('.cbd-feature-options');
+            
+            if ($(this).prop('checked')) {
+                $options.slideDown();
+            } else {
+                $options.slideUp();
+            }
+        });
+        
+        // Icon Picker
+        $('.cbd-icon-picker-trigger').on('click', function(e) {
+            e.preventDefault();
+            const $input = $(this).prev('input');
+            // Hier könnte ein Icon-Picker Modal geöffnet werden
+            const icon = prompt('Geben Sie den Icon-Namen ein (z.B. dashicons-admin-site):', $input.val());
+            if (icon) {
+                $input.val(icon);
+                $(this).find('span').attr('class', 'dashicons ' + icon);
+            }
+        });
+        
+        // ====================
+        // HILFSFUNKTIONEN
+        // ====================
+        
+        function showNotice(type, message) {
+            $('.cbd-notice').remove();
+            
+            const noticeClass = type === 'success' ? 'notice-success' : 'notice-error';
+            const $notice = $(`
+                <div class="notice ${noticeClass} cbd-notice is-dismissible">
+                    <p>${message}</p>
+                    <button type="button" class="notice-dismiss">
+                        <span class="screen-reader-text">Diese Meldung verwerfen</span>
+                    </button>
+                </div>
+            `);
+            
+            $('.wrap h1').after($notice);
+            
+            setTimeout(function() {
+                $notice.fadeOut(function() {
+                    $(this).remove();
+                });
+            }, 5000);
+            
+            $('html, body').animate({ scrollTop: 0 }, 'fast');
+        }
+        
+        $(document).on('click', '.notice-dismiss', function() {
+            $(this).closest('.notice').fadeOut(function() {
+                $(this).remove();
+            });
+        });
+        
+        function showLoadingIndicator() {
+            if ($('#cbd-loading').length === 0) {
+                $('body').append('<div id="cbd-loading"><div class="cbd-spinner"></div></div>');
+            }
+            $('#cbd-loading').fadeIn();
+        }
+        
+        function hideLoadingIndicator() {
+            $('#cbd-loading').fadeOut();
+        }
+        
+        // ====================
+        // TABS
+        // ====================
+        
+        $('.cbd-tab').on('click', function(e) {
+            e.preventDefault();
+            
+            const target = $(this).data('tab');
+            
+            // Update Tabs
+            $('.cbd-tab').removeClass('nav-tab-active');
+            $(this).addClass('nav-tab-active');
+            
+            // Update Content
+            $('.cbd-tab-content').hide();
+            $('#' + target).show();
+            
+            // Save active tab
+            localStorage.setItem('cbd_active_tab', target);
+        });
+        
+        // Restore active tab
+        const activeTab = localStorage.getItem('cbd_active_tab');
+        if (activeTab) {
+            $(`.cbd-tab[data-tab="${activeTab}"]`).click();
+        }
+        
+        // ====================
+        // VALIDATION
+        // ====================
+        
+        $('#cbd-block-form').on('submit', function(e) {
+            let isValid = true;
+            const errors = [];
+            
+            // Validate required fields
+            $(this).find('[required]').each(function() {
+                if (!$(this).val()) {
+                    isValid = false;
+                    errors.push($(this).attr('name') + ' ist erforderlich');
+                    $(this).addClass('error');
+                }
+            });
+            
+            // Validate slug
+            const slug = $('#cbd-block-slug').val();
+            if (slug && !/^[a-z0-9-]+$/.test(slug)) {
+                isValid = false;
+                errors.push('Slug darf nur Kleinbuchstaben, Zahlen und Bindestriche enthalten');
+                $('#cbd-block-slug').addClass('error');
+            }
+            
+            if (!isValid) {
+                e.preventDefault();
+                showNotice('error', 'Bitte korrigieren Sie die folgenden Fehler:\n' + errors.join('\n'));
+            }
+        });
+        
+        // Remove error class on input
+        $('input, textarea, select').on('input change', function() {
+            $(this).removeClass('error');
+        });
+        
+        // ====================
+        // AUTO-SAVE
+        // ====================
+        
+        let autoSaveTimer;
+        let hasChanges = false;
+        
+        $('#cbd-block-form input, #cbd-block-form textarea, #cbd-block-form select').on('input change', function() {
+            hasChanges = true;
+            clearTimeout(autoSaveTimer);
+            
+            // Auto-save nach 3 Sekunden Inaktivität
+            autoSaveTimer = setTimeout(function() {
+                if (hasChanges) {
+                    // Hier könnte Auto-Save implementiert werden
+                    console.log('Auto-save würde jetzt ausgeführt...');
+                    hasChanges = false;
+                }
+            }, 3000);
+        });
+        
+        // Warnung vor dem Verlassen der Seite bei ungespeicherten Änderungen
+        window.addEventListener('beforeunload', function(e) {
+            if (hasChanges) {
+                e.preventDefault();
+                e.returnValue = 'Sie haben ungespeicherte Änderungen. Möchten Sie die Seite wirklich verlassen?';
+            }
+        });
+        
+        // ====================
+        // INITIALISIERUNG
+        // ====================
+        
+        updateBulkActionsVisibility();
+        console.log('CBD Admin initialized successfully');
+        
+    });
+    
+})(jQuery);

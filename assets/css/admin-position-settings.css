@@ -1,0 +1,503 @@
+/**
+ * Container Block Designer - Position Settings Admin CSS
+ * Styles für die erweiterten Positionierungs-Einstellungen im Admin
+ * Version: 2.4.0
+ * 
+ * Datei speichern als: assets/css/admin-position-settings.css
+ */
+
+/* ========================================
+   Position Settings Container
+   ======================================== */
+
+.cbd-position-settings {
+    margin-top: 20px;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #f9f9f9;
+}
+
+.cbd-position-settings h4 {
+    margin: 0 0 15px 0;
+    color: #1e1e1e;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cbd-position-settings h4:before {
+    content: '\f179';
+    font-family: 'dashicons';
+    font-size: 16px;
+    color: #2271b1;
+}
+
+/* ========================================
+   Setting Groups
+   ======================================== */
+
+.cbd-setting-group {
+    margin-bottom: 15px;
+}
+
+.cbd-setting-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 5px;
+    color: #1e1e1e;
+    font-size: 13px;
+}
+
+.cbd-setting-group .description {
+    margin: 5px 0 0 0;
+    color: #646970;
+    font-style: italic;
+    font-size: 12px;
+}
+
+/* ========================================
+   Radio Button Groups
+   ======================================== */
+
+.cbd-radio-group {
+    display: flex;
+    gap: 15px;
+    margin-top: 8px;
+}
+
+.cbd-radio-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 8px 12px;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+    transition: all 0.2s ease;
+    font-weight: normal;
+    margin-bottom: 0;
+}
+
+.cbd-radio-label:hover {
+    border-color: #2271b1;
+    background: #f6f7f7;
+}
+
+.cbd-radio-label input[type="radio"] {
+    margin: 0;
+    position: relative;
+    top: 0;
+}
+
+.cbd-radio-label input[type="radio"]:checked + span {
+    color: #2271b1;
+    font-weight: 500;
+}
+
+.cbd-radio-label:has(input[type="radio"]:checked) {
+    border-color: #2271b1;
+    background: #f0f6fc;
+}
+
+/* ========================================
+   Select Dropdowns
+   ======================================== */
+
+.cbd-position-select {
+    width: 100%;
+    max-width: 300px;
+    padding: 8px 12px;
+    border: 1px solid #8c8f94;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 13px;
+}
+
+.cbd-position-select optgroup {
+    font-weight: 600;
+    color: #1e1e1e;
+    background: #f6f7f7;
+}
+
+.cbd-position-select option {
+    padding: 4px 8px;
+    font-weight: normal;
+    color: #1e1e1e;
+}
+
+/* ========================================
+   Input Rows & Columns
+   ======================================== */
+
+.cbd-input-row {
+    display: flex;
+    gap: 15px;
+    align-items: flex-start;
+}
+
+.cbd-input-col {
+    flex: 1;
+    min-width: 0;
+}
+
+.cbd-input-col input.small-text {
+    width: 100%;
+    max-width: 80px;
+    padding: 6px 8px;
+    text-align: center;
+}
+
+/* ========================================
+   Position Preview
+   ======================================== */
+
+.cbd-position-preview {
+    margin-top: 20px;
+    padding: 15px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.cbd-preview-container {
+    position: relative;
+    width: 200px;
+    height: 120px;
+    margin: 0 auto;
+    background: linear-gradient(45deg, #f0f0f0 25%, #ffffff 25%, #ffffff 50%, #f0f0f0 50%, #f0f0f0 75%, #ffffff 75%, #ffffff);
+    background-size: 10px 10px;
+    border: 2px solid #2271b1;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible; /* Wichtig für outside-Positionierung */
+}
+
+.cbd-preview-label {
+    color: #646970;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.cbd-preview-element {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    z-index: 10;
+}
+
+/* Feature-spezifische Preview-Farben */
+.icon-preview {
+    background: #ff6b35;
+    border: 2px solid #e55a2b;
+}
+
+.icon-preview:after {
+    content: '\f319';
+    font-family: 'dashicons';
+    color: #fff;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.numbering-preview {
+    background: #4caf50;
+    border: 2px solid #43a047;
+    color: #fff;
+    font-weight: bold;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.numbering-preview:after {
+    content: '1';
+}
+
+/* ========================================
+   Position Classes - Inside
+   ======================================== */
+
+.cbd-preview-element.cbd-inside.cbd-top-left {
+    top: 5px;
+    left: 5px;
+}
+
+.cbd-preview-element.cbd-inside.cbd-top-center {
+    top: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-preview-element.cbd-inside.cbd-top-right {
+    top: 5px;
+    right: 5px;
+}
+
+.cbd-preview-element.cbd-inside.cbd-middle-left {
+    top: 50%;
+    left: 5px;
+    transform: translateY(-50%);
+}
+
+.cbd-preview-element.cbd-inside.cbd-middle-center {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.cbd-preview-element.cbd-inside.cbd-middle-right {
+    top: 50%;
+    right: 5px;
+    transform: translateY(-50%);
+}
+
+.cbd-preview-element.cbd-inside.cbd-bottom-left {
+    bottom: 5px;
+    left: 5px;
+}
+
+.cbd-preview-element.cbd-inside.cbd-bottom-center {
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-preview-element.cbd-inside.cbd-bottom-right {
+    bottom: 5px;
+    right: 5px;
+}
+
+/* ========================================
+   Position Classes - Outside
+   ======================================== */
+
+.cbd-preview-element.cbd-outside.cbd-top-left {
+    top: -10px;
+    left: -10px;
+}
+
+.cbd-preview-element.cbd-outside.cbd-top-center {
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-preview-element.cbd-outside.cbd-top-right {
+    top: -10px;
+    right: -10px;
+}
+
+.cbd-preview-element.cbd-outside.cbd-bottom-left {
+    bottom: -10px;
+    left: -10px;
+}
+
+.cbd-preview-element.cbd-outside.cbd-bottom-center {
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-preview-element.cbd-outside.cbd-bottom-right {
+    bottom: -10px;
+    right: -10px;
+}
+
+.cbd-preview-element.cbd-outside.cbd-left-middle {
+    left: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.cbd-preview-element.cbd-outside.cbd-right-middle {
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+/* ========================================
+   Responsive Adjustments
+   ======================================== */
+
+@media (max-width: 782px) {
+    .cbd-radio-group {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .cbd-input-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .cbd-preview-container {
+        width: 160px;
+        height: 100px;
+    }
+    
+    .cbd-position-select {
+        max-width: 100%;
+    }
+}
+
+/* ========================================
+   Dark Mode Support (WordPress 5.7+)
+   ======================================== */
+
+@media (prefers-color-scheme: dark) {
+    .cbd-position-settings {
+        background: #1e1e1e;
+        border-color: #3c3c3c;
+        color: #e0e0e0;
+    }
+    
+    .cbd-position-settings h4 {
+        color: #e0e0e0;
+    }
+    
+    .cbd-setting-group label {
+        color: #e0e0e0;
+    }
+    
+    .cbd-radio-label {
+        background: #2c2c2c;
+        border-color: #3c3c3c;
+        color: #e0e0e0;
+    }
+    
+    .cbd-radio-label:hover {
+        background: #3c3c3c;
+        border-color: #2271b1;
+    }
+    
+    .cbd-position-select {
+        background: #2c2c2c;
+        border-color: #3c3c3c;
+        color: #e0e0e0;
+    }
+    
+    .cbd-preview-container {
+        background: #2c2c2c;
+        border-color: #2271b1;
+    }
+    
+    .cbd-preview-label {
+        color: #a7a7a7;
+    }
+}
+
+/* ========================================
+   Animation Effects
+   ======================================== */
+
+.cbd-position-settings {
+    animation: slideInDown 0.3s ease;
+}
+
+@keyframes slideInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.cbd-preview-element {
+    animation: bounceIn 0.4s ease;
+}
+
+@keyframes bounceIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.3);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+    70% {
+        transform: scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* ========================================
+   Hover Effects
+   ======================================== */
+
+.cbd-preview-element:hover {
+    transform: scale(1.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.cbd-radio-label {
+    position: relative;
+    overflow: hidden;
+}
+
+.cbd-radio-label:before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.cbd-radio-label:hover:before {
+    left: 100%;
+}
+
+/* ========================================
+   Accessibility
+   ======================================== */
+
+.cbd-radio-label:focus-within {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+.cbd-position-select:focus {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+    border-color: #2271b1;
+}
+
+/* High Contrast Mode Support */
+@media (prefers-contrast: high) {
+    .cbd-position-settings {
+        border-width: 2px;
+        border-color: #000;
+    }
+    
+    .cbd-radio-label {
+        border-width: 2px;
+    }
+    
+    .cbd-preview-element {
+        border-width: 3px;
+    }
+}

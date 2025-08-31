@@ -1,0 +1,2853 @@
+=== Log Cleared ===
+2025-08-28 11:51:21
+
+[2025-08-28 11:51:24] === CBD Quick Debug Loaded ===
+[2025-08-28 11:51:24] PHP Version | Data: 8.2.27
+[2025-08-28 11:51:24] WordPress Version | Data: 6.8.2
+[2025-08-28 11:51:24] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:51:24] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:51:24] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:51:24] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:51:24] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:51:24] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:51:24] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:51:24] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:51:24] WordPress Init Hook triggered
+[2025-08-28 11:51:24] Block registration available
+[2025-08-28 11:51:24] Admin Menu Hook triggered
+[2025-08-28 11:51:24] Admin Init Hook triggered
+[2025-08-28 11:51:24] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:51:24] Block count in database | Data: 6
+[2025-08-28 11:51:40] === CBD Quick Debug Loaded ===
+[2025-08-28 11:51:40] PHP Version | Data: 8.2.27
+[2025-08-28 11:51:40] WordPress Version | Data: 6.8.2
+[2025-08-28 11:51:40] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:51:40] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:51:40] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:51:40] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:51:40] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:51:40] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:51:40] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:51:40] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:51:40] WordPress Init Hook triggered
+[2025-08-28 11:51:40] Block registration available
+[2025-08-28 11:51:40] Admin Menu Hook triggered
+[2025-08-28 11:51:49] === CBD Quick Debug Loaded ===
+[2025-08-28 11:51:49] PHP Version | Data: 8.2.27
+[2025-08-28 11:51:49] WordPress Version | Data: 6.8.2
+[2025-08-28 11:51:49] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:51:49] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:51:49] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:51:49] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:51:49] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:51:49] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:51:49] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:51:49] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:51:49] WordPress Init Hook triggered
+[2025-08-28 11:51:49] Block registration available
+[2025-08-28 11:51:49] Admin Menu Hook triggered
+[2025-08-28 11:51:49] Admin Init Hook triggered
+[2025-08-28 11:51:49] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:51:49] Block count in database | Data: 6
+[2025-08-28 11:52:01] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:01] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:01] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:01] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:01] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:01] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:01] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:01] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:01] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:01] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:01] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:01] WordPress Init Hook triggered
+[2025-08-28 11:52:01] Block registration available
+[2025-08-28 11:52:01] Admin Init Hook triggered
+[2025-08-28 11:52:01] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:52:01] Block count in database | Data: 6
+[2025-08-28 11:52:01] AJAX: cbd_delete_block called | Data: Array
+(
+    [action] => cbd_delete_block
+    [block_id] => 10
+    [nonce] => 57d80cff70
+)
+
+[2025-08-28 11:52:03] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:03] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:03] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:03] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:03] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:03] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:03] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:03] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:03] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:03] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:03] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:03] WordPress Init Hook triggered
+[2025-08-28 11:52:03] Block registration available
+[2025-08-28 11:52:03] Admin Init Hook triggered
+[2025-08-28 11:52:03] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:52:03] Block count in database | Data: 5
+[2025-08-28 11:52:03] AJAX: cbd_delete_block called | Data: Array
+(
+    [action] => cbd_delete_block
+    [nonce] => f34d3067f1
+)
+
+[2025-08-28 11:52:16] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:16] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:16] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:16] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:16] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:16] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:16] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:16] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:16] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:16] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:16] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:16] WordPress Init Hook triggered
+[2025-08-28 11:52:16] Block registration available
+[2025-08-28 11:52:16] Admin Menu Hook triggered
+[2025-08-28 11:52:28] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:28] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:28] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:28] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:28] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:28] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:28] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:28] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:28] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:28] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:28] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:28] WordPress Init Hook triggered
+[2025-08-28 11:52:28] Block registration available
+[2025-08-28 11:52:28] Admin Menu Hook triggered
+[2025-08-28 11:52:28] Admin Init Hook triggered
+[2025-08-28 11:52:28] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:52:28] Block count in database | Data: 5
+[2025-08-28 11:52:36] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:36] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:36] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:36] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:36] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:36] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:36] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:36] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:36] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:36] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:36] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:36] WordPress Init Hook triggered
+[2025-08-28 11:52:36] Block registration available
+[2025-08-28 11:52:36] Admin Menu Hook triggered
+[2025-08-28 11:52:36] Admin Init Hook triggered
+[2025-08-28 11:52:36] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:52:36] Block count in database | Data: 5
+[2025-08-28 11:52:39] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:39] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:39] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:39] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:39] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:39] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:39] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:39] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:39] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:39] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:39] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:39] WordPress Init Hook triggered
+[2025-08-28 11:52:39] Block registration available
+[2025-08-28 11:52:39] Admin Init Hook triggered
+[2025-08-28 11:52:39] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:52:39] Block count in database | Data: 5
+[2025-08-28 11:52:40] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:40] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:40] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:40] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:40] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:40] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:40] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:40] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:40] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:40] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:40] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:40] WordPress Init Hook triggered
+[2025-08-28 11:52:40] Block registration available
+[2025-08-28 11:52:40] Admin Menu Hook triggered
+[2025-08-28 11:52:40] Admin Init Hook triggered
+[2025-08-28 11:52:40] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:52:40] Block count in database | Data: 5
+[2025-08-28 11:52:44] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:44] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:44] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:44] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:44] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:44] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:44] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:44] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:44] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:44] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:44] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:44] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:44] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:44] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:44] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:44] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:44] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:44] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:44] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:44] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:44] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:44] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:44] WordPress Init Hook triggered
+[2025-08-28 11:52:44] Block registration available
+[2025-08-28 11:52:45] WordPress Init Hook triggered
+[2025-08-28 11:52:45] Block registration available
+[2025-08-28 11:52:47] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:47] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:47] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:47] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:47] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:47] === CBD Quick Debug Loaded ===
+: includes/ajax-handlers.php
+[2025-08-28 11:52:47] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:47] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:47] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:47] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:47] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:47] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:47] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:47] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:47] === CBD Quick Debug Setup Complete ===
+es/ajax-handlers.php
+[2025-08-28 11:52:47] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:47] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:47] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:47] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:47] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:47] WordPress Init Hook triggered
+[2025-08-28 11:52:47] Block registration available
+[2025-08-28 11:52:47] WordPress Init Hook triggered
+[2025-08-28 11:52:47] Block registration available
+[2025-08-28 11:52:50] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:50] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:50] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:50] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:50] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:50] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:50] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:50] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:50] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:50] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:50] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:50] WordPress Init Hook triggered
+[2025-08-28 11:52:50] Block registration available
+[2025-08-28 11:52:51] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:51] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:51] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:51] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:51] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:51] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:51] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:51] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:51] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:51] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:51] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:51] WordPress Init Hook triggered
+[2025-08-28 11:52:51] Block registration available
+[2025-08-28 11:52:52] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:52] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:52] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:52] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:52] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:52] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:52] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:52] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:52] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:52] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:52] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:53] WordPress Init Hook triggered
+[2025-08-28 11:52:53] Block registration available
+[2025-08-28 11:52:54] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:54] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:54] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:54] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:54] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:54] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:54] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:54] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:54] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:54] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:54] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:54] WordPress Init Hook triggered
+[2025-08-28 11:52:54] Block registration available
+[2025-08-28 11:52:55] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:55] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:55] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:55] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:55] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:55] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:55] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:55] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:55] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:55] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:55] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:55] WordPress Init Hook triggered
+[2025-08-28 11:52:55] Block registration available
+[2025-08-28 11:52:56] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:56] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:56] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:56] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:56] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:56] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:56] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:56] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:56] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:56] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:56] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:56] WordPress Init Hook triggered
+[2025-08-28 11:52:56] Block registration available
+[2025-08-28 11:52:58] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:58] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:58] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:58] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:58] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:58] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:58] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:58] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:58] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:58] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:58] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:58] WordPress Init Hook triggered
+[2025-08-28 11:52:58] Block registration available
+[2025-08-28 11:52:59] === CBD Quick Debug Loaded ===
+[2025-08-28 11:52:59] PHP Version | Data: 8.2.27
+[2025-08-28 11:52:59] WordPress Version | Data: 6.8.2
+[2025-08-28 11:52:59] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:52:59] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:52:59] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:52:59] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:52:59] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:52:59] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:52:59] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:52:59] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:52:59] WordPress Init Hook triggered
+[2025-08-28 11:52:59] Block registration available
+[2025-08-28 11:52:59] Admin Init Hook triggered
+[2025-08-28 11:52:59] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:52:59] Block count in database | Data: 5
+[2025-08-28 11:53:03] === CBD Quick Debug Loaded ===
+[2025-08-28 11:53:03] PHP Version | Data: 8.2.27
+[2025-08-28 11:53:03] WordPress Version | Data: 6.8.2
+[2025-08-28 11:53:03] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:53:03] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:53:03] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:53:03] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:53:03] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:53:03] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:53:03] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:53:03] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:53:03] WordPress Init Hook triggered
+[2025-08-28 11:53:03] Block registration available
+[2025-08-28 11:53:04] === CBD Quick Debug Loaded ===
+[2025-08-28 11:53:04] PHP Version | Data: 8.2.27
+[2025-08-28 11:53:04] WordPress Version | Data: 6.8.2
+[2025-08-28 11:53:04] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:53:04] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:53:04] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:53:04] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:53:04] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:53:04] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:53:04] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:53:04] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:53:04] WordPress Init Hook triggered
+[2025-08-28 11:53:04] Block registration available
+[2025-08-28 11:53:04] Admin Init Hook triggered
+[2025-08-28 11:53:04] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:53:04] Block count in database | Data: 5
+[2025-08-28 11:53:14] === CBD Quick Debug Loaded ===
+[2025-08-28 11:53:14] PHP Version | Data: 8.2.27
+[2025-08-28 11:53:14] WordPress Version | Data: 6.8.2
+[2025-08-28 11:53:14] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:53:14] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:53:14] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:53:14] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:53:14] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:53:14] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:53:14] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:53:14] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:53:14] WordPress Init Hook triggered
+[2025-08-28 11:53:14] Block registration available
+[2025-08-28 11:53:14] Admin Init Hook triggered
+[2025-08-28 11:53:14] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:53:14] Block count in database | Data: 5
+[2025-08-28 11:53:23] === CBD Quick Debug Loaded ===
+[2025-08-28 11:53:23] PHP Version | Data: 8.2.27
+[2025-08-28 11:53:23] WordPress Version | Data: 6.8.2
+[2025-08-28 11:53:23] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:53:23] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:53:23] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:53:23] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:53:23] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:53:23] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:53:23] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:53:23] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:53:23] WordPress Init Hook triggered
+[2025-08-28 11:53:23] Block registration available
+[2025-08-28 11:53:24] === CBD Quick Debug Loaded ===
+[2025-08-28 11:53:24] PHP Version | Data: 8.2.27
+[2025-08-28 11:53:24] WordPress Version | Data: 6.8.2
+[2025-08-28 11:53:24] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:53:24] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:53:24] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:53:24] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:53:24] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:53:24] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:53:24] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:53:24] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:53:24] WordPress Init Hook triggered
+[2025-08-28 11:53:24] Block registration available
+[2025-08-28 11:53:24] Admin Init Hook triggered
+[2025-08-28 11:53:24] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:53:24] Block count in database | Data: 5
+[2025-08-28 11:53:34] === CBD Quick Debug Loaded ===
+[2025-08-28 11:53:34] PHP Version | Data: 8.2.27
+[2025-08-28 11:53:34] WordPress Version | Data: 6.8.2
+[2025-08-28 11:53:34] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:53:34] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:53:34] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:53:34] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:53:34] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:53:34] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:53:34] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:53:34] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:53:34] WordPress Init Hook triggered
+[2025-08-28 11:53:34] Block registration available
+[2025-08-28 11:53:34] Admin Init Hook triggered
+[2025-08-28 11:53:34] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:53:34] Block count in database | Data: 5
+[2025-08-28 11:53:44] === CBD Quick Debug Loaded ===
+[2025-08-28 11:53:44] PHP Version | Data: 8.2.27
+[2025-08-28 11:53:44] WordPress Version | Data: 6.8.2
+[2025-08-28 11:53:44] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:53:44] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:53:44] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:53:44] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:53:44] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:53:44] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:53:44] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:53:44] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:53:44] === CBD Quick Debug Loaded ===
+[2025-08-28 11:53:44] PHP Version | Data: 8.2.27
+[2025-08-28 11:53:44] WordPress Version | Data: 6.8.2
+[2025-08-28 11:53:44] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:53:44] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:53:44] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:53:44] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:53:44] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:53:44] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:53:44] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:53:44] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:53:44] WordPress Init Hook triggered
+[2025-08-28 11:53:44] Block registration available
+[2025-08-28 11:53:44] Admin Init Hook triggered
+[2025-08-28 11:53:44] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:53:44] Block count in database | Data: 5
+[2025-08-28 11:53:44] WordPress Init Hook triggered
+[2025-08-28 11:53:44] Block registration available
+[2025-08-28 11:53:54] === CBD Quick Debug Loaded ===
+[2025-08-28 11:53:54] PHP Version | Data: 8.2.27
+[2025-08-28 11:53:54] WordPress Version | Data: 6.8.2
+[2025-08-28 11:53:54] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:53:54] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:53:54] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:53:54] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:53:54] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:53:54] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:53:54] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:53:54] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:53:54] WordPress Init Hook triggered
+[2025-08-28 11:53:54] Block registration available
+[2025-08-28 11:53:54] Admin Init Hook triggered
+[2025-08-28 11:53:54] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:53:54] Block count in database | Data: 5
+[2025-08-28 11:54:04] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:04] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:04] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:04] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:04] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:04] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:04] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:04] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:04] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:04] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:04] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:04] WordPress Init Hook triggered
+[2025-08-28 11:54:04] Block registration available
+[2025-08-28 11:54:04] Admin Init Hook triggered
+[2025-08-28 11:54:04] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:54:04] Block count in database | Data: 5
+[2025-08-28 11:54:14] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:14] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:14] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:14] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:14] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:14] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:14] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:14] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:14] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:14] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:14] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:14] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:14] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:14] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:14] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:14] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:14] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:14] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:14] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:14] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:14] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:14] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:14] WordPress Init Hook triggered
+[2025-08-28 11:54:14] Block registration available
+[2025-08-28 11:54:14] Admin Init Hook triggered
+[2025-08-28 11:54:14] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:54:14] Block count in database | Data: 5
+[2025-08-28 11:54:14] WordPress Init Hook triggered
+[2025-08-28 11:54:14] Block registration available
+[2025-08-28 11:54:18] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:18] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:18] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:18] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:18] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:18] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:18] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:18] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:18] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:18] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:18] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:18] WordPress Init Hook triggered
+[2025-08-28 11:54:18] Block registration available
+[2025-08-28 11:54:20] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:20] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:20] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:20] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:20] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:20] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:20] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:20] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:20] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:20] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:20] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:20] WordPress Init Hook triggered
+[2025-08-28 11:54:20] Block registration available
+[2025-08-28 11:54:24] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:24] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:24] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:24] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:24] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:24] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:24] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:24] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:24] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:24] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:24] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:24] WordPress Init Hook triggered
+[2025-08-28 11:54:24] Block registration available
+[2025-08-28 11:54:24] Admin Init Hook triggered
+[2025-08-28 11:54:24] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:54:24] Block count in database | Data: 5
+[2025-08-28 11:54:34] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:34] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:34] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:34] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:34] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:34] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:34] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:34] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:34] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:34] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:34] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:34] WordPress Init Hook triggered
+[2025-08-28 11:54:34] Block registration available
+[2025-08-28 11:54:34] Admin Init Hook triggered
+[2025-08-28 11:54:34] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:54:34] Block count in database | Data: 5
+[2025-08-28 11:54:36] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:36] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:36] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:36] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:36] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:36] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:36] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:36] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:36] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:36] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:36] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:36] WordPress Init Hook triggered
+[2025-08-28 11:54:36] Block registration available
+[2025-08-28 11:54:41] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:41] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:41] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:41] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:41] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:41] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:41] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:41] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:41] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:41] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:41] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:41] WordPress Init Hook triggered
+[2025-08-28 11:54:41] Block registration available
+[2025-08-28 11:54:42] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:42] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:42] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:42] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:42] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:42] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:42] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:42] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:42] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:42] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:42] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:42] WordPress Init Hook triggered
+[2025-08-28 11:54:42] Block registration available
+[2025-08-28 11:54:45] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:45] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:45] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:45] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:45] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:45] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:45] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:45] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:45] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:45] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:45] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:45] WordPress Init Hook triggered
+[2025-08-28 11:54:45] Block registration available
+[2025-08-28 11:54:46] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:46] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:46] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:46] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:46] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:46] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:46] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:46] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:46] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:46] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:46] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:46] WordPress Init Hook triggered
+[2025-08-28 11:54:46] Block registration available
+[2025-08-28 11:54:46] Admin Init Hook triggered
+[2025-08-28 11:54:46] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:54:46] Block count in database | Data: 5
+[2025-08-28 11:54:55] === CBD Quick Debug Loaded ===
+[2025-08-28 11:54:55] PHP Version | Data: 8.2.27
+[2025-08-28 11:54:55] WordPress Version | Data: 6.8.2
+[2025-08-28 11:54:55] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:54:55] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:54:55] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:54:55] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:54:55] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:54:55] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:54:55] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:54:55] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:54:55] WordPress Init Hook triggered
+[2025-08-28 11:54:55] Block registration available
+[2025-08-28 11:54:55] Admin Init Hook triggered
+[2025-08-28 11:54:55] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:54:55] Block count in database | Data: 5
+[2025-08-28 11:55:05] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:05] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:05] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:05] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:05] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:05] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:05] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:05] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:05] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:05] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:05] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:05] WordPress Init Hook triggered
+[2025-08-28 11:55:05] Block registration available
+[2025-08-28 11:55:05] Admin Init Hook triggered
+[2025-08-28 11:55:05] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:55:05] Block count in database | Data: 5
+[2025-08-28 11:55:14] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:14] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:14] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:14] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:14] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:14] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:14] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:14] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:14] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:14] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:14] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:14] WordPress Init Hook triggered
+[2025-08-28 11:55:14] Block registration available
+[2025-08-28 11:55:15] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:15] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:15] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:15] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:15] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:15] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:15] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:15] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:15] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:15] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:15] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:15] WordPress Init Hook triggered
+[2025-08-28 11:55:15] Block registration available
+[2025-08-28 11:55:16] Admin Init Hook triggered
+[2025-08-28 11:55:16] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:55:16] Block count in database | Data: 5
+[2025-08-28 11:55:17] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:17] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:17] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:17] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:17] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:17] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:17] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:17] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:17] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:17] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:17] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:17] WordPress Init Hook triggered
+[2025-08-28 11:55:17] Block registration available
+[2025-08-28 11:55:25] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:25] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:25] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:25] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:25] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:25] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:25] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:25] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:25] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:25] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:25] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:25] WordPress Init Hook triggered
+[2025-08-28 11:55:25] Block registration available
+[2025-08-28 11:55:26] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:26] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:26] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:26] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:26] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:26] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:26] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:26] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:26] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:26] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:26] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:26] WordPress Init Hook triggered
+[2025-08-28 11:55:26] Block registration available
+[2025-08-28 11:55:26] Admin Init Hook triggered
+[2025-08-28 11:55:26] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:55:26] Block count in database | Data: 5
+[2025-08-28 11:55:36] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:36] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:36] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:36] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:36] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:36] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:36] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:36] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:36] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:36] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:36] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:36] WordPress Init Hook triggered
+[2025-08-28 11:55:36] Block registration available
+[2025-08-28 11:55:36] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:36] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:36] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:36] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:36] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:36] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:36] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:36] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:36] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:36] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:36] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:36] WordPress Init Hook triggered
+[2025-08-28 11:55:36] Block registration available
+[2025-08-28 11:55:37] Admin Init Hook triggered
+[2025-08-28 11:55:37] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:55:37] Block count in database | Data: 5
+[2025-08-28 11:55:39] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:39] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:39] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:39] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:39] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:39] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:39] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:39] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:39] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:39] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:39] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:39] WordPress Init Hook triggered
+[2025-08-28 11:55:39] Block registration available
+[2025-08-28 11:55:40] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:40] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:40] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:40] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:40] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:40] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:40] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:40] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:40] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:40] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:40] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:40] WordPress Init Hook triggered
+[2025-08-28 11:55:40] Block registration available
+[2025-08-28 11:55:47] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:47] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:47] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:47] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:47] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:47] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:47] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:47] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:47] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:47] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:47] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:47] WordPress Init Hook triggered
+[2025-08-28 11:55:47] Block registration available
+[2025-08-28 11:55:47] Admin Init Hook triggered
+[2025-08-28 11:55:47] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:55:47] Block count in database | Data: 5
+[2025-08-28 11:55:52] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:52] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:52] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:52] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:52] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:52] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:52] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:52] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:52] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:52] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:52] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:52] WordPress Init Hook triggered
+[2025-08-28 11:55:52] Block registration available
+[2025-08-28 11:55:56] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:56] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:56] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:56] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:56] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:56] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:56] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:56] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:56] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:56] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:56] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:57] WordPress Init Hook triggered
+[2025-08-28 11:55:57] Block registration available
+[2025-08-28 11:55:57] === CBD Quick Debug Loaded ===
+[2025-08-28 11:55:57] PHP Version | Data: 8.2.27
+[2025-08-28 11:55:57] WordPress Version | Data: 6.8.2
+[2025-08-28 11:55:57] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:55:57] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:55:57] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:55:57] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:55:57] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:55:57] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:55:57] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:55:57] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:55:57] WordPress Init Hook triggered
+[2025-08-28 11:55:57] Block registration available
+[2025-08-28 11:55:57] Admin Init Hook triggered
+[2025-08-28 11:55:57] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:55:57] Block count in database | Data: 5
+[2025-08-28 11:56:00] === CBD Quick Debug Loaded ===
+[2025-08-28 11:56:00] PHP Version | Data: 8.2.27
+[2025-08-28 11:56:00] WordPress Version | Data: 6.8.2
+[2025-08-28 11:56:00] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:56:00] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:56:00] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:56:00] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:56:00] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:56:00] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:56:00] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:56:00] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:56:01] WordPress Init Hook triggered
+[2025-08-28 11:56:01] Block registration available
+[2025-08-28 11:56:11] === CBD Quick Debug Loaded ===
+[2025-08-28 11:56:11] PHP Version | Data: 8.2.27
+[2025-08-28 11:56:11] WordPress Version | Data: 6.8.2
+[2025-08-28 11:56:11] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:56:11] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:56:11] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:56:11] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:56:11] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:56:11] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:56:11] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:56:11] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:56:11] WordPress Init Hook triggered
+[2025-08-28 11:56:11] Block registration available
+[2025-08-28 11:56:11] Admin Init Hook triggered
+[2025-08-28 11:56:11] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:56:11] Block count in database | Data: 5
+[2025-08-28 11:56:22] === CBD Quick Debug Loaded ===
+[2025-08-28 11:56:22] PHP Version | Data: 8.2.27
+[2025-08-28 11:56:22] WordPress Version | Data: 6.8.2
+[2025-08-28 11:56:22] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-28 11:56:22] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-28 11:56:22] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-28 11:56:22] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-28 11:56:22] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-28 11:56:22] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-28 11:56:22] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-28 11:56:22] === CBD Quick Debug Setup Complete ===
+[2025-08-28 11:56:22] WordPress Init Hook triggered
+[2025-08-28 11:56:22] Block registration available
+[2025-08-28 11:56:22] Admin Init Hook triggered
+[2025-08-28 11:56:22] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-28 11:56:22] Block count in database | Data: 5
+[2025-08-29 09:00:38] === CBD Quick Debug Loaded ===
+[2025-08-29 09:00:38] PHP Version | Data: 8.2.27
+[2025-08-29 09:00:38] WordPress Version | Data: 6.8.2
+[2025-08-29 09:00:38] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:00:38] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:00:38] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:00:38] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:00:38] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:00:38] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:00:38] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:00:38] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:00:42] WordPress Init Hook triggered
+[2025-08-29 09:00:42] Block registration available
+[2025-08-29 09:00:44] Admin Init Hook triggered
+[2025-08-29 09:00:44] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:00:44] Block count in database | Data: 5
+[2025-08-29 09:00:45] === CBD Quick Debug Loaded ===
+[2025-08-29 09:00:45] PHP Version | Data: 8.2.27
+[2025-08-29 09:00:45] WordPress Version | Data: 6.8.2
+[2025-08-29 09:00:45] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:00:45] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:00:45] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:00:45] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:00:45] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:00:45] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:00:45] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:00:45] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:00:45] WordPress Init Hook triggered
+[2025-08-29 09:00:45] Block registration available
+[2025-08-29 09:00:56] === CBD Quick Debug Loaded ===
+[2025-08-29 09:00:57] PHP Version | Data: 8.2.27
+[2025-08-29 09:00:57] WordPress Version | Data: 6.8.2
+[2025-08-29 09:00:57] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:00:57] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:00:57] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:00:57] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:00:57] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:00:57] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:00:57] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:00:57] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:00:57] WordPress Init Hook triggered
+[2025-08-29 09:00:57] Block registration available
+[2025-08-29 09:00:57] Admin Init Hook triggered
+[2025-08-29 09:00:57] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:00:57] Block count in database | Data: 5
+[2025-08-29 09:01:07] === CBD Quick Debug Loaded ===
+[2025-08-29 09:01:07] PHP Version | Data: 8.2.27
+[2025-08-29 09:01:07] WordPress Version | Data: 6.8.2
+[2025-08-29 09:01:07] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:01:07] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:01:07] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:01:07] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:01:07] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:01:07] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:01:07] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:01:07] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:01:07] WordPress Init Hook triggered
+[2025-08-29 09:01:07] Block registration available
+[2025-08-29 09:01:07] Admin Init Hook triggered
+[2025-08-29 09:01:07] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:01:07] Block count in database | Data: 5
+[2025-08-29 09:01:20] === CBD Quick Debug Loaded ===
+[2025-08-29 09:01:20] PHP Version | Data: 8.2.27
+[2025-08-29 09:01:20] WordPress Version | Data: 6.8.2
+[2025-08-29 09:01:20] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:01:20] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:01:20] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:01:20] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:01:20] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:01:20] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:01:20] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:01:20] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:01:20] WordPress Init Hook triggered
+[2025-08-29 09:01:20] Block registration available
+[2025-08-29 09:01:20] Admin Init Hook triggered
+[2025-08-29 09:01:20] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:01:20] Block count in database | Data: 5
+[2025-08-29 09:01:29] === CBD Quick Debug Loaded ===
+[2025-08-29 09:01:29] PHP Version | Data: 8.2.27
+[2025-08-29 09:01:29] WordPress Version | Data: 6.8.2
+[2025-08-29 09:01:29] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:01:29] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:01:29] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:01:29] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:01:29] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:01:29] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:01:29] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:01:29] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:01:29] WordPress Init Hook triggered
+[2025-08-29 09:01:29] Block registration available
+[2025-08-29 09:01:30] === CBD Quick Debug Loaded ===
+[2025-08-29 09:01:30] PHP Version | Data: 8.2.27
+[2025-08-29 09:01:30] WordPress Version | Data: 6.8.2
+[2025-08-29 09:01:30] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:01:30] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:01:30] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:01:30] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:01:30] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:01:30] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:01:30] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:01:30] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:01:31] WordPress Init Hook triggered
+[2025-08-29 09:01:31] Block registration available
+[2025-08-29 09:01:31] Admin Init Hook triggered
+[2025-08-29 09:01:31] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:01:31] Block count in database | Data: 5
+[2025-08-29 09:01:41] === CBD Quick Debug Loaded ===
+[2025-08-29 09:01:41] PHP Version | Data: 8.2.27
+[2025-08-29 09:01:41] WordPress Version | Data: 6.8.2
+[2025-08-29 09:01:41] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:01:41] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:01:41] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:01:41] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:01:41] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:01:41] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:01:41] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:01:41] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:01:41] WordPress Init Hook triggered
+[2025-08-29 09:01:41] Block registration available
+[2025-08-29 09:01:41] Admin Init Hook triggered
+[2025-08-29 09:01:41] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:01:41] Block count in database | Data: 5
+[2025-08-29 09:01:51] === CBD Quick Debug Loaded ===
+[2025-08-29 09:01:51] PHP Version | Data: 8.2.27
+[2025-08-29 09:01:51] WordPress Version | Data: 6.8.2
+[2025-08-29 09:01:51] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:01:51] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:01:51] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:01:51] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:01:51] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:01:51] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:01:51] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:01:51] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:01:51] WordPress Init Hook triggered
+[2025-08-29 09:01:51] Block registration available
+[2025-08-29 09:01:51] Admin Init Hook triggered
+[2025-08-29 09:01:51] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:01:51] Block count in database | Data: 5
+[2025-08-29 09:02:01] === CBD Quick Debug Loaded ===
+[2025-08-29 09:02:01] PHP Version | Data: 8.2.27
+[2025-08-29 09:02:01] WordPress Version | Data: 6.8.2
+[2025-08-29 09:02:01] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:02:01] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:02:01] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:02:01] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:02:01] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:02:01] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:02:01] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:02:01] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:02:01] WordPress Init Hook triggered
+[2025-08-29 09:02:01] Block registration available
+[2025-08-29 09:02:01] Admin Init Hook triggered
+[2025-08-29 09:02:01] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:02:01] Block count in database | Data: 5
+[2025-08-29 09:02:20] === CBD Quick Debug Loaded ===
+[2025-08-29 09:02:20] PHP Version | Data: 8.2.27
+[2025-08-29 09:02:20] WordPress Version | Data: 6.8.2
+[2025-08-29 09:02:20] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:02:20] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:02:20] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:02:20] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:02:20] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:02:20] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:02:20] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:02:20] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:02:20] WordPress Init Hook triggered
+[2025-08-29 09:02:20] Block registration available
+[2025-08-29 09:02:23] === CBD Quick Debug Loaded ===
+[2025-08-29 09:02:23] PHP Version | Data: 8.2.27
+[2025-08-29 09:02:23] WordPress Version | Data: 6.8.2
+[2025-08-29 09:02:23] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:02:23] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:02:23] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:02:23] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:02:23] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:02:23] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:02:23] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:02:23] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:02:23] WordPress Init Hook triggered
+[2025-08-29 09:02:23] Block registration available
+[2025-08-29 09:02:23] Admin Init Hook triggered
+[2025-08-29 09:02:23] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:02:23] Block count in database | Data: 5
+[2025-08-29 09:02:25] === CBD Quick Debug Loaded ===
+[2025-08-29 09:02:25] PHP Version | Data: 8.2.27
+[2025-08-29 09:02:25] WordPress Version | Data: 6.8.2
+[2025-08-29 09:02:25] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:02:26] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:02:26] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:02:26] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:02:26] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:02:26] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:02:26] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:02:26] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:02:26] WordPress Init Hook triggered
+[2025-08-29 09:02:26] Block registration available
+[2025-08-29 09:04:01] === CBD Quick Debug Loaded ===
+[2025-08-29 09:04:01] PHP Version | Data: 8.2.27
+[2025-08-29 09:04:01] WordPress Version | Data: 6.8.2
+[2025-08-29 09:04:01] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:04:01] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:04:01] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:04:01] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:04:01] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:04:01] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:04:01] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:04:01] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:04:01] WordPress Init Hook triggered
+[2025-08-29 09:04:01] Block registration available
+[2025-08-29 09:04:02] Admin Init Hook triggered
+[2025-08-29 09:04:02] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:04:02] Block count in database | Data: 5
+[2025-08-29 09:04:02] === CBD Quick Debug Loaded ===
+[2025-08-29 09:04:02] PHP Version | Data: 8.2.27
+[2025-08-29 09:04:02] WordPress Version | Data: 6.8.2
+[2025-08-29 09:04:02] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:04:02] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:04:02] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:04:02] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:04:02] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:04:02] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:04:02] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:04:02] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:04:02] WordPress Init Hook triggered
+[2025-08-29 09:04:02] Block registration available
+[2025-08-29 09:05:57] === CBD Quick Debug Loaded ===
+[2025-08-29 09:05:57] PHP Version | Data: 8.2.27
+[2025-08-29 09:05:57] WordPress Version | Data: 6.8.2
+[2025-08-29 09:05:57] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:05:57] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:05:57] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:05:57] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:05:57] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:05:57] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:05:57] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:05:57] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:05:57] WordPress Init Hook triggered
+[2025-08-29 09:05:57] Block registration available
+[2025-08-29 09:05:57] Admin Init Hook triggered
+[2025-08-29 09:05:57] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:05:57] Block count in database | Data: 5
+[2025-08-29 09:05:59] === CBD Quick Debug Loaded ===
+[2025-08-29 09:05:59] PHP Version | Data: 8.2.27
+[2025-08-29 09:05:59] WordPress Version | Data: 6.8.2
+[2025-08-29 09:05:59] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:05:59] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:05:59] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:05:59] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:05:59] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:05:59] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:05:59] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:05:59] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:05:59] WordPress Init Hook triggered
+[2025-08-29 09:05:59] Block registration available
+[2025-08-29 09:05:59] Admin Init Hook triggered
+[2025-08-29 09:05:59] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:05:59] Block count in database | Data: 5
+[2025-08-29 09:06:01] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:01] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:01] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:01] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:01] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:01] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:01] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:01] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:01] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:01] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:01] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:01] WordPress Init Hook triggered
+[2025-08-29 09:06:01] Block registration available
+[2025-08-29 09:06:01] Admin Menu Hook triggered
+[2025-08-29 09:06:01] Admin Init Hook triggered
+[2025-08-29 09:06:01] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:06:01] Block count in database | Data: 5
+[2025-08-29 09:06:07] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:07] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:07] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:07] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:07] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:07] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:07] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:07] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:07] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:07] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:07] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:07] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:07] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:07] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:07] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:07] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:07] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:07] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:07] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:07] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:07] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:07] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:07] WordPress Init Hook triggered
+[2025-08-29 09:06:07] Block registration available
+[2025-08-29 09:06:07] WordPress Init Hook triggered
+[2025-08-29 09:06:07] Block registration available
+[2025-08-29 09:06:10] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:10] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:10] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:10] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:10] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:10] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:10] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:10] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:10] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:10] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:10] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:10] WordPress Init Hook triggered
+[2025-08-29 09:06:10] Block registration available
+[2025-08-29 09:06:10] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:10] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:10] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:10] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:10] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:10] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:10] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:10] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:10] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:10] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:10] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:10] WordPress Init Hook triggered
+[2025-08-29 09:06:10] Block registration available
+[2025-08-29 09:06:13] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:13] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:13] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:13] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:13] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:13] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:13] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:13] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:13] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:13] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:13] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:13] WordPress Init Hook triggered
+[2025-08-29 09:06:13] Block registration available
+[2025-08-29 09:06:13] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:13] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:13] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:13] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:13] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:13] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:13] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:13] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:13] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:13] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:13] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:13] WordPress Init Hook triggered
+[2025-08-29 09:06:13] Block registration available
+[2025-08-29 09:06:15] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:15] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:15] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:15] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:15] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:15] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:15] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:15] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:15] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:15] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:15] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:15] WordPress Init Hook triggered
+[2025-08-29 09:06:16] Block registration available
+[2025-08-29 09:06:16] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:16] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:16] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:16] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:16] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:16] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:16] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:16] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:16] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:16] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:16] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:16] WordPress Init Hook triggered
+[2025-08-29 09:06:16] Block registration available
+[2025-08-29 09:06:18] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:18] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:18] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:18] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:18] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:18] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:18] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:18] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:18] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:18] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:18] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:18] WordPress Init Hook triggered
+[2025-08-29 09:06:18] Block registration available
+[2025-08-29 09:06:19] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:19] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:19] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:19] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:19] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:19] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:19] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:19] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:19] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:19] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:19] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:19] WordPress Init Hook triggered
+[2025-08-29 09:06:19] Block registration available
+[2025-08-29 09:06:21] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:21] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:22] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:22] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:22] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:22] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:22] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:22] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:22] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:22] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:22] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:22] WordPress Init Hook triggered
+[2025-08-29 09:06:22] Block registration available
+[2025-08-29 09:06:23] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:23] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:23] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:23] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:23] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:23] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:23] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:23] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:23] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:23] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:23] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:23] WordPress Init Hook triggered
+[2025-08-29 09:06:23] Block registration available
+[2025-08-29 09:06:26] === CBD Quick Debug Loaded ===
+[2025-08-29 09:06:26] PHP Version | Data: 8.2.27
+[2025-08-29 09:06:26] WordPress Version | Data: 6.8.2
+[2025-08-29 09:06:26] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:06:26] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:06:26] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:06:26] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:06:26] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:06:26] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:06:26] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:06:26] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:06:26] WordPress Init Hook triggered
+[2025-08-29 09:06:26] Block registration available
+[2025-08-29 09:06:26] Admin Init Hook triggered
+[2025-08-29 09:06:26] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:06:26] Block count in database | Data: 5
+[2025-08-29 09:08:19] === CBD Quick Debug Loaded ===
+[2025-08-29 09:08:19] PHP Version | Data: 8.2.27
+[2025-08-29 09:08:19] WordPress Version | Data: 6.8.2
+[2025-08-29 09:08:19] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:08:19] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:08:19] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:08:19] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:08:19] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:08:19] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:08:19] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:08:19] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:08:19] WordPress Init Hook triggered
+[2025-08-29 09:08:19] Block registration available
+[2025-08-29 09:08:19] Admin Init Hook triggered
+[2025-08-29 09:08:19] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:08:19] Block count in database | Data: 5
+[2025-08-29 09:10:20] === CBD Quick Debug Loaded ===
+[2025-08-29 09:10:20] PHP Version | Data: 8.2.27
+[2025-08-29 09:10:20] WordPress Version | Data: 6.8.2
+[2025-08-29 09:10:20] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:10:20] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:10:20] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:10:20] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:10:20] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:10:20] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:10:20] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:10:20] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:10:20] WordPress Init Hook triggered
+[2025-08-29 09:10:20] Block registration available
+[2025-08-29 09:10:20] Admin Init Hook triggered
+[2025-08-29 09:10:20] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:10:20] Block count in database | Data: 5
+[2025-08-29 09:11:36] === CBD Quick Debug Loaded ===
+[2025-08-29 09:11:36] PHP Version | Data: 8.2.27
+[2025-08-29 09:11:36] WordPress Version | Data: 6.8.2
+[2025-08-29 09:11:36] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:11:36] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:11:36] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:11:36] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:11:36] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:11:36] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:11:36] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:11:36] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:11:36] WordPress Init Hook triggered
+[2025-08-29 09:11:36] Block registration available
+[2025-08-29 09:11:36] Admin Init Hook triggered
+[2025-08-29 09:11:36] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:11:36] Block count in database | Data: 5
+[2025-08-29 09:13:37] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:37] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:37] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:37] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:37] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:37] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:37] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:37] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:37] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:37] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:37] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:37] WordPress Init Hook triggered
+[2025-08-29 09:13:37] Block registration available
+[2025-08-29 09:13:37] Admin Init Hook triggered
+[2025-08-29 09:13:37] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:13:37] Block count in database | Data: 5
+[2025-08-29 09:13:42] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:42] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:42] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:42] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:42] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:42] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:42] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:42] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:42] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:42] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:42] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:42] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:42] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:42] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:42] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:42] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:42] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:42] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:42] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:42] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:42] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:42] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:42] WordPress Init Hook triggered
+[2025-08-29 09:13:42] Block registration available
+[2025-08-29 09:13:42] WordPress Init Hook triggered
+[2025-08-29 09:13:42] Block registration available
+[2025-08-29 09:13:42] Admin Menu Hook triggered
+[2025-08-29 09:13:42] Admin Init Hook triggered
+[2025-08-29 09:13:42] Admin Init Hook triggered
+[2025-08-29 09:13:42] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:13:42] Block count in database | Data: 5
+[2025-08-29 09:13:42] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:13:42] Block count in database | Data: 5
+[2025-08-29 09:13:45] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:45] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:45] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:45] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:45] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:45] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:45] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:45] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:45] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:45] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:45] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:45] WordPress Init Hook triggered
+[2025-08-29 09:13:45] Block registration available
+[2025-08-29 09:13:49] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:49] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:49] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:49] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:49] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:49] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:49] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:49] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:49] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:49] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:49] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:49] WordPress Init Hook triggered
+[2025-08-29 09:13:49] Block registration available
+[2025-08-29 09:13:49] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:49] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:49] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:49] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:49] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:49] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:49] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:49] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:49] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:49] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:49] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:50] WordPress Init Hook triggered
+[2025-08-29 09:13:50] Block registration available
+[2025-08-29 09:13:52] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:52] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:52] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:52] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:52] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:52] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:52] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:52] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:52] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:52] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:52] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:52] WordPress Init Hook triggered
+[2025-08-29 09:13:52] Block registration available
+[2025-08-29 09:13:52] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:52] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:52] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:52] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:52] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:52] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:52] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:52] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:52] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:52] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:52] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:52] WordPress Init Hook triggered
+[2025-08-29 09:13:52] Block registration available
+[2025-08-29 09:13:55] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:55] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:55] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:55] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:55] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:55] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:55] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:55] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:55] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:55] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:55] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:55] WordPress Init Hook triggered
+[2025-08-29 09:13:55] Block registration available
+[2025-08-29 09:13:55] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:55] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:55] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:55] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:55] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:55] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:55] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:55] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:55] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:55] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:55] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:55] WordPress Init Hook triggered
+[2025-08-29 09:13:55] Block registration available
+[2025-08-29 09:13:58] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:58] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:58] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:58] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:58] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:58] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:58] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:58] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:58] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:58] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:58] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:58] WordPress Init Hook triggered
+[2025-08-29 09:13:58] Block registration available
+[2025-08-29 09:13:59] === CBD Quick Debug Loaded ===
+[2025-08-29 09:13:59] PHP Version | Data: 8.2.27
+[2025-08-29 09:13:59] WordPress Version | Data: 6.8.2
+[2025-08-29 09:13:59] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:13:59] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:13:59] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:13:59] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:13:59] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:13:59] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:13:59] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:13:59] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:13:59] WordPress Init Hook triggered
+[2025-08-29 09:13:59] Block registration available
+[2025-08-29 09:14:01] === CBD Quick Debug Loaded ===
+[2025-08-29 09:14:01] PHP Version | Data: 8.2.27
+[2025-08-29 09:14:01] WordPress Version | Data: 6.8.2
+[2025-08-29 09:14:01] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:14:01] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:14:01] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:14:01] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:14:01] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:14:01] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:14:01] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:14:01] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:14:01] WordPress Init Hook triggered
+[2025-08-29 09:14:01] Block registration available
+[2025-08-29 09:14:02] === CBD Quick Debug Loaded ===
+[2025-08-29 09:14:02] PHP Version | Data: 8.2.27
+[2025-08-29 09:14:02] WordPress Version | Data: 6.8.2
+[2025-08-29 09:14:02] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:14:02] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:14:02] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:14:02] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:14:02] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:14:02] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:14:02] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:14:02] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:14:02] WordPress Init Hook triggered
+[2025-08-29 09:14:02] Block registration available
+[2025-08-29 09:14:02] Admin Menu Hook triggered
+[2025-08-29 09:14:02] Admin Init Hook triggered
+[2025-08-29 09:14:02] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:14:02] Block count in database | Data: 5
+[2025-08-29 09:14:03] === CBD Quick Debug Loaded ===
+[2025-08-29 09:14:03] PHP Version | Data: 8.2.27
+[2025-08-29 09:14:03] WordPress Version | Data: 6.8.2
+[2025-08-29 09:14:03] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:14:03] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:14:03] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:14:03] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:14:03] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:14:03] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:14:03] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:14:03] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:14:03] WordPress Init Hook triggered
+[2025-08-29 09:14:03] Block registration available
+[2025-08-29 09:14:05] === CBD Quick Debug Loaded ===
+[2025-08-29 09:14:05] PHP Version | Data: 8.2.27
+[2025-08-29 09:14:05] WordPress Version | Data: 6.8.2
+[2025-08-29 09:14:05] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:14:05] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:14:05] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:14:05] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:14:05] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:14:05] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:14:05] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:14:05] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:14:05] WordPress Init Hook triggered
+[2025-08-29 09:14:05] Block registration available
+[2025-08-29 09:14:06] === CBD Quick Debug Loaded ===
+[2025-08-29 09:14:06] PHP Version | Data: 8.2.27
+[2025-08-29 09:14:06] WordPress Version | Data: 6.8.2
+[2025-08-29 09:14:06] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:14:06] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:14:06] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:14:06] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:14:06] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:14:06] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:14:06] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:14:06] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:14:06] WordPress Init Hook triggered
+[2025-08-29 09:14:06] Block registration available
+[2025-08-29 09:14:07] === CBD Quick Debug Loaded ===
+[2025-08-29 09:14:07] PHP Version | Data: 8.2.27
+[2025-08-29 09:14:07] WordPress Version | Data: 6.8.2
+[2025-08-29 09:14:07] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:14:07] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:14:07] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:14:07] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:14:07] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:14:07] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:14:07] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:14:07] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:14:07] WordPress Init Hook triggered
+[2025-08-29 09:14:07] Block registration available
+[2025-08-29 09:14:07] Admin Init Hook triggered
+[2025-08-29 09:14:07] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:14:07] Block count in database | Data: 5
+[2025-08-29 09:14:09] === CBD Quick Debug Loaded ===
+[2025-08-29 09:14:09] PHP Version | Data: 8.2.27
+[2025-08-29 09:14:09] WordPress Version | Data: 6.8.2
+[2025-08-29 09:14:09] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:14:09] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:14:09] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:14:09] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:14:09] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:14:09] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:14:09] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:14:09] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:14:09] WordPress Init Hook triggered
+[2025-08-29 09:14:09] Block registration available
+[2025-08-29 09:14:09] Admin Init Hook triggered
+[2025-08-29 09:14:09] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:14:09] Block count in database | Data: 5
+[2025-08-29 09:14:09] === CBD Quick Debug Loaded ===
+[2025-08-29 09:14:09] PHP Version | Data: 8.2.27
+[2025-08-29 09:14:09] WordPress Version | Data: 6.8.2
+[2025-08-29 09:14:09] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:14:09] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:14:09] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:14:09] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:14:09] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:14:09] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:14:09] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:14:09] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:14:10] WordPress Init Hook triggered
+[2025-08-29 09:14:10] Block registration available
+[2025-08-29 09:14:10] Admin Init Hook triggered
+[2025-08-29 09:14:10] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:14:10] Block count in database | Data: 5
+[2025-08-29 09:16:06] === CBD Quick Debug Loaded ===
+[2025-08-29 09:16:06] PHP Version | Data: 8.2.27
+[2025-08-29 09:16:06] WordPress Version | Data: 6.8.2
+[2025-08-29 09:16:06] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:16:06] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:16:06] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:16:06] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:16:06] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:16:06] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:16:06] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:16:06] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:16:06] WordPress Init Hook triggered
+[2025-08-29 09:16:06] Block registration available
+[2025-08-29 09:16:06] Admin Init Hook triggered
+[2025-08-29 09:16:06] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:16:06] Block count in database | Data: 5
+[2025-08-29 09:18:07] === CBD Quick Debug Loaded ===
+[2025-08-29 09:18:07] PHP Version | Data: 8.2.27
+[2025-08-29 09:18:07] WordPress Version | Data: 6.8.2
+[2025-08-29 09:18:07] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:18:07] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:18:07] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:18:07] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:18:07] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:18:07] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:18:07] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:18:07] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:18:07] WordPress Init Hook triggered
+[2025-08-29 09:18:07] Block registration available
+[2025-08-29 09:18:07] Admin Init Hook triggered
+[2025-08-29 09:18:07] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:18:07] Block count in database | Data: 5
+[2025-08-29 09:20:08] === CBD Quick Debug Loaded ===
+[2025-08-29 09:20:08] PHP Version | Data: 8.2.27
+[2025-08-29 09:20:08] WordPress Version | Data: 6.8.2
+[2025-08-29 09:20:08] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:20:08] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:20:08] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:20:08] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:20:08] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:20:08] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:20:08] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:20:08] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:20:08] WordPress Init Hook triggered
+[2025-08-29 09:20:08] Block registration available
+[2025-08-29 09:20:08] Admin Init Hook triggered
+[2025-08-29 09:20:08] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:20:08] Block count in database | Data: 5
+[2025-08-29 09:21:56] === CBD Quick Debug Loaded ===
+[2025-08-29 09:21:56] PHP Version | Data: 8.2.27
+[2025-08-29 09:21:56] WordPress Version | Data: 6.8.2
+[2025-08-29 09:21:56] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:21:56] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:21:56] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:21:56] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:21:56] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:21:56] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:21:56] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:21:56] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:21:56] WordPress Init Hook triggered
+[2025-08-29 09:21:56] Block registration available
+[2025-08-29 09:21:56] Admin Init Hook triggered
+[2025-08-29 09:21:56] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:21:56] Block count in database | Data: 5
+[2025-08-29 09:22:05] === CBD Quick Debug Loaded ===
+[2025-08-29 09:22:05] PHP Version | Data: 8.2.27
+[2025-08-29 09:22:05] WordPress Version | Data: 6.8.2
+[2025-08-29 09:22:05] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:22:05] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:22:05] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:22:05] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:22:05] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:22:05] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:22:05] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:22:05] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:22:05] WordPress Init Hook triggered
+[2025-08-29 09:22:05] Block registration available
+[2025-08-29 09:22:05] Admin Init Hook triggered
+[2025-08-29 09:22:05] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:22:05] Block count in database | Data: 5
+[2025-08-29 09:22:15] === CBD Quick Debug Loaded ===
+[2025-08-29 09:22:15] PHP Version | Data: 8.2.27
+[2025-08-29 09:22:15] WordPress Version | Data: 6.8.2
+[2025-08-29 09:22:15] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:22:15] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:22:15] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:22:15] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:22:15] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:22:15] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:22:15] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:22:15] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:22:15] WordPress Init Hook triggered
+[2025-08-29 09:22:15] Block registration available
+[2025-08-29 09:22:15] Admin Init Hook triggered
+[2025-08-29 09:22:15] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:22:15] Block count in database | Data: 5
+[2025-08-29 09:22:25] === CBD Quick Debug Loaded ===
+[2025-08-29 09:22:25] PHP Version | Data: 8.2.27
+[2025-08-29 09:22:25] WordPress Version | Data: 6.8.2
+[2025-08-29 09:22:25] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:22:25] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:22:25] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:22:25] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:22:25] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:22:25] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:22:25] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:22:25] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:22:25] WordPress Init Hook triggered
+[2025-08-29 09:22:25] Block registration available
+[2025-08-29 09:22:25] Admin Init Hook triggered
+[2025-08-29 09:22:25] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:22:25] Block count in database | Data: 5
+[2025-08-29 09:22:35] === CBD Quick Debug Loaded ===
+[2025-08-29 09:22:35] PHP Version | Data: 8.2.27
+[2025-08-29 09:22:35] WordPress Version | Data: 6.8.2
+[2025-08-29 09:22:35] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:22:35] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:22:35] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:22:35] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:22:35] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:22:35] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:22:35] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:22:35] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:22:35] WordPress Init Hook triggered
+[2025-08-29 09:22:35] Block registration available
+[2025-08-29 09:22:35] Admin Init Hook triggered
+[2025-08-29 09:22:35] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:22:35] Block count in database | Data: 5
+[2025-08-29 09:22:45] === CBD Quick Debug Loaded ===
+[2025-08-29 09:22:45] PHP Version | Data: 8.2.27
+[2025-08-29 09:22:45] WordPress Version | Data: 6.8.2
+[2025-08-29 09:22:45] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:22:45] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:22:45] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:22:45] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:22:45] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:22:45] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:22:45] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:22:45] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:22:45] WordPress Init Hook triggered
+[2025-08-29 09:22:45] Block registration available
+[2025-08-29 09:22:45] Admin Init Hook triggered
+[2025-08-29 09:22:45] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:22:45] Block count in database | Data: 5
+[2025-08-29 09:22:55] === CBD Quick Debug Loaded ===
+[2025-08-29 09:22:55] PHP Version | Data: 8.2.27
+[2025-08-29 09:22:55] WordPress Version | Data: 6.8.2
+[2025-08-29 09:22:55] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:22:55] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:22:55] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:22:55] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:22:55] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:22:55] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:22:55] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:22:55] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:22:55] WordPress Init Hook triggered
+[2025-08-29 09:22:55] Block registration available
+[2025-08-29 09:22:55] Admin Init Hook triggered
+[2025-08-29 09:22:55] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:22:55] Block count in database | Data: 5
+[2025-08-29 09:23:05] === CBD Quick Debug Loaded ===
+[2025-08-29 09:23:05] PHP Version | Data: 8.2.27
+[2025-08-29 09:23:05] WordPress Version | Data: 6.8.2
+[2025-08-29 09:23:05] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:23:05] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:23:05] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:23:05] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:23:05] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:23:05] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:23:05] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:23:05] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:23:05] WordPress Init Hook triggered
+[2025-08-29 09:23:05] Block registration available
+[2025-08-29 09:23:05] Admin Init Hook triggered
+[2025-08-29 09:23:05] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:23:05] Block count in database | Data: 5
+[2025-08-29 09:23:15] === CBD Quick Debug Loaded ===
+[2025-08-29 09:23:15] PHP Version | Data: 8.2.27
+[2025-08-29 09:23:15] WordPress Version | Data: 6.8.2
+[2025-08-29 09:23:15] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:23:15] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:23:15] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:23:15] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:23:15] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:23:15] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:23:15] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:23:15] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:23:15] WordPress Init Hook triggered
+[2025-08-29 09:23:15] Block registration available
+[2025-08-29 09:23:15] Admin Init Hook triggered
+[2025-08-29 09:23:15] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:23:15] Block count in database | Data: 5
+[2025-08-29 09:23:25] === CBD Quick Debug Loaded ===
+[2025-08-29 09:23:25] PHP Version | Data: 8.2.27
+[2025-08-29 09:23:25] WordPress Version | Data: 6.8.2
+[2025-08-29 09:23:25] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:23:25] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:23:25] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:23:25] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:23:25] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:23:25] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:23:25] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:23:25] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:23:25] WordPress Init Hook triggered
+[2025-08-29 09:23:25] Block registration available
+[2025-08-29 09:23:25] Admin Init Hook triggered
+[2025-08-29 09:23:25] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:23:25] Block count in database | Data: 5
+[2025-08-29 09:23:36] === CBD Quick Debug Loaded ===
+[2025-08-29 09:23:36] PHP Version | Data: 8.2.27
+[2025-08-29 09:23:36] WordPress Version | Data: 6.8.2
+[2025-08-29 09:23:36] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:23:36] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:23:36] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:23:36] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:23:36] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:23:36] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:23:36] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:23:36] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:23:36] WordPress Init Hook triggered
+[2025-08-29 09:23:36] Block registration available
+[2025-08-29 09:23:36] Admin Init Hook triggered
+[2025-08-29 09:23:36] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:23:36] Block count in database | Data: 5
+[2025-08-29 09:25:37] === CBD Quick Debug Loaded ===
+[2025-08-29 09:25:37] PHP Version | Data: 8.2.27
+[2025-08-29 09:25:37] WordPress Version | Data: 6.8.2
+[2025-08-29 09:25:37] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:25:37] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:25:37] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:25:37] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:25:37] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:25:37] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:25:37] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:25:37] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:25:37] WordPress Init Hook triggered
+[2025-08-29 09:25:37] Block registration available
+[2025-08-29 09:25:37] Admin Init Hook triggered
+[2025-08-29 09:25:37] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:25:37] Block count in database | Data: 5
+[2025-08-29 09:27:38] === CBD Quick Debug Loaded ===
+[2025-08-29 09:27:38] PHP Version | Data: 8.2.27
+[2025-08-29 09:27:38] WordPress Version | Data: 6.8.2
+[2025-08-29 09:27:38] Plugin Directory | Data: C:\Users\mtnhu\Local Sites\test\app\public\wp-content\plugins\container-block-designer/
+[2025-08-29 09:27:38] ✅ Found: Main Plugin File | Data: container-block-designer.php
+[2025-08-29 09:27:38] ✅ Found: AJAX Handlers | Data: includes/ajax-handlers.php
+[2025-08-29 09:27:38] ✅ Found: Admin Features Class | Data: includes/Admin/class-admin-features.php
+[2025-08-29 09:27:38] ✅ Found: Block JS | Data: assets/js/container-block.js
+[2025-08-29 09:27:38] ✅ Found: Admin JS | Data: assets/js/admin.js
+[2025-08-29 09:27:38] Plugin Status Check | Data: Array
+(
+    [CBD_VERSION] => NOT DEFINED
+    [CBD_PLUGIN_DIR] => NOT DEFINED
+    [CBD_PLUGIN_URL] => NOT DEFINED
+    [CBD_TABLE_BLOCKS] => NOT DEFINED
+)
+
+[2025-08-29 09:27:38] === CBD Quick Debug Setup Complete ===
+[2025-08-29 09:27:38] WordPress Init Hook triggered
+[2025-08-29 09:27:38] Block registration available
+[2025-08-29 09:27:38] Admin Init Hook triggered
+[2025-08-29 09:27:38] ✅ Database table exists | Data: wp_cbd_blocks
+[2025-08-29 09:27:38] Block count in database | Data: 5

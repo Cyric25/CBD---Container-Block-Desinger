@@ -1,0 +1,8 @@
+/* Container Block Designer - Frontend Styles */
+.wp-block-container-block-designer-container {
+    position: relative;
+}
+.cbd-container {
+    position: relative;
+    min-height: 50px;
+}
