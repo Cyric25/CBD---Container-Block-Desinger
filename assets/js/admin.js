@@ -1,655 +1,406 @@
 /**
  * Container Block Designer - Admin JavaScript
- * Version: 2.2.0
+ * Version: 2.5.0
+ * 
+ * Verwaltet alle Admin-Funktionalitäten
  */
 
 (function($) {
     'use strict';
     
-    // Debug mode
-    const DEBUG = true;
-    
-    /**
-     * Container Block Designer Admin
-     */
-    window.CBDAdmin = {
+    // Warten bis DOM bereit ist
+    $(document).ready(function() {
         
         /**
-         * Initialize
+         * Color Picker initialisieren
          */
-        init: function() {
-            console.log('🚀 Initializing CBD Admin...');
-            
-            // Check dependencies
-            if (typeof $ === 'undefined') {
-                console.error('❌ jQuery not found!');
-                return;
-            }
-            
-            // Setup AJAX defaults
-            if (typeof ajaxurl === 'undefined' && typeof cbdAdmin !== 'undefined') {
-                window.ajaxurl = cbdAdmin.ajaxUrl;
-            }
-            
-            // Initialize cbdAdmin if not exists
-            if (typeof cbdAdmin === 'undefined') {
-                window.cbdAdmin = {
-                    ajaxUrl: ajaxurl || '/wp-admin/admin-ajax.php',
-                    nonce: $('#cbd-nonce').val() || '',
-                    strings: {
-                        confirmDelete: 'Wirklich löschen?',
-                        confirmDuplicate: 'Block duplizieren?',
-                        saving: 'Speichern...',
-                        saved: 'Gespeichert!',
-                        error: 'Ein Fehler ist aufgetreten.',
-                        active: 'Aktiv',
-                        inactive: 'Inaktiv',
-                        activate: 'Aktivieren',
-                        deactivate: 'Deaktivieren'
+        if ($.fn.wpColorPicker) {
+            $('.cbd-color-picker').each(function() {
+                $(this).wpColorPicker({
+                    change: function(event, ui) {
+                        // Live-Preview Update
+                        updatePreview();
                     },
-                    blocksListUrl: window.location.origin + '/wp-admin/admin.php?page=container-block-designer'
-                };
-            }
-            
-            this.bindEvents();
-            this.initColorPickers();
-            this.initPreview();
-            this.initBulkActions();
-            this.initSearch();
-            
-            // Initialize tooltips only if available
-            this.initTooltips();
-            
-            console.log('✅ CBD Admin initialized successfully');
-        },
-
-        /**
-         * Bind all events
-         */
-        bindEvents: function() {
-            const self = this;
-            if (DEBUG) console.log('📌 Binding event handlers...');
-            
-            // SAVE BUTTON
-            $(document).on('click', '#cbd-save-block, button[type="submit"][name="cbd-save-block"]', function(e) {
-                e.preventDefault();
-                if (DEBUG) console.log('💾 Save button clicked');
-                self.saveBlock();
-            });
-            
-            // Form submit
-            $(document).on('submit', '#cbd-block-form, form.cbd-block-form', function(e) {
-                e.preventDefault();
-                if (DEBUG) console.log('📝 Form submitted');
-                self.saveBlock();
-            });
-            
-            // DELETE
-            $(document).on('click', '.cbd-delete-btn, a[data-action="delete"]', function(e) {
-                e.preventDefault();
-                const blockId = $(this).data('id') || $(this).data('block-id');
-                if (DEBUG) console.log('🗑️ Delete button clicked for block:', blockId);
-                if (blockId) {
-                    self.deleteBlock(blockId);
-                }
-            });
-            
-            // TOGGLE STATUS
-            $(document).on('click', '.cbd-toggle-status-btn, a[data-action="toggle-status"]', function(e) {
-                e.preventDefault();
-                const blockId = $(this).data('id') || $(this).data('block-id');
-                if (DEBUG) console.log('🔄 Toggle status clicked for block:', blockId);
-                if (blockId) {
-                    self.toggleStatus(blockId);
-                }
-            });
-            
-            // DUPLICATE
-            $(document).on('click', '.cbd-duplicate-btn, a[data-action="duplicate"]', function(e) {
-                e.preventDefault();
-                const blockId = $(this).data('id') || $(this).data('block-id');
-                if (DEBUG) console.log('📋 Duplicate clicked for block:', blockId);
-                if (blockId) {
-                    self.duplicateBlock(blockId);
-                }
-            });
-            
-            // EDIT - direkte Navigation
-            $(document).on('click', '.cbd-edit-btn, a[data-action="edit"]', function(e) {
-                if (DEBUG) console.log('✏️ Edit button clicked');
-                // Let the normal link work
-            });
-            
-            // Features modal - wird von admin-features.js behandelt
-            $(document).on('click', '.cbd-configure-features, .cbd-features-btn', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                let blockId = $(this).data('id') || $(this).data('block-id') || 
-                             $(this).closest('tr').data('block-id') || 
-                             $('#block-id').val();
-                
-                const blockName = $(this).data('name') || $('#block-name').val() || 'Block';
-                
-                if (DEBUG) console.log('⚙️ Opening features modal for block:', {id: blockId, name: blockName});
-                
-                if (blockId && blockId !== '0') {
-                    self.openFeaturesModal(blockId, blockName);
-                } else {
-                    self.showMessage('⚠️ Bitte speichern Sie zuerst den Block, bevor Sie Features konfigurieren.', 'warning');
-                }
-            });
-            
-            // Dismiss notices
-            $(document).on('click', '.cbd-notice .notice-dismiss', function() {
-                $(this).closest('.cbd-notice').fadeOut();
-            });
-            
-            if (DEBUG) console.log('✅ Event handlers bound');
-        },
-
-        /**
-         * Initialize tooltips - with fallback
-         */
-        initTooltips: function() {
-            // Check if jQuery UI tooltip is available
-            if ($.fn.tooltip) {
-                try {
-                    $('.cbd-tooltip').tooltip({
-                        position: {
-                            my: "center bottom-10",
-                            at: "center top",
-                            using: function(position, feedback) {
-                                $(this).css(position);
-                                $("<div>")
-                                    .addClass("arrow")
-                                    .addClass(feedback.vertical)
-                                    .addClass(feedback.horizontal)
-                                    .appendTo(this);
-                            }
-                        }
-                    });
-                    if (DEBUG) console.log('✅ Tooltips initialized');
-                } catch (e) {
-                    if (DEBUG) console.log('⚠️ Tooltip initialization failed:', e);
-                }
-            } else {
-                // Fallback: Use title attribute
-                if (DEBUG) console.log('ℹ️ jQuery UI Tooltip not available, using native tooltips');
-                $('.cbd-tooltip').each(function() {
-                    const $this = $(this);
-                    if (!$this.attr('title') && $this.data('tooltip')) {
-                        $this.attr('title', $this.data('tooltip'));
+                    clear: function() {
+                        updatePreview();
                     }
                 });
-            }
-        },
-
+            });
+        }
+        
         /**
-         * Save block
+         * Block Form Handler
          */
-        saveBlock: function() {
-            const self = this;
-            if (DEBUG) console.log('💾 Saving block...');
+        $('#cbd-block-form').on('submit', function(e) {
+            e.preventDefault();
             
-            // Get form data
-            const formData = {
-                action: 'cbd_save_block',
-                nonce: $('#cbd-nonce').val() || cbdAdmin.nonce,
-                block_id: $('#block-id').val() || '0',
-                block_name: $('#block-name').val(),
-                block_slug: $('#block-slug').val(),
-                block_description: $('#block-description').val(),
-                block_category: $('#block-category').val(),
-                block_icon: $('#block-icon').val(),
-                block_keywords: $('#block-keywords').val(),
-                block_status: $('#block-status').is(':checked') ? 1 : 0,
-                
-                // Style settings
-                background_color: $('#background-color').val(),
-                text_color: $('#text-color').val(),
-                border_style: $('#border-style').val(),
-                border_width: $('#border-width').val(),
-                border_color: $('#border-color').val(),
-                border_radius: $('#border-radius').val(),
-                padding: $('#padding').val(),
-                margin: $('#margin').val(),
-                custom_css: $('#custom-css').val()
+            var $form = $(this);
+            var $button = $form.find('button[type="submit"]');
+            var originalText = $button.text();
+            var isNewBlock = !$form.find('input[name="block_id"]').val();
+            
+            // Button Status ändern
+            $button.prop('disabled', true).text(cbdAdmin.strings.saving || 'Speichern...');
+            
+            // Form-Daten sammeln
+            var formData = new FormData(this);
+            formData.append('action', 'cbd_save_block');
+            
+            // Styles sammeln
+            var styles = {
+                padding: {
+                    top: parseInt($('input[name="styles[padding][top]"]').val()) || 20,
+                    right: parseInt($('input[name="styles[padding][right]"]').val()) || 20,
+                    bottom: parseInt($('input[name="styles[padding][bottom]"]').val()) || 20,
+                    left: parseInt($('input[name="styles[padding][left]"]').val()) || 20
+                },
+                background: {
+                    color: $('input[name="styles[background][color]"]').val() || '#ffffff'
+                },
+                text: {
+                    color: $('input[name="styles[text][color]"]').val() || '#333333',
+                    alignment: $('select[name="styles[text][alignment]"]').val() || 'left'
+                },
+                border: {
+                    width: parseInt($('input[name="styles[border][width]"]').val()) || 0,
+                    style: $('select[name="styles[border][style]"]').val() || 'solid',
+                    color: $('input[name="styles[border][color]"]').val() || '#e0e0e0',
+                    radius: parseInt($('input[name="styles[border][radius]"]').val()) || 0
+                }
             };
             
-            if (DEBUG) console.log('Form data:', formData);
+            // Features sammeln
+            var features = {
+                icon: {
+                    enabled: $('input[name="features[icon][enabled]"]').is(':checked'),
+                    value: $('input[name="features[icon][value]"]').val() || 'dashicons-admin-generic'
+                },
+                collapse: {
+                    enabled: $('input[name="features[collapse][enabled]"]').is(':checked'),
+                    defaultState: $('select[name="features[collapse][defaultState]"]').val() || 'expanded'
+                },
+                numbering: {
+                    enabled: $('input[name="features[numbering][enabled]"]').is(':checked'),
+                    format: $('select[name="features[numbering][format]"]').val() || 'numeric'
+                },
+                copyText: {
+                    enabled: $('input[name="features[copyText][enabled]"]').is(':checked'),
+                    buttonText: $('input[name="features[copyText][buttonText]"]').val() || 'Text kopieren'
+                }
+            };
             
-            // Validate required fields
-            if (!formData.block_name) {
-                this.showMessage('❌ Bitte geben Sie einen Block-Namen ein.', 'error');
-                $('#block-name').focus();
-                return;
-            }
+            // Config sammeln
+            var config = {
+                allowInnerBlocks: $('input[name="config[allowInnerBlocks]"]').is(':checked')
+            };
             
-            // Show saving state
-            const $saveBtn = $('#cbd-save-block');
-            const originalText = $saveBtn.text();
-            $saveBtn.text(cbdAdmin.strings.saving).prop('disabled', true);
+            // AJAX-Daten vorbereiten
+            var ajaxData = {
+                action: 'cbd_save_block',
+                nonce: $('#cbd_nonce').val() || formData.get('cbd_nonce'),
+                block_id: formData.get('block_id') || 0,
+                name: formData.get('name'),
+                title: formData.get('title'),
+                description: formData.get('description'),
+                status: formData.get('status'),
+                styles: JSON.stringify(styles),
+                features: JSON.stringify(features),
+                config: JSON.stringify(config)
+            };
             
-            // AJAX save
-            $.ajax({
-                url: cbdAdmin.ajaxUrl || ajaxurl,
-                type: 'POST',
-                data: formData,
-                success: function(response) {
-                    if (DEBUG) console.log('Save response:', response);
-                    
+            // AJAX Request
+            $.post(cbdAdmin.ajaxUrl, ajaxData)
+                .done(function(response) {
                     if (response.success) {
-                        // Update block ID if new block
-                        if (response.data && response.data.block_id) {
-                            $('#block-id').val(response.data.block_id);
-                            
-                            // Update URL if new block
-                            if (formData.block_id === '0') {
-                                const newUrl = cbdAdmin.blocksListUrl + '&action=edit&id=' + response.data.block_id;
-                                window.history.replaceState({}, '', newUrl);
-                            }
+                        // Erfolg
+                        $button.text(cbdAdmin.strings.saved || 'Gespeichert!');
+                        
+                        // Bei neuem Block zur Bearbeitungsseite weiterleiten
+                        if (isNewBlock && response.data.block) {
+                            setTimeout(function() {
+                                window.location.href = cbdAdmin.adminUrl + 'admin.php?page=cbd-edit-block&id=' + response.data.block.id;
+                            }, 1000);
+                        } else {
+                            // Button nach 2 Sekunden zurücksetzen
+                            setTimeout(function() {
+                                $button.prop('disabled', false).text(originalText);
+                            }, 2000);
                         }
                         
-                        $saveBtn.text(cbdAdmin.strings.saved);
-                        self.showMessage('✅ ' + (response.data.message || 'Block erfolgreich gespeichert!'), 'success');
+                        // Success Notice anzeigen
+                        showNotice(response.data.message || 'Erfolgreich gespeichert', 'success');
                         
-                        // Reset button after delay
-                        setTimeout(function() {
-                            $saveBtn.text(originalText).prop('disabled', false);
-                        }, 2000);
                     } else {
-                        $saveBtn.text(originalText).prop('disabled', false);
-                        self.showMessage('❌ ' + (response.data || cbdAdmin.strings.error), 'error');
+                        // Fehler
+                        showNotice(response.data.message || cbdAdmin.strings.error, 'error');
+                        $button.prop('disabled', false).text(originalText);
                     }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Save error:', error);
-                    $saveBtn.text(originalText).prop('disabled', false);
-                    self.showMessage('❌ ' + cbdAdmin.strings.error, 'error');
-                }
-            });
-        },
-
+                })
+                .fail(function(xhr, status, error) {
+                    showNotice('Verbindungsfehler: ' + error, 'error');
+                    $button.prop('disabled', false).text(originalText);
+                });
+        });
+        
         /**
-         * Delete block
+         * Block löschen
          */
-        deleteBlock: function(blockId) {
+        $('.cbd-delete-block').on('click', function(e) {
+            e.preventDefault();
+            
             if (!confirm(cbdAdmin.strings.confirmDelete)) {
                 return;
             }
             
-            const self = this;
+            var $button = $(this);
+            var blockId = $button.data('id');
+            var $row = $button.closest('tr');
             
-            $.ajax({
-                url: cbdAdmin.ajaxUrl || ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'cbd_delete_block',
-                    block_id: blockId,
-                    nonce: cbdAdmin.nonce || $('#cbd-nonce').val()
-                },
-                success: function(response) {
-                    if (response.success) {
-                        // Remove row from table
-                        $('tr[data-block-id="' + blockId + '"]').fadeOut(400, function() {
-                            $(this).remove();
-                        });
-                        self.showMessage('✅ Block erfolgreich gelöscht!', 'success');
-                    } else {
-                        self.showMessage('❌ ' + (response.data || 'Fehler beim Löschen'), 'error');
-                    }
-                },
-                error: function() {
-                    self.showMessage('❌ Fehler beim Löschen', 'error');
-                }
-            });
-        },
-
-        /**
-         * Toggle block status
-         */
-        toggleStatus: function(blockId) {
-            const self = this;
-            const $row = $('tr[data-block-id="' + blockId + '"]');
-            const $statusBadge = $row.find('.cbd-status-badge');
-            const currentStatus = $statusBadge.hasClass('cbd-status-active') ? 1 : 0;
-            const newStatus = currentStatus ? 0 : 1;
+            $button.prop('disabled', true).text('Löschen...');
             
-            $.ajax({
-                url: cbdAdmin.ajaxUrl || ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'cbd_toggle_status',
-                    block_id: blockId,
-                    status: newStatus,
-                    nonce: cbdAdmin.nonce || $('#cbd-nonce').val()
-                },
-                success: function(response) {
-                    if (response.success) {
-                        // Update UI
-                        if (newStatus) {
-                            $statusBadge
-                                .removeClass('cbd-status-inactive')
-                                .addClass('cbd-status-active')
-                                .text(cbdAdmin.strings.active);
-                        } else {
-                            $statusBadge
-                                .removeClass('cbd-status-active')
-                                .addClass('cbd-status-inactive')
-                                .text(cbdAdmin.strings.inactive);
+            $.post(cbdAdmin.ajaxUrl, {
+                action: 'cbd_delete_block',
+                block_id: blockId,
+                nonce: cbdAdmin.nonce
+            })
+            .done(function(response) {
+                if (response.success) {
+                    // Zeile ausblenden und entfernen
+                    $row.fadeOut(400, function() {
+                        $(this).remove();
+                        
+                        // Prüfen ob noch Blocks vorhanden
+                        if ($('.wp-list-table tbody tr').length === 0) {
+                            location.reload();
                         }
-                        self.showMessage('✅ Status erfolgreich geändert!', 'success');
-                    } else {
-                        self.showMessage('❌ Fehler beim Ändern des Status', 'error');
-                    }
-                },
-                error: function() {
-                    self.showMessage('❌ Fehler beim Ändern des Status', 'error');
+                    });
+                    
+                    showNotice(response.data.message || 'Block gelöscht', 'success');
+                } else {
+                    showNotice(response.data.message || 'Fehler beim Löschen', 'error');
+                    $button.prop('disabled', false).text('Löschen');
                 }
+            })
+            .fail(function() {
+                showNotice('Verbindungsfehler', 'error');
+                $button.prop('disabled', false).text('Löschen');
             });
-        },
-
+        });
+        
         /**
-         * Duplicate block
+         * Name-Feld automatisch formatieren
          */
-        duplicateBlock: function(blockId) {
-            if (!confirm(cbdAdmin.strings.confirmDuplicate || 'Block duplizieren?')) {
+        $('#block-name').on('input', function() {
+            var value = $(this).val();
+            var cleaned = value.toLowerCase()
+                .replace(/[^a-z0-9-]/g, '-')
+                .replace(/--+/g, '-')
+                .replace(/^-+|-+$/g, '');
+            
+            if (value !== cleaned) {
+                $(this).val(cleaned);
+            }
+        });
+        
+        /**
+         * Feature-Toggles
+         */
+        $('input[type="checkbox"][name*="features"]').on('change', function() {
+            var $checkbox = $(this);
+            var $container = $checkbox.closest('tr').find('input[type="text"], select').not($checkbox);
+            
+            if ($checkbox.is(':checked')) {
+                $container.prop('disabled', false).removeClass('disabled');
+            } else {
+                $container.prop('disabled', true).addClass('disabled');
+            }
+        }).trigger('change');
+        
+        /**
+         * Live-Preview
+         */
+        function updatePreview() {
+            var $preview = $('#cbd-block-preview');
+            if ($preview.length === 0) {
+                // Preview-Container erstellen
+                var $sidebar = $('.cbd-sidebar');
+                if ($sidebar.length) {
+                    $sidebar.append(
+                        '<div class="cbd-card">' +
+                        '<h3>Live-Vorschau</h3>' +
+                        '<div id="cbd-block-preview" class="cbd-preview-container">' +
+                        '<div class="cbd-preview-content">Beispiel-Inhalt</div>' +
+                        '</div>' +
+                        '</div>'
+                    );
+                    $preview = $('#cbd-block-preview');
+                }
+            }
+            
+            if ($preview.length) {
+                // Styles anwenden
+                var styles = {
+                    paddingTop: $('input[name="styles[padding][top]"]').val() + 'px',
+                    paddingRight: $('input[name="styles[padding][right]"]').val() + 'px',
+                    paddingBottom: $('input[name="styles[padding][bottom]"]').val() + 'px',
+                    paddingLeft: $('input[name="styles[padding][left]"]').val() + 'px',
+                    backgroundColor: $('input[name="styles[background][color]"]').val(),
+                    color: $('input[name="styles[text][color]"]').val(),
+                    textAlign: $('select[name="styles[text][alignment]"]').val(),
+                    borderWidth: $('input[name="styles[border][width]"]').val() + 'px',
+                    borderStyle: $('select[name="styles[border][style]"]').val(),
+                    borderColor: $('input[name="styles[border][color]"]').val(),
+                    borderRadius: $('input[name="styles[border][radius]"]').val() + 'px'
+                };
+                
+                $preview.css(styles);
+            }
+        }
+        
+        // Preview bei Änderungen aktualisieren
+        $('input[name*="styles"], select[name*="styles"]').on('change input', updatePreview);
+        
+        // Initial Preview
+        updatePreview();
+        
+        /**
+         * Tabs-Navigation (falls vorhanden)
+         */
+        $('.nav-tab').on('click', function(e) {
+            e.preventDefault();
+            
+            var $tab = $(this);
+            var target = $tab.attr('href');
+            
+            // Tabs wechseln
+            $('.nav-tab').removeClass('nav-tab-active');
+            $tab.addClass('nav-tab-active');
+            
+            // Inhalt wechseln
+            $('.tab-content').hide();
+            $(target).show();
+        });
+        
+        /**
+         * Dashicon-Picker
+         */
+        $('#dashicon-picker-button').on('click', function(e) {
+            e.preventDefault();
+            // Hier könnte ein Dashicon-Picker Modal geöffnet werden
+            alert('Dashicon-Picker wird in einer zukünftigen Version hinzugefügt.\nBesuchen Sie: https://developer.wordpress.org/resource/dashicons/');
+        });
+        
+        /**
+         * Import/Export Handler
+         */
+        $('#cbd-export-blocks').on('click', function(e) {
+            e.preventDefault();
+            window.location.href = cbdAdmin.ajaxUrl + '?action=cbd_export_blocks&nonce=' + cbdAdmin.nonce;
+        });
+        
+        $('#cbd-import-file').on('change', function() {
+            var file = this.files[0];
+            if (file) {
+                $('#cbd-import-button').prop('disabled', false);
+            } else {
+                $('#cbd-import-button').prop('disabled', true);
+            }
+        });
+        
+        $('#cbd-import-button').on('click', function(e) {
+            e.preventDefault();
+            
+            var fileInput = $('#cbd-import-file')[0];
+            var file = fileInput.files[0];
+            
+            if (!file) {
+                showNotice('Bitte wählen Sie eine Datei aus', 'error');
                 return;
             }
             
-            const self = this;
-            
-            $.ajax({
-                url: cbdAdmin.ajaxUrl || ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'cbd_duplicate_block',
-                    block_id: blockId,
-                    nonce: cbdAdmin.nonce || $('#cbd-nonce').val()
-                },
-                success: function(response) {
-                    if (response.success) {
-                        self.showMessage('✅ Block erfolgreich dupliziert! Seite wird neu geladen...', 'success');
-                        setTimeout(function() {
-                            location.reload();
-                        }, 1500);
-                    } else {
-                        self.showMessage('❌ ' + (response.data || 'Fehler beim Duplizieren'), 'error');
-                    }
-                },
-                error: function() {
-                    self.showMessage('❌ Fehler beim Duplizieren', 'error');
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    var data = JSON.parse(e.target.result);
+                    
+                    $.post(cbdAdmin.ajaxUrl, {
+                        action: 'cbd_import_blocks',
+                        nonce: cbdAdmin.nonce,
+                        data: JSON.stringify(data)
+                    })
+                    .done(function(response) {
+                        if (response.success) {
+                            showNotice('Blocks erfolgreich importiert!', 'success');
+                            setTimeout(function() {
+                                location.reload();
+                            }, 2000);
+                        } else {
+                            showNotice(response.data.message || 'Import fehlgeschlagen', 'error');
+                        }
+                    })
+                    .fail(function() {
+                        showNotice('Verbindungsfehler beim Import', 'error');
+                    });
+                    
+                } catch(err) {
+                    showNotice('Ungültige JSON-Datei: ' + err.message, 'error');
                 }
-            });
-        },
-
-        /**
-         * Open features modal
-         */
-        openFeaturesModal: function(blockId, blockName) {
-            if (DEBUG) console.log('Opening features modal:', {blockId, blockName});
+            };
             
-            // Trigger the features modal from admin-features.js
-            if (typeof CBDFeatures !== 'undefined' && CBDFeatures.openFeaturesModal) {
-                CBDFeatures.openFeaturesModal(blockId, blockName);
-            } else {
-                console.warn('⚠️ CBDFeatures not available');
-                this.showMessage('⚠️ Features-Modul nicht geladen', 'warning');
-            }
-        },
-
+            reader.readAsText(file);
+        });
+        
         /**
-         * Show message
+         * Notice-Helper
          */
-        showMessage: function(message, type = 'info') {
-            // Remove existing messages
-            $('.cbd-notice').remove();
+        function showNotice(message, type) {
+            type = type || 'info';
             
-            const $notice = $('<div class="cbd-notice notice notice-' + type + ' is-dismissible">' +
+            var $notice = $('<div class="notice notice-' + type + ' is-dismissible">' +
                 '<p>' + message + '</p>' +
                 '<button type="button" class="notice-dismiss">' +
-                '<span class="screen-reader-text">Dismiss</span>' +
+                '<span class="screen-reader-text">Diese Meldung ausblenden</span>' +
                 '</button>' +
                 '</div>');
             
-            // Try different container selectors
-            const $container = $('.cbd-admin-content, .wrap').first();
-            if ($container.length) {
-                $container.prepend($notice);
-            } else {
-                $('body').prepend($notice);
-            }
+            // Notice nach .wp-header-end einfügen
+            $('.wp-header-end').after($notice);
             
-            // Auto dismiss after 5 seconds
-            setTimeout(function() {
-                $notice.fadeOut(400, function() {
-                    $(this).remove();
-                });
-            }, 5000);
-            
-            // Handle dismiss button
+            // Dismiss-Handler
             $notice.find('.notice-dismiss').on('click', function() {
-                $notice.fadeOut(400, function() {
+                $notice.fadeOut(300, function() {
                     $(this).remove();
                 });
             });
-        },
-
-        /**
-         * Initialize color pickers
-         */
-        initColorPickers: function() {
-            if ($.fn.wpColorPicker) {
-                $('.cbd-color-picker').wpColorPicker({
-                    change: function(event, ui) {
-                        $(event.target).trigger('input');
-                        CBDAdmin.updatePreview();
-                    },
-                    clear: function() {
-                        CBDAdmin.updatePreview();
-                    }
-                });
-                if (DEBUG) console.log('✅ Color pickers initialized');
-            } else {
-                if (DEBUG) console.log('⚠️ wpColorPicker not available');
+            
+            // Auto-dismiss nach 5 Sekunden für Erfolg
+            if (type === 'success') {
+                setTimeout(function() {
+                    $notice.fadeOut(300, function() {
+                        $(this).remove();
+                    });
+                }, 5000);
             }
-        },
-
-        /**
-         * Initialize preview
-         */
-        initPreview: function() {
-            const self = this;
-            
-            // Listen for changes
-            $('#cbd-block-form input, #cbd-block-form select, #cbd-block-form textarea').on('input change', function() {
-                self.updatePreview();
-            });
-            
-            // Initial preview
-            this.updatePreview();
-        },
-
-        /**
-         * Update preview
-         */
-        updatePreview: function() {
-            const $preview = $('#cbd-preview-content');
-            if (!$preview.length) return;
-            
-            // Get current values
-            const styles = {
-                backgroundColor: $('#background-color').val(),
-                color: $('#text-color').val(),
-                borderStyle: $('#border-style').val(),
-                borderWidth: $('#border-width').val() + 'px',
-                borderColor: $('#border-color').val(),
-                borderRadius: $('#border-radius').val() + 'px',
-                padding: $('#padding').val() + 'px',
-                margin: $('#margin').val() + 'px'
-            };
-            
-            // Apply styles
-            $preview.css(styles);
-            
-            // Apply custom CSS
-            const customCSS = $('#custom-css').val();
-            if (customCSS) {
-                $('#cbd-preview-custom-style').remove();
-                $('<style id="cbd-preview-custom-style">' + 
-                  '#cbd-preview-content { ' + customCSS + ' }' +
-                  '</style>').appendTo('head');
-            }
-        },
-
-        /**
-         * Initialize bulk actions
-         */
-        initBulkActions: function() {
-            const self = this;
-            
-            // Select all checkbox
-            $('#cb-select-all').on('change', function() {
-                $('.cbd-block-checkbox').prop('checked', $(this).prop('checked'));
-            });
-            
-            // Bulk action submit
-            $('#doaction, #doaction2').on('click', function(e) {
-                e.preventDefault();
-                
-                const action = $(this).prev('select').val();
-                if (action === '-1') return;
-                
-                const selected = $('.cbd-block-checkbox:checked').map(function() {
-                    return $(this).val();
-                }).get();
-                
-                if (selected.length === 0) {
-                    self.showMessage('⚠️ Bitte wählen Sie mindestens einen Block aus.', 'warning');
-                    return;
-                }
-                
-                self.performBulkAction(action, selected);
-            });
-        },
-
-        /**
-         * Perform bulk action
-         */
-        performBulkAction: function(action, blockIds) {
-            const self = this;
-            let confirmMsg = '';
-            
-            switch(action) {
-                case 'delete':
-                    confirmMsg = 'Wirklich ' + blockIds.length + ' Block(s) löschen?';
-                    break;
-                case 'activate':
-                    confirmMsg = blockIds.length + ' Block(s) aktivieren?';
-                    break;
-                case 'deactivate':
-                    confirmMsg = blockIds.length + ' Block(s) deaktivieren?';
-                    break;
-                default:
-                    return;
-            }
-            
-            if (!confirm(confirmMsg)) return;
-            
-            $.ajax({
-                url: cbdAdmin.ajaxUrl || ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'cbd_bulk_action',
-                    bulk_action: action,
-                    block_ids: blockIds,
-                    nonce: cbdAdmin.nonce || $('#cbd-nonce').val()
-                },
-                success: function(response) {
-                    if (response.success) {
-                        self.showMessage('✅ ' + response.data.message, 'success');
-                        setTimeout(function() {
-                            location.reload();
-                        }, 1500);
-                    } else {
-                        self.showMessage('❌ ' + (response.data || 'Fehler'), 'error');
-                    }
-                },
-                error: function() {
-                    self.showMessage('❌ Fehler bei der Bulk-Aktion', 'error');
-                }
-            });
-        },
-
-        /**
-         * Initialize search
-         */
-        initSearch: function() {
-            const self = this;
-            let searchTimeout;
-            
-            // Live search
-            $('#cbd-search-input').on('input', function() {
-                clearTimeout(searchTimeout);
-                const query = $(this).val();
-                
-                searchTimeout = setTimeout(function() {
-                    self.performSearch(query);
-                }, 300);
-            });
-            
-            // Search form submit
-            $('#cbd-search-form').on('submit', function(e) {
-                e.preventDefault();
-                self.performSearch($('#cbd-search-input').val());
-            });
-        },
-
-        /**
-         * Perform search
-         */
-        performSearch: function(query) {
-            const $rows = $('.cbd-blocks-table tbody tr');
-            
-            if (!query) {
-                $rows.show();
-                return;
-            }
-            
-            const searchTerm = query.toLowerCase();
-            
-            $rows.each(function() {
-                const $row = $(this);
-                const blockName = $row.find('.cbd-block-name').text().toLowerCase();
-                const blockSlug = $row.find('.cbd-block-slug').text().toLowerCase();
-                const blockDesc = $row.find('.cbd-block-description').text().toLowerCase();
-                
-                if (blockName.includes(searchTerm) || 
-                    blockSlug.includes(searchTerm) || 
-                    blockDesc.includes(searchTerm)) {
-                    $row.show();
-                } else {
-                    $row.hide();
-                }
-            });
         }
-    };
-    
-    // Initialize when DOM is ready
-    $(document).ready(function() {
-        if (DEBUG) console.log('📄 DOM ready, initializing CBD Admin...');
-        CBDAdmin.init();
-    });
-    
-    // Also bind to window load as fallback
-    $(window).on('load', function() {
-        // Check if already initialized
-        if (!CBDAdmin.initialized) {
-            if (DEBUG) console.log('🪟 Window loaded, initializing CBD Admin as fallback...');
-            CBDAdmin.init();
-            CBDAdmin.initialized = true;
-        }
+        
+        /**
+         * Responsive Sidebar Toggle
+         */
+        $('#cbd-toggle-sidebar').on('click', function() {
+            $('.cbd-sidebar').toggleClass('cbd-sidebar-open');
+        });
+        
+        /**
+         * Keyboard Shortcuts
+         */
+        $(document).on('keydown', function(e) {
+            // Strg/Cmd + S zum Speichern
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                $('#cbd-block-form').submit();
+            }
+        });
+        
     });
     
 })(jQuery);
