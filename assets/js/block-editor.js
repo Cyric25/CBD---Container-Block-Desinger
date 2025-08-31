@@ -1,393 +1,410 @@
-/**
- * Container Block Designer - Block Editor Script
- * Version: 2.5.0
- * 
- * Registriert und verwaltet Container Blocks im Gutenberg Editor
- */
-
-(function(wp, cbdBlockEditor) {
+(function(wp, $) {
     'use strict';
     
     const { registerBlockType } = wp.blocks;
-    const { InnerBlocks, InspectorControls, BlockControls, useBlockProps, PanelColorSettings } = wp.blockEditor;
-    const { PanelBody, SelectControl, TextControl, ToggleControl, RangeControl, Button, ToolbarGroup, ToolbarButton } = wp.components;
-    const { useState, useEffect, Fragment } = wp.element;
+    const { InspectorControls, InnerBlocks, useBlockProps } = wp.blockEditor;
+    const { PanelBody, SelectControl, TextControl, ToggleControl, ColorPicker, RangeControl } = wp.components;
+    const { Fragment, useState, useEffect } = wp.element;
     const { __ } = wp.i18n;
-    const { apiFetch } = wp;
     
-    // Verfügbare Blocks laden
-    let availableBlocks = cbdBlockEditor.blocks || [];
+    // Get block data from localized script
+    const blockData = window.cbdBlockData || {};
     
-    /**
-     * Haupt Container Block
-     */
-    registerBlockType('cbd/container', {
-        title: __('Container Block', 'container-block-designer'),
-        description: __('Ein anpassbarer Container für Ihre Inhalte', 'container-block-designer'),
+    registerBlockType('container-block-designer/container', {
+        title: blockData.i18n?.blockTitle || __('Container Block', 'container-block-designer'),
+        description: blockData.i18n?.blockDescription || __('Ein anpassbarer Container-Block mit erweiterten Funktionen', 'container-block-designer'),
         icon: 'layout',
-        category: 'container-blocks',
-        keywords: ['container', 'wrapper', 'box'],
+        category: 'layout',
+        keywords: ['container', 'wrapper', 'section', 'box'],
         supports: {
-            align: ['wide', 'full'],
+            html: false,
+            className: true,
             anchor: true,
-            customClassName: true,
-            html: false
+            align: ['wide', 'full'],
+            spacing: {
+                margin: true,
+                padding: true
+            }
         },
         attributes: {
-            blockId: {
-                type: 'number',
-                default: 0
-            },
-            blockName: {
+            selectedBlock: {
                 type: 'string',
                 default: ''
             },
             customClasses: {
-                type: 'string',
+                type: 'string', 
                 default: ''
+            },
+            blockConfig: {
+                type: 'object',
+                default: {}
+            },
+            blockFeatures: {
+                type: 'object',
+                default: {}
             },
             alignment: {
                 type: 'string',
-                default: ''
-            },
-            styles: {
-                type: 'object',
-                default: {}
-            },
-            features: {
-                type: 'object',
-                default: {}
+                default: 'none'
             }
         },
         
-        /**
-         * Editor-Ansicht
-         */
         edit: function(props) {
             const { attributes, setAttributes, className } = props;
-            const { blockId, customClasses, alignment, styles, features } = attributes;
+            const { selectedBlock, customClasses, blockConfig, blockFeatures, alignment } = attributes;
             
-            const [selectedBlock, setSelectedBlock] = useState(null);
-            const [isLoading, setIsLoading] = useState(false);
+            const [availableBlocks, setAvailableBlocks] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+            const [error, setError] = useState(null);
             
-            const blockProps = useBlockProps({
-                className: `cbd-container-editor ${className || ''} ${customClasses || ''} ${alignment ? 'align' + alignment : ''}`
-            });
-            
-            // Block-Daten laden wenn blockId sich ändert
+            // Load available blocks on mount
             useEffect(() => {
-                if (blockId > 0) {
-                    setIsLoading(true);
-                    
-                    // AJAX-Request für Block-Daten
-                    jQuery.post(cbdBlockEditor.ajaxUrl, {
-                        action: 'cbd_get_block',
-                        block_id: blockId,
-                        nonce: cbdBlockEditor.nonce
-                    }, function(response) {
+                if (!blockData.ajaxUrl || !blockData.nonce) {
+                    setError('AJAX configuration missing');
+                    setIsLoading(false);
+                    return;
+                }
+                
+                $.ajax({
+                    url: blockData.ajaxUrl,
+                    method: 'POST',
+                    data: {
+                        action: 'cbd_get_blocks',
+                        nonce: blockData.nonce
+                    },
+                    success: function(response) {
                         if (response.success && response.data) {
-                            setSelectedBlock(response.data);
-                            setAttributes({
-                                blockName: response.data.name,
-                                styles: response.data.styles || {},
-                                features: response.data.features || {}
-                            });
+                            setAvailableBlocks(response.data);
+                            setError(null);
+                        } else {
+                            setError(response.data?.message || 'Failed to load blocks');
                         }
                         setIsLoading(false);
-                    });
-                }
-            }, [blockId]);
-            
-            // Block-Optionen für Select
-            const blockOptions = [
-                { label: __('-- Block auswählen --', 'container-block-designer'), value: 0 }
-            ];
-            
-            availableBlocks.forEach(block => {
-                blockOptions.push({
-                    label: block.title,
-                    value: parseInt(block.id)
+                    },
+                    error: function(xhr, status, errorThrown) {
+                        console.error('CBD: Failed to load blocks', errorThrown);
+                        setError('Failed to load blocks: ' + errorThrown);
+                        setIsLoading(false);
+                    }
                 });
+            }, []);
+            
+            // Update block config when selection changes
+            useEffect(() => {
+                if (selectedBlock && availableBlocks.length > 0) {
+                    const foundBlock = availableBlocks.find(b => b.slug === selectedBlock);
+                    if (foundBlock) {
+                        // Parse config if string
+                        let config = foundBlock.config;
+                        if (typeof config === 'string') {
+                            try {
+                                config = JSON.parse(config);
+                            } catch(e) {
+                                console.error('CBD: Failed to parse config', e);
+                                config = {};
+                            }
+                        }
+                        
+                        // Parse features if string
+                        let features = foundBlock.features;
+                        if (typeof features === 'string') {
+                            try {
+                                features = JSON.parse(features);
+                            } catch(e) {
+                                console.error('CBD: Failed to parse features', e);
+                                features = {};
+                            }
+                        }
+                        
+                        setAttributes({
+                            blockConfig: config || {},
+                            blockFeatures: features || {}
+                        });
+                    }
+                }
+            }, [selectedBlock, availableBlocks]);
+            
+            // Build styles from config
+            const styles = blockConfig?.styles || {};
+            const containerStyle = {};
+            
+            // Apply padding
+            if (styles.padding) {
+                containerStyle.paddingTop = `${styles.padding.top || 20}px`;
+                containerStyle.paddingRight = `${styles.padding.right || 20}px`;
+                containerStyle.paddingBottom = `${styles.padding.bottom || 20}px`;
+                containerStyle.paddingLeft = `${styles.padding.left || 20}px`;
+            }
+            
+            // Apply margin
+            if (styles.margin) {
+                containerStyle.marginTop = `${styles.margin.top || 0}px`;
+                containerStyle.marginRight = `${styles.margin.right || 0}px`;
+                containerStyle.marginBottom = `${styles.margin.bottom || 0}px`;
+                containerStyle.marginLeft = `${styles.margin.left || 0}px`;
+            }
+            
+            // Apply colors
+            if (styles.background?.color) {
+                containerStyle.backgroundColor = styles.background.color;
+            }
+            if (styles.text?.color) {
+                containerStyle.color = styles.text.color;
+            }
+            if (styles.text?.alignment) {
+                containerStyle.textAlign = styles.text.alignment;
+            }
+            
+            // Apply border
+            if (styles.border?.width && styles.border.width > 0) {
+                containerStyle.border = `${styles.border.width}px ${styles.border.style || 'solid'} ${styles.border.color || '#ddd'}`;
+                if (styles.border.radius) {
+                    containerStyle.borderRadius = `${styles.border.radius}px`;
+                }
+            }
+            
+            // Apply shadow
+            if (styles.shadow?.enabled) {
+                const shadow = styles.shadow;
+                containerStyle.boxShadow = `${shadow.x || 0}px ${shadow.y || 2}px ${shadow.blur || 4}px ${shadow.spread || 0}px ${shadow.color || 'rgba(0,0,0,0.1)'}`;
+            }
+            
+            containerStyle.minHeight = '100px';
+            containerStyle.position = 'relative';
+            
+            // Build class names
+            const containerClasses = [
+                'cbd-container',
+                selectedBlock ? `cbd-container-${selectedBlock}` : '',
+                alignment && alignment !== 'none' ? `align${alignment}` : '',
+                customClasses
+            ].filter(Boolean).join(' ');
+            
+            // Block props with styles
+            const blockProps = useBlockProps({
+                className: containerClasses,
+                style: containerStyle
             });
             
-            // Inline-Styles generieren
-            const containerStyles = {};
-            if (styles && styles.padding) {
-                containerStyles.paddingTop = (styles.padding.top || 20) + 'px';
-                containerStyles.paddingRight = (styles.padding.right || 20) + 'px';
-                containerStyles.paddingBottom = (styles.padding.bottom || 20) + 'px';
-                containerStyles.paddingLeft = (styles.padding.left || 20) + 'px';
+            // Build select options
+            const blockOptions = [
+                { label: blockData.i18n?.selectBlock || 'Wählen Sie einen Block', value: '' },
+                ...availableBlocks.map(b => ({
+                    label: b.name,
+                    value: b.slug
+                }))
+            ];
+            
+            // Get active features for display
+            const activeFeatures = [];
+            if (blockFeatures?.icon?.enabled) {
+                activeFeatures.push('Icon: ' + (blockFeatures.icon.value || 'dashicons-admin-generic'));
             }
-            if (styles && styles.background) {
-                containerStyles.backgroundColor = styles.background.color || '#ffffff';
+            if (blockFeatures?.collapse?.enabled) {
+                activeFeatures.push('Collapse: ' + (blockFeatures.collapse.defaultState || 'expanded'));
             }
-            if (styles && styles.border) {
-                if (styles.border.width > 0) {
-                    containerStyles.borderWidth = styles.border.width + 'px';
-                    containerStyles.borderStyle = styles.border.style || 'solid';
-                    containerStyles.borderColor = styles.border.color || '#e0e0e0';
-                }
-                if (styles.border.radius > 0) {
-                    containerStyles.borderRadius = styles.border.radius + 'px';
-                }
+            if (blockFeatures?.numbering?.enabled) {
+                activeFeatures.push('Nummerierung: ' + (blockFeatures.numbering.format || 'numeric'));
+            }
+            if (blockFeatures?.copyText?.enabled) {
+                activeFeatures.push('Text kopieren');
+            }
+            if (blockFeatures?.screenshot?.enabled) {
+                activeFeatures.push('Screenshot');
             }
             
             return (
                 <Fragment>
-                    {/* Block Controls (Toolbar) */}
-                    <BlockControls>
-                        <ToolbarGroup>
-                            <ToolbarButton
-                                icon="admin-appearance"
-                                label={__('Block-Einstellungen bearbeiten', 'container-block-designer')}
-                                onClick={() => {
-                                    if (blockId > 0) {
-                                        window.open(cbdBlockEditor.adminUrl + 'admin.php?page=cbd-edit-block&id=' + blockId, '_blank');
-                                    }
-                                }}
-                                disabled={blockId === 0}
-                            />
-                        </ToolbarGroup>
-                    </BlockControls>
-                    
-                    {/* Inspector Controls (Sidebar) */}
                     <InspectorControls>
-                        <PanelBody title={__('Container-Einstellungen', 'container-block-designer')} initialOpen={true}>
-                            <SelectControl
-                                label={__('Container-Block auswählen', 'container-block-designer')}
-                                value={blockId}
-                                options={blockOptions}
-                                onChange={(value) => setAttributes({ blockId: parseInt(value) })}
-                                help={__('Wählen Sie einen vorkonfigurierten Container-Block', 'container-block-designer')}
-                            />
-                            
-                            {selectedBlock && (
-                                <div className="cbd-block-info">
-                                    <p><strong>{selectedBlock.title}</strong></p>
-                                    {selectedBlock.description && (
-                                        <p className="description">{selectedBlock.description}</p>
-                                    )}
+                        <PanelBody 
+                            title={__('Container Einstellungen', 'container-block-designer')}
+                            initialOpen={true}
+                        >
+                            {error ? (
+                                <div style={{ color: 'red', marginBottom: '10px' }}>
+                                    <strong>Error:</strong> {error}
                                 </div>
-                            )}
+                            ) : null}
                             
-                            <TextControl
-                                label={__('Zusätzliche CSS-Klassen', 'container-block-designer')}
-                                value={customClasses}
-                                onChange={(value) => setAttributes({ customClasses: value })}
-                                help={__('Eigene CSS-Klassen für erweiterte Anpassungen', 'container-block-designer')}
-                            />
+                            {isLoading ? (
+                                <p>{blockData.i18n?.loading || 'Lade Blocks...'}</p>
+                            ) : availableBlocks.length === 0 ? (
+                                <p>{blockData.i18n?.noBlocks || 'Keine Blocks verfügbar. Bitte erstellen Sie zuerst einen Block im Admin-Bereich.'}</p>
+                            ) : (
+                                <Fragment>
+                                    <SelectControl
+                                        label={__('Block-Design', 'container-block-designer')}
+                                        value={selectedBlock}
+                                        options={blockOptions}
+                                        onChange={(value) => setAttributes({ selectedBlock: value })}
+                                        help={__('Wählen Sie ein vordefiniertes Container-Design', 'container-block-designer')}
+                                    />
+                                    
+                                    <TextControl
+                                        label={__('Zusätzliche CSS-Klassen', 'container-block-designer')}
+                                        value={customClasses}
+                                        onChange={(value) => setAttributes({ customClasses: value })}
+                                        help={__('Fügen Sie eigene CSS-Klassen hinzu (durch Leerzeichen getrennt)', 'container-block-designer')}
+                                    />
+                                    
+                                    {selectedBlock && activeFeatures.length > 0 && (
+                                        <div style={{ 
+                                            marginTop: '15px',
+                                            padding: '10px',
+                                            backgroundColor: '#f0f0f0',
+                                            borderRadius: '4px'
+                                        }}>
+                                            <strong>{__('Aktive Features:', 'container-block-designer')}</strong>
+                                            <ul style={{ 
+                                                marginTop: '8px', 
+                                                marginBottom: '0',
+                                                fontSize: '12px',
+                                                paddingLeft: '20px'
+                                            }}>
+                                                {activeFeatures.map((feature, index) => (
+                                                    <li key={index}>{feature}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </Fragment>
+                            )}
                         </PanelBody>
                         
-                        {/* Schnell-Anpassungen wenn Block ausgewählt */}
-                        {blockId > 0 && styles && (
-                            <PanelBody title={__('Schnell-Anpassungen', 'container-block-designer')} initialOpen={false}>
-                                <PanelColorSettings
-                                    title={__('Farben', 'container-block-designer')}
-                                    colorSettings={[
-                                        {
-                                            value: styles.background?.color,
-                                            onChange: (color) => {
-                                                const newStyles = { ...styles };
-                                                newStyles.background = { ...newStyles.background, color };
-                                                setAttributes({ styles: newStyles });
-                                            },
-                                            label: __('Hintergrundfarbe', 'container-block-designer')
-                                        },
-                                        {
-                                            value: styles.text?.color,
-                                            onChange: (color) => {
-                                                const newStyles = { ...styles };
-                                                newStyles.text = { ...newStyles.text, color };
-                                                setAttributes({ styles: newStyles });
-                                            },
-                                            label: __('Textfarbe', 'container-block-designer')
-                                        }
-                                    ]}
-                                />
-                                
-                                <RangeControl
-                                    label={__('Padding (alle Seiten)', 'container-block-designer')}
-                                    value={styles.padding?.top || 20}
-                                    onChange={(value) => {
-                                        const newStyles = { ...styles };
-                                        newStyles.padding = {
-                                            top: value,
-                                            right: value,
-                                            bottom: value,
-                                            left: value
-                                        };
-                                        setAttributes({ styles: newStyles });
-                                    }}
-                                    min={0}
-                                    max={100}
-                                />
-                            </PanelBody>
-                        )}
-                        
-                        {/* Features wenn Block ausgewählt */}
-                        {blockId > 0 && features && (
-                            <PanelBody title={__('Features', 'container-block-designer')} initialOpen={false}>
-                                {features.icon && (
-                                    <ToggleControl
-                                        label={__('Icon anzeigen', 'container-block-designer')}
-                                        checked={features.icon.enabled}
-                                        onChange={(value) => {
-                                            const newFeatures = { ...features };
-                                            newFeatures.icon.enabled = value;
-                                            setAttributes({ features: newFeatures });
-                                        }}
-                                    />
-                                )}
-                                
-                                {features.collapse && (
-                                    <ToggleControl
-                                        label={__('Einklappbar', 'container-block-designer')}
-                                        checked={features.collapse.enabled}
-                                        onChange={(value) => {
-                                            const newFeatures = { ...features };
-                                            newFeatures.collapse.enabled = value;
-                                            setAttributes({ features: newFeatures });
-                                        }}
-                                    />
-                                )}
-                                
-                                {features.numbering && (
-                                    <ToggleControl
-                                        label={__('Nummerierung', 'container-block-designer')}
-                                        checked={features.numbering.enabled}
-                                        onChange={(value) => {
-                                            const newFeatures = { ...features };
-                                            newFeatures.numbering.enabled = value;
-                                            setAttributes({ features: newFeatures });
-                                        }}
-                                    />
-                                )}
+                        {selectedBlock && blockConfig?.styles && (
+                            <PanelBody 
+                                title={__('Style-Informationen', 'container-block-designer')}
+                                initialOpen={false}
+                            >
+                                <div style={{ fontSize: '12px' }}>
+                                    <p><strong>Padding:</strong> {JSON.stringify(styles.padding || {})}</p>
+                                    <p><strong>Margin:</strong> {JSON.stringify(styles.margin || {})}</p>
+                                    {styles.background?.color && (
+                                        <p><strong>Hintergrund:</strong> {styles.background.color}</p>
+                                    )}
+                                    {styles.border?.width && (
+                                        <p><strong>Rahmen:</strong> {styles.border.width}px {styles.border.style || 'solid'}</p>
+                                    )}
+                                </div>
                             </PanelBody>
                         )}
                     </InspectorControls>
                     
-                    {/* Block-Inhalt */}
-                    <div {...blockProps} style={containerStyles}>
-                        {isLoading && (
-                            <div className="cbd-loading">
-                                <span className="spinner is-active"></span>
-                                {__('Block wird geladen...', 'container-block-designer')}
+                    <div {...blockProps}>
+                        {!selectedBlock ? (
+                            <div style={{ 
+                                padding: '40px', 
+                                textAlign: 'center',
+                                backgroundColor: '#f5f5f5',
+                                border: '2px dashed #ccc',
+                                borderRadius: '4px'
+                            }}>
+                                <div className="dashicons dashicons-layout" style={{ 
+                                    fontSize: '48px',
+                                    width: '48px',
+                                    height: '48px',
+                                    color: '#999',
+                                    margin: '0 auto 15px'
+                                }}></div>
+                                <p style={{ 
+                                    margin: '0 0 10px 0', 
+                                    fontSize: '16px', 
+                                    color: '#333',
+                                    fontWeight: 'bold'
+                                }}>
+                                    {__('Container Block Designer', 'container-block-designer')}
+                                </p>
+                                <p style={{ 
+                                    margin: 0, 
+                                    fontSize: '14px', 
+                                    color: '#666' 
+                                }}>
+                                    {__('Bitte wählen Sie ein Container-Design in den Block-Einstellungen', 'container-block-designer')}
+                                </p>
                             </div>
-                        )}
-                        
-                        {!isLoading && blockId === 0 && (
-                            <div className="cbd-placeholder">
-                                <div className="cbd-placeholder-icon">
-                                    <span className="dashicons dashicons-layout"></span>
-                                </div>
-                                <h3>{__('Container Block', 'container-block-designer')}</h3>
-                                <p>{__('Wählen Sie einen Container-Block aus den Einstellungen in der Seitenleiste.', 'container-block-designer')}</p>
-                            </div>
-                        )}
-                        
-                        {!isLoading && blockId > 0 && (
-                            <div className="cbd-container-inner">
-                                {/* Features Preview */}
-                                {features && features.icon && features.icon.enabled && (
-                                    <div className="cbd-feature-preview cbd-icon-preview">
-                                        <span className={`dashicons ${features.icon.value || 'dashicons-admin-generic'}`}></span>
+                        ) : (
+                            <Fragment>
+                                {blockFeatures?.icon?.enabled && (
+                                    <div className="cbd-icon" style={{
+                                        position: 'absolute',
+                                        top: '10px',
+                                        left: '10px',
+                                        fontSize: '24px',
+                                        color: blockFeatures.icon.color || '#333'
+                                    }}>
+                                        <span className={`dashicons ${blockFeatures.icon.value || 'dashicons-admin-generic'}`}></span>
                                     </div>
                                 )}
-                                
-                                {features && features.collapse && features.collapse.enabled && (
-                                    <div className="cbd-feature-preview cbd-collapse-preview">
-                                        <span className="dashicons dashicons-arrow-down"></span>
-                                    </div>
-                                )}
-                                
-                                {features && features.numbering && features.numbering.enabled && (
-                                    <div className="cbd-feature-preview cbd-numbering-preview">
-                                        <span>1.</span>
-                                    </div>
-                                )}
-                                
-                                {/* Inner Blocks */}
-                                <InnerBlocks
+                                <InnerBlocks 
                                     renderAppender={InnerBlocks.ButtonBlockAppender}
-                                    placeholder={__('Fügen Sie Inhalte zu diesem Container hinzu...', 'container-block-designer')}
+                                    template={[
+                                        ['core/paragraph', { placeholder: 'Fügen Sie hier Ihren Inhalt ein...' }]
+                                    ]}
+                                    templateLock={false}
                                 />
-                            </div>
+                            </Fragment>
                         )}
                     </div>
                 </Fragment>
             );
         },
         
-        /**
-         * Gespeicherte Ansicht
-         */
         save: function(props) {
             const { attributes } = props;
-            const { blockId, customClasses, alignment, styles, features } = attributes;
+            const { selectedBlock, customClasses, blockConfig, blockFeatures } = attributes;
             
-            const blockProps = useBlockProps.save({
-                className: `cbd-container-block ${customClasses || ''} ${alignment ? 'align' + alignment : ''}`,
-                'data-block-id': blockId
-            });
-            
-            // Inline-Styles
-            const containerStyles = {};
-            if (styles && styles.padding) {
-                containerStyles.paddingTop = (styles.padding.top || 20) + 'px';
-                containerStyles.paddingRight = (styles.padding.right || 20) + 'px';
-                containerStyles.paddingBottom = (styles.padding.bottom || 20) + 'px';
-                containerStyles.paddingLeft = (styles.padding.left || 20) + 'px';
-            }
-            if (styles && styles.background) {
-                containerStyles.backgroundColor = styles.background.color || '#ffffff';
-            }
-            if (styles && styles.border) {
-                if (styles.border.width > 0) {
-                    containerStyles.borderWidth = styles.border.width + 'px';
-                    containerStyles.borderStyle = styles.border.style || 'solid';
-                    containerStyles.borderColor = styles.border.color || '#e0e0e0';
-                }
-                if (styles.border.radius > 0) {
-                    containerStyles.borderRadius = styles.border.radius + 'px';
-                }
-            }
-            
-            return (
-                <div {...blockProps} style={containerStyles}>
-                    <div className="cbd-container-content">
-                        <InnerBlocks.Content />
-                    </div>
-                </div>
-            );
+            // Server-side rendering - we just save the inner blocks
+            // The PHP renderer will handle the container wrapper
+            return <InnerBlocks.Content />;
         }
     });
     
-    // Dynamische Blocks registrieren
-    if (availableBlocks && availableBlocks.length > 0) {
-        availableBlocks.forEach(function(block) {
-            if (block.status === 'active') {
-                const blockName = 'cbd/' + block.name.replace(/[^a-z0-9-]/g, '-');
-                
-                registerBlockType(blockName, {
-                    title: block.title,
-                    description: block.description,
-                    icon: 'layout',
-                    category: 'container-blocks',
-                    parent: ['cbd/container'],
-                    supports: {
-                        customClassName: true
-                    },
-                    edit: function() {
-                        return wp.element.createElement('div', { className: 'cbd-dynamic-block' },
-                            wp.element.createElement('p', null, block.title)
-                        );
-                    },
-                    save: function() {
-                        return null; // Server-side rendering
-                    }
-                });
-            }
-        });
+    // Helper function to wait for block type registration
+    function waitForBlock(callback, attempts = 0) {
+        if (attempts > 20) {
+            console.error('CBD: Timeout waiting for block registration');
+            return;
+        }
+        
+        const blockType = wp.blocks.getBlockType('container-block-designer/container');
+        if (blockType) {
+            console.log('CBD: Block registered successfully', blockType);
+            callback(blockType);
+        } else {
+            setTimeout(() => waitForBlock(callback, attempts + 1), 250);
+        }
     }
     
-})(window.wp, window.cbdBlockEditor || {});
+    // Enhanced block functionality after registration
+    function enhanceBlock(blockType) {
+        console.log('CBD: Enhancing block with additional features');
+        
+        // Add block variations if needed
+        if (window.cbdBlockVariations && Array.isArray(window.cbdBlockVariations)) {
+            window.cbdBlockVariations.forEach(variation => {
+                wp.blocks.registerBlockVariation('container-block-designer/container', variation);
+            });
+        }
+        
+        // Add block styles if needed
+        if (window.cbdBlockStyles && Array.isArray(window.cbdBlockStyles)) {
+            window.cbdBlockStyles.forEach(style => {
+                wp.blocks.registerBlockStyle('container-block-designer/container', style);
+            });
+        }
+    }
+    
+    // Initialize when DOM is ready
+    wp.domReady(() => {
+        console.log('CBD: Initializing Container Block Designer');
+        waitForBlock(enhanceBlock);
+        
+        // Unregister any existing block with same name to avoid conflicts
+        const existingBlock = wp.blocks.getBlockType('container-block-designer/container');
+        if (existingBlock && !existingBlock.cbdEnhanced) {
+            wp.blocks.unregisterBlockType('container-block-designer/container');
+            console.log('CBD: Unregistered existing block for re-registration');
+        }
+    });
+    
+})(window.wp, window.jQuery);
