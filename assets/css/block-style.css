@@ -1,8 +1,347 @@
-/* Container Block Designer - Frontend Styles */
+/**
+ * Container Block Designer - Frontend Styles
+ * Version: 2.5.2
+ * 
+ * Datei: assets/css/block-style.css
+ */
+
+/* ========================================
+   Container Base Styles
+   ======================================== */
+
 .wp-block-container-block-designer-container {
     position: relative;
+    box-sizing: border-box;
 }
+
 .cbd-container {
     position: relative;
     min-height: 50px;
+    box-sizing: border-box;
 }
+
+.cbd-container .cbd-content {
+    position: relative;
+}
+
+/* ========================================
+   Alignment Styles
+   ======================================== */
+
+.wp-block-container-block-designer-container.alignwide {
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+}
+
+.wp-block-container-block-designer-container.alignfull {
+    max-width: none;
+    width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+/* ========================================
+   Block Specific Styles
+   ======================================== */
+
+/* Info Box Style */
+.cbd-container.cbd-block-info-box {
+    background: #f0f8ff;
+    border: 1px solid #0073aa;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.cbd-container.cbd-block-info-box .cbd-icon {
+    color: #0073aa;
+    font-size: 24px;
+    margin-bottom: 10px;
+}
+
+/* Warning Box Style */
+.cbd-container.cbd-block-warning-box {
+    background: #fff8e1;
+    border: 1px solid #ffb300;
+    border-left-width: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.cbd-container.cbd-block-warning-box .cbd-icon {
+    color: #ffb300;
+    font-size: 24px;
+    margin-bottom: 10px;
+}
+
+/* Success Box Style */
+.cbd-container.cbd-block-success-box {
+    background: #f1f8f4;
+    border: 1px solid #4caf50;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.cbd-container.cbd-block-success-box .cbd-icon {
+    color: #4caf50;
+    font-size: 24px;
+    margin-bottom: 10px;
+}
+
+/* ========================================
+   Feature Styles
+   ======================================== */
+
+/* Icon Feature */
+.cbd-container .cbd-icon {
+    display: inline-block;
+    margin-right: 10px;
+    vertical-align: middle;
+}
+
+/* Collapse/Toggle Feature */
+.cbd-container.cbd-collapsible .cbd-toggle-button {
+    display: inline-block;
+    background: #f7f7f7;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 5px 10px;
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+}
+
+.cbd-container.cbd-collapsible .cbd-toggle-button:hover {
+    background: #e7e7e7;
+    border-color: #999;
+}
+
+.cbd-container.cbd-collapsible .cbd-toggle-button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 5px;
+    transition: transform 0.3s ease;
+}
+
+.cbd-container.cbd-collapsible.cbd-collapsed .cbd-toggle-button .dashicons {
+    transform: rotate(-90deg);
+}
+
+.cbd-container.cbd-collapsible .cbd-collapsible-content {
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+    max-height: 5000px;
+    opacity: 1;
+}
+
+.cbd-container.cbd-collapsible.cbd-collapsed .cbd-collapsible-content {
+    max-height: 0;
+    opacity: 0;
+}
+
+/* Numbering Feature */
+.cbd-container.cbd-numbered {
+    counter-increment: cbd-counter;
+    position: relative;
+    padding-left: 50px;
+}
+
+.cbd-container.cbd-numbered::before {
+    content: counter(cbd-counter);
+    position: absolute;
+    left: 0;
+    top: 20px;
+    width: 35px;
+    height: 35px;
+    background: #007cba;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+/* Reset counter at parent */
+.wp-block-group:has(.cbd-container.cbd-numbered),
+.entry-content:has(.cbd-container.cbd-numbered),
+.post-content:has(.cbd-container.cbd-numbered) {
+    counter-reset: cbd-counter;
+}
+
+/* Copy Text Feature */
+.cbd-container .cbd-copy-button {
+    display: inline-block;
+    background: #0073aa;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 10px;
+    transition: background 0.3s ease;
+}
+
+.cbd-container .cbd-copy-button:hover {
+    background: #005a87;
+}
+
+.cbd-container .cbd-copy-button.cbd-copied {
+    background: #4caf50;
+}
+
+.cbd-container .cbd-copy-button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+
+/* Screenshot Feature */
+.cbd-container .cbd-screenshot-button {
+    display: inline-block;
+    background: #ff9800;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-top: 10px;
+    transition: background 0.3s ease;
+}
+
+.cbd-container .cbd-screenshot-button:hover {
+    background: #e68900;
+}
+
+.cbd-container .cbd-screenshot-button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+
+/* ========================================
+   Responsive Design
+   ======================================== */
+
+@media (max-width: 768px) {
+    .cbd-container {
+        padding: 15px;
+    }
+    
+    .cbd-container.cbd-numbered {
+        padding-left: 40px;
+    }
+    
+    .cbd-container.cbd-numbered::before {
+        width: 30px;
+        height: 30px;
+        font-size: 14px;
+        top: 15px;
+    }
+    
+    .cbd-container .cbd-copy-button,
+    .cbd-container .cbd-screenshot-button {
+        width: 100%;
+        text-align: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .cbd-container {
+        padding: 10px;
+        margin: 10px 0;
+    }
+    
+    .cbd-container .cbd-icon {
+        display: block;
+        margin-bottom: 10px;
+        text-align: center;
+    }
+}
+
+/* ========================================
+   Print Styles
+   ======================================== */
+
+@media print {
+    .cbd-container .cbd-toggle-button,
+    .cbd-container .cbd-copy-button,
+    .cbd-container .cbd-screenshot-button {
+        display: none !important;
+    }
+    
+    .cbd-container.cbd-collapsible .cbd-collapsible-content {
+        max-height: none !important;
+        opacity: 1 !important;
+    }
+    
+    .cbd-container {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+}
+
+/* ========================================
+   Accessibility
+   ======================================== */
+
+.cbd-container:focus-within {
+    outline: 2px solid #007cba;
+    outline-offset: 2px;
+}
+
+.cbd-container button:focus {
+    outline: 2px solid #007cba;
+    outline-offset: 2px;
+}
+
+/* Screen Reader Only Text */
+.cbd-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ========================================
+   Animation Classes
+   ======================================== */
+
+@keyframes cbd-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.cbd-container.cbd-animate-in {
+    animation: cbd-fade-in 0.5s ease-out;
+}
+
+/* ========================================
+   Custom Block Styles (User-Defined)
+   ======================================== */
+
+/* Diese Styles werden dynamisch aus der Datenbank geladen */
+/* Platzhalter für benutzerdefinierte Styles */

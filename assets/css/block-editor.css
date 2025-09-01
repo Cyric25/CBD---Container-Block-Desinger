@@ -1,9 +1,13 @@
 /**
  * Container Block Designer - Block Editor Styles
- * Styles for the Gutenberg block editor interface
+ * Version: 2.5.2
+ * Fixed: Dropdown styles, component compatibility
  */
 
-/* Container Block Wrapper */
+/* ========================================
+   Container Block Base Styles
+   ======================================== */
+
 .wp-block-container-block-designer-container {
     position: relative;
     min-height: 100px;
@@ -11,9 +15,218 @@
     padding: 0;
 }
 
-/* Empty State */
+.wp-block-container-block-designer-container.is-selected {
+    outline: 2px solid #007cba;
+    outline-offset: -2px;
+}
+
+.cbd-container {
+    position: relative;
+    min-height: 80px;
+}
+
+.cbd-container-editor {
+    position: relative;
+    margin: 20px 0;
+}
+
+/* ========================================
+   Block Select Dropdown Styles (FIX)
+   ======================================== */
+
+/* SelectControl Container */
+.components-select-control__input {
+    width: 100%;
+    max-width: 100%;
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 6px 8px;
+    border: 1px solid #949494;
+    border-radius: 2px;
+    background-color: #fff;
+    color: #1e1e1e;
+    height: 36px;
+    cursor: pointer;
+    transition: border-color 0.1s linear;
+}
+
+.components-select-control__input:hover {
+    border-color: #007cba;
+}
+
+.components-select-control__input:focus {
+    border-color: #007cba;
+    box-shadow: 0 0 0 1px #007cba;
+    outline: 2px solid transparent;
+}
+
+/* Dropdown Options Styling */
+.components-select-control__input option {
+    padding: 8px 12px;
+    background-color: #fff;
+    color: #1e1e1e;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.components-select-control__input option:hover {
+    background-color: #f0f0f0;
+}
+
+.components-select-control__input option:checked {
+    background-color: #007cba;
+    color: #fff;
+}
+
+/* Disabled state */
+.components-select-control__input:disabled {
+    background-color: #f0f0f0;
+    border-color: #e0e0e0;
+    color: #949494;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Label Styling */
+.components-base-control__label {
+    display: inline-block;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1e1e1e;
+}
+
+/* Help Text */
+.components-base-control__help {
+    margin-top: 8px;
+    font-size: 12px;
+    font-style: normal;
+    color: #757575;
+}
+
+/* ========================================
+   Inspector Controls Panel
+   ======================================== */
+
+.components-panel__body {
+    border-top: 1px solid #e0e0e0;
+    margin: 0 -16px;
+    padding: 16px;
+}
+
+.components-panel__body:first-child {
+    border-top: none;
+}
+
+.components-panel__body-title {
+    margin: 0;
+    padding: 0;
+}
+
+/* ========================================
+   Toggle Control Fix (Deprecation Warning)
+   ======================================== */
+
+.components-toggle-control {
+    margin-bottom: 0 !important;
+}
+
+.components-toggle-control .components-base-control__field {
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+}
+
+.components-toggle-control .components-form-toggle {
+    margin-right: 12px;
+}
+
+.components-toggle-control .components-toggle-control__label {
+    font-size: 13px;
+    line-height: 1.4;
+    flex-grow: 1;
+}
+
+/* ========================================
+   Text Control Styles
+   ======================================== */
+
+.components-text-control__input {
+    width: 100%;
+    padding: 6px 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    border: 1px solid #949494;
+    border-radius: 2px;
+    background-color: #fff;
+    color: #1e1e1e;
+    transition: border-color 0.1s linear;
+}
+
+.components-text-control__input:hover {
+    border-color: #007cba;
+}
+
+.components-text-control__input:focus {
+    border-color: #007cba;
+    box-shadow: 0 0 0 1px #007cba;
+    outline: 2px solid transparent;
+}
+
+/* ========================================
+   Color Picker Styles
+   ======================================== */
+
+.components-color-picker {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 2px;
+    background: #fff;
+}
+
+.components-color-picker__saturation {
+    border-radius: 2px;
+}
+
+.components-color-picker__hue,
+.components-color-picker__alpha {
+    margin-top: 15px;
+}
+
+/* ========================================
+   Range Control Styles
+   ======================================== */
+
+.components-range-control {
+    margin-bottom: 0;
+}
+
+.components-range-control__wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.components-range-control__slider {
+    flex: 1;
+    margin: 0;
+}
+
+.components-range-control__number {
+    width: 60px;
+    padding: 3px 8px;
+    font-size: 13px;
+    border: 1px solid #949494;
+    border-radius: 2px;
+}
+
+/* ========================================
+   Editor Placeholder
+   ======================================== */
+
 .cbd-editor-placeholder {
-    padding: 40px;
+    padding: 40px 20px;
     text-align: center;
     background: linear-gradient(135deg, #f5f5f5 0%, #fafafa 100%);
     border: 2px dashed #ccc;
@@ -22,8 +235,8 @@
 }
 
 .cbd-editor-placeholder:hover {
+    background: linear-gradient(135deg, #fafafa 0%, #fff 100%);
     border-color: #007cba;
-    background: linear-gradient(135deg, #f0f7ff 0%, #f5faff 100%);
 }
 
 .cbd-editor-placeholder .dashicons {
@@ -31,189 +244,116 @@
     width: 48px;
     height: 48px;
     color: #999;
-    margin: 0 auto 15px;
-    display: block;
+    margin-bottom: 10px;
 }
 
 .cbd-editor-placeholder p {
-    margin: 0;
+    margin: 5px 0;
     color: #666;
     font-size: 14px;
 }
 
 .cbd-editor-placeholder p:first-of-type {
-    font-weight: bold;
-    font-size: 16px;
-    color: #333;
-    margin-bottom: 10px;
-}
-
-/* Container with Content */
-.cbd-container {
-    position: relative;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.cbd-container.alignwide {
-    max-width: 1140px;
-    margin-left: auto;
-    margin-right: auto;
-}
-
-.cbd-container.alignfull {
-    max-width: none;
-    width: 100%;
-}
-
-/* Icon Feature */
-.cbd-container .cbd-icon {
-    position: absolute;
-    font-size: 24px;
-    line-height: 1;
-    z-index: 10;
-    pointer-events: none;
-}
-
-.cbd-container .cbd-icon.top-left {
-    top: 10px;
-    left: 10px;
-}
-
-.cbd-container .cbd-icon.top-right {
-    top: 10px;
-    right: 10px;
-}
-
-.cbd-container .cbd-icon.bottom-left {
-    bottom: 10px;
-    left: 10px;
-}
-
-.cbd-container .cbd-icon.bottom-right {
-    bottom: 10px;
-    right: 10px;
-}
-
-/* Inspector Controls Styles */
-.components-panel__body .cbd-feature-info {
-    margin-top: 15px;
-    padding: 10px;
-    background-color: #f0f0f0;
-    border-radius: 4px;
-}
-
-.components-panel__body .cbd-feature-info strong {
-    display: block;
-    margin-bottom: 8px;
-    font-size: 13px;
-}
-
-.components-panel__body .cbd-feature-info ul {
-    margin: 0;
-    padding-left: 20px;
-    font-size: 12px;
-    line-height: 1.6;
-}
-
-.components-panel__body .cbd-feature-info li {
-    margin: 2px 0;
-}
-
-/* Style Preview in Inspector */
-.cbd-style-preview {
-    margin-top: 12px;
-    padding: 8px;
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 3px;
-    font-size: 11px;
-    font-family: monospace;
-}
-
-.cbd-style-preview p {
-    margin: 4px 0;
-    color: #555;
-}
-
-.cbd-style-preview strong {
-    color: #333;
     font-weight: 600;
+    color: #333;
+    font-size: 16px;
 }
 
-/* Block Variations */
-.block-editor-block-variation-picker {
-    padding: 16px;
+/* ========================================
+   Inner Blocks Container
+   ======================================== */
+
+.cbd-container .block-editor-inner-blocks {
+    min-height: 50px;
 }
 
-.block-editor-block-variation-picker__variations {
+.cbd-container .block-editor-block-list__layout {
+    min-height: 50px;
+}
+
+.cbd-container .block-editor-button-block-appender {
+    width: 100%;
+    padding: 14px;
+    margin-top: 12px;
+    background: #f6f7f7;
+    border: 1px dashed #c3c4c7;
+    border-radius: 2px;
+    transition: all 0.2s ease;
+}
+
+.cbd-container .block-editor-button-block-appender:hover {
+    background: #fff;
+    border-color: #007cba;
+    border-style: solid;
+}
+
+/* ========================================
+   Block Variations List
+   ======================================== */
+
+.cbd-block-variations {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-    gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
 }
 
-.block-editor-block-variation-picker__variation {
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+.cbd-block-variation {
+    padding: 12px;
     text-align: center;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
-.block-editor-block-variation-picker__variation:hover {
+.cbd-block-variation:hover {
     border-color: #007cba;
-    background: #f0f7ff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.block-editor-block-variation-picker__variation.is-selected {
+.cbd-block-variation.is-selected {
+    background: #f0f8ff;
     border-color: #007cba;
-    background: #007cba;
-    color: white;
 }
 
-/* Inner Blocks */
-.cbd-container .block-editor-inner-blocks {
-    min-height: 60px;
+.cbd-block-variation-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+    color: #555;
 }
 
-.cbd-container .block-editor-inner-blocks .block-editor-block-list__layout {
-    padding: 20px;
+.cbd-block-variation-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: #1e1e1e;
 }
 
-/* Block Appender */
-.cbd-container .block-editor-button-block-appender {
-    margin: 20px;
-}
+/* ========================================
+   Loading States
+   ======================================== */
 
-/* Loading State */
 .cbd-loading {
-    position: relative;
-    opacity: 0.6;
-    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    color: #666;
 }
 
-.cbd-loading::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 20px;
-    height: 20px;
-    margin: -10px 0 0 -10px;
-    border: 2px solid #ddd;
-    border-top-color: #007cba;
-    border-radius: 50%;
-    animation: cbd-spin 0.8s linear infinite;
+.cbd-loading .components-spinner {
+    margin-right: 8px;
 }
 
-@keyframes cbd-spin {
-    to {
-        transform: rotate(360deg);
-    }
+.cbd-loading-text {
+    font-size: 13px;
 }
 
-/* Error State */
+/* ========================================
+   Error States
+   ======================================== */
+
 .cbd-error-message {
     padding: 12px;
     background: #fef2f2;
@@ -230,46 +370,39 @@
     font-weight: 600;
 }
 
-/* Hover Effects */
-.cbd-container.cbd-hover-effect {
-    transition: all 0.3s ease;
+/* ========================================
+   Responsive Adjustments
+   ======================================== */
+
+@media (max-width: 782px) {
+    .components-select-control__input {
+        font-size: 16px;
+        height: 40px;
+    }
+    
+    .components-text-control__input {
+        font-size: 16px;
+    }
+    
+    .cbd-block-variations {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
 }
 
-.cbd-container.cbd-hover-effect:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-/* Focus Styles */
-.cbd-container:focus-within {
-    outline: 2px solid #007cba;
-    outline-offset: 2px;
-}
-
-/* Selected Block */
-.cbd-container.is-selected {
-    outline: 1px solid #007cba;
-    outline-offset: -1px;
-}
-
-/* Responsive Adjustments */
-@media (max-width: 768px) {
+@media (max-width: 600px) {
     .cbd-editor-placeholder {
-        padding: 30px 20px;
+        padding: 30px 15px;
     }
     
-    .cbd-editor-placeholder .dashicons {
-        font-size: 36px;
-        width: 36px;
-        height: 36px;
-    }
-    
-    .cbd-container .cbd-icon {
-        font-size: 20px;
+    .cbd-block-variations {
+        grid-template-columns: 1fr 1fr;
     }
 }
 
-/* Dark Mode Support */
+/* ========================================
+   Dark Mode Support
+   ======================================== */
+
 @media (prefers-color-scheme: dark) {
     .editor-styles-wrapper .cbd-editor-placeholder {
         background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%);
@@ -282,28 +415,42 @@
         border-color: #007cba;
     }
     
-    .editor-styles-wrapper .cbd-editor-placeholder .dashicons {
-        color: #666;
+    .editor-styles-wrapper .components-select-control__input {
+        background-color: #1e1e1e;
+        border-color: #444;
+        color: #ccc;
     }
     
-    .editor-styles-wrapper .cbd-editor-placeholder p {
-        color: #aaa;
+    .editor-styles-wrapper .components-select-control__input:hover,
+    .editor-styles-wrapper .components-select-control__input:focus {
+        border-color: #007cba;
+        background-color: #2a2a2a;
     }
     
-    .editor-styles-wrapper .cbd-editor-placeholder p:first-of-type {
+    .editor-styles-wrapper .components-select-control__input option {
+        background-color: #1e1e1e;
+        color: #ccc;
+    }
+    
+    .editor-styles-wrapper .components-text-control__input {
+        background-color: #1e1e1e;
+        border-color: #444;
         color: #ccc;
     }
 }
 
-/* Print Styles */
+/* ========================================
+   Print Styles
+   ======================================== */
+
 @media print {
     .cbd-container {
         break-inside: avoid;
         page-break-inside: avoid;
     }
     
-    .cbd-icon,
-    .block-editor-button-block-appender {
+    .block-editor-button-block-appender,
+    .cbd-editor-placeholder {
         display: none !important;
     }
 }
