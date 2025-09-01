@@ -1,0 +1,20 @@
+# Container Block Designer - Blockiere alte JavaScript-Dateien
+# Datei speichern als: /wp-content/plugins/container-block-designer/assets/js/.htaccess
+
+# Blockiere Zugriff auf container-block.js (alte Version)
+<Files "container-block.js">
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+# Blockiere Zugriff auf alle veralteten Dateien
+<FilesMatch "^(container-block|container-block-deprecated|fix-wp-blocks-loading)\.js$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Erlaube nur die neuen Dateien
+<FilesMatch "^(block-editor|frontend|admin)\.js$">
+    Order Allow,Deny
+    Allow from all
+</FilesMatch>

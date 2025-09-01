@@ -127,12 +127,22 @@ class ContainerBlockDesigner {
         if (!is_admin() && file_exists(CBD_PLUGIN_DIR . 'includes/class-cbd-frontend.php')) {
             require_once CBD_PLUGIN_DIR . 'includes/class-cbd-frontend.php';
         }
+        
+        // Cleanup-Script für alte Versionen
+        if (file_exists(CBD_PLUGIN_DIR . 'includes/cleanup.php')) {
+            require_once CBD_PLUGIN_DIR . 'includes/cleanup.php';
+        }
     }
     
     /**
      * Block registrieren
      */
     public function register_block() {
+        // WICHTIG: Deregistriere zuerst alte Block-Versionen falls vorhanden
+        if (WP_Block_Type_Registry::get_instance()->is_registered('container-block-designer/container')) {
+            unregister_block_type('container-block-designer/container');
+        }
+        
         // Registriere den Block mit render_callback für Server-Side-Rendering
         register_block_type('container-block-designer/container', array(
             'editor_script' => 'cbd-block-editor',
@@ -159,6 +169,16 @@ class ContainerBlockDesigner {
                 'align' => array(
                     'type' => 'string',
                     'default' => ''
+                )
+            ),
+            'supports' => array(
+                'html' => false,
+                'className' => true,
+                'anchor' => true,
+                'align' => array('wide', 'full'),
+                'spacing' => array(
+                    'margin' => true,
+                    'padding' => true
                 )
             )
         ));

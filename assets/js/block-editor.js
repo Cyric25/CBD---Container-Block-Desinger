@@ -120,6 +120,48 @@
             }
         },
         
+        // Deprecated versions für Migration alter Blöcke
+        deprecated: [
+            {
+                // Version 1: Alte Blöcke mit data-attributes
+                attributes: {
+                    selectedBlock: {
+                        type: 'string',
+                        default: ''
+                    },
+                    customClasses: {
+                        type: 'string',
+                        default: ''
+                    }
+                },
+                save: function() {
+                    return null; // Server-side rendering
+                },
+                migrate: function(attributes) {
+                    // Migriere alte Attribute zu neuen
+                    return {
+                        ...attributes,
+                        blockConfig: {
+                            styles: {
+                                padding: { top: 20, right: 20, bottom: 20, left: 20 },
+                                background: { color: '#ffffff' },
+                                border: { width: 0, color: '#dddddd', radius: 0 },
+                                text: { color: '#000000', alignment: 'left' }
+                            }
+                        },
+                        blockFeatures: {
+                            icon: {
+                                enabled: false,
+                                value: 'dashicons-admin-generic',
+                                position: 'top-left',
+                                color: '#333333'
+                            }
+                        }
+                    };
+                }
+            }
+        ],
+        
         // Edit-Funktion
         edit: function EditComponent(props) {
             const { attributes, setAttributes, isSelected } = props;
@@ -284,6 +326,8 @@
                                                     });
                                                 }
                                             },
+                                            __next40pxDefaultSize: true,
+                                            __nextHasNoMarginBottom: true,
                                             key: 'block-select'
                                         }
                                     ),
@@ -294,6 +338,8 @@
                                             value: customClasses,
                                             onChange: (value) => setAttributes({ customClasses: value }),
                                             help: 'Zusätzliche CSS-Klassen (mit Leerzeichen getrennt)',
+                                            __next40pxDefaultSize: true,
+                                            __nextHasNoMarginBottom: true,
                                             key: 'custom-classes'
                                         }
                                     )
@@ -409,6 +455,8 @@
                                                 value: blockFeatures.icon?.value || 'dashicons-admin-generic',
                                                 onChange: (value) => updateBlockFeatures('icon.value', value),
                                                 help: 'Dashicons-Klasse (z.B. dashicons-admin-generic)',
+                                                __next40pxDefaultSize: true,
+                                                __nextHasNoMarginBottom: true,
                                                 key: 'icon-class'
                                             }
                                         ),
@@ -424,6 +472,8 @@
                                                     { label: 'Unten Rechts', value: 'bottom-right' }
                                                 ],
                                                 onChange: (value) => updateBlockFeatures('icon.position', value),
+                                                __next40pxDefaultSize: true,
+                                                __nextHasNoMarginBottom: true,
                                                 key: 'icon-position'
                                             }
                                         )
