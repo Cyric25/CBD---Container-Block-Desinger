@@ -175,10 +175,10 @@ class ContainerBlockDesigner {
     }
     
     /**
-     * Block-Editor Assets einbinden
+     * Block Editor Assets laden
      */
     public function enqueue_block_editor_assets() {
-        // Block Editor Script
+        // Block-Editor Script
         wp_enqueue_script(
             'cbd-block-editor',
             CBD_PLUGIN_URL . 'assets/js/block-editor.js',
@@ -187,96 +187,81 @@ class ContainerBlockDesigner {
             true
         );
         
-        // Block Editor Styles
+        // Block-Editor Styles
         wp_enqueue_style(
-            'cbd-block-editor-style',
+            'cbd-block-editor',
             CBD_PLUGIN_URL . 'assets/css/block-editor.css',
             array('wp-edit-blocks'),
             CBD_VERSION
         );
         
         // Lokalisierung
-        wp_localize_script('cbd-block-editor', 'cbdBlockData', array(
-            'pluginUrl' => CBD_PLUGIN_URL,
+        wp_localize_script('cbd-block-editor', 'cbdData', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('cbd-block-editor'),
-            'blocks' => $this->get_active_blocks(),
-            'i18n' => array(
+            'nonce' => wp_create_nonce('cbd-nonce'),
+            'blocks' => $this->get_available_blocks(),
+            'pluginUrl' => CBD_PLUGIN_URL,
+            'strings' => array(
+                'blockTitle' => __('Container Block', 'container-block-designer'),
+                'blockDescription' => __('Ein anpassbarer Container-Block', 'container-block-designer'),
                 'selectBlock' => __('Block auswählen', 'container-block-designer'),
-                'customClasses' => __('Zusätzliche CSS-Klassen', 'container-block-designer'),
-                'blockSettings' => __('Block-Einstellungen', 'container-block-designer')
-            )
+                'noBlocks' => __('Keine Blocks verfügbar', 'container-block-designer'),
+            ),
         ));
     }
     
     /**
-     * Frontend Block Assets einbinden
+     * Frontend und Editor Assets laden
      */
     public function enqueue_block_assets() {
-        if (!is_admin()) {
-            // Frontend Styles
-            wp_enqueue_style(
-                'cbd-block-style',
-                CBD_PLUGIN_URL . 'assets/css/block-style.css',
-                array(),
-                CBD_VERSION
-            );
-            
-            // Frontend Script für interaktive Features
-            wp_enqueue_script(
-                'cbd-block-frontend',
-                CBD_PLUGIN_URL . 'assets/js/block-frontend.js',
-                array('jquery'),
-                CBD_VERSION,
-                true
-            );
-            
-            // Lokalisierung für Frontend
-            wp_localize_script('cbd-block-frontend', 'cbdFrontend', array(
-                'ajaxUrl' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('cbd-frontend')
-            ));
-        }
+        // Frontend Styles
+        wp_enqueue_style(
+            'cbd-block-style',
+            CBD_PLUGIN_URL . 'assets/css/block-style.css',
+            array(),
+            CBD_VERSION
+        );
     }
     
     /**
-     * Admin Assets einbinden
+     * Admin Assets laden
      */
     public function enqueue_admin_assets($hook) {
         // Nur auf Plugin-Seiten laden
-        if (strpos($hook, 'container-block-designer') === false) {
+        if (strpos($hook, 'container-block-designer') === false && 
+            strpos($hook, 'cbd-') === false) {
             return;
         }
         
         // Admin Styles
         wp_enqueue_style(
-            'cbd-admin-style',
-            CBD_PLUGIN_URL . 'assets/css/admin-style.css',
+            'cbd-admin',
+            CBD_PLUGIN_URL . 'assets/css/admin.css',
             array(),
             CBD_VERSION
         );
         
         // Admin Scripts
         wp_enqueue_script(
-            'cbd-admin-script',
-            CBD_PLUGIN_URL . 'assets/js/admin-script.js',
+            'cbd-admin',
+            CBD_PLUGIN_URL . 'assets/js/admin.js',
             array('jquery', 'wp-color-picker'),
             CBD_VERSION,
             true
         );
         
-        // WordPress Color Picker
+        // Color Picker
         wp_enqueue_style('wp-color-picker');
         
         // Lokalisierung
-        wp_localize_script('cbd-admin-script', 'cbdAdmin', array(
+        wp_localize_script('cbd-admin', 'cbdAdmin', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('cbd-admin'),
-            'i18n' => array(
-                'confirmDelete' => __('Möchten Sie diesen Block wirklich löschen?', 'container-block-designer'),
-                'saved' => __('Gespeichert', 'container-block-designer'),
-                'error' => __('Ein Fehler ist aufgetreten', 'container-block-designer')
-            )
+            'nonce' => wp_create_nonce('cbd-admin-nonce'),
+            'strings' => array(
+                'confirmDelete' => __('Sind Sie sicher, dass Sie diesen Block löschen möchten?', 'container-block-designer'),
+                'saved' => __('Gespeichert!', 'container-block-designer'),
+                'error' => __('Fehler beim Speichern', 'container-block-designer'),
+            ),
         ));
     }
     
@@ -289,21 +274,21 @@ class ContainerBlockDesigner {
                 array(
                     'slug' => 'container-blocks',
                     'title' => __('Container Blocks', 'container-block-designer'),
-                    'icon' => 'layout'
-                )
+                    'icon' => 'layout',
+                ),
             ),
             $categories
         );
     }
     
     /**
-     * Aktive Blöcke abrufen
+     * Verfügbare Blocks abrufen
      */
-    private function get_active_blocks() {
+    private function get_available_blocks() {
         global $wpdb;
         
         $blocks = $wpdb->get_results(
-            "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active'",
+            "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active' ORDER BY title ASC",
             ARRAY_A
         );
         

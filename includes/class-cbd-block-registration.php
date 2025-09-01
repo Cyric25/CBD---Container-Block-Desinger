@@ -17,20 +17,48 @@ if (!defined('ABSPATH')) {
 class CBD_Block_Registration {
     
     /**
+     * Singleton-Instanz
+     */
+    private static $instance = null;
+    
+    /**
+     * Debug-Modus
+     */
+    private $debug_mode = false;
+    
+    /**
+     * Singleton-Instanz abrufen
+     */
+    public static function get_instance() {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+    
+    /**
      * Konstruktor
      */
-    public function __construct() {
-        // Nichts zu tun hier
+    private function __construct() {
+        $this->debug_mode = defined('WP_DEBUG') && WP_DEBUG;
     }
     
     /**
      * Alle Blöcke registrieren
      */
     public function register_blocks() {
+        // Prüfen ob Block-Editor verfügbar ist
+        if (!function_exists('register_block_type')) {
+            return;
+        }
+        
         // Haupt-Container-Block registrieren
-        register_block_type('cbd/container', array(
+        register_block_type('container-block-designer/container', array(
             'render_callback' => array($this, 'render_container_block'),
             'attributes' => $this->get_block_attributes(),
+            'editor_script' => 'cbd-block-editor',
+            'editor_style' => 'cbd-block-editor',
+            'style' => 'cbd-block-style',
             'supports' => array(
                 'html' => false,
                 'align' => array('wide', 'full'),
@@ -38,6 +66,11 @@ class CBD_Block_Registration {
                 'customClassName' => true,
             ),
         ));
+        
+        // Debug-Log
+        if ($this->debug_mode) {
+            error_log('CBD: Block registered - container-block-designer/container');
+        }
         
         // Dynamische Blöcke aus der Datenbank registrieren
         $this->register_dynamic_blocks();
@@ -48,11 +81,7 @@ class CBD_Block_Registration {
      */
     private function get_block_attributes() {
         return array(
-            'blockId' => array(
-                'type' => 'number',
-                'default' => 0,
-            ),
-            'blockName' => array(
+            'selectedBlock' => array(
                 'type' => 'string',
                 'default' => '',
             ),
@@ -60,19 +89,15 @@ class CBD_Block_Registration {
                 'type' => 'string',
                 'default' => '',
             ),
+            'blockConfig' => array(
+                'type' => 'object',
+                'default' => array(),
+            ),
+            'blockFeatures' => array(
+                'type' => 'object',
+                'default' => array(),
+            ),
             'alignment' => array(
-                'type' => 'string',
-                'default' => '',
-            ),
-            'styles' => array(
-                'type' => 'object',
-                'default' => array(),
-            ),
-            'features' => array(
-                'type' => 'object',
-                'default' => array(),
-            ),
-            'content' => array(
                 'type' => 'string',
                 'default' => '',
             ),
@@ -83,11 +108,21 @@ class CBD_Block_Registration {
      * Dynamische Blöcke aus der Datenbank registrieren
      */
     private function register_dynamic_blocks() {
+        // Prüfen ob CBD_Database verfügbar ist
+        if (!class_exists('CBD_Database')) {
+            return;
+        }
+        
         $blocks = CBD_Database::get_blocks(array('status' => 'active'));
+        
+        if (!is_array($blocks)) {
+            return;
+        }
         
         foreach ($blocks as $block) {
             $block_name = 'cbd/' . sanitize_title($block['name']);
             
+            // Prüfen ob Block bereits registriert ist
             if (!WP_Block_Type_Registry::get_instance()->is_registered($block_name)) {
                 register_block_type($block_name, array(
                     'render_callback' => array($this, 'render_dynamic_block'),
@@ -101,6 +136,10 @@ class CBD_Block_Registration {
                         )
                     ),
                 ));
+                
+                if ($this->debug_mode) {
+                    error_log('CBD: Dynamic block registered - ' . $block_name);
+                }
             }
         }
     }
@@ -109,30 +148,38 @@ class CBD_Block_Registration {
      * Container-Block rendern
      */
     public function render_container_block($attributes, $content) {
-        $block_id = !empty($attributes['blockId']) ? intval($attributes['blockId']) : 0;
+        $selected_block = !empty($attributes['selectedBlock']) ? $attributes['selectedBlock'] : '';
         $custom_classes = !empty($attributes['customClasses']) ? esc_attr($attributes['customClasses']) : '';
-        $alignment = !empty($attributes['alignment']) ? esc_attr($attributes['alignment']) : '';
+        $block_config = !empty($attributes['blockConfig']) ? $attributes['blockConfig'] : array();
+        $block_features = !empty($attributes['blockFeatures']) ? $attributes['blockFeatures'] : array();
         
-        // Block-Daten aus der Datenbank laden
+        // Block-Daten laden wenn ein Block ausgewählt wurde
         $block_data = null;
-        if ($block_id > 0) {
-            $block_data = CBD_Database::get_block($block_id);
+        if ($selected_block) {
+            global $wpdb;
+            $block_data = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE name = %s AND status = 'active'",
+                $selected_block
+            ), ARRAY_A);
+            
+            if ($block_data) {
+                $block_data['config'] = json_decode($block_data['config'], true) ?: array();
+                $block_data['styles'] = json_decode($block_data['styles'], true) ?: array();
+                $block_data['features'] = json_decode($block_data['features'], true) ?: array();
+            }
         }
         
         // CSS-Klassen zusammenstellen
-        $classes = array('cbd-container-block');
-        if (!empty($custom_classes)) {
+        $classes = array('wp-block-container-block-designer-container', 'cbd-container');
+        if ($custom_classes) {
             $classes[] = $custom_classes;
         }
-        if (!empty($alignment)) {
-            $classes[] = 'align' . $alignment;
-        }
-        if ($block_data) {
-            $classes[] = 'cbd-block-' . sanitize_html_class($block_data['name']);
+        if ($selected_block) {
+            $classes[] = 'cbd-container-' . sanitize_html_class($selected_block);
         }
         
         // Inline-Styles generieren
-        $inline_styles = $this->generate_inline_styles($attributes, $block_data);
+        $inline_styles = $this->generate_inline_styles($block_data);
         
         // HTML generieren
         $output = sprintf(
@@ -142,7 +189,9 @@ class CBD_Block_Registration {
         );
         
         // Features rendern
-        $output .= $this->render_features($attributes, $block_data);
+        if ($block_data && !empty($block_data['features'])) {
+            $output .= $this->render_features($block_data['features'], $block_config);
+        }
         
         // Inhalt
         $output .= '<div class="cbd-container-content">';
@@ -158,162 +207,85 @@ class CBD_Block_Registration {
      * Dynamischen Block rendern
      */
     public function render_dynamic_block($attributes, $content) {
-        $db_block_id = !empty($attributes['dbBlockId']) ? intval($attributes['dbBlockId']) : 0;
-        
-        if ($db_block_id > 0) {
-            $attributes['blockId'] = $db_block_id;
-        }
-        
+        // Für dynamische Blöcke den Standard-Renderer verwenden
         return $this->render_container_block($attributes, $content);
     }
     
     /**
      * Inline-Styles generieren
      */
-    private function generate_inline_styles($attributes, $block_data) {
-        $styles = array();
+    private function generate_inline_styles($block_data) {
+        if (!$block_data || empty($block_data['styles'])) {
+            return '';
+        }
         
-        // Styles aus Attributen
-        if (!empty($attributes['styles'])) {
-            $attr_styles = $attributes['styles'];
-            
-            // Padding
-            if (!empty($attr_styles['padding'])) {
-                $padding = $attr_styles['padding'];
-                $styles[] = sprintf(
-                    'padding: %dpx %dpx %dpx %dpx',
-                    intval($padding['top'] ?? 20),
-                    intval($padding['right'] ?? 20),
-                    intval($padding['bottom'] ?? 20),
-                    intval($padding['left'] ?? 20)
+        $styles = $block_data['styles'];
+        $css_properties = array();
+        
+        // Padding
+        if (!empty($styles['padding'])) {
+            $padding = $styles['padding'];
+            $css_properties[] = sprintf(
+                'padding: %dpx %dpx %dpx %dpx',
+                intval($padding['top'] ?? 20),
+                intval($padding['right'] ?? 20),
+                intval($padding['bottom'] ?? 20),
+                intval($padding['left'] ?? 20)
+            );
+        }
+        
+        // Hintergrundfarbe
+        if (!empty($styles['background']['color'])) {
+            $css_properties[] = 'background-color: ' . $styles['background']['color'];
+        }
+        
+        // Textfarbe
+        if (!empty($styles['text']['color'])) {
+            $css_properties[] = 'color: ' . $styles['text']['color'];
+        }
+        
+        // Border
+        if (!empty($styles['border'])) {
+            $border = $styles['border'];
+            if (!empty($border['width']) && $border['width'] > 0) {
+                $css_properties[] = sprintf(
+                    'border: %dpx solid %s',
+                    intval($border['width']),
+                    $border['color'] ?? '#e0e0e0'
                 );
             }
-            
-            // Background
-            if (!empty($attr_styles['background']['color'])) {
-                $styles[] = 'background-color: ' . esc_attr($attr_styles['background']['color']);
-            }
-            
-            // Border
-            if (!empty($attr_styles['border'])) {
-                $border = $attr_styles['border'];
-                if (!empty($border['width']) && $border['width'] > 0) {
-                    $styles[] = sprintf(
-                        'border: %dpx %s %s',
-                        intval($border['width']),
-                        esc_attr($border['style'] ?? 'solid'),
-                        esc_attr($border['color'] ?? '#e0e0e0')
-                    );
-                }
-                if (!empty($border['radius'])) {
-                    $styles[] = 'border-radius: ' . intval($border['radius']) . 'px';
-                }
+            if (!empty($border['radius'])) {
+                $css_properties[] = 'border-radius: ' . intval($border['radius']) . 'px';
             }
         }
         
-        // Styles aus Datenbank
-        if ($block_data && !empty($block_data['styles'])) {
-            $db_styles = $block_data['styles'];
-            
-            // Nur anwenden wenn nicht bereits durch Attribute gesetzt
-            if (empty($attributes['styles'])) {
-                // Padding
-                if (!empty($db_styles['padding'])) {
-                    $padding = $db_styles['padding'];
-                    $styles[] = sprintf(
-                        'padding: %dpx %dpx %dpx %dpx',
-                        intval($padding['top'] ?? 20),
-                        intval($padding['right'] ?? 20),
-                        intval($padding['bottom'] ?? 20),
-                        intval($padding['left'] ?? 20)
-                    );
-                }
-                
-                // Background
-                if (!empty($db_styles['background']['color'])) {
-                    $styles[] = 'background-color: ' . esc_attr($db_styles['background']['color']);
-                }
-                
-                // Border
-                if (!empty($db_styles['border'])) {
-                    $border = $db_styles['border'];
-                    if (!empty($border['width']) && $border['width'] > 0) {
-                        $styles[] = sprintf(
-                            'border: %dpx %s %s',
-                            intval($border['width']),
-                            esc_attr($border['style'] ?? 'solid'),
-                            esc_attr($border['color'] ?? '#e0e0e0')
-                        );
-                    }
-                    if (!empty($border['radius'])) {
-                        $styles[] = 'border-radius: ' . intval($border['radius']) . 'px';
-                    }
-                }
-            }
-        }
-        
-        return implode('; ', $styles);
+        return implode('; ', $css_properties);
     }
     
     /**
      * Features rendern
      */
-    private function render_features($attributes, $block_data) {
+    private function render_features($features, $config = array()) {
         $output = '';
         
-        // Features aus Attributen oder Datenbank
-        $features = !empty($attributes['features']) ? $attributes['features'] : 
-                   ($block_data && !empty($block_data['features']) ? $block_data['features'] : array());
-        
-        if (empty($features)) {
-            return $output;
-        }
-        
-        // Icon
+        // Icon-Feature
         if (!empty($features['icon']['enabled']) && !empty($features['icon']['value'])) {
             $output .= sprintf(
-                '<div class="cbd-feature-icon"><span class="dashicons %s"></span></div>',
-                esc_attr($features['icon']['value'])
+                '<div class="cbd-feature-icon">%s</div>',
+                esc_html($features['icon']['value'])
             );
         }
         
-        // Collapse-Button
-        if (!empty($features['collapse']['enabled'])) {
-            $default_state = $features['collapse']['defaultState'] ?? 'expanded';
-            $output .= sprintf(
-                '<button class="cbd-collapse-toggle" data-state="%s">
-                    <span class="dashicons dashicons-arrow-%s"></span>
-                </button>',
-                esc_attr($default_state),
-                $default_state === 'expanded' ? 'up' : 'down'
-            );
-        }
-        
-        // Numbering
+        // Nummerierungs-Feature
         if (!empty($features['numbering']['enabled'])) {
-            $format = $features['numbering']['format'] ?? 'numeric';
-            $output .= sprintf(
-                '<div class="cbd-numbering" data-format="%s"></div>',
-                esc_attr($format)
-            );
+            $output .= '<div class="cbd-feature-numbering"></div>';
         }
         
-        // Copy-Text Button
-        if (!empty($features['copyText']['enabled'])) {
-            $button_text = $features['copyText']['buttonText'] ?? __('Text kopieren', 'container-block-designer');
-            $output .= sprintf(
-                '<button class="cbd-copy-text">%s</button>',
-                esc_html($button_text)
-            );
-        }
-        
-        // Screenshot Button
-        if (!empty($features['screenshot']['enabled'])) {
-            $button_text = $features['screenshot']['buttonText'] ?? __('Screenshot', 'container-block-designer');
-            $output .= sprintf(
-                '<button class="cbd-screenshot">%s</button>',
-                esc_html($button_text)
-            );
+        // Collapse-Feature
+        if (!empty($features['collapse']['enabled'])) {
+            $output .= '<button class="cbd-feature-collapse" aria-label="' . 
+                      esc_attr__('Container ein-/ausklappen', 'container-block-designer') . 
+                      '"><span class="dashicons dashicons-arrow-down"></span></button>';
         }
         
         return $output;
