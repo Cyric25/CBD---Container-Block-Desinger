@@ -87,7 +87,7 @@ class CBD_Admin {
         
         // Block bearbeiten (versteckt, nur über direkten Link erreichbar)
         add_submenu_page(
-            null, // Kein Parent-Menü (versteckt)
+            '', // Leerer String statt null für Parent-Menü
             __('Block bearbeiten', 'container-block-designer'),
             __('Block bearbeiten', 'container-block-designer'),
             'manage_options',

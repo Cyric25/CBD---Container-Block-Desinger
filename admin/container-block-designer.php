@@ -15,9 +15,12 @@ if (!defined('ABSPATH')) {
 global $wpdb;
 $blocks = $wpdb->get_results("SELECT * FROM " . CBD_TABLE_BLOCKS . " ORDER BY created DESC");
 
-// Verarbeite Feature-Toggle Aktionen
+// WICHTIG: Verarbeite Feature-Toggle Aktionen VOR jeglicher HTML-Ausgabe
 if (isset($_POST['toggle_feature']) && isset($_POST['block_id']) && isset($_POST['feature_key'])) {
-    check_admin_referer('cbd_toggle_feature');
+    // Nonce-Prüfung - Prüfe ob Nonce existiert bevor Verifikation
+    if (!isset($_POST['cbd_toggle_feature_nonce']) || !wp_verify_nonce($_POST['cbd_toggle_feature_nonce'], 'cbd_toggle_feature')) {
+        wp_die('Sicherheitsprüfung fehlgeschlagen');
+    }
     
     $block_id = intval($_POST['block_id']);
     $feature_key = sanitize_text_field($_POST['feature_key']);
@@ -48,37 +51,59 @@ if (isset($_POST['toggle_feature']) && isset($_POST['block_id']) && isset($_POST
             array('id' => $block_id)
         );
         
-        wp_redirect(add_query_arg('cbd_message', 'feature_toggled', remove_query_arg(array('toggle_feature', 'block_id', 'feature_key'))));
+        // Redirect mit Message
+        $redirect_url = admin_url('admin.php?page=container-block-designer&cbd_message=feature_toggled');
+        wp_safe_redirect($redirect_url);
         exit;
     }
 }
 
-// Verarbeite Status-Toggle (Aktiv/Inaktiv)
-if (isset($_GET['toggle_status']) && isset($_GET['block_id'])) {
-    check_admin_referer('cbd_toggle_status');
-    
-    $block_id = intval($_GET['block_id']);
-    
-    // Hole aktuellen Status
-    $current_status = $wpdb->get_var($wpdb->prepare(
-        "SELECT status FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
-        $block_id
-    ));
-    
-    if ($current_status) {
-        $new_status = ($current_status === 'active') ? 'inactive' : 'active';
+// Verarbeite Block-Löschung (MUSS VOR HTML-Output sein!)
+if (isset($_GET['delete_block']) && isset($_GET['_wpnonce'])) {
+    if (wp_verify_nonce($_GET['_wpnonce'], 'cbd_delete_block')) {
+        $block_id = intval($_GET['delete_block']);
         
-        $wpdb->update(
+        $result = $wpdb->delete(
             CBD_TABLE_BLOCKS,
-            array(
-                'status' => $new_status,
-                'updated' => current_time('mysql')
-            ),
-            array('id' => $block_id)
+            array('id' => $block_id),
+            array('%d')
         );
         
-        wp_redirect(add_query_arg('cbd_message', 'status_changed', remove_query_arg(array('toggle_status', 'block_id', '_wpnonce'))));
-        exit;
+        if ($result) {
+            $redirect_url = admin_url('admin.php?page=container-block-designer&cbd_message=deleted');
+            wp_safe_redirect($redirect_url);
+            exit;
+        }
+    }
+}
+
+// Verarbeite Status-Toggle (Aktiv/Inaktiv) - MUSS VOR HTML-Output sein!
+if (isset($_GET['toggle_status']) && isset($_GET['block_id']) && isset($_GET['_wpnonce'])) {
+    if (wp_verify_nonce($_GET['_wpnonce'], 'cbd_toggle_status')) {
+        $block_id = intval($_GET['block_id']);
+        
+        // Hole aktuellen Status
+        $current_status = $wpdb->get_var($wpdb->prepare(
+            "SELECT status FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
+            $block_id
+        ));
+        
+        if ($current_status) {
+            $new_status = ($current_status === 'active') ? 'inactive' : 'active';
+            
+            $wpdb->update(
+                CBD_TABLE_BLOCKS,
+                array(
+                    'status' => $new_status,
+                    'updated' => current_time('mysql')
+                ),
+                array('id' => $block_id)
+            );
+            
+            $redirect_url = admin_url('admin.php?page=container-block-designer&cbd_message=status_changed');
+            wp_safe_redirect($redirect_url);
+            exit;
+        }
     }
 }
 
@@ -161,8 +186,8 @@ $available_features = array(
         <?php else : ?>
             <div class="cbd-blocks-grid">
                 <?php foreach ($blocks as $block) : 
-                    $features = json_decode($block->features, true) ?: array();
-                    $styles = json_decode($block->styles, true) ?: array();
+                    $features = !empty($block->features) ? json_decode($block->features, true) : array();
+                    $styles = !empty($block->styles) ? json_decode($block->styles, true) : array();
                     $active_features = array_filter($features, function($f) { 
                         return isset($f['enabled']) && $f['enabled']; 
                     });
@@ -242,7 +267,7 @@ $available_features = array(
                         
                         <!-- Aktions-Buttons -->
                         <div class="cbd-block-actions">
-                            <a href="<?php echo admin_url('admin.php?page=cbd-edit-block&block_id=' . $block->id); ?>" class="button">
+                            <a href="<?php echo admin_url('admin.php?page=cbd-new-block&block_id=' . $block->id); ?>" class="button">
                                 <span class="dashicons dashicons-edit"></span>
                                 <?php _e('Bearbeiten', 'container-block-designer'); ?>
                             </a>
