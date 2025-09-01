@@ -1,9 +1,9 @@
 <?php
 /**
- * Container Block Designer - Admin-Bereich
+ * Container Block Designer - Admin-Klasse
  * 
  * @package ContainerBlockDesigner
- * @since 2.5.0
+ * @since 2.5.1
  */
 
 // Sicherheit: Direkten Zugriff verhindern
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * Admin-Klasse
+ * Admin-Klasse für das Container Block Designer Plugin
  */
 class CBD_Admin {
     
@@ -22,7 +22,7 @@ class CBD_Admin {
     private static $instance = null;
     
     /**
-     * Singleton-Instanz abrufen
+     * Singleton-Getter
      */
     public static function get_instance() {
         if (null === self::$instance) {
@@ -35,15 +35,18 @@ class CBD_Admin {
      * Konstruktor
      */
     private function __construct() {
-        $this->init_hooks();
-    }
-    
-    /**
-     * Hooks initialisieren
-     */
-    private function init_hooks() {
+        // Admin-Menü hinzufügen
         add_action('admin_menu', array($this, 'add_admin_menu'));
-        add_action('admin_notices', array($this, 'admin_notices'));
+        
+        // Admin-Styles und Scripts
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
+        
+        // AJAX-Handler für Admin-Aktionen
+        add_action('wp_ajax_cbd_save_block', array($this, 'ajax_save_block'));
+        add_action('wp_ajax_cbd_delete_block', array($this, 'ajax_delete_block'));
+        add_action('wp_ajax_cbd_toggle_status', array($this, 'ajax_toggle_status'));
+        
+        // Plugin-Action-Links
         add_filter('plugin_action_links_' . CBD_PLUGIN_BASENAME, array($this, 'add_plugin_action_links'));
     }
     
@@ -62,7 +65,7 @@ class CBD_Admin {
             30
         );
         
-        // Untermenüs
+        // Übersicht (gleiche Seite wie Hauptmenü)
         add_submenu_page(
             'container-block-designer',
             __('Alle Blöcke', 'container-block-designer'),
@@ -72,6 +75,7 @@ class CBD_Admin {
             array($this, 'render_main_page')
         );
         
+        // Neuer Block
         add_submenu_page(
             'container-block-designer',
             __('Neuer Block', 'container-block-designer'),
@@ -81,22 +85,14 @@ class CBD_Admin {
             array($this, 'render_new_block_page')
         );
         
+        // Block bearbeiten (versteckt, nur über direkten Link erreichbar)
         add_submenu_page(
-            'container-block-designer',
-            __('Import/Export', 'container-block-designer'),
-            __('Import/Export', 'container-block-designer'),
+            null, // Kein Parent-Menü (versteckt)
+            __('Block bearbeiten', 'container-block-designer'),
+            __('Block bearbeiten', 'container-block-designer'),
             'manage_options',
-            'cbd-import-export',
-            array($this, 'render_import_export_page')
-        );
-        
-        add_submenu_page(
-            'container-block-designer',
-            __('Einstellungen', 'container-block-designer'),
-            __('Einstellungen', 'container-block-designer'),
-            'manage_options',
-            'cbd-settings',
-            array($this, 'render_settings_page')
+            'cbd-edit-block',
+            array($this, 'render_edit_block_page')
         );
     }
     
@@ -104,267 +100,236 @@ class CBD_Admin {
      * Hauptseite rendern
      */
     public function render_main_page() {
-        // Blöcke aus der Datenbank abrufen
-        global $wpdb;
-        $blocks = $wpdb->get_results(
-            "SELECT * FROM " . CBD_TABLE_BLOCKS . " ORDER BY created DESC",
-            ARRAY_A
-        );
+        // Prüfe ob Datei existiert
+        $file_path = CBD_PLUGIN_DIR . 'admin/container-block-designer.php';
         
-        // Template einbinden
-        $this->include_admin_template('main-page', array('blocks' => $blocks));
+        if (file_exists($file_path)) {
+            include $file_path;
+        } else {
+            echo '<div class="wrap"><h1>' . __('Container Block Designer', 'container-block-designer') . '</h1>';
+            echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/container-block-designer.php', 'container-block-designer') . '</p></div>';
+            echo '</div>';
+        }
     }
     
     /**
      * Neue Block-Seite rendern
      */
     public function render_new_block_page() {
-        // Prüfen ob Edit-Modus
-        $block_id = isset($_GET['block_id']) ? intval($_GET['block_id']) : 0;
-        $block = null;
+        $file_path = CBD_PLUGIN_DIR . 'admin/new-block.php';
         
-        if ($block_id) {
-            global $wpdb;
-            $block = $wpdb->get_row(
-                $wpdb->prepare(
-                    "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
-                    $block_id
-                ),
-                ARRAY_A
-            );
-            
-            if ($block) {
-                $block['config'] = json_decode($block['config'], true) ?: array();
-                $block['styles'] = json_decode($block['styles'], true) ?: array();
-                $block['features'] = json_decode($block['features'], true) ?: array();
-            }
-        }
-        
-        // Template einbinden
-        $this->include_admin_template('new-block', array('block' => $block));
-    }
-    
-    /**
-     * Import/Export-Seite rendern
-     */
-    public function render_import_export_page() {
-        $this->include_admin_template('import-export');
-    }
-    
-    /**
-     * Einstellungen-Seite rendern
-     */
-    public function render_settings_page() {
-        $this->include_admin_template('settings');
-    }
-    
-    /**
-     * Admin-Template einbinden
-     */
-    private function include_admin_template($template, $data = array()) {
-        // Daten extrahieren
-        if (!empty($data)) {
-            extract($data);
-        }
-        
-        // Template-Pfad
-        $template_file = CBD_PLUGIN_DIR . 'admin/' . $template . '.php';
-        
-        // Prüfen ob Template existiert
-        if (file_exists($template_file)) {
-            include $template_file;
+        if (file_exists($file_path)) {
+            include $file_path;
         } else {
-            // Fallback: Einfache Ausgabe wenn Template nicht gefunden
-            $this->render_template_not_found($template);
+            echo '<div class="wrap"><h1>' . __('Neuer Block', 'container-block-designer') . '</h1>';
+            echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/new-block.php', 'container-block-designer') . '</p></div>';
+            echo '</div>';
         }
     }
     
     /**
-     * Template nicht gefunden - Fallback
+     * Block bearbeiten Seite rendern
      */
-    private function render_template_not_found($template) {
-        ?>
-        <div class="wrap">
-            <h1><?php echo esc_html__('Container Block Designer', 'container-block-designer'); ?></h1>
-            
-            <?php if ($template === 'main-page'): ?>
-                <?php $this->render_blocks_list_fallback(); ?>
-            <?php elseif ($template === 'new-block'): ?>
-                <?php $this->render_new_block_fallback(); ?>
-            <?php else: ?>
-                <div class="notice notice-warning">
-                    <p><?php printf(__('Template "%s" wurde nicht gefunden.', 'container-block-designer'), esc_html($template)); ?></p>
-                </div>
-            <?php endif; ?>
-        </div>
-        <?php
+    public function render_edit_block_page() {
+        $file_path = CBD_PLUGIN_DIR . 'admin/edit-block.php';
+        
+        if (file_exists($file_path)) {
+            include $file_path;
+        } else {
+            echo '<div class="wrap"><h1>' . __('Block bearbeiten', 'container-block-designer') . '</h1>';
+            echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/edit-block.php', 'container-block-designer') . '</p></div>';
+            echo '</div>';
+        }
     }
     
     /**
-     * Fallback für Blocks-Liste
+     * Admin-Assets laden
      */
-    private function render_blocks_list_fallback() {
+    public function enqueue_admin_assets($hook) {
+        // Nur auf unseren Plugin-Seiten laden
+        if (strpos($hook, 'container-block-designer') === false && 
+            strpos($hook, 'cbd-') === false) {
+            return;
+        }
+        
+        // Admin CSS
+        wp_enqueue_style(
+            'cbd-admin',
+            CBD_PLUGIN_URL . 'assets/css/admin.css',
+            array(),
+            CBD_VERSION
+        );
+        
+        // Admin JavaScript
+        wp_enqueue_script(
+            'cbd-admin',
+            CBD_PLUGIN_URL . 'assets/js/admin.js',
+            array('jquery', 'wp-color-picker'),
+            CBD_VERSION,
+            true
+        );
+        
+        // Color Picker CSS
+        wp_enqueue_style('wp-color-picker');
+        
+        // Lokalisierung für JavaScript
+        wp_localize_script('cbd-admin', 'cbdAdmin', array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('cbd-admin-nonce'),
+            'strings' => array(
+                'confirmDelete' => __('Sind Sie sicher, dass Sie diesen Block löschen möchten?', 'container-block-designer'),
+                'saving' => __('Speichern...', 'container-block-designer'),
+                'saved' => __('Gespeichert!', 'container-block-designer'),
+                'error' => __('Ein Fehler ist aufgetreten.', 'container-block-designer'),
+                'active' => __('Aktiv', 'container-block-designer'),
+                'inactive' => __('Inaktiv', 'container-block-designer'),
+                'featureEnabled' => __('Feature aktiviert', 'container-block-designer'),
+                'featureDisabled' => __('Feature deaktiviert', 'container-block-designer')
+            )
+        ));
+    }
+    
+    /**
+     * AJAX: Block speichern
+     */
+    public function ajax_save_block() {
+        // Sicherheitsprüfung
+        if (!check_ajax_referer('cbd-admin-nonce', 'nonce', false)) {
+            wp_die(__('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer'));
+        }
+        
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Keine Berechtigung', 'container-block-designer'));
+        }
+        
         global $wpdb;
-        $blocks = $wpdb->get_results("SELECT * FROM " . CBD_TABLE_BLOCKS . " ORDER BY created DESC", ARRAY_A);
-        ?>
-        <div class="cbd-blocks-list">
-            <div class="tablenav top">
-                <a href="<?php echo admin_url('admin.php?page=cbd-new-block'); ?>" class="button button-primary">
-                    <?php _e('Neuer Block', 'container-block-designer'); ?>
-                </a>
-            </div>
-            
-            <?php if (empty($blocks)): ?>
-                <div class="cbd-no-blocks">
-                    <p><?php _e('Keine Blöcke gefunden.', 'container-block-designer'); ?></p>
-                    <a href="<?php echo admin_url('admin.php?page=cbd-new-block'); ?>" class="button button-primary">
-                        <?php _e('Ersten Block erstellen', 'container-block-designer'); ?>
-                    </a>
-                </div>
-            <?php else: ?>
-                <table class="wp-list-table widefat fixed striped">
-                    <thead>
-                        <tr>
-                            <th><?php _e('Name', 'container-block-designer'); ?></th>
-                            <th><?php _e('Beschreibung', 'container-block-designer'); ?></th>
-                            <th><?php _e('Status', 'container-block-designer'); ?></th>
-                            <th><?php _e('Erstellt', 'container-block-designer'); ?></th>
-                            <th><?php _e('Aktionen', 'container-block-designer'); ?></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($blocks as $block): ?>
-                            <tr>
-                                <td>
-                                    <strong><?php echo esc_html($block['title'] ?? $block['name']); ?></strong>
-                                </td>
-                                <td><?php echo esc_html($block['description'] ?? ''); ?></td>
-                                <td>
-                                    <span class="cbd-status cbd-status-<?php echo esc_attr($block['status']); ?>">
-                                        <?php echo esc_html($block['status']); ?>
-                                    </span>
-                                </td>
-                                <td><?php echo esc_html($block['created']); ?></td>
-                                <td>
-                                    <a href="<?php echo admin_url('admin.php?page=cbd-new-block&block_id=' . $block['id']); ?>" 
-                                       class="button button-small">
-                                        <?php _e('Bearbeiten', 'container-block-designer'); ?>
-                                    </a>
-                                    <button class="button button-small cbd-delete-block" 
-                                            data-block-id="<?php echo esc_attr($block['id']); ?>">
-                                        <?php _e('Löschen', 'container-block-designer'); ?>
-                                    </button>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            <?php endif; ?>
-        </div>
-        <?php
-    }
-    
-    /**
-     * Fallback für Neuer Block
-     */
-    private function render_new_block_fallback() {
-        $block_id = isset($_GET['block_id']) ? intval($_GET['block_id']) : 0;
-        $block = null;
+        
+        $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
+        $data = array(
+            'name' => sanitize_text_field($_POST['name']),
+            'title' => sanitize_text_field($_POST['title']),
+            'description' => sanitize_textarea_field($_POST['description']),
+            'config' => wp_json_encode($_POST['config']),
+            'styles' => wp_json_encode($_POST['styles']),
+            'features' => wp_json_encode($_POST['features']),
+            'status' => sanitize_text_field($_POST['status']),
+            'updated' => current_time('mysql')
+        );
         
         if ($block_id) {
-            global $wpdb;
-            $block = $wpdb->get_row(
-                $wpdb->prepare("SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d", $block_id),
-                ARRAY_A
+            // Update
+            $result = $wpdb->update(
+                CBD_TABLE_BLOCKS,
+                $data,
+                array('id' => $block_id)
             );
+        } else {
+            // Insert
+            $data['created'] = current_time('mysql');
+            $result = $wpdb->insert(CBD_TABLE_BLOCKS, $data);
+            $block_id = $wpdb->insert_id;
         }
-        ?>
-        <div class="cbd-block-form">
-            <form method="post" id="cbd-block-form">
-                <?php wp_nonce_field('cbd-save-block', 'cbd_nonce'); ?>
-                <input type="hidden" name="block_id" value="<?php echo esc_attr($block_id); ?>">
-                
-                <table class="form-table">
-                    <tr>
-                        <th scope="row">
-                            <label for="block-name"><?php _e('Block Name', 'container-block-designer'); ?></label>
-                        </th>
-                        <td>
-                            <input type="text" 
-                                   id="block-name" 
-                                   name="block_name" 
-                                   class="regular-text" 
-                                   value="<?php echo esc_attr($block['name'] ?? ''); ?>" 
-                                   required>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="block-title"><?php _e('Block Titel', 'container-block-designer'); ?></label>
-                        </th>
-                        <td>
-                            <input type="text" 
-                                   id="block-title" 
-                                   name="block_title" 
-                                   class="regular-text" 
-                                   value="<?php echo esc_attr($block['title'] ?? ''); ?>">
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row">
-                            <label for="block-description"><?php _e('Beschreibung', 'container-block-designer'); ?></label>
-                        </th>
-                        <td>
-                            <textarea id="block-description" 
-                                      name="block_description" 
-                                      class="large-text" 
-                                      rows="3"><?php echo esc_textarea($block['description'] ?? ''); ?></textarea>
-                        </td>
-                    </tr>
-                </table>
-                
-                <p class="submit">
-                    <button type="submit" class="button button-primary">
-                        <?php echo $block_id ? __('Block aktualisieren', 'container-block-designer') : __('Block erstellen', 'container-block-designer'); ?>
-                    </button>
-                    <a href="<?php echo admin_url('admin.php?page=container-block-designer'); ?>" class="button">
-                        <?php _e('Abbrechen', 'container-block-designer'); ?>
-                    </a>
-                </p>
-            </form>
-        </div>
-        <?php
+        
+        if ($result !== false) {
+            wp_send_json_success(array(
+                'message' => __('Block erfolgreich gespeichert', 'container-block-designer'),
+                'block_id' => $block_id
+            ));
+        } else {
+            wp_send_json_error(array(
+                'message' => __('Fehler beim Speichern des Blocks', 'container-block-designer')
+            ));
+        }
     }
     
     /**
-     * Admin-Benachrichtigungen
+     * AJAX: Block löschen
      */
-    public function admin_notices() {
-        // Aktivierungs-Nachricht
-        if (isset($_GET['cbd_activated']) && $_GET['cbd_activated'] == '1') {
-            ?>
-            <div class="notice notice-success is-dismissible">
-                <p><?php _e('Container Block Designer wurde erfolgreich aktiviert!', 'container-block-designer'); ?></p>
-            </div>
-            <?php
+    public function ajax_delete_block() {
+        // Sicherheitsprüfung
+        if (!check_ajax_referer('cbd-admin-nonce', 'nonce', false)) {
+            wp_die(__('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer'));
         }
         
-        // Erfolgs-Nachricht
-        if (isset($_GET['cbd_message']) && $_GET['cbd_message'] == 'saved') {
-            ?>
-            <div class="notice notice-success is-dismissible">
-                <p><?php _e('Block wurde erfolgreich gespeichert!', 'container-block-designer'); ?></p>
-            </div>
-            <?php
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Keine Berechtigung', 'container-block-designer'));
         }
         
-        // Fehler-Nachricht
-        if (isset($_GET['cbd_error'])) {
-            ?>
-            <div class="notice notice-error is-dismissible">
-                <p><?php echo esc_html($_GET['cbd_error']); ?></p>
-            </div>
-            <?php
+        global $wpdb;
+        
+        $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
+        
+        if ($block_id) {
+            $result = $wpdb->delete(
+                CBD_TABLE_BLOCKS,
+                array('id' => $block_id)
+            );
+            
+            if ($result) {
+                wp_send_json_success(array(
+                    'message' => __('Block erfolgreich gelöscht', 'container-block-designer')
+                ));
+            } else {
+                wp_send_json_error(array(
+                    'message' => __('Fehler beim Löschen des Blocks', 'container-block-designer')
+                ));
+            }
+        } else {
+            wp_send_json_error(array(
+                'message' => __('Ungültige Block-ID', 'container-block-designer')
+            ));
+        }
+    }
+    
+    /**
+     * AJAX: Status umschalten
+     */
+    public function ajax_toggle_status() {
+        // Sicherheitsprüfung
+        if (!check_ajax_referer('cbd-admin-nonce', 'nonce', false)) {
+            wp_die(__('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer'));
+        }
+        
+        if (!current_user_can('manage_options')) {
+            wp_die(__('Keine Berechtigung', 'container-block-designer'));
+        }
+        
+        global $wpdb;
+        
+        $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
+        
+        if ($block_id) {
+            // Aktuellen Status abrufen
+            $current_status = $wpdb->get_var($wpdb->prepare(
+                "SELECT status FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
+                $block_id
+            ));
+            
+            $new_status = ($current_status === 'active') ? 'inactive' : 'active';
+            
+            $result = $wpdb->update(
+                CBD_TABLE_BLOCKS,
+                array(
+                    'status' => $new_status,
+                    'updated' => current_time('mysql')
+                ),
+                array('id' => $block_id)
+            );
+            
+            if ($result !== false) {
+                wp_send_json_success(array(
+                    'message' => __('Status erfolgreich geändert', 'container-block-designer'),
+                    'new_status' => $new_status
+                ));
+            } else {
+                wp_send_json_error(array(
+                    'message' => __('Fehler beim Ändern des Status', 'container-block-designer')
+                ));
+            }
+        } else {
+            wp_send_json_error(array(
+                'message' => __('Ungültige Block-ID', 'container-block-designer')
+            ));
         }
     }
     
@@ -379,4 +344,9 @@ class CBD_Admin {
         
         return array_merge($plugin_links, $links);
     }
+}
+
+// Initialisierung nur im Admin-Bereich
+if (is_admin()) {
+    CBD_Admin::get_instance();
 }
