@@ -1,13 +1,15 @@
 <?php
 /**
- * Container Block Designer - Block Registration Class (Updated)
+ * Container Block Designer - Block Registration
+ * Version: 2.5.2
  * 
- * Version 3.0.1 - Mit korrekten Asset-Pfaden
+ * Datei: includes/class-block-registration.php
  * 
- * Diese Datei ersetzt: includes/class-block-registration.php
+ * Diese Klasse kümmert sich um die korrekte Registrierung des Blocks
+ * und das Laden der Stile im Editor
  */
 
-// Sicherheitscheck
+// Sicherheit
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -15,117 +17,52 @@ if (!defined('ABSPATH')) {
 class CBD_Block_Registration {
     
     /**
-     * Singleton Instance
-     */
-    private static $instance = null;
-    
-    /**
-     * Debug Mode
+     * Debug-Modus
      */
     private $debug_mode = false;
     
     /**
-     * Get Instance
+     * Konstruktor
      */
-    public static function get_instance() {
-        if (null === self::$instance) {
-            self::$instance = new self();
-        }
-        return self::$instance;
-    }
-    
-    /**
-     * Constructor
-     */
-    private function __construct() {
-        // Enable debug mode if WP_DEBUG is on
+    public function __construct() {
+        // Aktiviere Debug-Modus wenn WP_DEBUG aktiv ist
         $this->debug_mode = defined('WP_DEBUG') && WP_DEBUG;
         
-        // Initialize hooks
-        $this->init_hooks();
-    }
-    
-    /**
-     * Initialize all hooks
-     */
-    private function init_hooks() {
-        // Server-side block registration (PRIMARY METHOD)
-        add_action('init', array($this, 'register_block_server_side'), 5);
+        // Hooks für Block-Registrierung
+        add_action('init', array($this, 'register_block_type'), 10);
+        add_action('enqueue_block_editor_assets', array($this, 'enqueue_block_editor_assets'), 10);
+        add_action('enqueue_block_assets', array($this, 'enqueue_block_assets'), 10);
         
-        // Enqueue block assets
-        add_action('enqueue_block_editor_assets', array($this, 'enqueue_block_assets'), 5);
+        // Block-Kategorie hinzufügen
+        add_filter('block_categories_all', array($this, 'add_block_category'), 10, 2);
         
-        // Enqueue frontend styles
-        add_action('enqueue_block_assets', array($this, 'enqueue_frontend_block_assets'), 5);
-        
-        // Inline registration as fallback
-        add_action('admin_footer', array($this, 'inline_block_registration'), 999);
-        
-        // Add debug info if needed
-        if ($this->debug_mode) {
-            add_action('admin_notices', array($this, 'show_debug_info'));
-        }
-        
-        // REST API endpoint for block data
+        // REST API Endpoint für Blocks
         add_action('rest_api_init', array($this, 'register_rest_routes'));
         
-        // Dequeue old container-block.js if it exists
-        add_action('enqueue_block_editor_assets', array($this, 'dequeue_old_scripts'), 20);
+        // AJAX Handler
+        add_action('wp_ajax_cbd_get_blocks', array($this, 'ajax_get_blocks'));
+        
+        $this->log_debug('Block Registration initialisiert');
     }
     
     /**
-     * Dequeue old scripts that cause conflicts
+     * Debug-Logging
      */
-    public function dequeue_old_scripts() {
-        // Remove old container-block.js if it's enqueued
-        if (wp_script_is('cbd-container-block', 'enqueued')) {
-            wp_dequeue_script('cbd-container-block');
-            wp_deregister_script('cbd-container-block');
+    private function log_debug($message) {
+        if ($this->debug_mode) {
+            error_log('CBD Block Registration: ' . $message);
         }
     }
     
     /**
-     * Register block server-side (PRIMARY METHOD)
+     * Block-Typ registrieren
      */
-    public function register_block_server_side() {
-        // Check if Gutenberg is available
-        if (!function_exists('register_block_type')) {
-            return;
-        }
-        
-        // Register scripts for the block
-        wp_register_script(
-            'cbd-block-editor',
-            CBD_PLUGIN_URL . 'assets/js/block-editor.js',
-            array('wp-blocks', 'wp-element', 'wp-editor', 'wp-components', 'wp-i18n', 'wp-block-editor'),
-            CBD_VERSION,
-            true
-        );
-        
-        // Register editor styles
-        wp_register_style(
-            'cbd-block-editor-style',
-            CBD_PLUGIN_URL . 'assets/css/block-editor.css',
-            array('wp-edit-blocks'),
-            CBD_VERSION
-        );
-        
-        // Register frontend styles
-        wp_register_style(
-            'cbd-block-style',
-            CBD_PLUGIN_URL . 'assets/css/block-style.css',
-            array(),
-            CBD_VERSION
-        );
-        
-        // Create frontend style file if it doesn't exist
+    public function register_block_type() {
+        // Stelle sicher, dass die CSS-Dateien existieren
         $this->ensure_css_files_exist();
         
-        // Register the block type
+        // Registriere den Block-Typ
         register_block_type('container-block-designer/container', array(
-            'editor_script' => 'cbd-block-editor',
-            'editor_style' => 'cbd-block-editor-style',
-            'style' => 'cbd-block-style',
             'render_callback' => array($this, 'render_block'),
             'attributes' => array(
                 'selectedBlock' => array(
@@ -140,356 +77,250 @@ class CBD_Block_Registration {
                     'type' => 'object',
                     'default' => array()
                 ),
-                'blockFeatures' => array(
-                    'type' => 'object',
-                    'default' => array()
+                'align' => array(
+                    'type' => 'string',
+                    'enum' => array('left', 'center', 'right', 'wide', 'full'),
+                    'default' => ''
+                ),
+                'className' => array(
+                    'type' => 'string',
+                    'default' => ''
                 )
             )
         ));
         
-        $this->log_debug('Block registered server-side');
+        // Registriere Block-Stile serverseitig
+        $this->register_block_styles();
+        
+        $this->log_debug('Block-Typ registriert');
     }
     
     /**
-     * Ensure CSS files exist
+     * Block-Stile registrieren
      */
-    private function ensure_css_files_exist() {
-        $css_dir = CBD_PLUGIN_DIR . 'assets/css/';
+    private function register_block_styles() {
+        // Standard-Stile für den Container-Block
+        $styles = array(
+            array(
+                'name' => 'default',
+                'label' => __('Standard', 'container-block-designer'),
+                'is_default' => true
+            ),
+            array(
+                'name' => 'boxed',
+                'label' => __('Box', 'container-block-designer'),
+                'inline_style' => '.wp-block-container-block-designer-container.is-style-boxed { border: 2px solid #e0e0e0; background: #f9f9f9; padding: 30px; }'
+            ),
+            array(
+                'name' => 'rounded',
+                'label' => __('Abgerundet', 'container-block-designer'),
+                'inline_style' => '.wp-block-container-block-designer-container.is-style-rounded { border-radius: 12px; background: #f5f5f5; padding: 25px; }'
+            ),
+            array(
+                'name' => 'shadow',
+                'label' => __('Schatten', 'container-block-designer'),
+                'inline_style' => '.wp-block-container-block-designer-container.is-style-shadow { box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); background: white; padding: 30px; }'
+            ),
+            array(
+                'name' => 'bordered',
+                'label' => __('Umrandet', 'container-block-designer'),
+                'inline_style' => '.wp-block-container-block-designer-container.is-style-bordered { border: 3px solid #007cba; padding: 25px; }'
+            )
+        );
         
-        // Create directory if it doesn't exist
-        if (!file_exists($css_dir)) {
-            wp_mkdir_p($css_dir);
+        // Registriere jeden Stil
+        foreach ($styles as $style) {
+            if (function_exists('register_block_style')) {
+                register_block_style('container-block-designer/container', $style);
+            }
         }
         
-        // Create block-editor.css if it doesn't exist
-        $editor_css = $css_dir . 'block-editor.css';
-        if (!file_exists($editor_css)) {
-            $editor_content = '/* Container Block Designer - Editor Styles */
-.wp-block-container-block-designer-container {
-    position: relative;
-    min-height: 100px;
-}
-.wp-block-container-block-designer-container.is-selected {
-    outline: 2px solid #007cba;
-    outline-offset: -2px;
-}
-.cbd-container {
-    position: relative;
-    min-height: 80px;
-}';
-            file_put_contents($editor_css, $editor_content);
-        }
-        
-        // Create block-style.css if it doesn't exist
-        $style_css = $css_dir . 'block-style.css';
-        if (!file_exists($style_css)) {
-            $style_content = '/* Container Block Designer - Frontend Styles */
-.wp-block-container-block-designer-container {
-    position: relative;
-}
-.cbd-container {
-    position: relative;
-    min-height: 50px;
-}';
-            file_put_contents($style_css, $style_content);
-        }
+        $this->log_debug('Block-Stile registriert: ' . count($styles));
     }
     
     /**
-     * Enqueue block assets
+     * Block Editor Assets laden
      */
-    public function enqueue_block_assets() {
-        // Localize script with data
+    public function enqueue_block_editor_assets() {
+        // Block Editor Script
+        wp_enqueue_script(
+            'cbd-block-editor',
+            CBD_PLUGIN_URL . 'assets/js/block-editor.js',
+            array(
+                'wp-blocks',
+                'wp-element',
+                'wp-block-editor',
+                'wp-components',
+                'wp-i18n',
+                'wp-data',
+                'wp-compose',
+                'wp-dom-ready'
+            ),
+            CBD_VERSION,
+            true
+        );
+        
+        // Block Editor Styles
+        wp_enqueue_style(
+            'cbd-block-editor',
+            CBD_PLUGIN_URL . 'assets/css/block-editor.css',
+            array('wp-edit-blocks'),
+            CBD_VERSION
+        );
+        
+        // Lokalisierung - WICHTIG: ajaxUrl muss gesetzt sein!
         wp_localize_script('cbd-block-editor', 'cbdBlockData', array(
-            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'ajaxUrl' => admin_url('admin-ajax.php'),  // KORRIGIERT: Immer setzen
             'restUrl' => rest_url('cbd/v1/'),
-            'nonce' => wp_create_nonce('wp_rest'),
+            'nonce' => wp_create_nonce('cbd-nonce'),
             'blocks' => $this->get_available_blocks(),
             'pluginUrl' => CBD_PLUGIN_URL,
             'debug' => $this->debug_mode,
             'i18n' => array(
                 'blockTitle' => __('Container Block', 'container-block-designer'),
                 'blockDescription' => __('Ein anpassbarer Container-Block mit erweiterten Features', 'container-block-designer'),
-                'selectBlock' => __('Block-Typ auswählen', 'container-block-designer'),
+                'selectBlock' => __('Design auswählen', 'container-block-designer'),
                 'customClasses' => __('Zusätzliche CSS-Klassen', 'container-block-designer'),
-                'loading' => __('Lade Blocks...', 'container-block-designer'),
-                'noBlocks' => __('Keine Blocks verfügbar', 'container-block-designer')
+                'loading' => __('Lade Designs...', 'container-block-designer'),
+                'noBlocks' => __('Keine Designs verfügbar', 'container-block-designer'),
+                'error' => __('Fehler beim Laden', 'container-block-designer')
             )
         ));
         
-        $this->log_debug('Block assets enqueued');
+        // Inline Styles für sofortige Verfügbarkeit
+        wp_add_inline_style('cbd-block-editor', $this->get_inline_editor_styles());
+        
+        $this->log_debug('Block Editor Assets geladen');
     }
     
     /**
-     * Enqueue frontend block assets
+     * Block Assets (Frontend + Editor) laden
      */
-    public function enqueue_frontend_block_assets() {
-        // This ensures the styles are loaded on both frontend and editor
+    public function enqueue_block_assets() {
+        // Frontend Styles (werden auch im Editor geladen)
+        wp_enqueue_style(
+            'cbd-block-style',
+            CBD_PLUGIN_URL . 'assets/css/block-style.css',
+            array(),
+            CBD_VERSION
+        );
+        
+        // Inline Styles für Frontend
         if (!is_admin()) {
-            wp_enqueue_style(
-                'cbd-block-style',
-                CBD_PLUGIN_URL . 'assets/css/block-style.css',
-                array(),
-                CBD_VERSION
-            );
+            wp_add_inline_style('cbd-block-style', $this->get_inline_frontend_styles());
         }
     }
     
     /**
-     * Inline block registration as fallback
+     * Inline Editor Styles
      */
-    public function inline_block_registration() {
-        // Only on block editor pages
-        $screen = get_current_screen();
-        if (!$screen || !$screen->is_block_editor()) {
-            return;
-        }
-        
-        ?>
-        <script type="text/javascript">
-        (function() {
-            'use strict';
-            
-            // Debug mode
-            const debugMode = <?php echo $this->debug_mode ? 'true' : 'false'; ?>;
-            
-            // Log function
-            function cbdLog(message, data = null) {
-                if (debugMode || window.cbdDebug) {
-                    console.log('[CBD Registration]', message, data || '');
-                }
+    private function get_inline_editor_styles() {
+        return '
+            /* Container Block Designer - Inline Editor Styles */
+            .wp-block-container-block-designer-container {
+                position: relative;
+                min-height: 100px;
+                padding: 20px;
+                margin: 20px 0;
+                transition: all 0.3s ease;
             }
             
-            // Check if block is already registered
-            function isBlockRegistered() {
-                if (!window.wp || !window.wp.blocks) return false;
-                const blocks = wp.blocks.getBlockTypes();
-                return blocks.some(block => block.name === 'container-block-designer/container');
+            .wp-block-container-block-designer-container.is-selected {
+                outline: 2px solid #007cba;
+                outline-offset: -2px;
             }
             
-            // Registration attempts counter
-            let attempts = 0;
-            const maxAttempts = 10;
-            
-            // Try to register block
-            function tryRegisterBlock() {
-                attempts++;
-                cbdLog(`Registration attempt ${attempts}/${maxAttempts}`);
-                
-                // Check if already registered
-                if (isBlockRegistered()) {
-                    cbdLog('✅ Block already registered!');
-                    return;
-                }
-                
-                // Check if WordPress is ready
-                if (!window.wp || !window.wp.blocks || !window.wp.element) {
-                    if (attempts < maxAttempts) {
-                        cbdLog('WordPress not ready, retrying...');
-                        setTimeout(tryRegisterBlock, 500);
-                    } else {
-                        cbdLog('❌ Failed to register after max attempts');
-                    }
-                    return;
-                }
-                
-                // Get data
-                const blockData = window.cbdBlockData || {};
-                
-                // Register the block
-                try {
-                    const { registerBlockType } = wp.blocks;
-                    const { InnerBlocks, useBlockProps } = wp.blockEditor;
-                    const { Fragment, createElement: el } = wp.element;
-                    const { __ } = wp.i18n;
-                    
-                    registerBlockType('container-block-designer/container', {
-                        title: blockData.i18n?.blockTitle || 'Container Block',
-                        description: blockData.i18n?.blockDescription || 'A customizable container block',
-                        category: 'design',
-                        icon: 'layout',
-                        attributes: {
-                            selectedBlock: { type: 'string', default: '' },
-                            customClasses: { type: 'string', default: '' },
-                            blockConfig: { type: 'object', default: {} },
-                            blockFeatures: { type: 'object', default: {} }
-                        },
-                        
-                        edit: function(props) {
-                            const blockProps = useBlockProps();
-                            return el(
-                                'div',
-                                blockProps,
-                                el(InnerBlocks)
-                            );
-                        },
-                        
-                        save: function() {
-                            const blockProps = useBlockProps.save();
-                            return el(
-                                'div',
-                                blockProps,
-                                el(InnerBlocks.Content)
-                            );
-                        }
-                    });
-                    
-                    cbdLog('✅ Block registered via inline script!');
-                    
-                    // Trigger custom event
-                    window.dispatchEvent(new CustomEvent('cbd-block-registered'));
-                    
-                } catch (error) {
-                    cbdLog('❌ Registration error:', error);
-                    
-                    if (attempts < maxAttempts) {
-                        setTimeout(tryRegisterBlock, 500);
-                    }
-                }
+            /* Stelle sicher, dass Block-Stile sichtbar sind */
+            .block-editor-block-styles__item-preview .wp-block-container-block-designer-container {
+                min-height: 60px;
+                padding: 10px;
             }
             
-            // Start registration process
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', tryRegisterBlock);
-            } else {
-                // Try immediately
-                tryRegisterBlock();
-                
-                // Also try when Gutenberg is ready
-                if (window.wp && window.wp.domReady) {
-                    wp.domReady(tryRegisterBlock);
-                }
+            /* Style Variationen */
+            .wp-block-container-block-designer-container.is-style-boxed {
+                border: 2px solid #e0e0e0;
+                background: #f9f9f9;
             }
             
-            // Expose debug function
-            window.cbdDebugRegistration = function() {
-                console.log('=== CBD Block Registration Debug ===');
-                console.log('Block registered:', isBlockRegistered());
-                console.log('WordPress loaded:', !!window.wp);
-                console.log('Blocks API:', !!window.wp?.blocks);
-                console.log('Block data:', window.cbdBlockData);
-                console.log('Attempts made:', attempts);
-                
-                if (window.wp?.blocks) {
-                    const blocks = wp.blocks.getBlockTypes();
-                    const cbdBlock = blocks.find(b => b.name === 'container-block-designer/container');
-                    console.log('CBD Block:', cbdBlock);
-                }
-            };
+            .wp-block-container-block-designer-container.is-style-rounded {
+                border-radius: 12px;
+                background: #f5f5f5;
+            }
             
-        })();
-        </script>
-        <?php
+            .wp-block-container-block-designer-container.is-style-shadow {
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                background: white;
+            }
+            
+            .wp-block-container-block-designer-container.is-style-bordered {
+                border: 3px solid #007cba;
+            }
+        ';
     }
     
     /**
-     * Render block callback
+     * Inline Frontend Styles
      */
-    public function render_block($attributes, $content) {
-        $selected_block = $attributes['selectedBlock'] ?? '';
-        $custom_classes = $attributes['customClasses'] ?? '';
-        $block_config = $attributes['blockConfig'] ?? array();
-        $block_features = $attributes['blockFeatures'] ?? array();
-        
-        // Build container classes
-        $container_classes = array(
-            'wp-block-container-block-designer-container',
-            'cbd-container'
-        );
-        
-        if ($selected_block) {
-            $container_classes[] = 'cbd-container-' . $selected_block;
-        }
-        
-        if ($custom_classes) {
-            $container_classes[] = $custom_classes;
-        }
-        
-        // Build data attributes for features
-        $data_attrs = array();
-        
-        if ($selected_block) {
-            $data_attrs['data-block-type'] = $selected_block;
-        }
-        
-        // Add feature data attributes
-        if (!empty($block_features['icon']['enabled'])) {
-            $data_attrs['data-icon'] = 'true';
-            $data_attrs['data-icon-value'] = $block_features['icon']['value'] ?? 'dashicons-admin-generic';
-        }
-        
-        if (!empty($block_features['collapse']['enabled'])) {
-            $data_attrs['data-collapse'] = 'true';
-            $data_attrs['data-collapse-default'] = $block_features['collapse']['defaultState'] ?? 'expanded';
-        }
-        
-        if (!empty($block_features['numbering']['enabled'])) {
-            $data_attrs['data-numbering'] = 'true';
-            $data_attrs['data-numbering-format'] = $block_features['numbering']['format'] ?? 'numeric';
-        }
-        
-        if (!empty($block_features['copyText']['enabled'])) {
-            $data_attrs['data-copy-text'] = 'true';
-            $data_attrs['data-copy-button-text'] = $block_features['copyText']['buttonText'] ?? 'Text kopieren';
-        }
-        
-        if (!empty($block_features['screenshot']['enabled'])) {
-            $data_attrs['data-screenshot'] = 'true';
-            $data_attrs['data-screenshot-button-text'] = $block_features['screenshot']['buttonText'] ?? 'Screenshot';
-        }
-        
-        // Build attributes string
-        $attrs_string = '';
-        foreach ($data_attrs as $key => $value) {
-            $attrs_string .= sprintf(' %s="%s"', $key, esc_attr($value));
-        }
-        
-        // Return rendered block
-        return sprintf(
-            '<div class="%s"%s>%s</div>',
-            esc_attr(implode(' ', $container_classes)),
-            $attrs_string,
-            $content
+    private function get_inline_frontend_styles() {
+        return '
+            /* Container Block Designer - Frontend Styles */
+            .wp-block-container-block-designer-container {
+                position: relative;
+                padding: 20px;
+                margin: 20px 0;
+            }
+            
+            .wp-block-container-block-designer-container.is-style-boxed {
+                border: 2px solid #e0e0e0;
+                background: #f9f9f9;
+                padding: 30px;
+            }
+            
+            .wp-block-container-block-designer-container.is-style-rounded {
+                border-radius: 12px;
+                background: #f5f5f5;
+                padding: 25px;
+            }
+            
+            .wp-block-container-block-designer-container.is-style-shadow {
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                background: white;
+                padding: 30px;
+            }
+            
+            .wp-block-container-block-designer-container.is-style-bordered {
+                border: 3px solid #007cba;
+                padding: 25px;
+            }
+            
+            /* Responsive */
+            @media (max-width: 768px) {
+                .wp-block-container-block-designer-container {
+                    padding: 15px;
+                    margin: 15px 0;
+                }
+            }
+        ';
+    }
+    
+    /**
+     * Block-Kategorie hinzufügen
+     */
+    public function add_block_category($categories, $post) {
+        return array_merge(
+            array(
+                array(
+                    'slug' => 'container-blocks',
+                    'title' => __('Container Blocks', 'container-block-designer'),
+                    'icon' => 'layout'
+                )
+            ),
+            $categories
         );
     }
     
     /**
-     * Get available blocks from database
-     */
-    private function get_available_blocks() {
-        global $wpdb;
-        
-        $table_name = CBD_TABLE_BLOCKS;
-        
-        // Check if table exists
-        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") !== $table_name) {
-            return array();
-        }
-        
-        // Get active blocks
-        $blocks = $wpdb->get_results(
-            "SELECT id, name, slug, description, config, features 
-             FROM $table_name 
-             WHERE status = 'active' 
-             ORDER BY name ASC",
-            ARRAY_A
-        );
-        
-        if (!$blocks) {
-            return array();
-        }
-        
-        // Parse JSON fields
-        foreach ($blocks as &$block) {
-            $block['config'] = json_decode($block['config'], true) ?: array();
-            $block['features'] = json_decode($block['features'], true) ?: array();
-        }
-        
-        return $blocks;
-    }
-    
-    /**
-     * Register REST routes
+     * REST API Routes registrieren
      */
     public function register_rest_routes() {
         register_rest_route('cbd/v1', '/blocks', array(
@@ -502,38 +333,179 @@ class CBD_Block_Registration {
     }
     
     /**
-     * REST endpoint: Get blocks
+     * REST API: Blocks abrufen
      */
     public function rest_get_blocks($request) {
         return rest_ensure_response($this->get_available_blocks());
     }
     
     /**
-     * Show debug info
+     * AJAX: Blocks abrufen
      */
-    public function show_debug_info() {
-        $screen = get_current_screen();
-        if (!$screen || !$screen->is_block_editor()) {
+    public function ajax_get_blocks() {
+        // Nonce-Überprüfung
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cbd-nonce')) {
+            wp_send_json_error('Ungültige Sicherheitsüberprüfung');
             return;
         }
         
-        ?>
-        <div class="notice notice-info">
-            <p><strong>CBD Debug Mode:</strong> Block-Registrierung ist aktiv. 
-            Öffnen Sie die Browser-Konsole und führen Sie <code>cbdDebugRegistration()</code> aus für Details.</p>
-        </div>
-        <?php
+        // Berechtigung prüfen
+        if (!current_user_can('edit_posts')) {
+            wp_send_json_error('Keine Berechtigung');
+            return;
+        }
+        
+        $blocks = $this->get_available_blocks();
+        wp_send_json_success($blocks);
     }
     
     /**
-     * Log debug message
+     * Verfügbare Blocks abrufen
      */
-    private function log_debug($message) {
-        if ($this->debug_mode) {
-            error_log('[CBD Registration] ' . $message);
+    private function get_available_blocks() {
+        global $wpdb;
+        
+        // Versuche Blocks aus der Datenbank zu laden
+        $table_name = $wpdb->prefix . 'cbd_blocks';
+        
+        // Prüfe ob die Tabelle existiert
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name) {
+            // Hole alle aktiven Blocks aus der Datenbank
+            // Beachte: Die Spalte kann 'name' oder 'title' heißen, slug existiert immer
+            $blocks = $wpdb->get_results(
+                "SELECT 
+                    id,
+                    COALESCE(title, name) as name,
+                    slug,
+                    description,
+                    config,
+                    features,
+                    status
+                FROM $table_name 
+                WHERE status = 'active' 
+                ORDER BY COALESCE(title, name) ASC",
+                ARRAY_A
+            );
+            
+            // Verarbeite die Blocks für die Ausgabe
+            if ($blocks && !empty($blocks)) {
+                $processed_blocks = array();
+                
+                foreach ($blocks as $block) {
+                    // Stelle sicher dass slug existiert
+                    if (empty($block['slug'])) {
+                        $block['slug'] = sanitize_title($block['name']);
+                    }
+                    
+                    // Dekodiere JSON-Felder wenn nötig
+                    if (!empty($block['config']) && is_string($block['config'])) {
+                        $block['config'] = json_decode($block['config'], true) ?: array();
+                    }
+                    
+                    if (!empty($block['features']) && is_string($block['features'])) {
+                        $block['features'] = json_decode($block['features'], true) ?: array();
+                    }
+                    
+                    $processed_blocks[] = array(
+                        'id' => $block['id'],
+                        'name' => $block['name'],
+                        'slug' => $block['slug'],
+                        'description' => $block['description'] ?: '',
+                        'config' => $block['config'] ?: array(),
+                        'features' => $block['features'] ?: array()
+                    );
+                }
+                
+                $this->log_debug('Blocks aus Datenbank geladen: ' . count($processed_blocks));
+                return $processed_blocks;
+            }
+        }
+        
+        $this->log_debug('Keine Blocks in Datenbank gefunden, keine Demo-Blocks zurückgeben');
+        
+        // Kein Fallback zu Demo-Blocks - zeige leere Liste wenn keine echten Blocks existieren
+        return array();
+    }
+    
+    /**
+     * Block rendern
+     */
+    public function render_block($attributes, $content) {
+        $selected_block = isset($attributes['selectedBlock']) ? $attributes['selectedBlock'] : '';
+        $custom_classes = isset($attributes['customClasses']) ? $attributes['customClasses'] : '';
+        $className = isset($attributes['className']) ? $attributes['className'] : '';
+        $align = isset($attributes['align']) ? 'align' . $attributes['align'] : '';
+        
+        // Kombiniere alle Klassen
+        $classes = array(
+            'wp-block-container-block-designer-container',
+            'cbd-container'
+        );
+        
+        if ($selected_block) {
+            $classes[] = 'cbd-block-' . sanitize_html_class($selected_block);
+        }
+        
+        if ($custom_classes) {
+            $classes[] = esc_attr($custom_classes);
+        }
+        
+        if ($className) {
+            $classes[] = esc_attr($className);
+        }
+        
+        if ($align) {
+            $classes[] = esc_attr($align);
+        }
+        
+        $class_string = implode(' ', $classes);
+        
+        // Render Output
+        $output = sprintf(
+            '<div class="%s" data-block="%s">%s</div>',
+            esc_attr($class_string),
+            esc_attr($selected_block),
+            $content
+        );
+        
+        return $output;
+    }
+    
+    /**
+     * Stelle sicher, dass CSS-Dateien existieren
+     */
+    private function ensure_css_files_exist() {
+        $css_dir = CBD_PLUGIN_DIR . 'assets/css/';
+        
+        // Erstelle Verzeichnis wenn es nicht existiert
+        if (!file_exists($css_dir)) {
+            wp_mkdir_p($css_dir);
+        }
+        
+        // Block Editor CSS
+        $editor_css = $css_dir . 'block-editor.css';
+        if (!file_exists($editor_css)) {
+            $editor_content = '/* Container Block Designer - Editor Styles */
+.wp-block-container-block-designer-container {
+    position: relative;
+    min-height: 100px;
+    padding: 20px;
+}';
+            file_put_contents($editor_css, $editor_content);
+        }
+        
+        // Frontend CSS
+        $style_css = $css_dir . 'block-style.css';
+        if (!file_exists($style_css)) {
+            $style_content = '/* Container Block Designer - Frontend Styles */
+.wp-block-container-block-designer-container {
+    position: relative;
+    padding: 20px;
+}';
+            file_put_contents($style_css, $style_content);
         }
     }
 }
 
-// Initialize
-CBD_Block_Registration::get_instance();
+// Initialisierung
+new CBD_Block_Registration();

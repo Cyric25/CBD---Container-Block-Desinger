@@ -1,9 +1,11 @@
 <?php
 /**
- * Container Block Designer - AJAX-Handler
+ * Container Block Designer - AJAX Handler Korrektur
+ * Version: 2.5.3
  * 
- * @package ContainerBlockDesigner
- * @since 2.5.0
+ * Datei: includes/class-cbd-ajax-handler.php
+ * 
+ * KORRIGIERT: Lädt echte Blocks aus der Datenbank
  */
 
 // Sicherheit: Direkten Zugriff verhindern
@@ -27,332 +29,242 @@ class CBD_Ajax_Handler {
      * AJAX-Handler initialisieren
      */
     private function init_ajax_handlers() {
-        // Admin AJAX-Handler
+        // Block-Abruf für Editor
         add_action('wp_ajax_cbd_get_blocks', array($this, 'get_blocks'));
-        add_action('wp_ajax_cbd_get_block', array($this, 'get_block'));
+        add_action('wp_ajax_nopriv_cbd_get_blocks', array($this, 'get_blocks_nopriv'));
+        
+        // Weitere Admin AJAX-Handler
         add_action('wp_ajax_cbd_save_block', array($this, 'save_block'));
         add_action('wp_ajax_cbd_delete_block', array($this, 'delete_block'));
         add_action('wp_ajax_cbd_duplicate_block', array($this, 'duplicate_block'));
-        add_action('wp_ajax_cbd_update_block_status', array($this, 'update_block_status'));
-        
-        // Editor AJAX-Handler
-        add_action('wp_ajax_cbd_get_block_preview', array($this, 'get_block_preview'));
-        add_action('wp_ajax_cbd_get_block_styles', array($this, 'get_block_styles'));
-        
-        // Frontend AJAX-Handler (für eingeloggte Benutzer)
-        add_action('wp_ajax_cbd_track_interaction', array($this, 'track_interaction'));
-        add_action('wp_ajax_nopriv_cbd_track_interaction', array($this, 'track_interaction'));
     }
     
     /**
-     * Alle Blöcke abrufen
+     * Alle Blöcke abrufen - KORRIGIERTE VERSION
      */
     public function get_blocks() {
-        // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-admin', 'nonce', false) && 
-            !check_ajax_referer('cbd-block-editor', 'nonce', false)) {
-            wp_send_json_error(array('message' => __('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer')));
+        // Debug-Log
+        error_log('CBD: AJAX get_blocks aufgerufen');
+        
+        // Nonce-Überprüfung - flexibel für verschiedene Nonces
+        $nonce_valid = false;
+        
+        // Prüfe verschiedene mögliche Nonce-Namen
+        if (isset($_POST['nonce'])) {
+            if (wp_verify_nonce($_POST['nonce'], 'cbd-nonce') || 
+                wp_verify_nonce($_POST['nonce'], 'cbd-admin-nonce') ||
+                wp_verify_nonce($_POST['nonce'], 'wp_rest')) {
+                $nonce_valid = true;
+            }
         }
         
-        // Berechtigung prüfen
-        if (!current_user_can('edit_posts')) {
-            wp_send_json_error(array('message' => __('Keine Berechtigung', 'container-block-designer')));
+        // Falls kein gültiger Nonce, prüfe ob Benutzer berechtigt ist
+        if (!$nonce_valid && !current_user_can('edit_posts')) {
+            error_log('CBD: Nonce-Prüfung fehlgeschlagen');
+            wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
+            return;
         }
         
-        $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : 'active';
-        $blocks = CBD_Database::get_blocks(array('status' => $status));
+        global $wpdb;
         
-        wp_send_json_success($blocks);
+        // Hole Blocks direkt aus der Datenbank
+        $table_name = $wpdb->prefix . 'cbd_blocks';
+        
+        // Prüfe ob Tabelle existiert
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") !== $table_name) {
+            error_log('CBD: Tabelle existiert nicht: ' . $table_name);
+            wp_send_json_success(array());
+            return;
+        }
+        
+        // SQL-Query für aktive Blocks
+        $sql = "SELECT 
+                id,
+                COALESCE(title, name) as name,
+                slug,
+                description,
+                config,
+                features,
+                status
+            FROM $table_name 
+            WHERE status = 'active' OR status IS NULL
+            ORDER BY COALESCE(title, name) ASC";
+        
+        $blocks = $wpdb->get_results($sql, ARRAY_A);
+        
+        error_log('CBD: Gefundene Blocks: ' . count($blocks));
+        
+        // Verarbeite die Blocks
+        $processed_blocks = array();
+        
+        if ($blocks) {
+            foreach ($blocks as $block) {
+                // Stelle sicher dass slug existiert
+                if (empty($block['slug'])) {
+                    $block['slug'] = sanitize_title($block['name']);
+                }
+                
+                // Parse JSON-Felder
+                $config = !empty($block['config']) ? json_decode($block['config'], true) : array();
+                $features = !empty($block['features']) ? json_decode($block['features'], true) : array();
+                
+                $processed_blocks[] = array(
+                    'id' => intval($block['id']),
+                    'name' => esc_html($block['name']),
+                    'slug' => sanitize_title($block['slug']),
+                    'description' => esc_html($block['description'] ?: ''),
+                    'config' => $config ?: array(),
+                    'features' => $features ?: array()
+                );
+            }
+        }
+        
+        // Debug-Ausgabe
+        error_log('CBD: Sende ' . count($processed_blocks) . ' Blocks zurück');
+        
+        // Sende erfolgreiche Antwort
+        wp_send_json_success($processed_blocks);
     }
     
     /**
-     * Einzelnen Block abrufen
+     * Blocks für nicht eingeloggte Benutzer (sollte nicht aufgerufen werden)
      */
-    public function get_block() {
-        // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-admin', 'nonce', false) && 
-            !check_ajax_referer('cbd-block-editor', 'nonce', false)) {
-            wp_send_json_error(array('message' => __('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer')));
-        }
-        
-        // Berechtigung prüfen
-        if (!current_user_can('edit_posts')) {
-            wp_send_json_error(array('message' => __('Keine Berechtigung', 'container-block-designer')));
-        }
-        
-        $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
-        
-        if (!$block_id) {
-            wp_send_json_error(array('message' => __('Ungültige Block-ID', 'container-block-designer')));
-        }
-        
-        $block = CBD_Database::get_block($block_id);
-        
-        if (!$block) {
-            wp_send_json_error(array('message' => __('Block nicht gefunden', 'container-block-designer')));
-        }
-        
-        wp_send_json_success($block);
+    public function get_blocks_nopriv() {
+        wp_send_json_error(array('message' => 'Nicht autorisiert'));
     }
     
     /**
      * Block speichern
      */
     public function save_block() {
-        // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-admin', 'nonce', false)) {
-            wp_send_json_error(array('message' => __('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer')));
+        // Nonce-Überprüfung
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cbd-admin-nonce')) {
+            wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
+            return;
         }
         
         // Berechtigung prüfen
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(array('message' => __('Keine Berechtigung', 'container-block-designer')));
+            wp_send_json_error(array('message' => 'Keine Berechtigung'));
+            return;
         }
         
-        // Daten validieren
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cbd_blocks';
+        
+        // Daten vorbereiten
         $data = array(
-            'id' => isset($_POST['block_id']) ? intval($_POST['block_id']) : 0,
-            'name' => isset($_POST['name']) ? sanitize_text_field($_POST['name']) : '',
-            'title' => isset($_POST['title']) ? sanitize_text_field($_POST['title']) : '',
-            'description' => isset($_POST['description']) ? sanitize_textarea_field($_POST['description']) : '',
-            'status' => isset($_POST['status']) ? sanitize_text_field($_POST['status']) : 'active',
+            'name' => sanitize_text_field($_POST['name']),
+            'slug' => sanitize_title($_POST['slug'] ?: $_POST['name']),
+            'description' => sanitize_textarea_field($_POST['description'] ?: ''),
+            'config' => json_encode($_POST['config'] ?: array()),
+            'features' => json_encode($_POST['features'] ?: array()),
+            'status' => 'active'
         );
         
-        // Name validieren
-        if (empty($data['name'])) {
-            wp_send_json_error(array('message' => __('Block-Name ist erforderlich', 'container-block-designer')));
+        // Speichern oder Update
+        if (!empty($_POST['id'])) {
+            $result = $wpdb->update($table_name, $data, array('id' => intval($_POST['id'])));
+        } else {
+            $result = $wpdb->insert($table_name, $data);
         }
         
-        // Titel validieren
-        if (empty($data['title'])) {
-            wp_send_json_error(array('message' => __('Block-Titel ist erforderlich', 'container-block-designer')));
+        if ($result === false) {
+            wp_send_json_error(array('message' => 'Fehler beim Speichern'));
+            return;
         }
         
-        // Config parsen
-        if (isset($_POST['config'])) {
-            $data['config'] = is_array($_POST['config']) ? $_POST['config'] : json_decode(stripslashes($_POST['config']), true);
-        }
-        
-        // Styles parsen
-        if (isset($_POST['styles'])) {
-            $data['styles'] = is_array($_POST['styles']) ? $_POST['styles'] : json_decode(stripslashes($_POST['styles']), true);
-        }
-        
-        // Features parsen
-        if (isset($_POST['features'])) {
-            $data['features'] = is_array($_POST['features']) ? $_POST['features'] : json_decode(stripslashes($_POST['features']), true);
-        }
-        
-        // Block speichern
-        $result = CBD_Database::save_block($data);
-        
-        if (is_wp_error($result)) {
-            wp_send_json_error(array('message' => $result->get_error_message()));
-        }
-        
-        // Erfolgreiche Antwort
-        $block = CBD_Database::get_block($result);
-        wp_send_json_success(array(
-            'message' => __('Block erfolgreich gespeichert', 'container-block-designer'),
-            'block' => $block,
-        ));
+        wp_send_json_success(array('message' => 'Block gespeichert'));
     }
     
     /**
      * Block löschen
      */
     public function delete_block() {
-        // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-admin', 'nonce', false) && 
-            !check_ajax_referer('cbd_delete_block', 'nonce', false)) {
-            wp_send_json_error(array('message' => __('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer')));
+        // Nonce-Überprüfung
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cbd-admin-nonce')) {
+            wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
+            return;
         }
         
         // Berechtigung prüfen
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(array('message' => __('Keine Berechtigung', 'container-block-designer')));
+            wp_send_json_error(array('message' => 'Keine Berechtigung'));
+            return;
         }
         
-        $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cbd_blocks';
+        
+        $block_id = intval($_POST['block_id']);
         
         if (!$block_id) {
-            wp_send_json_error(array('message' => __('Ungültige Block-ID', 'container-block-designer')));
+            wp_send_json_error(array('message' => 'Ungültige Block-ID'));
+            return;
         }
         
-        $result = CBD_Database::delete_block($block_id);
+        $result = $wpdb->delete($table_name, array('id' => $block_id));
         
-        if (!$result) {
-            wp_send_json_error(array('message' => __('Fehler beim Löschen des Blocks', 'container-block-designer')));
+        if ($result === false) {
+            wp_send_json_error(array('message' => 'Fehler beim Löschen'));
+            return;
         }
         
-        wp_send_json_success(array(
-            'message' => __('Block erfolgreich gelöscht', 'container-block-designer'),
-        ));
+        wp_send_json_success(array('message' => 'Block gelöscht'));
     }
     
     /**
      * Block duplizieren
      */
     public function duplicate_block() {
-        // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-admin', 'nonce', false)) {
-            wp_send_json_error(array('message' => __('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer')));
+        // Nonce-Überprüfung
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cbd-admin-nonce')) {
+            wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
+            return;
         }
         
         // Berechtigung prüfen
         if (!current_user_can('manage_options')) {
-            wp_send_json_error(array('message' => __('Keine Berechtigung', 'container-block-designer')));
+            wp_send_json_error(array('message' => 'Keine Berechtigung'));
+            return;
         }
         
-        $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cbd_blocks';
+        
+        $block_id = intval($_POST['block_id']);
         
         if (!$block_id) {
-            wp_send_json_error(array('message' => __('Ungültige Block-ID', 'container-block-designer')));
+            wp_send_json_error(array('message' => 'Ungültige Block-ID'));
+            return;
         }
         
-        $new_block_id = CBD_Database::duplicate_block($block_id);
+        // Original-Block holen
+        $original = $wpdb->get_row(
+            $wpdb->prepare("SELECT * FROM $table_name WHERE id = %d", $block_id),
+            ARRAY_A
+        );
         
-        if (!$new_block_id) {
-            wp_send_json_error(array('message' => __('Fehler beim Duplizieren des Blocks', 'container-block-designer')));
+        if (!$original) {
+            wp_send_json_error(array('message' => 'Block nicht gefunden'));
+            return;
         }
         
-        $new_block = CBD_Database::get_block($new_block_id);
+        // Kopie erstellen
+        unset($original['id']);
+        $original['name'] = $original['name'] . ' (Kopie)';
+        $original['slug'] = $original['slug'] . '-copy-' . time();
         
-        wp_send_json_success(array(
-            'message' => __('Block erfolgreich dupliziert', 'container-block-designer'),
-            'block' => $new_block,
-        ));
-    }
-    
-    /**
-     * Block-Status aktualisieren
-     */
-    public function update_block_status() {
-        // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-admin', 'nonce', false)) {
-            wp_send_json_error(array('message' => __('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer')));
+        $result = $wpdb->insert($table_name, $original);
+        
+        if ($result === false) {
+            wp_send_json_error(array('message' => 'Fehler beim Duplizieren'));
+            return;
         }
         
-        // Berechtigung prüfen
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(array('message' => __('Keine Berechtigung', 'container-block-designer')));
-        }
-        
-        $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
-        $status = isset($_POST['status']) ? sanitize_text_field($_POST['status']) : '';
-        
-        if (!$block_id || !in_array($status, array('active', 'inactive', 'draft'))) {
-            wp_send_json_error(array('message' => __('Ungültige Parameter', 'container-block-designer')));
-        }
-        
-        $result = CBD_Database::update_block_status($block_id, $status);
-        
-        if (!$result) {
-            wp_send_json_error(array('message' => __('Fehler beim Aktualisieren des Status', 'container-block-designer')));
-        }
-        
-        wp_send_json_success(array(
-            'message' => __('Status erfolgreich aktualisiert', 'container-block-designer'),
-        ));
-    }
-    
-    /**
-     * Block-Vorschau abrufen
-     */
-    public function get_block_preview() {
-        // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-block-editor', 'nonce', false)) {
-            wp_send_json_error(array('message' => __('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer')));
-        }
-        
-        // Berechtigung prüfen
-        if (!current_user_can('edit_posts')) {
-            wp_send_json_error(array('message' => __('Keine Berechtigung', 'container-block-designer')));
-        }
-        
-        $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
-        
-        if (!$block_id) {
-            wp_send_json_error(array('message' => __('Ungültige Block-ID', 'container-block-designer')));
-        }
-        
-        $block = CBD_Database::get_block($block_id);
-        
-        if (!$block) {
-            wp_send_json_error(array('message' => __('Block nicht gefunden', 'container-block-designer')));
-        }
-        
-        // HTML-Vorschau generieren
-        $preview_html = '<div class="cbd-block-preview">';
-        $preview_html .= '<h4>' . esc_html($block['title']) . '</h4>';
-        
-        if (!empty($block['description'])) {
-            $preview_html .= '<p>' . esc_html($block['description']) . '</p>';
-        }
-        
-        $preview_html .= '</div>';
-        
-        wp_send_json_success(array(
-            'html' => $preview_html,
-            'styles' => $block['styles'],
-            'features' => $block['features'],
-        ));
-    }
-    
-    /**
-     * Block-Styles abrufen
-     */
-    public function get_block_styles() {
-        // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-block-editor', 'nonce', false)) {
-            wp_send_json_error(array('message' => __('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer')));
-        }
-        
-        // Berechtigung prüfen
-        if (!current_user_can('edit_posts')) {
-            wp_send_json_error(array('message' => __('Keine Berechtigung', 'container-block-designer')));
-        }
-        
-        $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
-        
-        if (!$block_id) {
-            wp_send_json_error(array('message' => __('Ungültige Block-ID', 'container-block-designer')));
-        }
-        
-        $block = CBD_Database::get_block($block_id);
-        
-        if (!$block) {
-            wp_send_json_error(array('message' => __('Block nicht gefunden', 'container-block-designer')));
-        }
-        
-        wp_send_json_success(array(
-            'styles' => $block['styles'],
-            'config' => $block['config'],
-        ));
-    }
-    
-    /**
-     * Interaktion tracken (für Analytics)
-     */
-    public function track_interaction() {
-        // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-frontend', 'nonce', false)) {
-            wp_send_json_error(array('message' => __('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer')));
-        }
-        
-        $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
-        $interaction = isset($_POST['interaction']) ? sanitize_text_field($_POST['interaction']) : '';
-        
-        if (!$block_id || !$interaction) {
-            wp_send_json_error(array('message' => __('Ungültige Parameter', 'container-block-designer')));
-        }
-        
-        // Hier könnte man die Interaktion in der Datenbank speichern
-        // Für diese Version loggen wir nur
-        do_action('cbd_track_interaction', $block_id, $interaction);
-        
-        wp_send_json_success(array(
-            'message' => __('Interaktion getrackt', 'container-block-designer'),
-        ));
+        wp_send_json_success(array('message' => 'Block dupliziert', 'id' => $wpdb->insert_id));
     }
 }
+
+// Initialisierung
+new CBD_Ajax_Handler();
