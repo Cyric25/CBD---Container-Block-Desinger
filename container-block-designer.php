@@ -175,40 +175,60 @@ class ContainerBlockDesigner {
     }
     
     /**
-     * Block Editor Assets laden
-     */
-    public function enqueue_block_editor_assets() {
-        // Block-Editor Script
-        wp_enqueue_script(
-            'cbd-block-editor',
-            CBD_PLUGIN_URL . 'assets/js/block-editor.js',
-            array('wp-blocks', 'wp-element', 'wp-editor', 'wp-components', 'wp-i18n', 'wp-block-editor'),
-            CBD_VERSION,
-            true
-        );
-        
-        // Block-Editor Styles
-        wp_enqueue_style(
-            'cbd-block-editor',
-            CBD_PLUGIN_URL . 'assets/css/block-editor.css',
-            array('wp-edit-blocks'),
-            CBD_VERSION
-        );
-        
-        // Lokalisierung
-        wp_localize_script('cbd-block-editor', 'cbdData', array(
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('cbd-nonce'),
-            'blocks' => $this->get_available_blocks(),
-            'pluginUrl' => CBD_PLUGIN_URL,
-            'strings' => array(
-                'blockTitle' => __('Container Block', 'container-block-designer'),
-                'blockDescription' => __('Ein anpassbarer Container-Block', 'container-block-designer'),
-                'selectBlock' => __('Block auswählen', 'container-block-designer'),
-                'noBlocks' => __('Keine Blocks verfügbar', 'container-block-designer'),
-            ),
-        ));
-    }
+ * Block Editor Assets laden - KORRIGIERTE VERSION
+ */
+public function enqueue_block_editor_assets() {
+    // Block Editor Script mit korrekter Versionsnummer
+    wp_enqueue_script(
+        'cbd-block-editor',
+        CBD_PLUGIN_URL . 'assets/js/block-editor.js',
+        array(
+            'wp-blocks',
+            'wp-element',
+            'wp-block-editor',
+            'wp-components',
+            'wp-i18n',
+            'wp-data',
+            'wp-dom-ready'
+        ),
+        CBD_VERSION, // Verwende die definierte Version
+        true
+    );
+    
+    // Block Editor Styles
+    wp_enqueue_style(
+        'cbd-block-editor',
+        CBD_PLUGIN_URL . 'assets/css/block-editor.css',
+        array('wp-edit-blocks'),
+        CBD_VERSION
+    );
+    
+    // Hole verfügbare Blocks
+    $available_blocks = $this->get_available_blocks();
+    
+    // Lokalisierung mit allen notwendigen Daten
+    wp_localize_script('cbd-block-editor', 'cbdBlockData', array(
+        'ajaxUrl' => admin_url('admin-ajax.php'),
+        'restUrl' => rest_url('cbd/v1/'),
+        'nonce' => wp_create_nonce('cbd-nonce'),
+        'blocks' => $available_blocks, // Die geladenen Blocks
+        'pluginUrl' => CBD_PLUGIN_URL,
+        'version' => CBD_VERSION,
+        'debug' => defined('WP_DEBUG') && WP_DEBUG,
+        'i18n' => array(
+            'blockTitle' => __('Container Block', 'container-block-designer'),
+            'blockDescription' => __('Ein anpassbarer Container-Block mit erweiterten Features', 'container-block-designer'),
+            'selectBlock' => __('Design auswählen', 'container-block-designer'),
+            'customClasses' => __('Zusätzliche CSS-Klassen', 'container-block-designer'),
+            'loading' => __('Lade Designs...', 'container-block-designer'),
+            'noBlocks' => __('Keine Designs verfügbar', 'container-block-designer'),
+            'error' => __('Fehler beim Laden', 'container-block-designer'),
+            'reload' => __('Designs neu laden', 'container-block-designer')
+        )
+    ));
+    
+    error_log('CBD: Block Editor Assets geladen mit ' . count($available_blocks) . ' Blocks');
+    } 
     
     /**
      * Frontend und Editor Assets laden
@@ -281,26 +301,74 @@ class ContainerBlockDesigner {
         );
     }
     
-    /**
-     * Verfügbare Blocks abrufen
-     */
-    private function get_available_blocks() {
-        global $wpdb;
-        
+/**
+ * Verfügbare Blocks abrufen
+ */
+private function get_available_blocks() {
+    global $wpdb;
+    
+    $blocks_data = array();
+    $table_name = CBD_TABLE_BLOCKS;
+    
+    // Prüfe ob Tabelle existiert
+    if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name) {
+        // Hole alle aktiven Blocks aus der Datenbank
         $blocks = $wpdb->get_results(
-            "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active' ORDER BY title ASC",
+            "SELECT 
+                id,
+                COALESCE(title, name) as name,
+                COALESCE(slug, LOWER(REPLACE(COALESCE(title, name), ' ', '-'))) as slug,
+                description,
+                config,
+                features,
+                status
+            FROM $table_name 
+            WHERE status = 'active' OR status IS NULL
+            ORDER BY id ASC",
             ARRAY_A
         );
         
-        // JSON-Daten dekodieren
-        foreach ($blocks as &$block) {
-            $block['config'] = json_decode($block['config'], true) ?: array();
-            $block['styles'] = json_decode($block['styles'], true) ?: array();
-            $block['features'] = json_decode($block['features'], true) ?: array();
+        if ($blocks && is_array($blocks)) {
+            foreach ($blocks as $block) {
+                // Sichere JSON-Dekodierung mit NULL-Check
+                $config = null;
+                $features = null;
+                
+                if (!empty($block['config']) && is_string($block['config'])) {
+                    $decoded = json_decode($block['config'], true);
+                    $config = (json_last_error() === JSON_ERROR_NONE) ? $decoded : array();
+                } else {
+                    $config = array();
+                }
+                
+                if (!empty($block['features']) && is_string($block['features'])) {
+                    $decoded = json_decode($block['features'], true);
+                    $features = (json_last_error() === JSON_ERROR_NONE) ? $decoded : array();
+                } else {
+                    $features = array();
+                }
+                
+                // Stelle sicher dass slug existiert
+                $slug = !empty($block['slug']) ? $block['slug'] : 'block-' . $block['id'];
+                
+                $blocks_data[] = array(
+                    'id' => intval($block['id']),
+                    'name' => esc_html($block['name'] ?: 'Block ' . $block['id']),
+                    'slug' => sanitize_title($slug),
+                    'description' => esc_html($block['description'] ?: ''),
+                    'config' => $config,
+                    'features' => $features
+                );
+                
+                error_log('CBD: Block gefunden - ' . $block['name'] . ' (slug: ' . $slug . ')');
+            }
         }
-        
-        return $blocks ?: array();
     }
+    
+    error_log('CBD: Insgesamt ' . count($blocks_data) . ' Blocks geladen');
+    
+    return $blocks_data;
+}
     
     /**
      * Standard-Block erstellen
@@ -342,6 +410,8 @@ class ContainerBlockDesigner {
         }
     }
 }
+
+
 
 // Plugin initialisieren
 function cbd_init_plugin() {
