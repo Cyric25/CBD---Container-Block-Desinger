@@ -1,9 +1,9 @@
 <?php
 /**
  * Container Block Designer - Frontend Renderer
+ * Version: 2.5.2
  * 
- * @package ContainerBlockDesigner
- * @since 2.5.0
+ * Datei: includes/class-cbd-frontend-renderer.php
  */
 
 // Sicherheit: Direkten Zugriff verhindern
@@ -12,7 +12,7 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * Frontend-Renderer Klasse
+ * Frontend Renderer Klasse
  */
 class CBD_Frontend_Renderer {
     
@@ -20,14 +20,19 @@ class CBD_Frontend_Renderer {
      * Initialisierung
      */
     public static function init() {
-        add_action('init', array(__CLASS__, 'register_render_callback'));
+        // Render Callback registrieren
+        add_action('init', array(__CLASS__, 'register_render_callback'), 20);
+        
+        // Frontend Assets laden
+        add_action('wp_enqueue_scripts', array(__CLASS__, 'enqueue_frontend_assets'));
     }
     
     /**
-     * Render-Callback registrieren
+     * Render Callback registrieren
      */
     public static function register_render_callback() {
-        if (function_exists('register_block_type')) {
+        // Prüfe ob Block bereits registriert ist
+        if (!WP_Block_Type_Registry::get_instance()->is_registered('container-block-designer/container')) {
             register_block_type('container-block-designer/container', array(
                 'render_callback' => array(__CLASS__, 'render_block')
             ));
@@ -38,88 +43,118 @@ class CBD_Frontend_Renderer {
      * Block rendern
      */
     public static function render_block($attributes, $content) {
-        // Attribute mit Standardwerten
-        $selected_block = isset($attributes['selectedBlock']) ? sanitize_text_field($attributes['selectedBlock']) : '';
-        $custom_classes = isset($attributes['customClasses']) ? sanitize_text_field($attributes['customClasses']) : '';
-        $block_config = isset($attributes['blockConfig']) ? $attributes['blockConfig'] : array();
-        $block_features = isset($attributes['blockFeatures']) ? $attributes['blockFeatures'] : array();
+        // Falls CBD_Block_Registration verfügbar ist, dessen Render-Methode verwenden
+        if (class_exists('CBD_Block_Registration')) {
+            $registration = CBD_Block_Registration::get_instance();
+            if (method_exists($registration, 'render_block')) {
+                return $registration->render_block($attributes, $content);
+            }
+        }
         
-        // Container-Klassen erstellen
-        $container_classes = array(
+        // Fallback Rendering
+        return self::fallback_render($attributes, $content);
+    }
+    
+    /**
+     * Fallback Rendering
+     */
+    private static function fallback_render($attributes, $content) {
+        $selected_block = $attributes['selectedBlock'] ?? '';
+        $custom_classes = $attributes['customClasses'] ?? '';
+        $align = $attributes['align'] ?? '';
+        
+        // CSS-Klassen aufbauen
+        $classes = array(
             'wp-block-container-block-designer-container',
             'cbd-container'
         );
         
         if ($selected_block) {
-            $container_classes[] = 'cbd-block-' . esc_attr($selected_block);
+            $classes[] = 'cbd-container-' . sanitize_html_class($selected_block);
         }
         
         if ($custom_classes) {
-            $container_classes[] = esc_attr($custom_classes);
+            $classes[] = esc_attr($custom_classes);
         }
         
-        // Features prüfen
-        $has_icon = isset($block_features['icon']) && $block_features['icon']['enabled'];
-        $has_collapse = isset($block_features['collapse']) && $block_features['collapse']['enabled'];
-        $has_numbering = isset($block_features['numbering']) && $block_features['numbering']['enabled'];
-        $has_copy = isset($block_features['copyText']) && $block_features['copyText']['enabled'];
-        $has_screenshot = isset($block_features['screenshot']) && $block_features['screenshot']['enabled'];
+        if ($align) {
+            $classes[] = 'align' . $align;
+        }
         
-        // Unique ID für JavaScript-Features
-        $block_id = 'cbd-block-' . uniqid();
+        // HTML generieren
+        $html = sprintf(
+            '<div class="%s">',
+            esc_attr(implode(' ', $classes))
+        );
         
-        // Output Buffer starten
-        ob_start();
-        ?>
-        <div id="<?php echo esc_attr($block_id); ?>" 
-             class="<?php echo esc_attr(implode(' ', $container_classes)); ?>"
-             <?php if ($has_collapse): ?>
-                data-collapse="true"
-                data-collapse-default="<?php echo esc_attr($block_features['collapse']['defaultState'] ?? 'expanded'); ?>"
-             <?php endif; ?>>
-            
-            <?php if ($has_icon && !empty($block_features['icon']['value'])): ?>
-                <div class="cbd-block-icon">
-                    <span class="<?php echo esc_attr($block_features['icon']['value']); ?>"></span>
-                </div>
-            <?php endif; ?>
-            
-            <?php if ($has_numbering): ?>
-                <div class="cbd-block-number" 
-                     data-format="<?php echo esc_attr($block_features['numbering']['format'] ?? 'numeric'); ?>">
-                </div>
-            <?php endif; ?>
-            
-            <?php if ($has_collapse): ?>
-                <button class="cbd-collapse-toggle" aria-expanded="true">
-                    <span class="dashicons dashicons-arrow-down"></span>
-                </button>
-            <?php endif; ?>
-            
-            <div class="cbd-block-content">
-                <?php echo $content; ?>
-            </div>
-            
-            <?php if ($has_copy || $has_screenshot): ?>
-                <div class="cbd-block-actions">
-                    <?php if ($has_copy): ?>
-                        <button class="cbd-copy-text" data-block-id="<?php echo esc_attr($block_id); ?>">
-                            <span class="dashicons dashicons-clipboard"></span>
-                            <?php echo esc_html($block_features['copyText']['buttonText'] ?? __('Text kopieren', 'container-block-designer')); ?>
-                        </button>
-                    <?php endif; ?>
-                    
-                    <?php if ($has_screenshot): ?>
-                        <button class="cbd-screenshot" data-block-id="<?php echo esc_attr($block_id); ?>">
-                            <span class="dashicons dashicons-camera"></span>
-                            <?php echo esc_html($block_features['screenshot']['buttonText'] ?? __('Screenshot', 'container-block-designer')); ?>
-                        </button>
-                    <?php endif; ?>
-                </div>
-            <?php endif; ?>
-        </div>
-        <?php
+        $html .= '<div class="cbd-container-content">';
+        $html .= $content;
+        $html .= '</div>';
         
-        return ob_get_clean();
+        $html .= '</div>';
+        
+        return $html;
+    }
+    
+    /**
+     * Frontend Assets laden
+     */
+    public static function enqueue_frontend_assets() {
+        // Prüfe ob interaktive Features verwendet werden
+        if (self::has_interactive_features()) {
+            // Frontend JavaScript
+            wp_enqueue_script(
+                'cbd-frontend',
+                CBD_PLUGIN_URL . 'assets/js/block-frontend.js',
+                array('jquery'),
+                CBD_VERSION,
+                true
+            );
+            
+            // Lokalisierung
+            wp_localize_script('cbd-frontend', 'cbdFrontend', array(
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('cbd-frontend'),
+                'i18n' => array(
+                    'copySuccess' => __('Text kopiert!', 'container-block-designer'),
+                    'copyError' => __('Kopieren fehlgeschlagen', 'container-block-designer'),
+                    'collapsed' => __('Eingeklappt', 'container-block-designer'),
+                    'expanded' => __('Ausgeklappt', 'container-block-designer'),
+                    'screenshot' => __('Screenshot', 'container-block-designer'),
+                    'creating' => __('Erstelle...', 'container-block-designer'),
+                    'screenshotSuccess' => __('Screenshot erstellt!', 'container-block-designer'),
+                    'screenshotError' => __('Screenshot fehlgeschlagen', 'container-block-designer'),
+                    'screenshotUnavailable' => __('Screenshot nicht verfügbar', 'container-block-designer'),
+                    'noTextFound' => __('Kein Text gefunden', 'container-block-designer')
+                )
+            ));
+        }
+    }
+    
+    /**
+     * Prüfen ob interaktive Features vorhanden sind
+     */
+    private static function has_interactive_features() {
+        global $wpdb;
+        
+        // Cache prüfen
+        $cache_key = 'cbd_has_interactive_features';
+        $has_features = wp_cache_get($cache_key);
+        
+        if (false === $has_features) {
+            // Prüfe ob irgendein Block interaktive Features hat
+            $result = $wpdb->get_var(
+                "SELECT COUNT(*) FROM " . CBD_TABLE_BLOCKS . " 
+                 WHERE status = 'active' 
+                 AND (features LIKE '%collapsible%' 
+                      OR features LIKE '%copy%' 
+                      OR features LIKE '%screenshot%')"
+            );
+            
+            $has_features = $result > 0;
+            wp_cache_set($cache_key, $has_features, '', HOUR_IN_SECONDS);
+        }
+        
+        return $has_features;
     }
 }

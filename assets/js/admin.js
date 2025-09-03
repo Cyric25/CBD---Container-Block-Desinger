@@ -1,615 +1,554 @@
 /**
  * Container Block Designer - Admin JavaScript
- * Handles all admin-side functionality including block management, settings, and AJAX operations
+ * Version: 2.5.2
+ * 
+ * Datei: assets/js/admin.js
  */
 
 (function($) {
     'use strict';
     
-    // Wait for document ready
+    // Warte bis DOM geladen ist
     $(document).ready(function() {
+        initAdmin();
+    });
+    
+    /**
+     * Admin-Funktionen initialisieren
+     */
+    function initAdmin() {
+        // Color Picker initialisieren
+        initColorPickers();
         
-        // Global CBD Admin object
-        window.CBDAdmin = {
+        // Tabs initialisieren
+        initTabs();
+        
+        // Form Validierung
+        initFormValidation();
+        
+        // Range Slider
+        initRangeSliders();
+        
+        // Block Preview
+        initBlockPreview();
+        
+        // AJAX Actions
+        initAjaxActions();
+        
+        // Sortable für Features
+        initSortable();
+    }
+    
+    /**
+     * Color Picker initialisieren
+     */
+    function initColorPickers() {
+        $('.cbd-color-picker').each(function() {
+            const $input = $(this);
             
-            // Initialize admin functionality
-            init: function() {
-                console.log('CBD Admin: Initializing');
-                
-                this.bindEvents();
-                this.initColorPickers();
-                this.initSortable();
-                this.initTooltips();
-                this.initCodeEditor();
-                this.validateForms();
-                
-                // Check for messages in URL
-                this.handleUrlMessages();
-            },
-            
-            // Bind all event handlers
-            bindEvents: function() {
-                // Delete block confirmation
-                $('.cbd-delete-block').on('click', this.confirmDelete);
-                
-                // Duplicate block
-                $('.cbd-duplicate-block').on('click', this.duplicateBlock);
-                
-                // Export block
-                $('.cbd-export-block').on('click', this.exportBlock);
-                
-                // Import block
-                $('#cbd-import-form').on('submit', this.importBlock);
-                
-                // Feature toggles
-                $('.cbd-feature-toggle').on('change', this.toggleFeature);
-                
-                // Style preview update
-                $('.cbd-style-input').on('input change', this.updatePreview);
-                
-                // Save settings via AJAX
-                $('.cbd-ajax-save').on('click', this.saveViaAjax);
-                
-                // Reset to defaults
-                $('.cbd-reset-defaults').on('click', this.resetToDefaults);
-                
-                // Tab navigation
-                $('.cbd-tab-nav a').on('click', this.switchTab);
-                
-                // Search/Filter blocks
-                $('#cbd-block-search').on('input', this.filterBlocks);
-                
-                // Bulk actions
-                $('#cbd-bulk-action-submit').on('click', this.executeBulkAction);
-            },
-            
-            // Initialize color pickers
-            initColorPickers: function() {
-                if ($.fn.wpColorPicker) {
-                    $('.cbd-color-picker').each(function() {
-                        $(this).wpColorPicker({
-                            change: function(event, ui) {
-                                $(event.target).trigger('change');
-                                CBDAdmin.updatePreview();
-                            },
-                            clear: function() {
-                                CBDAdmin.updatePreview();
-                            }
-                        });
-                    });
-                }
-            },
-            
-            // Initialize sortable for blocks list
-            initSortable: function() {
-                if ($.fn.sortable) {
-                    $('#cbd-blocks-list tbody').sortable({
-                        handle: '.cbd-drag-handle',
-                        placeholder: 'cbd-sortable-placeholder',
-                        update: function(event, ui) {
-                            CBDAdmin.updateBlockOrder();
-                        }
-                    });
-                }
-            },
-            
-            // Initialize tooltips
-            initTooltips: function() {
-                if ($.fn.tooltip) {
-                    $('.cbd-tooltip').tooltip({
-                        position: {
-                            my: 'center bottom-10',
-                            at: 'center top'
-                        }
-                    });
-                }
-            },
-            
-            // Initialize code editor for custom CSS
-            initCodeEditor: function() {
-                if (window.wp && window.wp.codeEditor) {
-                    $('.cbd-code-editor').each(function() {
-                        const settings = {
-                            codemirror: {
-                                mode: $(this).data('mode') || 'css',
-                                lineNumbers: true,
-                                lineWrapping: true,
-                                indentUnit: 2,
-                                tabSize: 2
-                            }
-                        };
-                        
-                        const editor = wp.codeEditor.initialize(this, settings);
-                        $(this).data('code-editor', editor);
-                        
-                        // Update preview on change
-                        editor.codemirror.on('change', function() {
-                            CBDAdmin.updatePreview();
-                        });
-                    });
-                }
-            },
-            
-            // Validate forms before submission
-            validateForms: function() {
-                $('form.cbd-validate').on('submit', function(e) {
-                    const form = $(this);
-                    let isValid = true;
-                    
-                    // Check required fields
-                    form.find('[required]').each(function() {
-                        const field = $(this);
-                        if (!field.val() || field.val().trim() === '') {
-                            field.addClass('cbd-error');
-                            isValid = false;
-                        } else {
-                            field.removeClass('cbd-error');
-                        }
-                    });
-                    
-                    // Check slug format
-                    form.find('.cbd-slug-field').each(function() {
-                        const field = $(this);
-                        const value = field.val();
-                        if (value && !/^[a-z0-9-]+$/.test(value)) {
-                            field.addClass('cbd-error');
-                            CBDAdmin.showNotice('Slug darf nur Kleinbuchstaben, Zahlen und Bindestriche enthalten', 'error');
-                            isValid = false;
-                        }
-                    });
-                    
-                    if (!isValid) {
-                        e.preventDefault();
-                        CBDAdmin.showNotice('Bitte füllen Sie alle Pflichtfelder korrekt aus', 'error');
+            if ($.fn.wpColorPicker) {
+                $input.wpColorPicker({
+                    change: function(event, ui) {
+                        updatePreview();
+                    },
+                    clear: function() {
+                        updatePreview();
                     }
                 });
-            },
+            }
+        });
+    }
+    
+    /**
+     * Tabs initialisieren
+     */
+    function initTabs() {
+        $('.cbd-tab-nav-item').on('click', function() {
+            const $tab = $(this);
+            const target = $tab.data('tab');
+            const $container = $tab.closest('.cbd-tabs');
             
-            // Handle URL messages
-            handleUrlMessages: function() {
-                const urlParams = new URLSearchParams(window.location.search);
-                const message = urlParams.get('message');
-                
-                if (message) {
-                    const messages = {
-                        'block-saved': 'Block erfolgreich gespeichert',
-                        'block-deleted': 'Block erfolgreich gelöscht',
-                        'block-duplicated': 'Block erfolgreich dupliziert',
-                        'settings-saved': 'Einstellungen erfolgreich gespeichert'
-                    };
-                    
-                    if (messages[message]) {
-                        this.showNotice(messages[message], 'success');
-                    }
-                }
-            },
+            // Active State für Navigation
+            $container.find('.cbd-tab-nav-item').removeClass('active');
+            $tab.addClass('active');
             
-            // Confirm delete action
-            confirmDelete: function(e) {
+            // Content anzeigen
+            $container.find('.cbd-tab-content').removeClass('active');
+            $container.find('#' + target).addClass('active');
+            
+            // In localStorage speichern
+            if (typeof(Storage) !== 'undefined') {
+                localStorage.setItem('cbd_active_tab', target);
+            }
+        });
+        
+        // Letzten aktiven Tab wiederherstellen
+        if (typeof(Storage) !== 'undefined') {
+            const activeTab = localStorage.getItem('cbd_active_tab');
+            if (activeTab) {
+                $(`.cbd-tab-nav-item[data-tab="${activeTab}"]`).trigger('click');
+            }
+        }
+    }
+    
+    /**
+     * Form Validierung
+     */
+    function initFormValidation() {
+        $('#cbd-block-form').on('submit', function(e) {
+            let isValid = true;
+            const errors = [];
+            
+            // Name validieren
+            const name = $('#block-name').val().trim();
+            if (!name) {
+                errors.push(cbdAdmin.strings.nameRequired || 'Name ist erforderlich');
+                isValid = false;
+            }
+            
+            // Slug validieren
+            const slug = $('#block-slug').val().trim();
+            if (!slug) {
+                errors.push(cbdAdmin.strings.slugRequired || 'Slug ist erforderlich');
+                isValid = false;
+            } else if (!/^[a-z0-9-]+$/.test(slug)) {
+                errors.push(cbdAdmin.strings.slugInvalid || 'Slug darf nur Kleinbuchstaben, Zahlen und Bindestriche enthalten');
+                isValid = false;
+            }
+            
+            // Fehler anzeigen
+            if (!isValid) {
                 e.preventDefault();
-                const link = $(this);
-                const blockName = link.data('block-name') || 'diesen Block';
-                
-                if (confirm(`Möchten Sie ${blockName} wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
-                    window.location.href = link.attr('href');
-                }
-            },
+                showNotice(errors.join('<br>'), 'error');
+            }
+        });
+        
+        // Auto-Slug generieren
+        $('#block-name').on('keyup', function() {
+            const $slug = $('#block-slug');
             
-            // Duplicate block via AJAX
-            duplicateBlock: function(e) {
-                e.preventDefault();
-                const button = $(this);
-                const blockId = button.data('block-id');
-                
-                if (!blockId) return;
-                
-                button.prop('disabled', true);
-                
-                $.ajax({
-                    url: cbdAdminData.ajaxUrl,
-                    type: 'POST',
-                    data: {
-                        action: 'cbd_duplicate_block',
-                        block_id: blockId,
-                        nonce: cbdAdminData.nonce
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            CBDAdmin.showNotice('Block erfolgreich dupliziert', 'success');
-                            setTimeout(() => window.location.reload(), 1500);
-                        } else {
-                            CBDAdmin.showNotice(response.data || 'Fehler beim Duplizieren', 'error');
-                            button.prop('disabled', false);
-                        }
-                    },
-                    error: function() {
-                        CBDAdmin.showNotice('Netzwerkfehler beim Duplizieren', 'error');
-                        button.prop('disabled', false);
-                    }
-                });
-            },
+            // Nur wenn Slug leer ist oder automatisch generiert wurde
+            if (!$slug.val() || $slug.data('auto-generated')) {
+                const slug = generateSlug($(this).val());
+                $slug.val(slug).data('auto-generated', true);
+            }
+        });
+        
+        // Manuell bearbeiteter Slug
+        $('#block-slug').on('keyup', function() {
+            $(this).data('auto-generated', false);
+        });
+    }
+    
+    /**
+     * Range Sliders initialisieren
+     */
+    function initRangeSliders() {
+        $('.cbd-range-wrapper input[type="range"]').each(function() {
+            const $range = $(this);
+            const $value = $range.siblings('.cbd-range-value');
             
-            // Export block as JSON
-            exportBlock: function(e) {
-                e.preventDefault();
-                const button = $(this);
-                const blockId = button.data('block-id');
-                
-                if (!blockId) return;
-                
-                $.ajax({
-                    url: cbdAdminData.ajaxUrl,
-                    type: 'POST',
-                    data: {
-                        action: 'cbd_export_block',
-                        block_id: blockId,
-                        nonce: cbdAdminData.nonce
-                    },
-                    success: function(response) {
-                        if (response.success && response.data) {
-                            // Create download link
-                            const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `cbd-block-${response.data.slug || blockId}.json`;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-                            
-                            CBDAdmin.showNotice('Block erfolgreich exportiert', 'success');
-                        } else {
-                            CBDAdmin.showNotice('Fehler beim Exportieren', 'error');
-                        }
-                    },
-                    error: function() {
-                        CBDAdmin.showNotice('Netzwerkfehler beim Exportieren', 'error');
-                    }
-                });
-            },
+            // Initial Value setzen
+            $value.text($range.val() + ($range.data('unit') || 'px'));
             
-            // Import block from JSON
-            importBlock: function(e) {
-                e.preventDefault();
-                const form = $(this);
-                const fileInput = form.find('input[type="file"]')[0];
-                
-                if (!fileInput || !fileInput.files.length) {
-                    CBDAdmin.showNotice('Bitte wählen Sie eine Datei aus', 'error');
-                    return;
-                }
-                
-                const file = fileInput.files[0];
-                const reader = new FileReader();
-                
-                reader.onload = function(event) {
-                    try {
-                        const blockData = JSON.parse(event.target.result);
-                        
-                        $.ajax({
-                            url: cbdAdminData.ajaxUrl,
-                            type: 'POST',
-                            data: {
-                                action: 'cbd_import_block',
-                                block_data: blockData,
-                                nonce: cbdAdminData.nonce
-                            },
-                            success: function(response) {
-                                if (response.success) {
-                                    CBDAdmin.showNotice('Block erfolgreich importiert', 'success');
-                                    setTimeout(() => window.location.reload(), 1500);
-                                } else {
-                                    CBDAdmin.showNotice(response.data || 'Fehler beim Importieren', 'error');
-                                }
-                            },
-                            error: function() {
-                                CBDAdmin.showNotice('Netzwerkfehler beim Importieren', 'error');
-                            }
-                        });
-                    } catch (error) {
-                        CBDAdmin.showNotice('Ungültige JSON-Datei', 'error');
-                    }
-                };
-                
-                reader.readAsText(file);
+            // Bei Änderung aktualisieren
+            $range.on('input', function() {
+                $value.text($(this).val() + ($range.data('unit') || 'px'));
+                updatePreview();
+            });
+        });
+    }
+    
+    /**
+     * Block Preview initialisieren
+     */
+    function initBlockPreview() {
+        const $preview = $('#cbd-block-preview');
+        
+        if (!$preview.length) {
+            return;
+        }
+        
+        // Initial Preview
+        updatePreview();
+        
+        // Live Preview bei Änderungen
+        $('.cbd-live-preview').on('change keyup', function() {
+            updatePreview();
+        });
+    }
+    
+    /**
+     * Preview aktualisieren
+     */
+    function updatePreview() {
+        const $preview = $('#cbd-block-preview-content');
+        
+        if (!$preview.length) {
+            return;
+        }
+        
+        // Styles sammeln
+        const styles = {
+            padding: {
+                top: $('#padding-top').val() || 20,
+                right: $('#padding-right').val() || 20,
+                bottom: $('#padding-bottom').val() || 20,
+                left: $('#padding-left').val() || 20
             },
-            
-            // Toggle feature on/off
-            toggleFeature: function() {
-                const checkbox = $(this);
-                const featureContainer = checkbox.closest('.cbd-feature-container');
-                const featureSettings = featureContainer.find('.cbd-feature-settings');
-                
-                if (checkbox.is(':checked')) {
-                    featureSettings.slideDown(200);
-                } else {
-                    featureSettings.slideUp(200);
-                }
-                
-                CBDAdmin.updatePreview();
+            background: {
+                color: $('#background-color').val() || '#ffffff'
             },
-            
-            // Update live preview
-            updatePreview: function() {
-                const preview = $('#cbd-block-preview');
-                if (!preview.length) return;
-                
-                // Collect all style values
-                const styles = {
-                    padding: {
-                        top: $('#padding-top').val() || 20,
-                        right: $('#padding-right').val() || 20,
-                        bottom: $('#padding-bottom').val() || 20,
-                        left: $('#padding-left').val() || 20
-                    },
-                    margin: {
-                        top: $('#margin-top').val() || 0,
-                        right: $('#margin-right').val() || 0,
-                        bottom: $('#margin-bottom').val() || 0,
-                        left: $('#margin-left').val() || 0
-                    },
-                    background: {
-                        color: $('#background-color').val() || '#ffffff'
-                    },
-                    text: {
-                        color: $('#text-color').val() || '#333333',
-                        alignment: $('#text-alignment').val() || 'left'
-                    },
-                    border: {
-                        width: $('#border-width').val() || 0,
-                        style: $('#border-style').val() || 'solid',
-                        color: $('#border-color').val() || '#dddddd',
-                        radius: $('#border-radius').val() || 0
-                    }
-                };
-                
-                // Apply styles to preview
-                preview.css({
-                    'padding': `${styles.padding.top}px ${styles.padding.right}px ${styles.padding.bottom}px ${styles.padding.left}px`,
-                    'margin': `${styles.margin.top}px ${styles.margin.right}px ${styles.margin.bottom}px ${styles.margin.left}px`,
-                    'background-color': styles.background.color,
-                    'color': styles.text.color,
-                    'text-align': styles.text.alignment,
-                    'border': styles.border.width > 0 ? `${styles.border.width}px ${styles.border.style} ${styles.border.color}` : 'none',
-                    'border-radius': `${styles.border.radius}px`
-                });
-                
-                // Update custom CSS
-                const customCSS = $('.cbd-code-editor').val();
-                if (customCSS) {
-                    $('#cbd-custom-preview-styles').remove();
-                    $('<style>')
-                        .attr('id', 'cbd-custom-preview-styles')
-                        .text(customCSS.replace(/\.cbd-container/g, '#cbd-block-preview'))
-                        .appendTo('head');
-                }
+            border: {
+                width: $('#border-width').val() || 0,
+                style: $('#border-style').val() || 'solid',
+                color: $('#border-color').val() || '#dddddd',
+                radius: $('#border-radius').val() || 0
             },
-            
-            // Save settings via AJAX
-            saveViaAjax: function(e) {
-                e.preventDefault();
-                const button = $(this);
-                const form = button.closest('form');
-                
-                button.prop('disabled', true);
-                
-                const formData = new FormData(form[0]);
-                formData.append('action', 'cbd_save_settings');
-                formData.append('nonce', cbdAdminData.nonce);
-                
-                $.ajax({
-                    url: cbdAdminData.ajaxUrl,
-                    type: 'POST',
-                    data: formData,
-                    processData: false,
-                    contentType: false,
-                    success: function(response) {
-                        if (response.success) {
-                            CBDAdmin.showNotice('Einstellungen erfolgreich gespeichert', 'success');
-                        } else {
-                            CBDAdmin.showNotice(response.data || 'Fehler beim Speichern', 'error');
-                        }
-                        button.prop('disabled', false);
-                    },
-                    error: function() {
-                        CBDAdmin.showNotice('Netzwerkfehler beim Speichern', 'error');
-                        button.prop('disabled', false);
-                    }
-                });
-            },
-            
-            // Reset to default values
-            resetToDefaults: function(e) {
-                e.preventDefault();
-                
-                if (!confirm('Möchten Sie wirklich alle Einstellungen auf die Standardwerte zurücksetzen?')) {
-                    return;
-                }
-                
-                // Reset form fields
-                $('#padding-top, #padding-right, #padding-bottom, #padding-left').val(20);
-                $('#margin-top, #margin-right, #margin-bottom, #margin-left').val(0);
-                $('#background-color').val('#ffffff').trigger('change');
-                $('#text-color').val('#333333').trigger('change');
-                $('#text-alignment').val('left');
-                $('#border-width').val(0);
-                $('#border-style').val('solid');
-                $('#border-color').val('#dddddd').trigger('change');
-                $('#border-radius').val(0);
-                
-                // Clear custom CSS
-                const editor = $('.cbd-code-editor').data('code-editor');
-                if (editor) {
-                    editor.codemirror.setValue('');
-                }
-                
-                CBDAdmin.updatePreview();
-                CBDAdmin.showNotice('Einstellungen wurden zurückgesetzt', 'info');
-            },
-            
-            // Switch tabs
-            switchTab: function(e) {
-                e.preventDefault();
-                const link = $(this);
-                const target = link.attr('href');
-                
-                // Update active states
-                link.closest('.cbd-tab-nav').find('a').removeClass('active');
-                link.addClass('active');
-                
-                // Show target panel
-                $('.cbd-tab-panel').removeClass('active');
-                $(target).addClass('active');
-                
-                // Save active tab
-                if (window.localStorage) {
-                    localStorage.setItem('cbd-active-tab', target);
-                }
-            },
-            
-            // Filter blocks in list
-            filterBlocks: function() {
-                const searchTerm = $(this).val().toLowerCase();
-                const rows = $('#cbd-blocks-list tbody tr');
-                
-                rows.each(function() {
-                    const row = $(this);
-                    const text = row.text().toLowerCase();
-                    
-                    if (text.includes(searchTerm)) {
-                        row.show();
-                    } else {
-                        row.hide();
-                    }
-                });
-                
-                // Update results count
-                const visibleCount = rows.filter(':visible').length;
-                $('#cbd-results-count').text(`${visibleCount} von ${rows.length} Blocks`);
-            },
-            
-            // Execute bulk action
-            executeBulkAction: function(e) {
-                e.preventDefault();
-                const action = $('#cbd-bulk-action').val();
-                const checkedItems = $('.cbd-bulk-checkbox:checked');
-                
-                if (!action) {
-                    CBDAdmin.showNotice('Bitte wählen Sie eine Aktion aus', 'error');
-                    return;
-                }
-                
-                if (checkedItems.length === 0) {
-                    CBDAdmin.showNotice('Bitte wählen Sie mindestens einen Block aus', 'error');
-                    return;
-                }
-                
-                const blockIds = [];
-                checkedItems.each(function() {
-                    blockIds.push($(this).val());
-                });
-                
-                if (action === 'delete' && !confirm(`Möchten Sie wirklich ${blockIds.length} Block(s) löschen?`)) {
-                    return;
-                }
-                
-                $.ajax({
-                    url: cbdAdminData.ajaxUrl,
-                    type: 'POST',
-                    data: {
-                        action: 'cbd_bulk_action',
-                        bulk_action: action,
-                        block_ids: blockIds,
-                        nonce: cbdAdminData.nonce
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            CBDAdmin.showNotice(`Aktion erfolgreich für ${blockIds.length} Block(s) ausgeführt`, 'success');
-                            setTimeout(() => window.location.reload(), 1500);
-                        } else {
-                            CBDAdmin.showNotice(response.data || 'Fehler bei der Ausführung', 'error');
-                        }
-                    },
-                    error: function() {
-                        CBDAdmin.showNotice('Netzwerkfehler bei der Ausführung', 'error');
-                    }
-                });
-            },
-            
-            // Update block order after sorting
-            updateBlockOrder: function() {
-                const order = [];
-                $('#cbd-blocks-list tbody tr').each(function(index) {
-                    const blockId = $(this).data('block-id');
-                    if (blockId) {
-                        order.push({ id: blockId, order: index });
-                    }
-                });
-                
-                $.ajax({
-                    url: cbdAdminData.ajaxUrl,
-                    type: 'POST',
-                    data: {
-                        action: 'cbd_update_block_order',
-                        order: order,
-                        nonce: cbdAdminData.nonce
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            CBDAdmin.showNotice('Reihenfolge aktualisiert', 'success');
-                        }
-                    }
-                });
-            },
-            
-            // Show notice message
-            showNotice: function(message, type = 'info') {
-                const notice = $('<div>')
-                    .addClass(`notice notice-${type} is-dismissible cbd-notice`)
-                    .html(`<p>${message}</p>`);
-                
-                // Add dismiss button
-                const dismissButton = $('<button>')
-                    .attr('type', 'button')
-                    .addClass('notice-dismiss')
-                    .on('click', function() {
-                        notice.fadeOut(300, function() {
-                            $(this).remove();
-                        });
-                    });
-                
-                notice.append(dismissButton);
-                
-                // Insert after page title or at top of content
-                const target = $('.wrap h1').first();
-                if (target.length) {
-                    notice.insertAfter(target);
-                } else {
-                    notice.prependTo('.wrap');
-                }
-                
-                // Auto-dismiss after 5 seconds for success messages
-                if (type === 'success') {
-                    setTimeout(() => {
-                        notice.fadeOut(300, function() {
-                            $(this).remove();
-                        });
-                    }, 5000);
-                }
-                
-                // Scroll to notice
-                $('html, body').animate({
-                    scrollTop: notice.offset().top - 50
-                }, 300);
+            typography: {
+                color: $('#text-color').val() || '#333333',
+                fontSize: $('#font-size').val() || '16px'
             }
         };
         
-        // Initialize CBD Admin
-        CBDAdmin.init();
+        // CSS generieren
+        let css = '';
+        css += `padding: ${styles.padding.top}px ${styles.padding.right}px ${styles.padding.bottom}px ${styles.padding.left}px;`;
+        css += `background-color: ${styles.background.color};`;
         
-        // Make available globally
-        window.CBDAdmin = CBDAdmin;
-    });
+        if (styles.border.width > 0) {
+            css += `border: ${styles.border.width}px ${styles.border.style} ${styles.border.color};`;
+        }
+        
+        if (styles.border.radius > 0) {
+            css += `border-radius: ${styles.border.radius}px;`;
+        }
+        
+        css += `color: ${styles.typography.color};`;
+        css += `font-size: ${styles.typography.fontSize};`;
+        
+        // Styles anwenden
+        $preview.attr('style', css);
+        
+        // Features aktualisieren
+        updatePreviewFeatures();
+    }
+    
+    /**
+     * Preview Features aktualisieren
+     */
+    function updatePreviewFeatures() {
+        const $preview = $('#cbd-block-preview-content');
+        
+        // Icon
+        if ($('#feature-icon-enabled').is(':checked')) {
+            const iconClass = $('#feature-icon-value').val() || 'dashicons-admin-generic';
+            const iconPosition = $('#feature-icon-position').val() || 'top-left';
+            
+            let $icon = $preview.find('.cbd-preview-icon');
+            if (!$icon.length) {
+                $icon = $('<span class="cbd-preview-icon dashicons"></span>');
+                $preview.prepend($icon);
+            }
+            
+            $icon.removeClass().addClass('cbd-preview-icon dashicons ' + iconClass);
+            $icon.attr('data-position', iconPosition);
+        } else {
+            $preview.find('.cbd-preview-icon').remove();
+        }
+        
+        // Numbering
+        if ($('#feature-numbering-enabled').is(':checked')) {
+            const format = $('#feature-numbering-format').val() || 'numeric';
+            const position = $('#feature-numbering-position').val() || 'top-left';
+            
+            let $number = $preview.find('.cbd-preview-number');
+            if (!$number.length) {
+                $number = $('<span class="cbd-preview-number">1</span>');
+                $preview.prepend($number);
+            }
+            
+            $number.attr('data-position', position);
+            
+            // Format anwenden
+            switch(format) {
+                case 'roman':
+                    $number.text('I');
+                    break;
+                case 'letters':
+                    $number.text('A');
+                    break;
+                case 'leading-zero':
+                    $number.text('01');
+                    break;
+                default:
+                    $number.text('1');
+            }
+        } else {
+            $preview.find('.cbd-preview-number').remove();
+        }
+    }
+    
+    /**
+     * AJAX Actions initialisieren
+     */
+    function initAjaxActions() {
+        // Block speichern
+        $('.cbd-save-block').on('click', function(e) {
+            e.preventDefault();
+            saveBlock();
+        });
+        
+        // Block löschen
+        $('.cbd-delete-block').on('click', function(e) {
+            e.preventDefault();
+            
+            if (confirm(cbdAdmin.strings.confirmDelete)) {
+                deleteBlock($(this).data('block-id'));
+            }
+        });
+        
+        // Block Status ändern
+        $('.cbd-toggle-status').on('click', function(e) {
+            e.preventDefault();
+            toggleBlockStatus($(this).data('block-id'));
+        });
+        
+        // Styles aktualisieren
+        $('.cbd-refresh-styles').on('click', function(e) {
+            e.preventDefault();
+            refreshStyles();
+        });
+    }
+    
+    /**
+     * Block speichern
+     */
+    function saveBlock() {
+        const $form = $('#cbd-block-form');
+        const formData = $form.serialize();
+        
+        // Loading State
+        showSpinner();
+        
+        $.ajax({
+            url: cbdAdmin.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'cbd_save_block',
+                nonce: cbdAdmin.nonce,
+                data: formData
+            },
+            success: function(response) {
+                hideSpinner();
+                
+                if (response.success) {
+                    showNotice(cbdAdmin.strings.saved, 'success');
+                    
+                    // Nach 2 Sekunden zur Übersicht
+                    setTimeout(function() {
+                        window.location.href = cbdAdmin.adminUrl + 'admin.php?page=container-block-designer';
+                    }, 2000);
+                } else {
+                    showNotice(response.data.message || cbdAdmin.strings.error, 'error');
+                }
+            },
+            error: function() {
+                hideSpinner();
+                showNotice(cbdAdmin.strings.error, 'error');
+            }
+        });
+    }
+    
+    /**
+     * Block löschen
+     */
+    function deleteBlock(blockId) {
+        showSpinner();
+        
+        $.ajax({
+            url: cbdAdmin.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'cbd_delete_block',
+                nonce: cbdAdmin.nonce,
+                block_id: blockId
+            },
+            success: function(response) {
+                hideSpinner();
+                
+                if (response.success) {
+                    showNotice(cbdAdmin.strings.deleted, 'success');
+                    
+                    // Zeile aus Tabelle entfernen
+                    $(`tr[data-block-id="${blockId}"]`).fadeOut(function() {
+                        $(this).remove();
+                    });
+                } else {
+                    showNotice(response.data.message || cbdAdmin.strings.error, 'error');
+                }
+            },
+            error: function() {
+                hideSpinner();
+                showNotice(cbdAdmin.strings.error, 'error');
+            }
+        });
+    }
+    
+    /**
+     * Block Status ändern
+     */
+    function toggleBlockStatus(blockId) {
+        showSpinner();
+        
+        $.ajax({
+            url: cbdAdmin.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'cbd_toggle_block_status',
+                nonce: cbdAdmin.nonce,
+                block_id: blockId
+            },
+            success: function(response) {
+                hideSpinner();
+                
+                if (response.success) {
+                    // Status Badge aktualisieren
+                    const $badge = $(`tr[data-block-id="${blockId}"] .cbd-status`);
+                    
+                    if ($badge.hasClass('cbd-status-active')) {
+                        $badge.removeClass('cbd-status-active').addClass('cbd-status-inactive').text('Inaktiv');
+                    } else {
+                        $badge.removeClass('cbd-status-inactive').addClass('cbd-status-active').text('Aktiv');
+                    }
+                    
+                    showNotice(cbdAdmin.strings.statusChanged, 'success');
+                } else {
+                    showNotice(response.data.message || cbdAdmin.strings.error, 'error');
+                }
+            },
+            error: function() {
+                hideSpinner();
+                showNotice(cbdAdmin.strings.error, 'error');
+            }
+        });
+    }
+    
+    /**
+     * Styles aktualisieren
+     */
+    function refreshStyles() {
+        showSpinner();
+        
+        $.ajax({
+            url: cbdAdmin.ajaxUrl,
+            type: 'POST',
+            data: {
+                action: 'cbd_refresh_styles',
+                nonce: cbdAdmin.nonce
+            },
+            success: function(response) {
+                hideSpinner();
+                
+                if (response.success) {
+                    showNotice(cbdAdmin.strings.stylesRefreshed || 'Styles aktualisiert', 'success');
+                } else {
+                    showNotice(response.data.message || cbdAdmin.strings.error, 'error');
+                }
+            },
+            error: function() {
+                hideSpinner();
+                showNotice(cbdAdmin.strings.error, 'error');
+            }
+        });
+    }
+    
+    /**
+     * Sortable für Features
+     */
+    function initSortable() {
+        if ($.fn.sortable) {
+            $('.cbd-features-list').sortable({
+                handle: '.cbd-feature-handle',
+                placeholder: 'cbd-feature-placeholder',
+                update: function(event, ui) {
+                    updateFeatureOrder();
+                }
+            });
+        }
+    }
+    
+    /**
+     * Feature-Reihenfolge aktualisieren
+     */
+    function updateFeatureOrder() {
+        const order = [];
+        
+        $('.cbd-feature-item').each(function(index) {
+            const featureId = $(this).data('feature');
+            order.push(featureId);
+            $(this).find('.cbd-feature-order').val(index);
+        });
+        
+        // Order in Hidden Field speichern
+        $('#feature-order').val(order.join(','));
+    }
+    
+    /**
+     * Slug generieren
+     */
+    function generateSlug(text) {
+        return text
+            .toLowerCase()
+            .replace(/ä/g, 'ae')
+            .replace(/ö/g, 'oe')
+            .replace(/ü/g, 'ue')
+            .replace(/ß/g, 'ss')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+    }
+    
+    /**
+     * Notice anzeigen
+     */
+    function showNotice(message, type) {
+        // Alte Notices entfernen
+        $('.cbd-ajax-notice').remove();
+        
+        const noticeHtml = `
+            <div class="cbd-ajax-notice cbd-notice cbd-notice-${type}">
+                <p>${message}</p>
+            </div>
+        `;
+        
+        $('.cbd-admin-wrap').prepend(noticeHtml);
+        
+        // Nach oben scrollen
+        $('html, body').animate({ scrollTop: 0 }, 300);
+        
+        // Nach 5 Sekunden ausblenden
+        setTimeout(function() {
+            $('.cbd-ajax-notice').fadeOut(function() {
+                $(this).remove();
+            });
+        }, 5000);
+    }
+    
+    /**
+     * Spinner anzeigen
+     */
+    function showSpinner() {
+        if (!$('.cbd-global-spinner').length) {
+            $('body').append('<div class="cbd-global-spinner"><span class="cbd-spinner"></span></div>');
+        }
+        $('.cbd-global-spinner').fadeIn();
+    }
+    
+    /**
+     * Spinner verstecken
+     */
+    function hideSpinner() {
+        $('.cbd-global-spinner').fadeOut();
+    }
     
 })(jQuery);
