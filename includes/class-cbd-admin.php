@@ -3,7 +3,7 @@
  * Container Block Designer - Admin-Klasse
  * 
  * @package ContainerBlockDesigner
- * @since 2.5.1
+ * @since 2.5.2
  */
 
 // Sicherheit: Direkten Zugriff verhindern
@@ -52,17 +52,23 @@ class CBD_Admin {
         add_action('wp_ajax_cbd_toggle_status', array($this, 'ajax_toggle_status'));
         
         // Plugin-Action-Links
-        add_filter('plugin_action_links_' . CBD_PLUGIN_BASENAME, array($this, 'add_plugin_action_links'));
+        add_filter('plugin_action_links_' . CBD_PLUGIN_BASENAME, array($this, 'add_action_links'));
+        
+        // Admin-Notices
+        add_action('admin_notices', array($this, 'admin_notices'));
+        
+        // Verarbeite Admin-Aktionen früh (vor Ausgabe)
+        add_action('admin_init', array($this, 'process_admin_actions'));
     }
     
     /**
      * Admin-Menü hinzufügen
      */
     public function add_admin_menu() {
-        // Hauptmenü
+        // Hauptmenüpunkt
         add_menu_page(
             __('Container Block Designer', 'container-block-designer'),
-            __('Container Blocks', 'container-block-designer'),
+            __('Container Designer', 'container-block-designer'),
             'manage_options',
             'container-block-designer',
             array($this, 'render_main_page'),
@@ -70,17 +76,7 @@ class CBD_Admin {
             30
         );
         
-        // Übersicht (gleiche Seite wie Hauptmenü)
-        add_submenu_page(
-            'container-block-designer',
-            __('Alle Blöcke', 'container-block-designer'),
-            __('Alle Blöcke', 'container-block-designer'),
-            'manage_options',
-            'container-block-designer',
-            array($this, 'render_main_page')
-        );
-        
-        // Neuer Block
+        // Untermenü: Neuer Block
         add_submenu_page(
             'container-block-designer',
             __('Neuer Block', 'container-block-designer'),
@@ -90,25 +86,63 @@ class CBD_Admin {
             array($this, 'render_new_block_page')
         );
         
-        // Block bearbeiten (versteckt, nur über direkten Link erreichbar)
+        // Untermenü: Import/Export
         add_submenu_page(
-            '', // Leerer String statt null für Parent-Menü
-            __('Block bearbeiten', 'container-block-designer'),
-            __('Block bearbeiten', 'container-block-designer'),
+            'container-block-designer',
+            __('Import/Export', 'container-block-designer'),
+            __('Import/Export', 'container-block-designer'),
             'manage_options',
-            'cbd-edit-block',
-            array($this, 'render_edit_block_page')
+            'cbd-import-export',
+            array($this, 'render_import_export_page')
         );
+    }
+    
+    /**
+     * Admin-Assets einbinden
+     */
+    public function enqueue_admin_assets($hook) {
+        // Nur auf Plugin-Seiten laden
+        if (strpos($hook, 'container-block-designer') === false && 
+            strpos($hook, 'cbd-') === false) {
+            return;
+        }
+        
+        // Admin-CSS
+        wp_enqueue_style(
+            'cbd-admin',
+            CBD_PLUGIN_URL . 'assets/css/admin.css',
+            array(),
+            CBD_VERSION
+        );
+        
+        // Admin-JavaScript
+        wp_enqueue_script(
+            'cbd-admin',
+            CBD_PLUGIN_URL . 'assets/js/admin.js',
+            array('jquery', 'wp-color-picker'),
+            CBD_VERSION,
+            true
+        );
+        
+        // Color Picker
+        wp_enqueue_style('wp-color-picker');
+        
+        // Lokalisierung
+        wp_localize_script('cbd-admin', 'cbdAdmin', array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('cbd_admin_nonce'),
+            'messages' => array(
+                'confirmDelete' => __('Sind Sie sicher, dass Sie diesen Block löschen möchten?', 'container-block-designer'),
+                'saved' => __('Gespeichert!', 'container-block-designer'),
+                'error' => __('Ein Fehler ist aufgetreten.', 'container-block-designer')
+            )
+        ));
     }
     
     /**
      * Hauptseite rendern
      */
     public function render_main_page() {
-        // WICHTIG: Verarbeite alle POST/GET Aktionen VOR dem Include
-        $this->process_admin_actions();
-        
-        // Prüfe ob Datei existiert
         $file_path = CBD_PLUGIN_DIR . 'admin/container-block-designer.php';
         
         if (file_exists($file_path)) {
@@ -124,7 +158,12 @@ class CBD_Admin {
      * Verarbeite Admin-Aktionen (POST/GET)
      * Muss VOR jeglicher Ausgabe erfolgen!
      */
-    private function process_admin_actions() {
+    public function process_admin_actions() {
+        // Nur auf unseren Admin-Seiten
+        if (!isset($_GET['page']) || strpos($_GET['page'], 'container-block-designer') === false) {
+            return;
+        }
+        
         global $wpdb;
         
         // Feature-Toggle verarbeiten
@@ -150,71 +189,115 @@ class CBD_Admin {
                     $features[$feature_key]['enabled'] = !$features[$feature_key]['enabled'];
                 }
                 
+                // Verwende die korrekte Spalte 'updated_at'
+                $update_data = array(
+                    'features' => json_encode($features)
+                );
+                
+                // Prüfe welche Spalte existiert
                 $columns = $wpdb->get_col("SHOW COLUMNS FROM " . CBD_TABLE_BLOCKS);
-                $updated_column = in_array('updated_at', $columns) ? 'updated_at' : 'updated';
+                if (in_array('updated_at', $columns)) {
+                    $update_data['updated_at'] = current_time('mysql');
+                }
                 
                 $wpdb->update(
                     CBD_TABLE_BLOCKS,
-                    array(
-                        'features' => json_encode($features),
-                        $updated_column => current_time('mysql')
-                    ),
+                    $update_data,
                     array('id' => $block_id)
                 );
                 
-                wp_safe_redirect(admin_url('admin.php?page=container-block-designer&cbd_message=feature_toggled'));
+                // Setze Transient für Erfolgsmeldung
+                set_transient('cbd_admin_message', 'feature_toggled', 30);
+                
+                // Weiterleitung
+                wp_safe_redirect(admin_url('admin.php?page=container-block-designer'));
                 exit;
             }
         }
         
-        // Block löschen verarbeiten
-        if (isset($_GET['delete_block']) && isset($_GET['_wpnonce'])) {
-            if (wp_verify_nonce($_GET['_wpnonce'], 'cbd_delete_block')) {
-                $block_id = intval($_GET['delete_block']);
-                
-                $result = $wpdb->delete(
-                    CBD_TABLE_BLOCKS,
-                    array('id' => $block_id),
-                    array('%d')
-                );
-                
-                if ($result) {
-                    wp_safe_redirect(admin_url('admin.php?page=container-block-designer&cbd_message=deleted'));
-                    exit;
-                }
+        // Block löschen
+        if (isset($_POST['delete_block']) && isset($_POST['block_id'])) {
+            if (!isset($_POST['_wpnonce']) || !wp_verify_nonce($_POST['_wpnonce'], 'cbd_delete_block')) {
+                wp_die('Sicherheitsprüfung fehlgeschlagen');
             }
+            
+            $block_id = intval($_POST['block_id']);
+            
+            $wpdb->delete(
+                CBD_TABLE_BLOCKS,
+                array('id' => $block_id),
+                array('%d')
+            );
+            
+            set_transient('cbd_admin_message', 'block_deleted', 30);
+            
+            wp_safe_redirect(admin_url('admin.php?page=container-block-designer'));
+            exit;
         }
         
-        // Status-Toggle verarbeiten
-        if (isset($_GET['toggle_status']) && isset($_GET['block_id']) && isset($_GET['_wpnonce'])) {
-            if (wp_verify_nonce($_GET['_wpnonce'], 'cbd_toggle_status')) {
-                $block_id = intval($_GET['block_id']);
+        // Block-Status ändern
+        if (isset($_POST['toggle_status']) && isset($_POST['block_id'])) {
+            if (!isset($_POST['_wpnonce']) || !wp_verify_nonce($_POST['_wpnonce'], 'cbd_toggle_status')) {
+                wp_die('Sicherheitsprüfung fehlgeschlagen');
+            }
+            
+            $block_id = intval($_POST['block_id']);
+            
+            $block = $wpdb->get_row($wpdb->prepare(
+                "SELECT status FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
+                $block_id
+            ));
+            
+            if ($block) {
+                $new_status = $block->status === 'active' ? 'inactive' : 'active';
                 
-                $current_status = $wpdb->get_var($wpdb->prepare(
-                    "SELECT status FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
-                    $block_id
-                ));
+                $update_data = array(
+                    'status' => $new_status
+                );
                 
-                if ($current_status) {
-                    $new_status = ($current_status === 'active') ? 'inactive' : 'active';
-                    
-                    $columns = $wpdb->get_col("SHOW COLUMNS FROM " . CBD_TABLE_BLOCKS);
-                    $updated_column = in_array('updated_at', $columns) ? 'updated_at' : 'updated';
-                    
-                    $wpdb->update(
-                        CBD_TABLE_BLOCKS,
-                        array(
-                            'status' => $new_status,
-                            $updated_column => current_time('mysql')
-                        ),
-                        array('id' => $block_id)
-                    );
-                    
-                    wp_safe_redirect(admin_url('admin.php?page=container-block-designer&cbd_message=status_changed'));
-                    exit;
+                // Prüfe welche Spalte existiert
+                $columns = $wpdb->get_col("SHOW COLUMNS FROM " . CBD_TABLE_BLOCKS);
+                if (in_array('updated_at', $columns)) {
+                    $update_data['updated_at'] = current_time('mysql');
                 }
+                
+                $wpdb->update(
+                    CBD_TABLE_BLOCKS,
+                    $update_data,
+                    array('id' => $block_id)
+                );
+                
+                set_transient('cbd_admin_message', 'status_toggled', 30);
+                
+                wp_safe_redirect(admin_url('admin.php?page=container-block-designer'));
+                exit;
             }
         }
+    }
+    
+    /**
+     * Admin-Notices anzeigen
+     */
+    public function admin_notices() {
+        $message = get_transient('cbd_admin_message');
+        
+        if (!$message) {
+            return;
+        }
+        
+        delete_transient('cbd_admin_message');
+        
+        $messages = array(
+            'feature_toggled' => __('Feature wurde erfolgreich geändert.', 'container-block-designer'),
+            'block_deleted' => __('Block wurde erfolgreich gelöscht.', 'container-block-designer'),
+            'status_toggled' => __('Block-Status wurde erfolgreich geändert.', 'container-block-designer'),
+            'block_saved' => __('Block wurde erfolgreich gespeichert.', 'container-block-designer'),
+            'settings_saved' => __('Einstellungen wurden erfolgreich gespeichert.', 'container-block-designer')
+        );
+        
+        $text = isset($messages[$message]) ? $messages[$message] : __('Operation erfolgreich.', 'container-block-designer');
+        
+        echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($text) . '</p></div>';
     }
     
     /**
@@ -233,65 +316,18 @@ class CBD_Admin {
     }
     
     /**
-     * Block bearbeiten Seite rendern
+     * Import/Export-Seite rendern
      */
-    public function render_edit_block_page() {
-        $file_path = CBD_PLUGIN_DIR . 'admin/edit-block.php';
+    public function render_import_export_page() {
+        $file_path = CBD_PLUGIN_DIR . 'admin/import-export.php';
         
         if (file_exists($file_path)) {
             include $file_path;
         } else {
-            echo '<div class="wrap"><h1>' . __('Block bearbeiten', 'container-block-designer') . '</h1>';
-            echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/edit-block.php', 'container-block-designer') . '</p></div>';
+            echo '<div class="wrap"><h1>' . __('Import/Export', 'container-block-designer') . '</h1>';
+            echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/import-export.php', 'container-block-designer') . '</p></div>';
             echo '</div>';
         }
-    }
-    
-    /**
-     * Admin-Assets laden
-     */
-    public function enqueue_admin_assets($hook) {
-        // Nur auf unseren Plugin-Seiten laden
-        if (strpos($hook, 'container-block-designer') === false && 
-            strpos($hook, 'cbd-') === false) {
-            return;
-        }
-        
-        // Admin CSS
-        wp_enqueue_style(
-            'cbd-admin',
-            CBD_PLUGIN_URL . 'assets/css/admin.css',
-            array(),
-            CBD_VERSION
-        );
-        
-        // Admin JavaScript
-        wp_enqueue_script(
-            'cbd-admin',
-            CBD_PLUGIN_URL . 'assets/js/admin.js',
-            array('jquery', 'wp-color-picker'),
-            CBD_VERSION,
-            true
-        );
-        
-        // Color Picker CSS
-        wp_enqueue_style('wp-color-picker');
-        
-        // Lokalisierung für JavaScript
-        wp_localize_script('cbd-admin', 'cbdAdmin', array(
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('cbd-admin-nonce'),
-            'strings' => array(
-                'confirmDelete' => __('Sind Sie sicher, dass Sie diesen Block löschen möchten?', 'container-block-designer'),
-                'saving' => __('Speichern...', 'container-block-designer'),
-                'saved' => __('Gespeichert!', 'container-block-designer'),
-                'error' => __('Ein Fehler ist aufgetreten.', 'container-block-designer'),
-                'active' => __('Aktiv', 'container-block-designer'),
-                'inactive' => __('Inaktiv', 'container-block-designer'),
-                'featureEnabled' => __('Feature aktiviert', 'container-block-designer'),
-                'featureDisabled' => __('Feature deaktiviert', 'container-block-designer')
-            )
-        ));
     }
     
     /**
@@ -299,39 +335,59 @@ class CBD_Admin {
      */
     public function ajax_save_block() {
         // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-admin-nonce', 'nonce', false)) {
-            wp_die(__('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer'));
+        if (!check_ajax_referer('cbd_admin_nonce', 'nonce', false)) {
+            wp_send_json_error(__('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer'));
         }
         
+        // Berechtigung prüfen
         if (!current_user_can('manage_options')) {
-            wp_die(__('Keine Berechtigung', 'container-block-designer'));
+            wp_send_json_error(__('Keine Berechtigung', 'container-block-designer'));
         }
         
         global $wpdb;
         
         $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
+        $title = sanitize_text_field($_POST['title'] ?? '');
+        $description = sanitize_textarea_field($_POST['description'] ?? '');
+        $styles = wp_unslash($_POST['styles'] ?? '{}');
+        $features = wp_unslash($_POST['features'] ?? '{}');
+        
+        if (empty($title)) {
+            wp_send_json_error(__('Titel ist erforderlich', 'container-block-designer'));
+        }
+        
         $data = array(
-            'name' => sanitize_text_field($_POST['name']),
-            'title' => sanitize_text_field($_POST['title']),
-            'description' => sanitize_textarea_field($_POST['description']),
-            'config' => wp_json_encode($_POST['config']),
-            'styles' => wp_json_encode($_POST['styles']),
-            'features' => wp_json_encode($_POST['features']),
-            'status' => sanitize_text_field($_POST['status']),
-            'updated' => current_time('mysql')
+            'title' => $title,
+            'description' => $description,
+            'styles' => $styles,
+            'features' => $features
         );
         
+        // Prüfe welche Spalte existiert
+        $columns = $wpdb->get_col("SHOW COLUMNS FROM " . CBD_TABLE_BLOCKS);
+        if (in_array('updated_at', $columns)) {
+            $data['updated_at'] = current_time('mysql');
+        }
+        
         if ($block_id) {
-            // Update
+            // Bestehenden Block aktualisieren
             $result = $wpdb->update(
                 CBD_TABLE_BLOCKS,
                 $data,
                 array('id' => $block_id)
             );
         } else {
-            // Insert
-            $data['created'] = current_time('mysql');
-            $result = $wpdb->insert(CBD_TABLE_BLOCKS, $data);
+            // Neuen Block erstellen
+            $data['status'] = 'active';
+            if (in_array('created_at', $columns)) {
+                $data['created_at'] = current_time('mysql');
+            }
+            
+            $result = $wpdb->insert(
+                CBD_TABLE_BLOCKS,
+                $data
+            );
+            
             $block_id = $wpdb->insert_id;
         }
         
@@ -341,9 +397,7 @@ class CBD_Admin {
                 'block_id' => $block_id
             ));
         } else {
-            wp_send_json_error(array(
-                'message' => __('Fehler beim Speichern des Blocks', 'container-block-designer')
-            ));
+            wp_send_json_error(__('Fehler beim Speichern des Blocks', 'container-block-designer'));
         }
     }
     
@@ -352,96 +406,100 @@ class CBD_Admin {
      */
     public function ajax_delete_block() {
         // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-admin-nonce', 'nonce', false)) {
-            wp_die(__('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer'));
+        if (!check_ajax_referer('cbd_admin_nonce', 'nonce', false)) {
+            wp_send_json_error(__('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer'));
         }
         
+        // Berechtigung prüfen
         if (!current_user_can('manage_options')) {
-            wp_die(__('Keine Berechtigung', 'container-block-designer'));
+            wp_send_json_error(__('Keine Berechtigung', 'container-block-designer'));
         }
         
         global $wpdb;
         
         $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
         
-        if ($block_id) {
-            $result = $wpdb->delete(
-                CBD_TABLE_BLOCKS,
-                array('id' => $block_id)
-            );
-            
-            if ($result) {
-                wp_send_json_success(array(
-                    'message' => __('Block erfolgreich gelöscht', 'container-block-designer')
-                ));
-            } else {
-                wp_send_json_error(array(
-                    'message' => __('Fehler beim Löschen des Blocks', 'container-block-designer')
-                ));
-            }
+        if (!$block_id) {
+            wp_send_json_error(__('Ungültige Block-ID', 'container-block-designer'));
+        }
+        
+        $result = $wpdb->delete(
+            CBD_TABLE_BLOCKS,
+            array('id' => $block_id),
+            array('%d')
+        );
+        
+        if ($result) {
+            wp_send_json_success(__('Block erfolgreich gelöscht', 'container-block-designer'));
         } else {
-            wp_send_json_error(array(
-                'message' => __('Ungültige Block-ID', 'container-block-designer')
-            ));
+            wp_send_json_error(__('Fehler beim Löschen des Blocks', 'container-block-designer'));
         }
     }
     
     /**
-     * AJAX: Status umschalten
+     * AJAX: Block-Status umschalten
      */
     public function ajax_toggle_status() {
         // Sicherheitsprüfung
-        if (!check_ajax_referer('cbd-admin-nonce', 'nonce', false)) {
-            wp_die(__('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer'));
+        if (!check_ajax_referer('cbd_admin_nonce', 'nonce', false)) {
+            wp_send_json_error(__('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer'));
         }
         
+        // Berechtigung prüfen
         if (!current_user_can('manage_options')) {
-            wp_die(__('Keine Berechtigung', 'container-block-designer'));
+            wp_send_json_error(__('Keine Berechtigung', 'container-block-designer'));
         }
         
         global $wpdb;
         
         $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
         
-        if ($block_id) {
-            // Aktuellen Status abrufen
-            $current_status = $wpdb->get_var($wpdb->prepare(
-                "SELECT status FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
-                $block_id
+        if (!$block_id) {
+            wp_send_json_error(__('Ungültige Block-ID', 'container-block-designer'));
+        }
+        
+        // Aktuellen Status abrufen
+        $current_status = $wpdb->get_var($wpdb->prepare(
+            "SELECT status FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
+            $block_id
+        ));
+        
+        if (!$current_status) {
+            wp_send_json_error(__('Block nicht gefunden', 'container-block-designer'));
+        }
+        
+        $new_status = $current_status === 'active' ? 'inactive' : 'active';
+        
+        $update_data = array(
+            'status' => $new_status
+        );
+        
+        // Prüfe welche Spalte existiert
+        $columns = $wpdb->get_col("SHOW COLUMNS FROM " . CBD_TABLE_BLOCKS);
+        if (in_array('updated_at', $columns)) {
+            $update_data['updated_at'] = current_time('mysql');
+        }
+        
+        $result = $wpdb->update(
+            CBD_TABLE_BLOCKS,
+            $update_data,
+            array('id' => $block_id)
+        );
+        
+        if ($result !== false) {
+            wp_send_json_success(array(
+                'message' => __('Status erfolgreich geändert', 'container-block-designer'),
+                'new_status' => $new_status
             ));
-            
-            $new_status = ($current_status === 'active') ? 'inactive' : 'active';
-            
-            $result = $wpdb->update(
-                CBD_TABLE_BLOCKS,
-                array(
-                    'status' => $new_status,
-                    'updated' => current_time('mysql')
-                ),
-                array('id' => $block_id)
-            );
-            
-            if ($result !== false) {
-                wp_send_json_success(array(
-                    'message' => __('Status erfolgreich geändert', 'container-block-designer'),
-                    'new_status' => $new_status
-                ));
-            } else {
-                wp_send_json_error(array(
-                    'message' => __('Fehler beim Ändern des Status', 'container-block-designer')
-                ));
-            }
         } else {
-            wp_send_json_error(array(
-                'message' => __('Ungültige Block-ID', 'container-block-designer')
-            ));
+            wp_send_json_error(__('Fehler beim Ändern des Status', 'container-block-designer'));
         }
     }
     
     /**
      * Plugin-Action-Links hinzufügen
      */
-    public function add_plugin_action_links($links) {
+    public function add_action_links($links) {
         $plugin_links = array(
             '<a href="' . admin_url('admin.php?page=container-block-designer') . '">' . __('Einstellungen', 'container-block-designer') . '</a>',
             '<a href="' . admin_url('admin.php?page=cbd-new-block') . '">' . __('Neuer Block', 'container-block-designer') . '</a>',

@@ -1,9 +1,9 @@
 <?php
 /**
- * Container Block Designer - Hauptseite der Admin-Oberfläche
+ * Container Block Designer - Admin Hauptseite
  * 
  * @package ContainerBlockDesigner
- * @since 2.5.1
+ * @since 2.5.2
  */
 
 // Sicherheit: Direkten Zugriff verhindern
@@ -11,38 +11,35 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Lade alle gespeicherten Blöcke
 global $wpdb;
-$blocks = $wpdb->get_results("SELECT * FROM " . CBD_TABLE_BLOCKS . " ORDER BY created DESC");
 
-// Feature-Definitionen
+// WICHTIG: Verwende created_at statt created!
+$blocks = $wpdb->get_results("SELECT * FROM " . CBD_TABLE_BLOCKS . " ORDER BY created_at DESC");
+
+// Verfügbare Features definieren
 $available_features = array(
+    'responsive' => array(
+        'label' => __('Responsive', 'container-block-designer'),
+        'description' => __('Block passt sich an verschiedene Bildschirmgrößen an', 'container-block-designer'),
+        'dashicon' => 'dashicons-smartphone'
+    ),
+    'customClass' => array(
+        'label' => __('CSS-Klassen', 'container-block-designer'),
+        'description' => __('Eigene CSS-Klassen hinzufügen', 'container-block-designer'),
+        'dashicon' => 'dashicons-code-standards'
+    ),
+    'anchor' => array(
+        'label' => __('Anker', 'container-block-designer'),
+        'description' => __('HTML-Anker für direkte Links', 'container-block-designer'),
+        'dashicon' => 'dashicons-admin-links'
+    ),
     'icon' => array(
-        'label' => __('Block-Icon', 'container-block-designer'),
-        'description' => __('Zeigt ein Icon im Block-Header', 'container-block-designer'),
+        'label' => __('Icon', 'container-block-designer'),
+        'description' => __('Icon am Anfang des Blocks anzeigen', 'container-block-designer'),
         'dashicon' => 'dashicons-star-filled'
-    ),
-    'collapse' => array(
-        'label' => __('Ein-/Ausklappen', 'container-block-designer'),
-        'description' => __('Ermöglicht das Ein- und Ausklappen des Blocks', 'container-block-designer'),
-        'dashicon' => 'dashicons-arrow-down-alt2'
-    ),
-    'numbering' => array(
-        'label' => __('Nummerierung', 'container-block-designer'),
-        'description' => __('Automatische Nummerierung der Blöcke', 'container-block-designer'),
-        'dashicon' => 'dashicons-editor-ol'
-    ),
-    'copyText' => array(
-        'label' => __('Text kopieren', 'container-block-designer'),
-        'description' => __('Button zum Kopieren des Block-Inhalts', 'container-block-designer'),
-        'dashicon' => 'dashicons-admin-page'
-    ),
-    'screenshot' => array(
-        'label' => __('Screenshot', 'container-block-designer'),
-        'description' => __('Erstellt einen Screenshot des Blocks', 'container-block-designer'),
-        'dashicon' => 'dashicons-camera'
     )
 );
+
 ?>
 
 <div class="wrap cbd-admin-wrap">
@@ -56,152 +53,126 @@ $available_features = array(
     
     <hr class="wp-header-end">
     
-    <?php
-    // Nachrichten anzeigen
-    if (isset($_GET['cbd_message'])) {
-        $message = '';
-        switch ($_GET['cbd_message']) {
-            case 'saved':
-                $message = __('Block wurde erfolgreich gespeichert!', 'container-block-designer');
-                break;
-            case 'deleted':
-                $message = __('Block wurde erfolgreich gelöscht!', 'container-block-designer');
-                break;
-            case 'status_changed':
-                $message = __('Block-Status wurde geändert!', 'container-block-designer');
-                break;
-            case 'feature_toggled':
-                $message = __('Feature wurde aktualisiert!', 'container-block-designer');
-                break;
-        }
-        
-        if ($message) {
-            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($message) . '</p></div>';
-        }
-    }
-    ?>
-    
-    <div class="cbd-admin-content">
-        <?php if (empty($blocks)) : ?>
-            <div class="cbd-empty-state">
+    <?php if (empty($blocks)) : ?>
+        <div class="cbd-empty-state">
+            <div class="cbd-empty-state-icon">
                 <span class="dashicons dashicons-layout"></span>
-                <h2><?php _e('Keine Blöcke vorhanden', 'container-block-designer'); ?></h2>
-                <p><?php _e('Erstellen Sie Ihren ersten Container-Block, um loszulegen.', 'container-block-designer'); ?></p>
-                <a href="<?php echo admin_url('admin.php?page=cbd-new-block'); ?>" class="button button-primary">
-                    <?php _e('Ersten Block erstellen', 'container-block-designer'); ?>
-                </a>
             </div>
-        <?php else : ?>
-            <div class="cbd-blocks-grid">
-                <?php foreach ($blocks as $block) : 
-                    $features = !empty($block->features) ? json_decode($block->features, true) : array();
-                    $styles = !empty($block->styles) ? json_decode($block->styles, true) : array();
-                    $active_features = array_filter($features, function($f) { 
-                        return isset($f['enabled']) && $f['enabled']; 
-                    });
-                ?>
-                    <div class="cbd-block-card <?php echo $block->status === 'inactive' ? 'cbd-inactive' : ''; ?>">
-                        <div class="cbd-block-header">
-                            <h3><?php echo esc_html($block->title); ?></h3>
-                            <div class="cbd-block-status">
-                                <span class="cbd-status-badge cbd-status-<?php echo esc_attr($block->status); ?>">
-                                    <?php echo $block->status === 'active' ? __('Aktiv', 'container-block-designer') : __('Inaktiv', 'container-block-designer'); ?>
-                                </span>
-                            </div>
-                        </div>
-                        
-                        <?php if ($block->description) : ?>
-                            <p class="cbd-block-description"><?php echo esc_html($block->description); ?></p>
-                        <?php endif; ?>
-                        
-                        <!-- Features-Bereich -->
-                        <div class="cbd-block-features">
-                            <h4><?php _e('Features', 'container-block-designer'); ?></h4>
-                            <div class="cbd-features-grid">
-                                <?php foreach ($available_features as $key => $feature_info) : 
-                                    $is_enabled = isset($features[$key]['enabled']) && $features[$key]['enabled'];
-                                ?>
-                                    <div class="cbd-feature-item <?php echo $is_enabled ? 'cbd-feature-active' : 'cbd-feature-inactive'; ?>">
-                                        <form method="post" style="display: inline;">
-                                            <?php wp_nonce_field('cbd_toggle_feature'); ?>
-                                            <input type="hidden" name="toggle_feature" value="1">
-                                            <input type="hidden" name="block_id" value="<?php echo $block->id; ?>">
-                                            <input type="hidden" name="feature_key" value="<?php echo esc_attr($key); ?>">
-                                            
-                                            <button type="submit" class="cbd-feature-toggle" title="<?php echo esc_attr($feature_info['description']); ?>">
-                                                <span class="dashicons <?php echo esc_attr($feature_info['dashicon']); ?>"></span>
-                                                <span class="cbd-feature-label"><?php echo esc_html($feature_info['label']); ?></span>
-                                                <span class="cbd-feature-status">
-                                                    <?php if ($is_enabled) : ?>
-                                                        <span class="dashicons dashicons-yes"></span>
-                                                    <?php else : ?>
-                                                        <span class="dashicons dashicons-no-alt"></span>
-                                                    <?php endif; ?>
-                                                </span>
-                                            </button>
-                                        </form>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                            
-                            <?php if (!empty($active_features)) : ?>
-                                <div class="cbd-active-features-summary">
-                                    <strong><?php _e('Aktive Features:', 'container-block-designer'); ?></strong>
-                                    <?php 
-                                    $active_names = array();
-                                    foreach ($active_features as $key => $feature) {
-                                        if (isset($available_features[$key])) {
-                                            $active_names[] = $available_features[$key]['label'];
-                                        }
-                                    }
-                                    echo esc_html(implode(', ', $active_names));
-                                    ?>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                        
-                        <!-- Vorschau-Bereich -->
-                        <div class="cbd-block-preview">
-                            <div class="cbd-preview-box" style="
-                                padding: <?php echo intval($styles['padding']['top'] ?? 20); ?>px <?php echo intval($styles['padding']['right'] ?? 20); ?>px <?php echo intval($styles['padding']['bottom'] ?? 20); ?>px <?php echo intval($styles['padding']['left'] ?? 20); ?>px;
-                                background-color: <?php echo esc_attr($styles['background']['color'] ?? '#ffffff'); ?>;
-                                border: <?php echo intval($styles['border']['width'] ?? 1); ?>px <?php echo esc_attr($styles['border']['style'] ?? 'solid'); ?> <?php echo esc_attr($styles['border']['color'] ?? '#e0e0e0'); ?>;
-                                border-radius: <?php echo intval($styles['border']['radius'] ?? 4); ?>px;
-                                color: <?php echo esc_attr($styles['text']['color'] ?? '#333333'); ?>;
-                            ">
-                                <small><?php _e('Stil-Vorschau', 'container-block-designer'); ?></small>
-                            </div>
-                        </div>
-                        
-                        <!-- Aktions-Buttons -->
+            <h2><?php _e('Keine Container-Blöcke vorhanden', 'container-block-designer'); ?></h2>
+            <p><?php _e('Erstellen Sie Ihren ersten Container-Block, um loszulegen.', 'container-block-designer'); ?></p>
+            <a href="<?php echo admin_url('admin.php?page=cbd-new-block'); ?>" class="button button-primary button-hero">
+                <?php _e('Ersten Block erstellen', 'container-block-designer'); ?>
+            </a>
+        </div>
+    <?php else : ?>
+        <div class="cbd-blocks-grid">
+            <?php foreach ($blocks as $block) : 
+                $features = !empty($block->features) ? json_decode($block->features, true) : array();
+                $styles = !empty($block->styles) ? json_decode($block->styles, true) : array();
+                $config = !empty($block->config) ? json_decode($block->config, true) : array();
+                
+                // Verwende 'name' falls vorhanden, sonst 'title'
+                $display_name = !empty($block->name) ? $block->name : $block->title;
+            ?>
+                <div class="cbd-block-card <?php echo $block->status !== 'active' ? 'cbd-inactive' : ''; ?>">
+                    <div class="cbd-block-header">
+                        <h3><?php echo esc_html($display_name); ?></h3>
                         <div class="cbd-block-actions">
-                            <a href="<?php echo admin_url('admin.php?page=cbd-new-block&block_id=' . $block->id); ?>" class="button">
-                                <span class="dashicons dashicons-edit"></span>
-                                <?php _e('Bearbeiten', 'container-block-designer'); ?>
-                            </a>
-                            
-                            <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=container-block-designer&toggle_status=1&block_id=' . $block->id), 'cbd_toggle_status'); ?>" 
-                               class="button <?php echo $block->status === 'active' ? '' : 'button-primary'; ?>">
-                                <span class="dashicons dashicons-<?php echo $block->status === 'active' ? 'pause' : 'controls-play'; ?>"></span>
-                                <?php echo $block->status === 'active' ? __('Deaktivieren', 'container-block-designer') : __('Aktivieren', 'container-block-designer'); ?>
-                            </a>
-                            
-                            <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=container-block-designer&delete_block=' . $block->id), 'cbd_delete_block'); ?>" 
-                               class="button button-link-delete"
-                               onclick="return confirm('<?php _e('Sind Sie sicher, dass Sie diesen Block löschen möchten?', 'container-block-designer'); ?>');">
-                                <span class="dashicons dashicons-trash"></span>
-                                <?php _e('Löschen', 'container-block-designer'); ?>
-                            </a>
+                            <form method="post" style="display: inline;">
+                                <?php wp_nonce_field('cbd_toggle_status'); ?>
+                                <input type="hidden" name="toggle_status" value="1">
+                                <input type="hidden" name="block_id" value="<?php echo $block->id; ?>">
+                                <button type="submit" class="cbd-status-toggle" title="<?php _e('Status ändern', 'container-block-designer'); ?>">
+                                    <span class="cbd-status-badge cbd-status-<?php echo esc_attr($block->status); ?>">
+                                        <?php echo $block->status === 'active' ? __('Aktiv', 'container-block-designer') : __('Inaktiv', 'container-block-designer'); ?>
+                                    </span>
+                                </button>
+                            </form>
                         </div>
                     </div>
-                <?php endforeach; ?>
-            </div>
-        <?php endif; ?>
-    </div>
+                    
+                    <?php if (!empty($block->slug)) : ?>
+                        <p class="cbd-block-slug">
+                            <code><?php echo esc_html($block->slug); ?></code>
+                        </p>
+                    <?php endif; ?>
+                    
+                    <?php if ($block->description) : ?>
+                        <p class="cbd-block-description"><?php echo esc_html($block->description); ?></p>
+                    <?php endif; ?>
+                    
+                    <!-- Features-Bereich -->
+                    <div class="cbd-block-features">
+                        <h4><?php _e('Features', 'container-block-designer'); ?></h4>
+                        <div class="cbd-features-grid">
+                            <?php foreach ($available_features as $key => $feature_info) : 
+                                $is_enabled = isset($features[$key]['enabled']) && $features[$key]['enabled'];
+                            ?>
+                                <div class="cbd-feature-item <?php echo $is_enabled ? 'cbd-feature-active' : 'cbd-feature-inactive'; ?>">
+                                    <form method="post" style="display: inline;">
+                                        <?php wp_nonce_field('cbd_toggle_feature'); ?>
+                                        <input type="hidden" name="toggle_feature" value="1">
+                                        <input type="hidden" name="block_id" value="<?php echo $block->id; ?>">
+                                        <input type="hidden" name="feature_key" value="<?php echo esc_attr($key); ?>">
+                                        
+                                        <button type="submit" class="cbd-feature-toggle" title="<?php echo esc_attr($feature_info['description']); ?>">
+                                            <span class="dashicons <?php echo esc_attr($feature_info['dashicon']); ?>"></span>
+                                            <span class="cbd-feature-label"><?php echo esc_html($feature_info['label']); ?></span>
+                                        </button>
+                                    </form>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    
+                    <!-- Aktionen -->
+                    <div class="cbd-block-actions-footer">
+                        <a href="<?php echo admin_url('admin.php?page=cbd-edit-block&block_id=' . $block->id); ?>" class="button button-secondary">
+                            <span class="dashicons dashicons-edit"></span>
+                            <?php _e('Bearbeiten', 'container-block-designer'); ?>
+                        </a>
+                        
+                        <form method="post" style="display: inline;" onsubmit="return confirm('<?php _e('Sind Sie sicher?', 'container-block-designer'); ?>');">
+                            <?php wp_nonce_field('cbd_delete_block'); ?>
+                            <input type="hidden" name="delete_block" value="1">
+                            <input type="hidden" name="block_id" value="<?php echo $block->id; ?>">
+                            <button type="submit" class="button button-link-delete">
+                                <span class="dashicons dashicons-trash"></span>
+                                <?php _e('Löschen', 'container-block-designer'); ?>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
 </div>
 
 <style>
-/* Zusätzliche Styles für die Feature-Verwaltung */
+.cbd-admin-wrap {
+    margin: 20px 20px 0 2px;
+}
+
+.cbd-empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    margin-top: 20px;
+}
+
+.cbd-empty-state-icon {
+    font-size: 60px;
+    color: #dcdcde;
+    margin-bottom: 20px;
+}
+
+.cbd-empty-state h2 {
+    color: #23282d;
+    font-size: 24px;
+    margin-bottom: 10px;
+}
+
 .cbd-blocks-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
@@ -212,13 +183,13 @@ $available_features = array(
 .cbd-block-card {
     background: #fff;
     border: 1px solid #ccd0d4;
-    border-radius: 4px;
     padding: 20px;
-    transition: all 0.2s;
+    position: relative;
+    transition: box-shadow 0.3s;
 }
 
 .cbd-block-card:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .cbd-block-card.cbd-inactive {
@@ -231,15 +202,43 @@ $available_features = array(
     justify-content: space-between;
     align-items: center;
     margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
 }
 
 .cbd-block-header h3 {
     margin: 0;
     font-size: 18px;
+    color: #23282d;
+}
+
+.cbd-block-slug {
+    margin: 5px 0;
+    font-size: 12px;
+}
+
+.cbd-block-slug code {
+    background: #f0f0f1;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.cbd-block-description {
+    color: #666;
+    margin: 10px 0;
+    font-size: 14px;
+}
+
+.cbd-status-toggle {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
 }
 
 .cbd-status-badge {
-    padding: 3px 8px;
+    display: inline-block;
+    padding: 4px 10px;
     border-radius: 3px;
     font-size: 12px;
     font-weight: 600;
@@ -252,14 +251,8 @@ $available_features = array(
 }
 
 .cbd-status-inactive {
-    background: #f4f4f4;
-    color: #757575;
-}
-
-.cbd-block-description {
-    color: #666;
-    margin: 10px 0;
-    font-size: 14px;
+    background: #fef1f1;
+    color: #d63638;
 }
 
 .cbd-block-features {
@@ -272,136 +265,72 @@ $available_features = array(
 .cbd-block-features h4 {
     margin: 0 0 10px 0;
     font-size: 14px;
-    font-weight: 600;
+    color: #50575e;
 }
 
 .cbd-features-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 8px;
-    margin-bottom: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
 }
 
 .cbd-feature-item {
-    position: relative;
+    text-align: center;
 }
 
 .cbd-feature-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: 6px 10px;
     background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 3px;
+    border: 2px solid #dcdcde;
+    padding: 10px;
+    border-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s;
-    font-size: 12px;
-}
-
-.cbd-feature-toggle:hover {
-    background: #f0f0f1;
-    border-color: #0073aa;
+    transition: all 0.3s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
 }
 
 .cbd-feature-active .cbd-feature-toggle {
-    background: #e8f5e9;
-    border-color: #4caf50;
+    background: #007cba;
+    border-color: #007cba;
+    color: #fff;
+}
+
+.cbd-feature-toggle:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .cbd-feature-toggle .dashicons {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-    margin-right: 4px;
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+    margin-bottom: 5px;
 }
 
 .cbd-feature-label {
-    flex: 1;
-    text-align: left;
+    font-size: 11px;
+    display: block;
 }
 
-.cbd-feature-status .dashicons {
-    font-size: 14px;
-    width: 14px;
-    height: 14px;
-}
-
-.cbd-feature-status .dashicons-yes {
-    color: #4caf50;
-}
-
-.cbd-feature-status .dashicons-no-alt {
-    color: #999;
-}
-
-.cbd-active-features-summary {
-    margin-top: 10px;
-    padding-top: 10px;
-    border-top: 1px solid #e0e0e0;
-    font-size: 13px;
-    color: #555;
-}
-
-.cbd-block-preview {
-    margin: 15px 0;
-}
-
-.cbd-preview-box {
-    min-height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.cbd-preview-box small {
-    opacity: 0.5;
-    font-style: italic;
-}
-
-.cbd-block-actions {
+.cbd-block-actions-footer {
+    margin-top: 20px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
     display: flex;
     gap: 10px;
-    padding-top: 15px;
-    border-top: 1px solid #e0e0e0;
 }
 
-.cbd-block-actions .button {
+.cbd-block-actions-footer .button {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 5px;
 }
 
-.cbd-block-actions .button .dashicons {
+.cbd-block-actions-footer .dashicons {
     font-size: 16px;
     width: 16px;
     height: 16px;
-}
-
-.cbd-empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    background: #fff;
-    border: 1px solid #ccd0d4;
-    border-radius: 4px;
-    margin-top: 20px;
-}
-
-.cbd-empty-state .dashicons {
-    font-size: 48px;
-    width: 48px;
-    height: 48px;
-    color: #ddd;
-}
-
-.cbd-empty-state h2 {
-    margin: 20px 0 10px;
-    color: #666;
-}
-
-.cbd-empty-state p {
-    color: #999;
-    margin-bottom: 20px;
 }
 </style>
