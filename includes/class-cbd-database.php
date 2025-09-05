@@ -3,7 +3,7 @@
  * Container Block Designer - Database Class
  * 
  * @package ContainerBlockDesigner
- * @since 2.5.1
+ * @since 2.5.2
  */
 
 // Sicherheit: Direkten Zugriff verhindern
@@ -34,8 +34,8 @@ class CBD_Database {
             styles longtext,
             features longtext,
             status varchar(20) DEFAULT 'active',
-            created datetime DEFAULT CURRENT_TIMESTAMP,
-            updated datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             UNIQUE KEY name (name),
             KEY status (status)
@@ -43,6 +43,36 @@ class CBD_Database {
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
+        
+        // Nach der Tabellenerstellung, prüfe und korrigiere Spaltennamen
+        self::fix_column_names();
+    }
+    
+    /**
+     * Fix column names if needed
+     */
+    public static function fix_column_names() {
+        global $wpdb;
+        
+        $table_name = CBD_TABLE_BLOCKS;
+        
+        // Hole aktuelle Spalten
+        $columns = $wpdb->get_col("SHOW COLUMNS FROM $table_name");
+        
+        // Korrigiere 'updated' zu 'updated_at'
+        if (in_array('updated', $columns) && !in_array('updated_at', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name CHANGE COLUMN `updated` `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+        }
+        
+        // Korrigiere 'created' zu 'created_at'
+        if (in_array('created', $columns) && !in_array('created_at', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name CHANGE COLUMN `created` `created_at` datetime DEFAULT CURRENT_TIMESTAMP");
+        }
+        
+        // Korrigiere 'modified' zu 'updated_at'
+        if (in_array('modified', $columns) && !in_array('updated_at', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name CHANGE COLUMN `modified` `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+        }
     }
     
     /**
@@ -95,16 +125,18 @@ class CBD_Database {
         
         $defaults = array(
             'status' => '',
-            'orderby' => 'created',
-            'order' => 'DESC',
-            'limit' => 0
+            'orderby' => 'name',
+            'order' => 'ASC',
+            'limit' => -1,
+            'offset' => 0
         );
         
         $args = wp_parse_args($args, $defaults);
         
         $sql = "SELECT * FROM " . CBD_TABLE_BLOCKS;
-        $where = array();
         
+        // WHERE clause
+        $where = array();
         if (!empty($args['status'])) {
             $where[] = $wpdb->prepare("status = %s", $args['status']);
         }
@@ -113,15 +145,24 @@ class CBD_Database {
             $sql .= " WHERE " . implode(' AND ', $where);
         }
         
-        $sql .= " ORDER BY " . esc_sql($args['orderby']) . " " . esc_sql($args['order']);
+        // ORDER BY
+        $allowed_orderby = array('id', 'name', 'title', 'status', 'created_at', 'updated_at');
+        if (in_array($args['orderby'], $allowed_orderby)) {
+            $sql .= " ORDER BY " . $args['orderby'];
+            $sql .= ($args['order'] === 'DESC') ? ' DESC' : ' ASC';
+        }
         
+        // LIMIT
         if ($args['limit'] > 0) {
-            $sql .= " LIMIT " . intval($args['limit']);
+            $sql .= $wpdb->prepare(" LIMIT %d", $args['limit']);
+            if ($args['offset'] > 0) {
+                $sql .= $wpdb->prepare(" OFFSET %d", $args['offset']);
+            }
         }
         
         $blocks = $wpdb->get_results($sql, ARRAY_A);
         
-        // Dekodiere JSON für alle Blöcke mit Null-Check
+        // Decode JSON fields
         foreach ($blocks as &$block) {
             $block['config'] = !empty($block['config']) ? json_decode($block['config'], true) : array();
             $block['styles'] = !empty($block['styles']) ? json_decode($block['styles'], true) : array();
@@ -137,16 +178,16 @@ class CBD_Database {
     public static function save_block($data, $block_id = 0) {
         global $wpdb;
         
-        // Bereite Daten vor
+        // Daten vorbereiten
         $save_data = array(
-            'name' => sanitize_text_field($data['name']),
-            'title' => sanitize_text_field($data['title']),
+            'name' => sanitize_text_field($data['name'] ?? ''),
+            'title' => sanitize_text_field($data['title'] ?? ''),
             'description' => sanitize_textarea_field($data['description'] ?? ''),
             'config' => wp_json_encode($data['config'] ?? array()),
             'styles' => wp_json_encode($data['styles'] ?? array()),
             'features' => wp_json_encode($data['features'] ?? array()),
             'status' => sanitize_text_field($data['status'] ?? 'active'),
-            'updated' => current_time('mysql')
+            'updated_at' => current_time('mysql')
         );
         
         if ($block_id) {
@@ -160,7 +201,7 @@ class CBD_Database {
             );
         } else {
             // Insert
-            $save_data['created'] = current_time('mysql');
+            $save_data['created_at'] = current_time('mysql');
             $result = $wpdb->insert(
                 CBD_TABLE_BLOCKS,
                 $save_data,
@@ -198,7 +239,7 @@ class CBD_Database {
             CBD_TABLE_BLOCKS,
             array(
                 'status' => $status,
-                'updated' => current_time('mysql')
+                'updated_at' => current_time('mysql')
             ),
             array('id' => $block_id),
             array('%s', '%s'),
@@ -216,7 +257,7 @@ class CBD_Database {
             CBD_TABLE_BLOCKS,
             array(
                 'features' => wp_json_encode($features),
-                'updated' => current_time('mysql')
+                'updated_at' => current_time('mysql')
             ),
             array('id' => $block_id),
             array('%s', '%s'),
@@ -239,56 +280,86 @@ class CBD_Database {
             $sql .= $wpdb->prepare(" AND id != %d", $exclude_id);
         }
         
-        return (bool) $wpdb->get_var($sql);
+        return $wpdb->get_var($sql) > 0;
     }
     
     /**
-     * Get default block config
+     * Duplicate block
      */
-    public static function get_default_config() {
-        return array(
-            'allowInnerBlocks' => true,
-            'templateLock' => false
+    public static function duplicate_block($block_id) {
+        global $wpdb;
+        
+        $original = self::get_block($block_id);
+        
+        if (!$original) {
+            return false;
+        }
+        
+        // Generate unique name
+        $counter = 1;
+        $new_name = $original['name'] . '_copy';
+        while (self::block_name_exists($new_name)) {
+            $counter++;
+            $new_name = $original['name'] . '_copy_' . $counter;
+        }
+        
+        // Prepare duplicate
+        $duplicate_data = array(
+            'name' => $new_name,
+            'title' => $original['title'] . ' (Kopie)',
+            'description' => $original['description'],
+            'config' => $original['config'],
+            'styles' => $original['styles'],
+            'features' => $original['features'],
+            'status' => 'inactive' // Set duplicate to inactive by default
         );
+        
+        return self::save_block($duplicate_data);
     }
     
     /**
-     * Get default block styles
+     * Get block count
      */
-    public static function get_default_styles() {
-        return array(
-            'padding' => array(
-                'top' => 20,
-                'right' => 20,
-                'bottom' => 20,
-                'left' => 20
-            ),
-            'background' => array(
-                'color' => '#ffffff'
-            ),
-            'border' => array(
-                'width' => 1,
-                'color' => '#e0e0e0',
-                'style' => 'solid',
-                'radius' => 4
-            ),
-            'text' => array(
-                'color' => '#333333',
-                'alignment' => 'left'
-            )
-        );
+    public static function get_block_count($status = '') {
+        global $wpdb;
+        
+        $sql = "SELECT COUNT(*) FROM " . CBD_TABLE_BLOCKS;
+        
+        if (!empty($status)) {
+            $sql .= $wpdb->prepare(" WHERE status = %s", $status);
+        }
+        
+        return $wpdb->get_var($sql);
     }
     
     /**
-     * Get default block features
+     * Search blocks
      */
-    public static function get_default_features() {
-        return array(
-            'icon' => array('enabled' => false, 'value' => 'dashicons-admin-generic'),
-            'collapse' => array('enabled' => false, 'defaultState' => 'expanded'),
-            'numbering' => array('enabled' => false, 'format' => 'numeric'),
-            'copyText' => array('enabled' => false, 'buttonText' => 'Text kopieren'),
-            'screenshot' => array('enabled' => false, 'buttonText' => 'Screenshot')
+    public static function search_blocks($search_term) {
+        global $wpdb;
+        
+        $search_term = '%' . $wpdb->esc_like($search_term) . '%';
+        
+        $sql = $wpdb->prepare(
+            "SELECT * FROM " . CBD_TABLE_BLOCKS . " 
+            WHERE name LIKE %s 
+            OR title LIKE %s 
+            OR description LIKE %s 
+            ORDER BY name ASC",
+            $search_term,
+            $search_term,
+            $search_term
         );
+        
+        $blocks = $wpdb->get_results($sql, ARRAY_A);
+        
+        // Decode JSON fields
+        foreach ($blocks as &$block) {
+            $block['config'] = !empty($block['config']) ? json_decode($block['config'], true) : array();
+            $block['styles'] = !empty($block['styles']) ? json_decode($block['styles'], true) : array();
+            $block['features'] = !empty($block['features']) ? json_decode($block['features'], true) : array();
+        }
+        
+        return $blocks;
     }
 }
