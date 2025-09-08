@@ -49,10 +49,7 @@ class CBD_Block_Registration {
         $this->debug_mode = defined('WP_DEBUG') && WP_DEBUG;
         
         // Style Loader initialisieren
-        if (file_exists(CBD_PLUGIN_DIR . 'includes/class-cbd-style-loader.php')) {
-            require_once CBD_PLUGIN_DIR . 'includes/class-cbd-style-loader.php';
-            $this->style_loader = CBD_Style_Loader::get_instance();
-        }
+        $this->style_loader = CBD_Style_Loader::get_instance();
     }
     
     /**

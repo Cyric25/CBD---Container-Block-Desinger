@@ -1,7 +1,8 @@
 <?php
 /**
- * Container Block Designer - Frontend Renderer
- * Version: 2.5.2
+ * Container Block Designer - Frontend Renderer (Legacy Wrapper)
+ * Now delegates to Unified Frontend Renderer
+ * Version: 2.6.0
  * 
  * Datei: includes/class-cbd-frontend-renderer.php
  */
@@ -11,20 +12,19 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Load unified renderer
+require_once CBD_PLUGIN_DIR . 'includes/class-unified-frontend-renderer.php';
+
 /**
- * Frontend Renderer Klasse
+ * Frontend Renderer Klasse - Legacy wrapper for backward compatibility
  */
 class CBD_Frontend_Renderer {
     
     /**
-     * Initialisierung
+     * Initialisierung - Now delegates to unified renderer
      */
     public static function init() {
-        // Render Callback registrieren
-        add_action('init', array(__CLASS__, 'register_render_callback'), 20);
-        
-        // Frontend Assets laden
-        add_action('wp_enqueue_scripts', array(__CLASS__, 'enqueue_frontend_assets'));
+        return CBD_Unified_Frontend_Renderer::init();
     }
     
     /**

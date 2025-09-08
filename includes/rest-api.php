@@ -1,9 +1,8 @@
 <?php
 /**
- * Container Block Designer - REST API
- * Version: 2.3.0
- * 
- * Diese Datei stellt die REST API Endpunkte für den Block Editor bereit
+ * Container Block Designer - REST API (Legacy Wrapper)
+ * Now uses API Manager for structured endpoint management
+ * Version: 2.6.0
  * 
  * @package ContainerBlockDesigner
  */
@@ -13,10 +12,19 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Load API Manager
+require_once CBD_PLUGIN_DIR . 'includes/API/class-api-manager.php';
+
+// Initialize API Manager
+new \ContainerBlockDesigner\API\APIManager();
+
 /**
- * Register REST API routes
+ * Legacy function for backwards compatibility
  */
-add_action('rest_api_init', 'cbd_register_rest_routes');
+function cbd_register_rest_routes() {
+    // This function is now handled by API Manager
+    // Kept for backwards compatibility
+}
 
 function cbd_register_rest_routes() {
     // Get all blocks

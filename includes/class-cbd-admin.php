@@ -32,22 +32,21 @@ class CBD_Admin {
     }
     
     /**
-     * Konstruktor
+     * Admin Router
+     */
+    private $router = null;
+    
+    /**
+     * Konstruktor - Now uses router-based architecture
      */
     private function __construct() {
-        // Datenbank-Update einbinden
-        if (file_exists(CBD_PLUGIN_DIR . 'includes/update-database.php')) {
-            require_once CBD_PLUGIN_DIR . 'includes/update-database.php';
-        }
+        // Load Admin Router
+        require_once CBD_PLUGIN_DIR . 'includes/Admin/class-admin-router.php';
+        $this->router = new \ContainerBlockDesigner\Admin\AdminRouter();
         
-        // Admin-Menü hinzufügen
-        add_action('admin_menu', array($this, 'add_admin_menu'));
-        
-        // Admin-Styles und Scripts
+        // Legacy admin hooks
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
-        
-        // AJAX-Handler für Admin-Aktionen
-        add_action('wp_ajax_cbd_save_block', array($this, 'ajax_save_block'));
+        add_action('wp_ajax_cbd_admin_action', array($this->router, 'handle_ajax_request'));
         add_action('wp_ajax_cbd_delete_block', array($this, 'ajax_delete_block'));
         add_action('wp_ajax_cbd_toggle_status', array($this, 'ajax_toggle_status'));
         
@@ -107,34 +106,111 @@ class CBD_Admin {
             return;
         }
         
-        // Admin-CSS
+        // Get current page from $_GET
+        $page = sanitize_text_field($_GET['page'] ?? '');
+        
+        // Common admin styles
         wp_enqueue_style(
-            'cbd-admin',
-            CBD_PLUGIN_URL . 'assets/css/admin.css',
+            'cbd-admin-common',
+            CBD_PLUGIN_URL . 'assets/css/admin-common.css',
             array(),
             CBD_VERSION
         );
         
-        // Admin-JavaScript
-        wp_enqueue_script(
+        // Legacy admin CSS (for backward compatibility)
+        wp_enqueue_style(
             'cbd-admin',
-            CBD_PLUGIN_URL . 'assets/js/admin.js',
-            array('jquery', 'wp-color-picker'),
+            CBD_PLUGIN_URL . 'assets/css/admin.css',
+            array('cbd-admin-common'),
+            CBD_VERSION
+        );
+        
+        // Page-specific assets
+        switch ($page) {
+            case 'cbd-new-block':
+            case 'cbd-edit-block':
+                wp_enqueue_style(
+                    'cbd-block-editor',
+                    CBD_PLUGIN_URL . 'assets/css/block-editor.css',
+                    array('cbd-admin-common'),
+                    CBD_VERSION
+                );
+                
+                wp_enqueue_script(
+                    'cbd-block-editor',
+                    CBD_PLUGIN_URL . 'assets/js/block-editor.js',
+                    array('jquery', 'wp-color-picker'),
+                    CBD_VERSION,
+                    true
+                );
+                
+                wp_localize_script('cbd-block-editor', 'cbdBlockEditor', array(
+                    'ajaxUrl' => admin_url('admin-ajax.php'),
+                    'nonce' => wp_create_nonce('cbd_block_editor'),
+                    'strings' => array(
+                        'previewUpdated' => __('Vorschau aktualisiert', 'container-block-designer'),
+                        'previewError' => __('Fehler beim Aktualisieren der Vorschau', 'container-block-designer'),
+                        'saving' => __('Speichern...', 'container-block-designer'),
+                        'saved' => __('Gespeichert', 'container-block-designer'),
+                        'error' => __('Fehler', 'container-block-designer')
+                    )
+                ));
+                
+                // Color picker
+                wp_enqueue_style('wp-color-picker');
+                break;
+                
+            case 'cbd-blocks':
+                wp_enqueue_script(
+                    'cbd-blocks-list',
+                    CBD_PLUGIN_URL . 'assets/js/admin-blocks-list.js',
+                    array('jquery'),
+                    CBD_VERSION,
+                    true
+                );
+                break;
+                
+            case 'cbd-import-export':
+                wp_enqueue_script(
+                    'cbd-import-export',
+                    CBD_PLUGIN_URL . 'assets/js/admin-import-export.js',
+                    array('jquery'),
+                    CBD_VERSION,
+                    true
+                );
+                break;
+        }
+        
+        // Common admin JavaScript
+        wp_enqueue_script(
+            'cbd-admin-common',
+            CBD_PLUGIN_URL . 'assets/js/admin-common.js',
+            array('jquery'),
             CBD_VERSION,
             true
         );
         
-        // Color Picker
-        wp_enqueue_style('wp-color-picker');
+        // Legacy admin JavaScript (for backward compatibility)
+        wp_enqueue_script(
+            'cbd-admin',
+            CBD_PLUGIN_URL . 'assets/js/admin.js',
+            array('jquery', 'wp-color-picker', 'cbd-admin-common'),
+            CBD_VERSION,
+            true
+        );
         
         // Lokalisierung
-        wp_localize_script('cbd-admin', 'cbdAdmin', array(
+        wp_localize_script('cbd-admin-common', 'cbdAdmin', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('cbd_admin_nonce'),
-            'messages' => array(
+            'nonce' => wp_create_nonce('cbd_admin'),
+            'strings' => array(
                 'confirmDelete' => __('Sind Sie sicher, dass Sie diesen Block löschen möchten?', 'container-block-designer'),
-                'saved' => __('Gespeichert!', 'container-block-designer'),
-                'error' => __('Ein Fehler ist aufgetreten.', 'container-block-designer')
+                'confirmBulkDelete' => __('Sind Sie sicher, dass Sie die ausgewählten Blöcke löschen möchten?', 'container-block-designer'),
+                'noItemsSelected' => __('Bitte wählen Sie mindestens einen Block aus.', 'container-block-designer'),
+                'processing' => __('Verarbeiten...', 'container-block-designer'),
+                'done' => __('Fertig', 'container-block-designer'),
+                'error' => __('Ein Fehler ist aufgetreten.', 'container-block-designer'),
+                'saved' => __('Gespeichert!', 'container-block-designer')
             )
         ));
     }

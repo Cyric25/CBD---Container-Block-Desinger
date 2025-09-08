@@ -22,7 +22,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '2.5.2');
+define('CBD_VERSION', '2.6.0');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -32,8 +32,19 @@ define('CBD_PLUGIN_BASENAME', plugin_basename(__FILE__));
 global $wpdb;
 define('CBD_TABLE_BLOCKS', $wpdb->prefix . 'cbd_blocks');
 
+// Autoloading - Try Composer first, fallback to custom autoloader
+if (file_exists(CBD_PLUGIN_DIR . 'vendor/autoload.php')) {
+    require_once CBD_PLUGIN_DIR . 'vendor/autoload.php';
+} else {
+    // Fallback autoloader
+    require_once CBD_PLUGIN_DIR . 'includes/class-autoloader.php';
+    $autoloader = new CBD_Autoloader();
+    $autoloader->init_default_mappings();
+    $autoloader->register();
+}
+
 /**
- * Hauptklasse des Plugins
+ * Hauptklasse des Plugins - Refactored with Service Container
  */
 class ContainerBlockDesigner {
     
@@ -43,14 +54,9 @@ class ContainerBlockDesigner {
     private static $instance = null;
     
     /**
-     * Style Loader Instanz
+     * Service Container
      */
-    private $style_loader = null;
-    
-    /**
-     * Block Registration Instanz
-     */
-    private $block_registration = null;
+    private $container = null;
     
     /**
      * Plugin-Initialisierung
@@ -63,11 +69,20 @@ class ContainerBlockDesigner {
     }
     
     /**
-     * Konstruktor
+     * Konstruktor - Now uses Service Container
      */
     private function __construct() {
+        $this->init_container();
         $this->load_dependencies();
         $this->init_hooks();
+    }
+    
+    /**
+     * Initialize service container
+     */
+    private function init_container() {
+        require_once CBD_PLUGIN_DIR . 'includes/class-service-container.php';
+        $this->container = CBD_Service_Container::get_instance();
     }
     
     /**
@@ -85,7 +100,7 @@ class ContainerBlockDesigner {
             require_once CBD_PLUGIN_DIR . 'includes/class-cbd-admin.php';
         }
         
-        // Frontend-Renderer
+        // Frontend-Renderer (unified)
         if (!is_admin() || wp_doing_ajax()) {
             require_once CBD_PLUGIN_DIR . 'includes/class-cbd-frontend-renderer.php';
         }
@@ -148,43 +163,83 @@ class ContainerBlockDesigner {
     }
     
     /**
-     * Plugin initialisieren
+     * Plugin initialisieren - Now uses Service Container
      */
     public function init() {
-        // Style Loader initialisieren (muss zuerst kommen)
-        $this->style_loader = CBD_Style_Loader::get_instance();
+        try {
+            // Initialize services through container
+            $style_loader = $this->container->get('style_loader');
+            
+            // Block registration
+            $block_registration = $this->container->get('block_registration');
+            $block_registration->register_blocks();
+            
+            // AJAX handler
+            $this->container->get('ajax_handler');
+            
+            // Admin area
+            if (is_admin()) {
+                $this->container->get('admin');
+            }
+            
+            // Frontend renderer
+            if (!is_admin() || wp_doing_ajax()) {
+                $frontend_renderer = $this->container->get('consolidated_frontend');
+            }
+            
+            // API Manager
+            $this->container->get('api_manager');
+            
+            // Check for plugin activation
+            if (get_option('cbd_plugin_activated')) {
+                delete_option('cbd_plugin_activated');
+                if (is_admin() && !wp_doing_ajax()) {
+                    wp_safe_redirect(admin_url('admin.php?page=cbd-blocks&cbd_activated=1'));
+                    exit;
+                }
+            }
+            
+            // Version update check
+            $this->check_version_update();
+            
+        } catch (Exception $e) {
+            // Log error and fall back to legacy initialization
+            error_log('CBD Service Container Error: ' . $e->getMessage());
+            error_log('CBD Stack Trace: ' . $e->getTraceAsString());
+            $this->init_legacy_fallback();
+        } catch (Error $e) {
+            // Handle fatal errors (like private constructor calls)
+            error_log('CBD Service Container Fatal Error: ' . $e->getMessage());
+            error_log('CBD Stack Trace: ' . $e->getTraceAsString());
+            $this->init_legacy_fallback();
+        }
+    }
+    
+    /**
+     * Legacy fallback initialization
+     */
+    private function init_legacy_fallback() {
+        // Fallback to old initialization method
+        if (class_exists('CBD_Style_Loader')) {
+            CBD_Style_Loader::get_instance();
+        }
         
-        // Block-Registrierung
-        $this->block_registration = CBD_Block_Registration::get_instance();
-        $this->block_registration->register_blocks();
+        if (class_exists('CBD_Block_Registration')) {
+            $registration = CBD_Block_Registration::get_instance();
+            $registration->register_blocks();
+        }
         
-        // AJAX-Handler initialisieren
-        new CBD_Ajax_Handler();
+        if (class_exists('CBD_Ajax_Handler')) {
+            new CBD_Ajax_Handler();
+        }
         
-        // Admin-Bereich initialisieren
-        if (is_admin()) {
+        if (is_admin() && class_exists('CBD_Admin')) {
             CBD_Admin::get_instance();
         }
         
-        // Frontend-Renderer initialisieren
-        if (!is_admin() || wp_doing_ajax()) {
-            if (class_exists('CBD_Frontend_Renderer')) {
-                CBD_Frontend_Renderer::init();
-            }
+        if ((!is_admin() || wp_doing_ajax()) && class_exists('CBD_Consolidated_Frontend')) {
+            CBD_Consolidated_Frontend::get_instance();
         }
-        
-        // Prüfen ob Plugin gerade aktiviert wurde
-        if (get_option('cbd_plugin_activated')) {
-            delete_option('cbd_plugin_activated');
-            // Zur Plugin-Seite weiterleiten
-            if (is_admin() && !wp_doing_ajax()) {
-                wp_safe_redirect(admin_url('admin.php?page=container-block-designer&cbd_activated=1'));
-                exit;
-            }
-        }
-        
-        // Version-Update prüfen
-        $this->check_version_update();
     }
     
     /**
@@ -455,10 +510,31 @@ class ContainerBlockDesigner {
      * Verfügbare Blocks für globale Verwendung
      */
     public function get_available_blocks() {
-        if ($this->block_registration) {
-            return $this->block_registration->get_available_blocks();
+        try {
+            $block_registration = $this->container->get('block_registration');
+            return $block_registration->get_available_blocks();
+        } catch (Exception $e) {
+            return array();
         }
-        return array();
+    }
+    
+    /**
+     * Get service container
+     */
+    public function get_container() {
+        return $this->container;
+    }
+    
+    /**
+     * Get service from container
+     */
+    public function get_service($service_name) {
+        try {
+            return $this->container->get($service_name);
+        } catch (Exception $e) {
+            error_log('CBD Service Error: ' . $e->getMessage());
+            return null;
+        }
     }
 }
 
@@ -467,10 +543,24 @@ add_action('plugins_loaded', function() {
     ContainerBlockDesigner::get_instance();
 });
 
-// Globale Hilfsfunktion
+// Globale Hilfsfunktionen
 if (!function_exists('cbd_get_blocks')) {
     function cbd_get_blocks() {
         $cbd = ContainerBlockDesigner::get_instance();
         return $cbd->get_available_blocks();
+    }
+}
+
+if (!function_exists('cbd_get_service')) {
+    function cbd_get_service($service_name) {
+        $cbd = ContainerBlockDesigner::get_instance();
+        return $cbd->get_service($service_name);
+    }
+}
+
+if (!function_exists('cbd_get_container')) {
+    function cbd_get_container() {
+        $cbd = ContainerBlockDesigner::get_instance();
+        return $cbd->get_container();
     }
 }

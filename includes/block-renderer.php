@@ -1,8 +1,8 @@
 <?php
 /**
- * Container Block Designer - Block Renderer
- * Rendert Container-Blöcke im Frontend mit Positionierung
- * Version: 2.4.0
+ * Container Block Designer - Block Renderer (Legacy Wrapper)
+ * Now delegates to Consolidated Frontend Manager
+ * Version: 2.6.0
  * 
  * Datei speichern als: includes/block-renderer.php
  */
@@ -12,13 +12,16 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Load consolidated frontend
+require_once CBD_PLUGIN_DIR . 'includes/class-consolidated-frontend.php';
+
 /**
- * Block Renderer Class
+ * Block Renderer Class - Legacy wrapper
  */
 class CBD_Block_Renderer {
     
     /**
-     * Container counter for numbering
+     * Container counter for numbering - Legacy compatibility
      */
     private static $container_counter = array();
     

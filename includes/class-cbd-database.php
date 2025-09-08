@@ -1,9 +1,10 @@
 <?php
 /**
  * Container Block Designer - Database Class
+ * Now uses unified Schema Manager for all database operations
  * 
  * @package ContainerBlockDesigner
- * @since 2.5.2
+ * @since 2.6.0
  */
 
 // Sicherheit: Direkten Zugriff verhindern
@@ -11,68 +12,26 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Load Schema Manager
+require_once CBD_PLUGIN_DIR . 'includes/Database/class-schema-manager.php';
+
 /**
- * Database handler class
+ * Database handler class - Refactored to use Schema Manager
  */
 class CBD_Database {
     
     /**
-     * Create database tables
+     * Create database tables - Now delegated to Schema Manager
      */
     public static function create_tables() {
-        global $wpdb;
-        
-        $charset_collate = $wpdb->get_charset_collate();
-        $table_name = CBD_TABLE_BLOCKS;
-        
-        $sql = "CREATE TABLE IF NOT EXISTS $table_name (
-            id int(11) NOT NULL AUTO_INCREMENT,
-            name varchar(100) NOT NULL,
-            title varchar(200) NOT NULL,
-            description text,
-            config longtext,
-            styles longtext,
-            features longtext,
-            status varchar(20) DEFAULT 'active',
-            created_at datetime DEFAULT CURRENT_TIMESTAMP,
-            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            PRIMARY KEY (id),
-            UNIQUE KEY name (name),
-            KEY status (status)
-        ) $charset_collate;";
-        
-        require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        dbDelta($sql);
-        
-        // Nach der Tabellenerstellung, prüfe und korrigiere Spaltennamen
-        self::fix_column_names();
+        return CBD_Schema_Manager::create_tables();
     }
     
     /**
-     * Fix column names if needed
+     * Update schema - Now delegated to Schema Manager
      */
-    public static function fix_column_names() {
-        global $wpdb;
-        
-        $table_name = CBD_TABLE_BLOCKS;
-        
-        // Hole aktuelle Spalten
-        $columns = $wpdb->get_col("SHOW COLUMNS FROM $table_name");
-        
-        // Korrigiere 'updated' zu 'updated_at'
-        if (in_array('updated', $columns) && !in_array('updated_at', $columns)) {
-            $wpdb->query("ALTER TABLE $table_name CHANGE COLUMN `updated` `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
-        }
-        
-        // Korrigiere 'created' zu 'created_at'
-        if (in_array('created', $columns) && !in_array('created_at', $columns)) {
-            $wpdb->query("ALTER TABLE $table_name CHANGE COLUMN `created` `created_at` datetime DEFAULT CURRENT_TIMESTAMP");
-        }
-        
-        // Korrigiere 'modified' zu 'updated_at'
-        if (in_array('modified', $columns) && !in_array('updated_at', $columns)) {
-            $wpdb->query("ALTER TABLE $table_name CHANGE COLUMN `modified` `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
-        }
+    public static function update_schema() {
+        return CBD_Schema_Manager::run_migrations();
     }
     
     /**

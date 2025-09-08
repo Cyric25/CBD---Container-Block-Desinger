@@ -1,7 +1,8 @@
 <?php
 /**
- * Container Block Designer - Frontend PHP Functions
- * Version: 2.4.0
+ * Container Block Designer - Frontend PHP Functions (Legacy Wrapper)
+ * Now delegates to Consolidated Frontend Manager
+ * Version: 2.6.0
  * 
  * Datei speichern als: includes/frontend.php
  */
@@ -11,19 +12,20 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Load consolidated frontend
+require_once CBD_PLUGIN_DIR . 'includes/class-consolidated-frontend.php';
+
 /**
- * Frontend functionality class
+ * Frontend functionality class - Legacy wrapper
  */
 class CBD_Frontend {
     
     /**
-     * Constructor
+     * Constructor - Now delegates to consolidated frontend
      */
     public function __construct() {
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
-        add_action('wp_head', array($this, 'add_custom_styles'));
-        add_filter('body_class', array($this, 'add_body_classes'));
-        add_action('wp_footer', array($this, 'add_frontend_scripts'));
+        // Initialize consolidated frontend instead
+        CBD_Consolidated_Frontend::get_instance();
     }
     
     /**
