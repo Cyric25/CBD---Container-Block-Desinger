@@ -67,15 +67,13 @@ class CBD_Service_Container {
         $this->services[$name] = array(
             'factory' => $factory,
             'singleton' => $singleton,
-            'config' => $config
+            'created' => false
         );
-        
-        // Store config separately for easy access
         $this->configs[$name] = $config;
     }
     
     /**
-     * Get a service instance
+     * Get service
      * 
      * @param string $name Service name
      * @return mixed Service instance
@@ -83,21 +81,23 @@ class CBD_Service_Container {
      */
     public function get($name) {
         if (!isset($this->services[$name])) {
-            throw new Exception(sprintf('Service "%s" not found', $name));
+            throw new Exception("Service '{$name}' not found in container");
         }
         
-        $service_config = $this->services[$name];
+        $service = $this->services[$name];
         
-        // Return cached instance for singletons
-        if ($service_config['singleton'] && isset($this->instances[$name])) {
+        // Return existing instance for singletons
+        if ($service['singleton'] && isset($this->instances[$name])) {
             return $this->instances[$name];
         }
         
+        // Create new instance
         $instance = $this->create_instance($name);
         
-        // Cache singleton instances
-        if ($service_config['singleton']) {
+        // Store singleton instances
+        if ($service['singleton']) {
             $this->instances[$name] = $instance;
+            $this->services[$name]['created'] = true;
         }
         
         return $instance;
@@ -108,82 +108,30 @@ class CBD_Service_Container {
      * 
      * @param string $name Service name
      * @return mixed Service instance
+     * @throws Exception If creation fails
      */
     private function create_instance($name) {
-        $service_config = $this->services[$name];
-        $factory = $service_config['factory'];
-        $config = $service_config['config'];
+        $service = $this->services[$name];
+        $factory = $service['factory'];
+        $config = isset($this->configs[$name]) ? $this->configs[$name] : array();
         
-        if (is_callable($factory)) {
-            // Factory function
-            return call_user_func($factory, $this, $config);
-        } elseif (is_string($factory)) {
-            // Class name
-            if (class_exists($factory)) {
-                // Use reflection to handle constructor dependencies
-                return $this->create_with_dependencies($factory, $config);
-            }
-        }
-        
-        throw new Exception(sprintf('Cannot create service "%s"', $name));
-    }
-    
-    /**
-     * Create instance with dependency resolution
-     * 
-     * @param string $class_name Class name
-     * @param array $config Configuration
-     * @return object Instance
-     */
-    private function create_with_dependencies($class_name, $config = array()) {
-        $reflection = new ReflectionClass($class_name);
-        
-        if (!$reflection->getConstructor()) {
-            return new $class_name();
-        }
-        
-        $parameters = $reflection->getConstructor()->getParameters();
-        $dependencies = array();
-        
-        foreach ($parameters as $parameter) {
-            $param_type = $parameter->getType();
-            
-            if ($param_type && !$param_type->isBuiltin()) {
-                $param_class = $param_type->getName();
-                
-                // Try to resolve from container first
-                $service_name = $this->get_service_name_for_class($param_class);
-                if ($service_name && $this->has($service_name)) {
-                    $dependencies[] = $this->get($service_name);
-                } elseif (class_exists($param_class)) {
-                    // Create dependency recursively
-                    $dependencies[] = $this->create_with_dependencies($param_class);
+        try {
+            if (is_callable($factory)) {
+                // Factory function
+                return call_user_func($factory, $this, $config);
+            } elseif (is_string($factory) && class_exists($factory)) {
+                // Class name - instantiate with config
+                if (empty($config)) {
+                    return new $factory();
                 } else {
-                    throw new Exception(sprintf('Cannot resolve dependency "%s" for "%s"', $param_class, $class_name));
+                    return new $factory($config);
                 }
-            } elseif ($parameter->isDefaultValueAvailable()) {
-                $dependencies[] = $parameter->getDefaultValue();
             } else {
-                throw new Exception(sprintf('Cannot resolve parameter "%s" for "%s"', $parameter->getName(), $class_name));
+                throw new Exception("Invalid factory for service '{$name}'");
             }
+        } catch (Exception $e) {
+            throw new Exception("Failed to create service '{$name}': " . $e->getMessage());
         }
-        
-        return $reflection->newInstanceArgs($dependencies);
-    }
-    
-    /**
-     * Get service name for class
-     * 
-     * @param string $class_name Class name
-     * @return string|null Service name
-     */
-    private function get_service_name_for_class($class_name) {
-        foreach ($this->services as $name => $config) {
-            if (is_string($config['factory']) && $config['factory'] === $class_name) {
-                return $name;
-            }
-        }
-        return null;
     }
     
     /**
@@ -197,21 +145,10 @@ class CBD_Service_Container {
     }
     
     /**
-     * Remove service
-     * 
-     * @param string $name Service name
-     */
-    public function remove($name) {
-        unset($this->services[$name]);
-        unset($this->instances[$name]);
-        unset($this->configs[$name]);
-    }
-    
-    /**
      * Get service configuration
      * 
      * @param string $name Service name
-     * @return array Configuration
+     * @return array Service configuration
      */
     public function get_config($name) {
         return isset($this->configs[$name]) ? $this->configs[$name] : array();
@@ -264,8 +201,13 @@ class CBD_Service_Container {
             return new \ContainerBlockDesigner\Admin\AdminRouter();
         });
         
-        // API manager - Create new instance  
+        // API manager - Create new instance
+        // WICHTIG: Datei muss zuerst geladen werden!
         $this->register('api_manager', function($container, $config) {
+            // Stelle sicher, dass die API Manager Datei geladen ist
+            if (!class_exists('\ContainerBlockDesigner\API\APIManager')) {
+                require_once CBD_PLUGIN_DIR . 'includes/API/class-api-manager.php';
+            }
             return new \ContainerBlockDesigner\API\APIManager();
         });
         
@@ -302,70 +244,8 @@ class CBD_Service_Container {
      */
     public function register_factory($name, $factory, $config = array(), $singleton = true) {
         if (!is_callable($factory)) {
-            throw new Exception(sprintf('Factory for service "%s" must be callable', $name));
+            throw new Exception("Factory must be callable for service '{$name}'");
         }
-        
         $this->register($name, $factory, $config, $singleton);
-    }
-    
-    /**
-     * Get all registered services
-     * 
-     * @return array Service names
-     */
-    public function get_services() {
-        return array_keys($this->services);
-    }
-    
-    /**
-     * Get all instantiated services
-     * 
-     * @return array Instance names
-     */
-    public function get_instances() {
-        return array_keys($this->instances);
-    }
-    
-    /**
-     * Clear all instances (useful for testing)
-     */
-    public function clear_instances() {
-        $this->instances = array();
-    }
-    
-    /**
-     * Clone prevention
-     */
-    private function __clone() {}
-    
-    /**
-     * Unserialization prevention
-     */
-    public function __wakeup() {
-        throw new Exception('Cannot unserialize service container');
-    }
-    
-    /**
-     * Get container debug information
-     * 
-     * @return array Debug info
-     */
-    public function get_debug_info() {
-        $debug_info = array(
-            'services_count' => count($this->services),
-            'instances_count' => count($this->instances),
-            'services' => array(),
-            'instances' => array_keys($this->instances)
-        );
-        
-        foreach ($this->services as $name => $config) {
-            $debug_info['services'][$name] = array(
-                'singleton' => $config['singleton'],
-                'factory_type' => is_callable($config['factory']) ? 'callable' : 'class',
-                'instantiated' => isset($this->instances[$name])
-            );
-        }
-        
-        return $debug_info;
     }
 }

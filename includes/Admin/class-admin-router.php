@@ -68,8 +68,9 @@ class AdminRouter {
             array($this, 'route_request')
         );
         
+        // Hidden page - use empty string instead of null to avoid PHP deprecation warnings
         add_submenu_page(
-            null, // Hidden from menu
+            '', // Empty string instead of null for hidden pages
             __('Block bearbeiten', 'container-block-designer'),
             __('Block bearbeiten', 'container-block-designer'),
             $capability,
@@ -100,7 +101,12 @@ class AdminRouter {
      * Route admin request to appropriate controller
      */
     public function route_request() {
-        $page = sanitize_text_field($_GET['page'] ?? '');
+        $page = isset($_GET['page']) ? sanitize_text_field($_GET['page']) : '';
+        
+        if (empty($page)) {
+            wp_die(__('Keine Seite angegeben.', 'container-block-designer'));
+            return;
+        }
         
         // Map pages to controllers
         $routes = array(
@@ -113,6 +119,7 @@ class AdminRouter {
         
         if (!isset($routes[$page])) {
             wp_die(__('Unbekannte Seite.', 'container-block-designer'));
+            return;
         }
         
         $controller_class = self::CONTROLLER_NAMESPACE . $routes[$page];
@@ -124,7 +131,16 @@ class AdminRouter {
         }
         
         if (!class_exists($controller_class)) {
+            // Try to load with fallback path
+            $fallback_file = CBD_PLUGIN_DIR . 'admin/' . str_replace('_', '-', strtolower($page)) . '.php';
+            if (file_exists($fallback_file)) {
+                // Use legacy template file
+                require_once $fallback_file;
+                return;
+            }
+            
             wp_die(sprintf(__('Controller %s nicht gefunden.', 'container-block-designer'), $controller_class));
+            return;
         }
         
         // Instantiate and render
@@ -132,6 +148,7 @@ class AdminRouter {
         
         if (!method_exists($controller, 'render')) {
             wp_die(sprintf(__('Controller %s hat keine render() Methode.', 'container-block-designer'), $controller_class));
+            return;
         }
         
         $controller->render();
@@ -145,20 +162,21 @@ class AdminRouter {
                strtolower(str_replace('Controller', '-controller', $controller_name)) . '.php';
     }
     
-    
     /**
      * Handle AJAX requests for admin
      */
     public function handle_ajax_request() {
-        $action = sanitize_text_field($_POST['cbd_action'] ?? '');
+        // Check nonce first
+        if (!isset($_POST['_wpnonce']) || !wp_verify_nonce($_POST['_wpnonce'], 'cbd_admin')) {
+            wp_send_json_error(__('Sicherheitsüberprüfung fehlgeschlagen.', 'container-block-designer'));
+            return;
+        }
+        
+        $action = isset($_POST['cbd_action']) ? sanitize_text_field($_POST['cbd_action']) : '';
         
         if (empty($action)) {
             wp_send_json_error(__('Keine Aktion angegeben.', 'container-block-designer'));
-        }
-        
-        // Verify nonce
-        if (!wp_verify_nonce($_POST['_wpnonce'], 'cbd_admin')) {
-            wp_send_json_error(__('Sicherheitsüberprüfung fehlgeschlagen.', 'container-block-designer'));
+            return;
         }
         
         // Route to appropriate handler
@@ -184,63 +202,69 @@ class AdminRouter {
      * Handle block preview AJAX request
      */
     private function handle_preview_block() {
-        $styles = $_POST['styles'] ?? '{}';
-        $features = $_POST['features'] ?? '{}';
-        $content = sanitize_text_field($_POST['content'] ?? 'Beispielinhalt');
+        $styles = isset($_POST['styles']) ? $_POST['styles'] : '{}';
+        $features = isset($_POST['features']) ? $_POST['features'] : '{}';
+        $content = isset($_POST['content']) ? sanitize_text_field($_POST['content']) : '';
         
         // Generate preview HTML
-        $preview_html = $this->generate_preview_html($styles, $features, $content);
+        $preview_html = '<div class="cbd-block-preview">';
+        $preview_html .= '<div class="cbd-block-content">' . $content . '</div>';
+        $preview_html .= '</div>';
         
         wp_send_json_success(array(
             'html' => $preview_html,
-            'message' => __('Vorschau aktualisiert', 'container-block-designer')
-        ));
-    }
-    
-    /**
-     * Generate preview HTML
-     */
-    private function generate_preview_html($styles_json, $features_json, $content) {
-        $styles = json_decode($styles_json, true) ?: array();
-        $features = json_decode($features_json, true) ?: array();
-        
-        // Use unified frontend renderer for consistent preview
-        require_once CBD_PLUGIN_DIR . 'includes/class-unified-frontend-renderer.php';
-        
-        $attributes = array(
-            'selectedBlock' => 'preview',
+            'styles' => $styles,
             'features' => $features
-        );
-        
-        // Mock block data for preview
-        $mock_block_data = array(
-            'name' => 'preview',
-            'styles' => $styles_json,
-            'features' => $features_json,
-            'config' => '{}'
-        );
-        
-        // Generate preview using renderer logic
-        // This would need to be adapted to work with the renderer
-        return '<div class="cbd-preview-container">' . $content . '</div>';
+        ));
     }
     
     /**
      * Handle block duplication
      */
     private function handle_duplicate_block() {
-        $block_id = intval($_POST['block_id'] ?? 0);
-        
-        if ($block_id <= 0) {
-            wp_send_json_error(__('Ungültige Block-ID.', 'container-block-designer'));
+        if (!isset($_POST['block_id'])) {
+            wp_send_json_error(__('Block ID fehlt.', 'container-block-designer'));
+            return;
         }
         
-        $new_block_id = \CBD_Database::duplicate_block($block_id);
+        $block_id = intval($_POST['block_id']);
         
-        if ($new_block_id) {
+        global $wpdb;
+        $block = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
+            $block_id
+        ));
+        
+        if (!$block) {
+            wp_send_json_error(__('Block nicht gefunden.', 'container-block-designer'));
+            return;
+        }
+        
+        // Create duplicate with new name
+        $new_name = $block->name . '-copy-' . time();
+        $new_title = $block->title . ' (Kopie)';
+        
+        $result = $wpdb->insert(
+            CBD_TABLE_BLOCKS,
+            array(
+                'name' => $new_name,
+                'title' => $new_title,
+                'description' => $block->description,
+                'content' => $block->content,
+                'styles' => $block->styles,
+                'features' => $block->features,
+                'config' => $block->config,
+                'status' => 'inactive', // Start as inactive
+                'created_at' => current_time('mysql'),
+                'updated_at' => current_time('mysql')
+            ),
+            array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
+        );
+        
+        if ($result) {
             wp_send_json_success(array(
                 'message' => __('Block wurde dupliziert.', 'container-block-designer'),
-                'redirect' => admin_url('admin.php?page=cbd-edit-block&id=' . $new_block_id)
+                'new_id' => $wpdb->insert_id
             ));
         } else {
             wp_send_json_error(__('Fehler beim Duplizieren des Blocks.', 'container-block-designer'));
@@ -251,25 +275,38 @@ class AdminRouter {
      * Handle block status toggle
      */
     private function handle_toggle_block_status() {
-        $block_id = intval($_POST['block_id'] ?? 0);
-        $new_status = sanitize_text_field($_POST['status'] ?? '');
-        
-        if ($block_id <= 0) {
-            wp_send_json_error(__('Ungültige Block-ID.', 'container-block-designer'));
+        if (!isset($_POST['block_id'])) {
+            wp_send_json_error(__('Block ID fehlt.', 'container-block-designer'));
+            return;
         }
         
-        if (!in_array($new_status, array('active', 'inactive'))) {
-            wp_send_json_error(__('Ungültiger Status.', 'container-block-designer'));
+        $block_id = intval($_POST['block_id']);
+        
+        global $wpdb;
+        $current_status = $wpdb->get_var($wpdb->prepare(
+            "SELECT status FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
+            $block_id
+        ));
+        
+        if ($current_status === null) {
+            wp_send_json_error(__('Block nicht gefunden.', 'container-block-designer'));
+            return;
         }
         
-        $result = \CBD_Database::update_block_status($block_id, $new_status);
+        $new_status = ($current_status === 'active') ? 'inactive' : 'active';
+        
+        $result = $wpdb->update(
+            CBD_TABLE_BLOCKS,
+            array('status' => $new_status, 'updated_at' => current_time('mysql')),
+            array('id' => $block_id),
+            array('%s', '%s'),
+            array('%d')
+        );
         
         if ($result !== false) {
             wp_send_json_success(array(
-                'message' => sprintf(
-                    __('Block wurde %s.', 'container-block-designer'),
-                    $new_status === 'active' ? __('aktiviert', 'container-block-designer') : __('deaktiviert', 'container-block-designer')
-                )
+                'message' => __('Block-Status wurde aktualisiert.', 'container-block-designer'),
+                'new_status' => $new_status
             ));
         } else {
             wp_send_json_error(__('Fehler beim Aktualisieren des Block-Status.', 'container-block-designer'));

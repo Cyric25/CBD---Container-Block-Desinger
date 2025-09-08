@@ -351,19 +351,20 @@ class BlocksApiController extends \WP_REST_Controller {
             $prepared_block['description'] = sanitize_textarea_field($request->get_param('description'));
         }
         
+        // WICHTIG: Korrigierte ternäre Operatoren mit Klammern
         if ($request->has_param('config')) {
             $config = $request->get_param('config');
-            $prepared_block['config'] = is_array($config) ? $config : json_decode($config, true) ?: array();
+            $prepared_block['config'] = is_array($config) ? $config : (json_decode($config, true) ?: array());
         }
         
         if ($request->has_param('styles')) {
             $styles = $request->get_param('styles');
-            $prepared_block['styles'] = is_array($styles) ? $styles : json_decode($styles, true) ?: array();
+            $prepared_block['styles'] = is_array($styles) ? $styles : (json_decode($styles, true) ?: array());
         }
         
         if ($request->has_param('features')) {
             $features = $request->get_param('features');
-            $prepared_block['features'] = is_array($features) ? $features : json_decode($features, true) ?: array();
+            $prepared_block['features'] = is_array($features) ? $features : (json_decode($features, true) ?: array());
         }
         
         if ($request->has_param('status')) {
@@ -512,21 +513,20 @@ class BlocksApiController extends \WP_REST_Controller {
                     'description' => __('Block Status', 'container-block-designer'),
                     'type' => 'string',
                     'enum' => array('active', 'inactive'),
-                    'context' => array('view', 'edit'),
-                    'default' => 'active'
+                    'context' => array('view', 'edit')
                 ),
                 'created_at' => array(
                     'description' => __('Erstellungsdatum', 'container-block-designer'),
                     'type' => 'string',
                     'format' => 'date-time',
-                    'context' => array('view'),
+                    'context' => array('view', 'edit'),
                     'readonly' => true
                 ),
                 'updated_at' => array(
-                    'description' => __('Änderungsdatum', 'container-block-designer'),
+                    'description' => __('Aktualisierungsdatum', 'container-block-designer'),
                     'type' => 'string',
                     'format' => 'date-time',
-                    'context' => array('view'),
+                    'context' => array('view', 'edit'),
                     'readonly' => true
                 )
             )
