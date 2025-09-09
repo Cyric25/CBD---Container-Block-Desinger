@@ -16,29 +16,52 @@ global $wpdb;
 // WICHTIG: Verwende created_at statt created!
 $blocks = $wpdb->get_results("SELECT * FROM " . CBD_TABLE_BLOCKS . " ORDER BY created_at DESC");
 
-// Verfügbare Features definieren
+// Echte Features aus der Datenbank verwenden
 $available_features = array(
-    'responsive' => array(
-        'label' => __('Responsive', 'container-block-designer'),
-        'description' => __('Block passt sich an verschiedene Bildschirmgrößen an', 'container-block-designer'),
-        'dashicon' => 'dashicons-smartphone'
-    ),
-    'customClass' => array(
-        'label' => __('CSS-Klassen', 'container-block-designer'),
-        'description' => __('Eigene CSS-Klassen hinzufügen', 'container-block-designer'),
-        'dashicon' => 'dashicons-code-standards'
-    ),
-    'anchor' => array(
-        'label' => __('Anker', 'container-block-designer'),
-        'description' => __('HTML-Anker für direkte Links', 'container-block-designer'),
-        'dashicon' => 'dashicons-admin-links'
-    ),
     'icon' => array(
         'label' => __('Icon', 'container-block-designer'),
         'description' => __('Icon am Anfang des Blocks anzeigen', 'container-block-designer'),
         'dashicon' => 'dashicons-star-filled'
+    ),
+    'collapse' => array(
+        'label' => __('Klappbar', 'container-block-designer'),
+        'description' => __('Block kann ein- und ausgeklappt werden', 'container-block-designer'),
+        'dashicon' => 'dashicons-arrow-up-alt2'
+    ),
+    'numbering' => array(
+        'label' => __('Nummerierung', 'container-block-designer'),
+        'description' => __('Automatische Nummerierung der Blocks', 'container-block-designer'),
+        'dashicon' => 'dashicons-editor-ol'
+    ),
+    'copyText' => array(
+        'label' => __('Text kopieren', 'container-block-designer'),
+        'description' => __('Button zum Kopieren des Textes', 'container-block-designer'),
+        'dashicon' => 'dashicons-clipboard'
+    ),
+    'screenshot' => array(
+        'label' => __('Screenshot', 'container-block-designer'),
+        'description' => __('Screenshot-Funktion für den Block', 'container-block-designer'),
+        'dashicon' => 'dashicons-camera'
     )
 );
+
+// Helper-Funktion um Farben aufzuhellen
+function lighten_color($hex, $percent) {
+    // Entferne # falls vorhanden
+    $hex = ltrim($hex, '#');
+    
+    // Konvertiere zu RGB
+    $r = hexdec(substr($hex, 0, 2));
+    $g = hexdec(substr($hex, 2, 2));
+    $b = hexdec(substr($hex, 4, 2));
+    
+    // Helle auf
+    $r = min(255, $r + ($r * $percent));
+    $g = min(255, $g + ($g * $percent));
+    $b = min(255, $b + ($b * $percent));
+    
+    return '#' . sprintf('%02x%02x%02x', $r, $g, $b);
+}
 
 ?>
 
@@ -71,10 +94,34 @@ $available_features = array(
                 $styles = !empty($block->styles) ? json_decode($block->styles, true) : array();
                 $config = !empty($block->config) ? json_decode($block->config, true) : array();
                 
-                // Verwende 'name' falls vorhanden, sonst 'title'
-                $display_name = !empty($block->name) ? $block->name : $block->title;
+                // Verwende 'title' für Anzeige, 'name' für interne Referenz
+                $display_name = !empty($block->title) ? $block->title : $block->name;
+                
+                // Dynamische Styles basierend auf Block-Konfiguration
+                $card_styles = '';
+                if (!empty($styles)) {
+                    $bg_color = $styles['background']['color'] ?? '#ffffff';
+                    $text_color = $styles['text']['color'] ?? '#333333';
+                    $border_width = $styles['border']['width'] ?? 1;
+                    $border_color = $styles['border']['color'] ?? '#e0e0e0';
+                    $border_style = $styles['border']['style'] ?? 'solid';
+                    $border_radius = $styles['border']['radius'] ?? 4;
+                    
+                    $card_styles = sprintf(
+                        'background: linear-gradient(135deg, %s 0%%, %s 100%%); color: %s; border: %dpx %s %s; border-radius: %dpx;',
+                        $bg_color,
+                        lighten_color($bg_color, 0.05),
+                        $text_color,
+                        $border_width,
+                        $border_style,
+                        $border_color,
+                        $border_radius
+                    );
+                }
             ?>
-                <div class="cbd-block-card <?php echo $block->status !== 'active' ? 'cbd-inactive' : ''; ?>">
+                <div class="cbd-block-card <?php echo $block->status !== 'active' ? 'cbd-inactive' : ''; ?>" 
+                     style="<?php echo esc_attr($card_styles); ?>"
+                     data-block-name="<?php echo esc_attr($block->name); ?>">
                     <div class="cbd-block-header">
                         <h3><?php echo esc_html($display_name); ?></h3>
                         <div class="cbd-block-actions">

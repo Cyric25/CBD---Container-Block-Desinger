@@ -144,7 +144,7 @@ class CBD_Ajax_Handler {
         }
         
         // Berechtigung prüfen
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('edit_posts')) {
             wp_send_json_error(array('message' => 'Keine Berechtigung'));
             return;
         }
@@ -188,7 +188,7 @@ class CBD_Ajax_Handler {
         }
         
         // Berechtigung prüfen
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('edit_posts')) {
             wp_send_json_error(array('message' => 'Keine Berechtigung'));
             return;
         }
@@ -224,7 +224,7 @@ class CBD_Ajax_Handler {
         }
         
         // Berechtigung prüfen
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('edit_posts')) {
             wp_send_json_error(array('message' => 'Keine Berechtigung'));
             return;
         }

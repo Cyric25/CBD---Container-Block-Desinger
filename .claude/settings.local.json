@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(dir:*)",
-      "Read(//l/Huber/**)"
+      "Read(//l/Huber/**)",
+      "Bash(php:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

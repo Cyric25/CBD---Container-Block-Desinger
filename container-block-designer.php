@@ -22,7 +22,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '2.6.0');
+define('CBD_VERSION', '2.6.1');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -166,6 +166,14 @@ class ContainerBlockDesigner {
      * Plugin initialisieren - Now uses Service Container
      */
     public function init() {
+        // Einfache statische Variable - funktioniert innerhalb eines Requests
+        static $initialized = false;
+        
+        if ($initialized) {
+            error_log('[CBD Main] Plugin already initialized, skipping');
+            return;
+        }
+        
         try {
             // Initialize services through container
             $style_loader = $this->container->get('style_loader');
@@ -177,9 +185,12 @@ class ContainerBlockDesigner {
             // AJAX handler
             $this->container->get('ajax_handler');
             
-            // Admin area
+            // Admin area - aktiviert für normale Funktionalität
             if (is_admin()) {
-                $this->container->get('admin');
+                // Fallback: Direct admin initialization wenn Service Container admin nicht verfügbar
+                if (class_exists('CBD_Admin')) {
+                    CBD_Admin::get_instance();
+                }
             }
             
             // Frontend renderer
@@ -187,8 +198,8 @@ class ContainerBlockDesigner {
                 $frontend_renderer = $this->container->get('consolidated_frontend');
             }
             
-            // API Manager
-            $this->container->get('api_manager');
+            // API Manager - falls benötigt
+            // $this->container->get('api_manager');
             
             // Check for plugin activation
             if (get_option('cbd_plugin_activated')) {
@@ -201,6 +212,10 @@ class ContainerBlockDesigner {
             
             // Version update check
             $this->check_version_update();
+            
+            // Markiere als initialisiert
+            $initialized = true;
+            error_log('[CBD Main] Plugin initialization completed');
             
         } catch (Exception $e) {
             // Log error and fall back to legacy initialization
@@ -286,6 +301,12 @@ class ContainerBlockDesigner {
             // Cache-Verzeichnis erstellen
             $this->create_upload_directory();
         }
+        
+        // Updates für Version 2.6.1
+        if (version_compare($from_version, '2.6.1', '<')) {
+            // Standard-Blocks mit korrekten Namen neu erstellen
+            $this->create_default_blocks();
+        }
     }
     
     /**
@@ -307,7 +328,7 @@ class ContainerBlockDesigner {
             array(
                 array(
                     'slug' => 'container-blocks',
-                    'title' => __('Container Blocks', 'container-block-designer'),
+                    'title' => __('Container', 'container-block-designer'),
                     'icon' => 'layout'
                 )
             ),
@@ -351,18 +372,22 @@ class ContainerBlockDesigner {
     private function create_default_blocks() {
         global $wpdb;
         
-        // Prüfe ob bereits Blocks existieren
-        $count = $wpdb->get_var("SELECT COUNT(*) FROM " . CBD_TABLE_BLOCKS);
+        // Prüfe ob bereits korrekte Standard-Blocks existieren
+        $correct_blocks = $wpdb->get_var("SELECT COUNT(*) FROM " . CBD_TABLE_BLOCKS . " WHERE name IN ('basic-container', 'card-container', 'hero-section')");
         
-        if ($count > 0) {
-            return; // Bereits Blocks vorhanden
+        if ($correct_blocks >= 3) {
+            return; // Bereits korrekte Blocks vorhanden
         }
+        
+        // Lösche alte Standard-Blocks mit deutschen Namen falls vorhanden
+        $wpdb->query("DELETE FROM " . CBD_TABLE_BLOCKS . " WHERE name LIKE '%Container%' OR name LIKE '%Info-Box%' OR name LIKE '%Klappbar%'");
         
         // Standard-Blocks definieren
         $default_blocks = array(
             array(
-                'name' => __('Einfacher Container', 'container-block-designer'),
-                'slug' => 'simple-container',
+                'name' => 'basic-container', // Konsistent mit Block-Registrierung
+                'title' => __('Einfacher Container', 'container-block-designer'),
+                'slug' => 'basic-container',
                 'description' => __('Ein einfacher Container mit Rahmen und Padding', 'container-block-designer'),
                 'config' => json_encode(array(
                     'allowInnerBlocks' => true,
@@ -390,8 +415,9 @@ class ContainerBlockDesigner {
                 'status' => 'active'
             ),
             array(
-                'name' => __('Info-Box', 'container-block-designer'),
-                'slug' => 'info-box',
+                'name' => 'card-container', // Konsistent mit Block-Registrierung
+                'title' => __('Info-Box', 'container-block-designer'),
+                'slug' => 'card-container',
                 'description' => __('Eine Info-Box mit Icon und blauem Hintergrund', 'container-block-designer'),
                 'config' => json_encode(array(
                     'allowInnerBlocks' => true,
@@ -427,9 +453,10 @@ class ContainerBlockDesigner {
                 'status' => 'active'
             ),
             array(
-                'name' => __('Klappbarer Container', 'container-block-designer'),
-                'slug' => 'collapsible-container',
-                'description' => __('Ein Container der ein- und ausgeklappt werden kann', 'container-block-designer'),
+                'name' => 'hero-section', // Konsistent mit Block-Registrierung
+                'title' => __('Hero Section', 'container-block-designer'),
+                'slug' => 'hero-section',
+                'description' => __('Ein Hero-Bereich für prominente Inhalte', 'container-block-designer'),
                 'config' => json_encode(array(
                     'allowInnerBlocks' => true,
                     'maxWidth' => '100%',

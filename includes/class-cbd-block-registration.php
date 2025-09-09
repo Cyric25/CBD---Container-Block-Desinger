@@ -40,7 +40,7 @@ class CBD_Block_Registration {
      * Konstruktor
      */
     private function __construct() {
-        add_action('init', array($this, 'register_blocks'));
+        // Nur Asset-Hooks hier, Block-Registrierung erfolgt manuell über register_blocks()
         add_action('enqueue_block_editor_assets', array($this, 'enqueue_block_editor_assets'));
         add_action('enqueue_block_assets', array($this, 'enqueue_block_assets'));
     }
@@ -49,9 +49,9 @@ class CBD_Block_Registration {
      * Blöcke registrieren
      */
     public function register_blocks() {
-        // Überprüfe ob Block bereits registriert ist
+        // Verwende WordPress Block Registry als einzige Wahrheitsquelle
         if (WP_Block_Type_Registry::get_instance()->is_registered('container-block-designer/container')) {
-            error_log('[CBD Block Registration] Block already registered, skipping');
+            error_log('[CBD Block Registration] Blocks already registered, skipping');
             return;
         }
         
@@ -254,13 +254,73 @@ class CBD_Block_Registration {
      * Block-Assets einbinden (Frontend & Editor)
      */
     public function enqueue_block_assets() {
-        // Gemeinsame Styles für Frontend und Editor
+        // Frontend CSS
         wp_enqueue_style(
-            'cbd-block-common',
-            CBD_PLUGIN_URL . 'assets/css/block-common.css',
+            'cbd-frontend',
+            CBD_PLUGIN_URL . 'assets/css/cbd-frontend.css',
             array(),
             CBD_VERSION
         );
+        
+        // Frontend JavaScript für interaktive Features
+        $this->enqueue_frontend_scripts();
+    }
+    
+    /**
+     * Frontend JavaScript einbinden
+     */
+    private function enqueue_frontend_scripts() {
+        // Prüfe ob interaktive Features verwendet werden
+        if (!$this->has_interactive_features()) {
+            return;
+        }
+        
+        wp_enqueue_script(
+            'cbd-frontend-features',
+            CBD_PLUGIN_URL . 'assets/js/frontend.js',
+            array('jquery'),
+            CBD_VERSION,
+            true
+        );
+        
+        // Lokalisierung für Frontend
+        wp_localize_script('cbd-frontend-features', 'cbdFrontend', array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('cbd_frontend'),
+            'i18n' => array(
+                'copySuccess' => __('Text kopiert!', 'container-block-designer'),
+                'copyError' => __('Kopieren fehlgeschlagen', 'container-block-designer'),
+                'screenshotSuccess' => __('Screenshot erstellt!', 'container-block-designer'),
+                'screenshotError' => __('Screenshot fehlgeschlagen', 'container-block-designer'),
+                'screenshotUnavailable' => __('Screenshot-Funktion nicht verfügbar', 'container-block-designer')
+            )
+        ));
+    }
+    
+    /**
+     * Prüfen ob interaktive Features vorhanden sind
+     */
+    private function has_interactive_features() {
+        global $wpdb;
+        
+        // Cache prüfen
+        $cache_key = 'cbd_has_interactive_features';
+        $has_features = wp_cache_get($cache_key);
+        
+        if (false === $has_features) {
+            // Prüfe ob irgendein Block interaktive Features hat
+            $result = $wpdb->get_var(
+                "SELECT COUNT(*) FROM " . CBD_TABLE_BLOCKS . " 
+                 WHERE status = 'active' 
+                 AND (features LIKE '%copyText%' 
+                      OR features LIKE '%screenshot%')"
+            );
+            
+            $has_features = $result > 0;
+            wp_cache_set($cache_key, $has_features, '', HOUR_IN_SECONDS);
+        }
+        
+        return $has_features;
     }
     
     /**
@@ -277,7 +337,6 @@ class CBD_Block_Registration {
         }
         
         // Block-Daten aus der Datenbank holen
-        // Der selected_block ist bereits sanitized, also müssen wir nach dem Original-Namen suchen
         global $wpdb;
         
         // Suche zuerst nach dem sanitized Namen
@@ -289,8 +348,11 @@ class CBD_Block_Registration {
         // Falls nicht gefunden, suche nach Blocks deren sanitized Name dem selected_block entspricht
         if (!$block) {
             $all_blocks = $wpdb->get_results("SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active'");
+            
             foreach ($all_blocks as $test_block) {
-                if ($this->sanitize_block_name($test_block->name) === $selected_block) {
+                $sanitized_name = $this->sanitize_block_name($test_block->name);
+                
+                if ($sanitized_name === $selected_block) {
                     $block = $test_block;
                     break;
                 }
@@ -298,11 +360,16 @@ class CBD_Block_Registration {
         }
         
         if (!$block) {
-            return '<!-- Container Block: Block not found -->';
+            return '<!-- Container Block: Block "' . esc_html($selected_block) . '" not found -->';
         }
         
+        // Parse block data
+        $styles = !empty($block->styles) ? json_decode($block->styles, true) : array();
+        $features = !empty($block->features) ? json_decode($block->features, true) : array();
+        $config = !empty($block->config) ? json_decode($block->config, true) : array();
+        
         // Block-HTML generieren
-        $block_classes = array('cbd-container-block', 'cbd-block-' . $selected_block);
+        $block_classes = array('cbd-container', 'cbd-block-' . $selected_block);
         
         if (!empty($custom_classes)) {
             $block_classes[] = $custom_classes;
@@ -320,24 +387,115 @@ class CBD_Block_Registration {
             $block_attributes['id'] = $anchor;
         }
         
+        // Data attributes für Features
+        if (!empty($features)) {
+            $block_attributes['data-features'] = esc_attr(json_encode($features));
+        }
+        
+        $block_attributes['data-block-id'] = esc_attr($block->id);
+        $block_attributes['data-block-name'] = esc_attr($selected_block);
+        
         // Styles anwenden
-        $styles = !empty($block->styles) ? json_decode($block->styles, true) : array();
         $inline_styles = $this->generate_inline_styles($styles);
         
         if (!empty($inline_styles)) {
             $block_attributes['style'] = $inline_styles;
         }
         
-        // HTML ausgeben
+        // HTML generieren
         $html = '<div';
         foreach ($block_attributes as $key => $value) {
             $html .= ' ' . $key . '="' . esc_attr($value) . '"';
         }
         $html .= '>';
+        
+        // Feature-basierte Inhalte hinzufügen
+        if (!empty($features)) {
+            $html .= $this->render_features($features, $block->id);
+        }
+        
+        // Container-Inhalt
+        $html .= '<div class="cbd-container-content">';
         $html .= $content;
         $html .= '</div>';
         
+        $html .= '</div>';
+        
         return $html;
+    }
+    
+    /**
+     * Features rendern
+     */
+    private function render_features($features, $block_id) {
+        $html = '';
+        
+        // Icon Feature
+        if (!empty($features['icon']['enabled'])) {
+            $icon_class = $features['icon']['value'] ?? 'dashicons-admin-generic';
+            $html .= '<div class="cbd-container-icon">';
+            $html .= '<span class="dashicons ' . esc_attr($icon_class) . '" aria-hidden="true"></span>';
+            $html .= '</div>';
+        }
+        
+        // Numbering Feature
+        if (!empty($features['numbering']['enabled'])) {
+            static $numbering_counter = 0;
+            $numbering_counter++;
+            
+            $format = $features['numbering']['format'] ?? 'numeric';
+            $number = $this->format_number($numbering_counter, $format);
+            
+            $html .= '<div class="cbd-container-number" data-number="' . esc_attr($numbering_counter) . '">';
+            $html .= esc_html($number);
+            $html .= '</div>';
+        }
+        
+        // Action Buttons
+        $has_copy = !empty($features['copyText']['enabled']);
+        $has_screenshot = !empty($features['screenshot']['enabled']);
+        
+        if ($has_copy || $has_screenshot) {
+            $html .= '<div class="cbd-container-actions">';
+            
+            if ($has_copy) {
+                $copy_text = $features['copyText']['buttonText'] ?? 'Text kopieren';
+                $html .= '<button class="cbd-copy-button" data-container-id="' . esc_attr($block_id) . '" title="' . esc_attr($copy_text) . '">';
+                $html .= '<span class="dashicons dashicons-clipboard"></span>';
+                $html .= '<span class="sr-only">' . esc_html($copy_text) . '</span>';
+                $html .= '</button>';
+            }
+            
+            if ($has_screenshot) {
+                $screenshot_text = $features['screenshot']['buttonText'] ?? 'Screenshot';
+                $html .= '<button class="cbd-screenshot-button" data-container-id="' . esc_attr($block_id) . '" title="' . esc_attr($screenshot_text) . '">';
+                $html .= '<span class="dashicons dashicons-camera"></span>';
+                $html .= '<span class="sr-only">' . esc_html($screenshot_text) . '</span>';
+                $html .= '</button>';
+            }
+            
+            $html .= '</div>';
+        }
+        
+        return $html;
+    }
+    
+    /**
+     * Nummer formatieren basierend auf Format
+     */
+    private function format_number($number, $format) {
+        switch ($format) {
+            case 'alphabetic':
+                return chr(64 + $number); // A, B, C...
+                
+            case 'roman':
+                $map = array('', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X');
+                return isset($map[$number]) ? $map[$number] : $number;
+                
+            case 'numeric':
+            default:
+                return $number;
+        }
     }
     
     /**
@@ -346,28 +504,50 @@ class CBD_Block_Registration {
     private function generate_inline_styles($styles) {
         $css = '';
         
-        if (!empty($styles['backgroundColor'])) {
-            $css .= 'background-color: ' . $styles['backgroundColor'] . ';';
+        // Background Color
+        if (!empty($styles['background']['color'])) {
+            $css .= 'background-color: ' . esc_attr($styles['background']['color']) . ';';
         }
         
-        if (!empty($styles['textColor'])) {
-            $css .= 'color: ' . $styles['textColor'] . ';';
+        // Text Color
+        if (!empty($styles['text']['color'])) {
+            $css .= 'color: ' . esc_attr($styles['text']['color']) . ';';
         }
         
+        // Text Alignment
+        if (!empty($styles['text']['alignment'])) {
+            $css .= 'text-align: ' . esc_attr($styles['text']['alignment']) . ';';
+        }
+        
+        // Padding
         if (!empty($styles['padding'])) {
-            $css .= 'padding: ' . $styles['padding'] . ';';
+            if (is_array($styles['padding'])) {
+                $top = $styles['padding']['top'] ?? 0;
+                $right = $styles['padding']['right'] ?? 0;
+                $bottom = $styles['padding']['bottom'] ?? 0;
+                $left = $styles['padding']['left'] ?? 0;
+                $css .= "padding: {$top}px {$right}px {$bottom}px {$left}px;";
+            } else {
+                $css .= 'padding: ' . esc_attr($styles['padding']) . ';';
+            }
         }
         
-        if (!empty($styles['margin'])) {
-            $css .= 'margin: ' . $styles['margin'] . ';';
-        }
-        
-        if (!empty($styles['borderRadius'])) {
-            $css .= 'border-radius: ' . $styles['borderRadius'] . ';';
-        }
-        
+        // Border
         if (!empty($styles['border'])) {
-            $css .= 'border: ' . $styles['border'] . ';';
+            $border = $styles['border'];
+            
+            // Border width, style, color
+            if (!empty($border['width']) && !empty($border['style']) && !empty($border['color'])) {
+                $width = $border['width'] . 'px';
+                $style = esc_attr($border['style']);
+                $color = esc_attr($border['color']);
+                $css .= "border: {$width} {$style} {$color};";
+            }
+            
+            // Border radius
+            if (!empty($border['radius'])) {
+                $css .= 'border-radius: ' . esc_attr($border['radius']) . 'px;';
+            }
         }
         
         return $css;

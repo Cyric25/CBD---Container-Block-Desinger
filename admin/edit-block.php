@@ -11,8 +11,11 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Block-ID abrufen
-$block_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+// Output Buffering starten um Headers bereits sent zu verhindern
+ob_start();
+
+// Block-ID abrufen - unterstütze sowohl 'id' als auch 'block_id' Parameter
+$block_id = isset($_GET['block_id']) ? intval($_GET['block_id']) : (isset($_GET['id']) ? intval($_GET['id']) : 0);
 
 if (!$block_id) {
     wp_die(__('Ungültige Block-ID', 'container-block-designer'));
@@ -30,7 +33,11 @@ $styles = $block['styles'] ?: array(
     'padding' => array('top' => 20, 'right' => 20, 'bottom' => 20, 'left' => 20),
     'background' => array('color' => '#ffffff'),
     'text' => array('color' => '#333333', 'alignment' => 'left'),
-    'border' => array('width' => 1, 'color' => '#e0e0e0', 'style' => 'solid', 'radius' => 4)
+    'border' => array('width' => 1, 'color' => '#e0e0e0', 'style' => 'solid', 'radius' => 4),
+    'shadow' => array(
+        'outer' => array('enabled' => false, 'x' => 0, 'y' => 4, 'blur' => 6, 'spread' => 0, 'color' => '#00000040'),
+        'inner' => array('enabled' => false, 'x' => 0, 'y' => 2, 'blur' => 4, 'spread' => 0, 'color' => '#00000030')
+    )
 );
 
 $features = $block['features'] ?: array(
@@ -149,6 +156,76 @@ $config = $block['config'] ?: array(
                                                value="<?php echo esc_attr($styles['padding']['left'] ?? 20); ?>" 
                                                min="0" max="100" class="small-text">
                                         <label><?php _e('Links', 'container-block-designer'); ?></label>
+                                    </div>
+                                </td>
+                            </tr>
+                            
+                            <!-- Shadow -->
+                            <tr>
+                                <th scope="row"><?php _e('Schatten', 'container-block-designer'); ?></th>
+                                <td>
+                                    <div class="cbd-shadow-controls">
+                                        <fieldset>
+                                            <legend><?php _e('Äußerer Schatten (Box Shadow)', 'container-block-designer'); ?></legend>
+                                            <label>
+                                                <input type="checkbox" name="styles[shadow][outer][enabled]" value="1" <?php checked($styles['shadow']['outer']['enabled'] ?? false); ?>>
+                                                <?php _e('Aktivieren', 'container-block-designer'); ?>
+                                            </label>
+                                            <br><br>
+                                            <div class="cbd-shadow-options">
+                                                <label>
+                                                    <?php _e('Horizontal:', 'container-block-designer'); ?>
+                                                    <input type="number" name="styles[shadow][outer][x]" value="<?php echo esc_attr($styles['shadow']['outer']['x'] ?? 0); ?>" min="-50" max="50" class="small-text">px
+                                                </label>
+                                                <label>
+                                                    <?php _e('Vertikal:', 'container-block-designer'); ?>
+                                                    <input type="number" name="styles[shadow][outer][y]" value="<?php echo esc_attr($styles['shadow']['outer']['y'] ?? 4); ?>" min="-50" max="50" class="small-text">px
+                                                </label>
+                                                <label>
+                                                    <?php _e('Unschärfe:', 'container-block-designer'); ?>
+                                                    <input type="number" name="styles[shadow][outer][blur]" value="<?php echo esc_attr($styles['shadow']['outer']['blur'] ?? 6); ?>" min="0" max="50" class="small-text">px
+                                                </label>
+                                                <label>
+                                                    <?php _e('Größe:', 'container-block-designer'); ?>
+                                                    <input type="number" name="styles[shadow][outer][spread]" value="<?php echo esc_attr($styles['shadow']['outer']['spread'] ?? 0); ?>" min="-25" max="25" class="small-text">px
+                                                </label>
+                                                <label>
+                                                    <?php _e('Farbe:', 'container-block-designer'); ?>
+                                                    <input type="text" name="styles[shadow][outer][color]" value="<?php echo esc_attr($styles['shadow']['outer']['color'] ?? '#00000040'); ?>" class="cbd-color-picker">
+                                                </label>
+                                            </div>
+                                        </fieldset>
+                                        <br>
+                                        <fieldset>
+                                            <legend><?php _e('Innerer Schatten (Inset Shadow)', 'container-block-designer'); ?></legend>
+                                            <label>
+                                                <input type="checkbox" name="styles[shadow][inner][enabled]" value="1" <?php checked($styles['shadow']['inner']['enabled'] ?? false); ?>>
+                                                <?php _e('Aktivieren', 'container-block-designer'); ?>
+                                            </label>
+                                            <br><br>
+                                            <div class="cbd-shadow-options">
+                                                <label>
+                                                    <?php _e('Horizontal:', 'container-block-designer'); ?>
+                                                    <input type="number" name="styles[shadow][inner][x]" value="<?php echo esc_attr($styles['shadow']['inner']['x'] ?? 0); ?>" min="-50" max="50" class="small-text">px
+                                                </label>
+                                                <label>
+                                                    <?php _e('Vertikal:', 'container-block-designer'); ?>
+                                                    <input type="number" name="styles[shadow][inner][y]" value="<?php echo esc_attr($styles['shadow']['inner']['y'] ?? 2); ?>" min="-50" max="50" class="small-text">px
+                                                </label>
+                                                <label>
+                                                    <?php _e('Unschärfe:', 'container-block-designer'); ?>
+                                                    <input type="number" name="styles[shadow][inner][blur]" value="<?php echo esc_attr($styles['shadow']['inner']['blur'] ?? 4); ?>" min="0" max="50" class="small-text">px
+                                                </label>
+                                                <label>
+                                                    <?php _e('Größe:', 'container-block-designer'); ?>
+                                                    <input type="number" name="styles[shadow][inner][spread]" value="<?php echo esc_attr($styles['shadow']['inner']['spread'] ?? 0); ?>" min="-25" max="25" class="small-text">px
+                                                </label>
+                                                <label>
+                                                    <?php _e('Farbe:', 'container-block-designer'); ?>
+                                                    <input type="text" name="styles[shadow][inner][color]" value="<?php echo esc_attr($styles['shadow']['inner']['color'] ?? '#00000030'); ?>" class="cbd-color-picker">
+                                                </label>
+                                            </div>
+                                        </fieldset>
                                     </div>
                                 </td>
                             </tr>
@@ -278,6 +355,42 @@ $config = $block['config'] ?: array(
                                     </select>
                                 </td>
                             </tr>
+                            
+                            <!-- Copy Text -->
+                            <tr>
+                                <th scope="row"><?php _e('Text kopieren', 'container-block-designer'); ?></th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="features[copyText][enabled]" value="1" 
+                                               <?php checked($features['copyText']['enabled'] ?? false, true); ?>>
+                                        <?php _e('Text kopieren Button anzeigen', 'container-block-designer'); ?>
+                                    </label>
+                                    <br><br>
+                                    <input type="text" name="features[copyText][buttonText]" 
+                                           value="<?php echo esc_attr($features['copyText']['buttonText'] ?? 'Text kopieren'); ?>" 
+                                           class="regular-text" 
+                                           placeholder="Text kopieren">
+                                    <p class="description"><?php _e('Text für den Button', 'container-block-designer'); ?></p>
+                                </td>
+                            </tr>
+                            
+                            <!-- Screenshot -->
+                            <tr>
+                                <th scope="row"><?php _e('Screenshot', 'container-block-designer'); ?></th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="features[screenshot][enabled]" value="1" 
+                                               <?php checked($features['screenshot']['enabled'] ?? false, true); ?>>
+                                        <?php _e('Screenshot Button anzeigen', 'container-block-designer'); ?>
+                                    </label>
+                                    <br><br>
+                                    <input type="text" name="features[screenshot][buttonText]" 
+                                           value="<?php echo esc_attr($features['screenshot']['buttonText'] ?? 'Screenshot'); ?>" 
+                                           class="regular-text" 
+                                           placeholder="Screenshot">
+                                    <p class="description"><?php _e('Text für den Button', 'container-block-designer'); ?></p>
+                                </td>
+                            </tr>
                         </table>
                     </div>
                     
@@ -285,10 +398,23 @@ $config = $block['config'] ?: array(
                 
                 <!-- Sidebar -->
                 <div class="cbd-sidebar">
+                    <!-- Live Preview -->
+                    <div class="cbd-card">
+                        <h3><?php _e('Live Preview', 'container-block-designer'); ?></h3>
+                        <div id="cbd-live-preview" class="cbd-preview-container">
+                            <div id="cbd-preview-block" class="cbd-preview-block">
+                                <div class="cbd-preview-content">
+                                    <h4 id="cbd-preview-title"><?php echo esc_html($block['title'] ?? 'Block Titel'); ?></h4>
+                                    <p id="cbd-preview-description"><?php echo esc_html($block['description'] ?? 'Block Beschreibung...'); ?></p>
+                                    <div class="cbd-preview-features" id="cbd-preview-features"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="cbd-card">
                         <h3><?php _e('Aktionen', 'container-block-designer'); ?></h3>
                         
-                        <button type="submit" class="button button-primary button-large" id="cbd-save-block">
+                        <button type="submit" name="save_block" class="button button-primary button-large" id="cbd-save-block">
                             <?php _e('Änderungen speichern', 'container-block-designer'); ?>
                         </button>
                         
@@ -318,12 +444,18 @@ $config = $block['config'] ?: array(
                         
                         <p>
                             <strong><?php _e('Erstellt:', 'container-block-designer'); ?></strong><br>
-                            <?php echo date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($block['created'])); ?>
+                            <?php 
+                            $created = isset($block['created']) && $block['created'] ? $block['created'] : current_time('mysql');
+                            echo date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($created)); 
+                            ?>
                         </p>
                         
                         <p>
                             <strong><?php _e('Aktualisiert:', 'container-block-designer'); ?></strong><br>
-                            <?php echo date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($block['updated'])); ?>
+                            <?php 
+                            $updated = isset($block['updated']) && $block['updated'] ? $block['updated'] : current_time('mysql');
+                            echo date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($updated)); 
+                            ?>
                         </p>
                         
                         <p>
@@ -386,35 +518,146 @@ $config = $block['config'] ?: array(
     margin: 15px 0;
 }
 
+/* Live Preview Styles */
+.cbd-preview-container {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    background: #f9f9f9;
+    margin-top: 10px;
+}
+
+#cbd-preview-block {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 20px;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+#cbd-preview-title {
+    margin: 0 0 10px 0;
+    font-weight: 600;
+    color: #333;
+}
+
+#cbd-preview-description {
+    margin: 0 0 15px 0;
+    color: #666;
+    line-height: 1.5;
+}
+
+.cbd-preview-features {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.cbd-preview-feature {
+    font-size: 11px;
+    background: #0073aa;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.cbd-preview-feature.inactive {
+    background: #ccc;
+    color: #666;
+}
+
+.cbd-preview-feature .dashicons {
+    font-size: 12px;
+    width: 12px;
+    height: 12px;
+}
+
 @media (max-width: 782px) {
     .cbd-form-grid {
         grid-template-columns: 1fr;
     }
 }
+
+/* Shadow Controls Styles */
+.cbd-shadow-controls fieldset {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.cbd-shadow-controls legend {
+    font-weight: 600;
+    padding: 0 10px;
+}
+
+.cbd-shadow-options {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.cbd-shadow-options label {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.cbd-shadow-options input {
+    margin-top: 5px;
+}
 </style>
 
 <script>
 jQuery(document).ready(function($) {
-    // Color Picker initialisieren
-    $('.cbd-color-picker').wpColorPicker();
+    console.log('Edit block JavaScript loaded');
     
-    // Form Submit Handler
+    // Color Picker initialisieren
+    if ($.fn.wpColorPicker) {
+        $('.cbd-color-picker').wpColorPicker();
+    }
+    
+    // Form Submit Handler - mit höherer Priorität
+    $(document).off('submit', '#cbd-block-form');
+    $('#cbd-block-form').off('submit');
+    
     $('#cbd-block-form').on('submit', function(e) {
+        console.log('Edit block form submitted - intercepting for AJAX');
         e.preventDefault();
+        e.stopPropagation();
         
-        var $form = $(this);
-        var $button = $('#cbd-save-block');
-        var originalText = $button.text();
-        
-        // Button deaktivieren
-        $button.prop('disabled', true).text('<?php esc_attr_e('Speichern...', 'container-block-designer'); ?>');
-        
-        // Daten sammeln
-        var formData = $form.serialize();
-        formData += '&action=cbd_save_block';
+        try {
+            var $form = $(this);
+            var $button = $('#cbd-save-block');
+            var originalText = $button.text();
+            
+            console.log('Form element found:', $form.length);
+            console.log('Button element found:', $button.length);
+            
+            // Button deaktivieren
+            $button.prop('disabled', true).text('<?php esc_attr_e('Speichern...', 'container-block-designer'); ?>');
+            
+            // Verwende neue funktionierende Action mit allen Daten
+            var formData = $form.serialize();
+            formData += '&action=cbd_edit_save';
+            
+            console.log('Data serialized successfully');
         
         // AJAX Request
+        var ajaxurl = '<?php echo admin_url('admin-ajax.php'); ?>';
+        console.log('Sending AJAX request to:', ajaxurl);
+        console.log('Form data:', formData);
+        
         $.post(ajaxurl, formData, function(response) {
+            console.log('AJAX response received:', response);
+            console.log('Response success:', response.success);
+            console.log('Response data:', response.data);
             if (response.success) {
                 // Erfolg
                 $button.text('<?php esc_attr_e('Gespeichert!', 'container-block-designer'); ?>');
@@ -428,10 +671,104 @@ jQuery(document).ready(function($) {
                 alert(response.data.message || '<?php esc_attr_e('Ein Fehler ist aufgetreten', 'container-block-designer'); ?>');
                 $button.prop('disabled', false).text(originalText);
             }
-        }).fail(function() {
+        }).fail(function(xhr, status, error) {
+            console.log('AJAX request failed:', status, error);
             alert('<?php esc_attr_e('Verbindungsfehler', 'container-block-designer'); ?>');
             $button.prop('disabled', false).text(originalText);
         });
+        
+        } catch (err) {
+            console.error('JavaScript error in form handler:', err);
+            alert('JavaScript-Fehler: ' + err.message);
+        }
+        
+        return false;
+    });
+    
+    // Live Preview Update Function
+    function updateLivePreview() {
+        var $previewBlock = $('#cbd-preview-block');
+        var $previewTitle = $('#cbd-preview-title');
+        var $previewDescription = $('#cbd-preview-description');
+        var $previewFeatures = $('#cbd-preview-features');
+        
+        // Update content
+        var title = $('#block-title').val() || 'Block Titel';
+        var description = $('#description').val() || 'Block Beschreibung...';
+        
+        $previewTitle.text(title);
+        $previewDescription.text(description);
+        
+        // Update styles
+        var bgColor = $('input[name="styles[background][color]"]').val() || '#ffffff';
+        var textColor = $('input[name="styles[text][color]"]').val() || '#333333';
+        var borderWidth = $('input[name="styles[border][width]"]').val() || '1';
+        var borderColor = $('input[name="styles[border][color]"]').val() || '#e0e0e0';
+        var borderStyle = $('select[name="styles[border][style]"]').val() || 'solid';
+        var borderRadius = $('input[name="styles[border][radius]"]').val() || '4';
+        var paddingTop = $('input[name="styles[padding][top]"]').val() || '20';
+        var paddingRight = $('input[name="styles[padding][right]"]').val() || '20';
+        var paddingBottom = $('input[name="styles[padding][bottom]"]').val() || '20';
+        var paddingLeft = $('input[name="styles[padding][left]"]').val() || '20';
+        
+        // Shadow styles
+        var outerEnabled = $('input[name="styles[shadow][outer][enabled]"]').is(':checked');
+        var outerX = $('input[name="styles[shadow][outer][x]"]').val() || '0';
+        var outerY = $('input[name="styles[shadow][outer][y]"]').val() || '4';
+        var outerBlur = $('input[name="styles[shadow][outer][blur]"]').val() || '6';
+        var outerSpread = $('input[name="styles[shadow][outer][spread]"]').val() || '0';
+        var outerColor = $('input[name="styles[shadow][outer][color]"]').val() || '#00000040';
+        
+        var innerEnabled = $('input[name="styles[shadow][inner][enabled]"]').is(':checked');
+        var innerX = $('input[name="styles[shadow][inner][x]"]').val() || '0';
+        var innerY = $('input[name="styles[shadow][inner][y]"]').val() || '2';
+        var innerBlur = $('input[name="styles[shadow][inner][blur]"]').val() || '4';
+        var innerSpread = $('input[name="styles[shadow][inner][spread]"]').val() || '0';
+        var innerColor = $('input[name="styles[shadow][inner][color]"]').val() || '#00000030';
+        
+        // Build box-shadow value
+        var boxShadows = [];
+        if (outerEnabled) {
+            boxShadows.push(outerX + 'px ' + outerY + 'px ' + outerBlur + 'px ' + outerSpread + 'px ' + outerColor);
+        }
+        if (innerEnabled) {
+            boxShadows.push('inset ' + innerX + 'px ' + innerY + 'px ' + innerBlur + 'px ' + innerSpread + 'px ' + innerColor);
+        }
+        
+        $previewBlock.css({
+            'background-color': bgColor,
+            'color': textColor,
+            'border': borderWidth + 'px ' + borderStyle + ' ' + borderColor,
+            'border-radius': borderRadius + 'px',
+            'padding': paddingTop + 'px ' + paddingRight + 'px ' + paddingBottom + 'px ' + paddingLeft + 'px',
+            'box-shadow': boxShadows.length > 0 ? boxShadows.join(', ') : 'none'
+        });
+        
+        // Update features
+        $previewFeatures.empty();
+        var features = [
+            { key: 'icon', name: 'Icon', icon: 'dashicons-star-filled' },
+            { key: 'collapse', name: 'Klappbar', icon: 'dashicons-arrow-up-alt2' },
+            { key: 'numbering', name: 'Nummerierung', icon: 'dashicons-editor-ol' },
+            { key: 'copyText', name: 'Text kopieren', icon: 'dashicons-clipboard' },
+            { key: 'screenshot', name: 'Screenshot', icon: 'dashicons-camera' }
+        ];
+        
+        features.forEach(function(feature) {
+            var isEnabled = $('input[name="features[' + feature.key + '][enabled]"]').is(':checked');
+            var $featureEl = $('<div class="cbd-preview-feature' + (isEnabled ? '' : ' inactive') + '">')
+                .append('<span class="dashicons ' + feature.icon + '"></span>')
+                .append(feature.name);
+            $previewFeatures.append($featureEl);
+        });
+    }
+    
+    // Initialize preview and bind events
+    updateLivePreview();
+    
+    // Bind live preview updates
+    $('input[name^="styles"], select[name^="styles"], input[name="title"], textarea[name="description"], input[name^="features"]').on('input change', function() {
+        updateLivePreview();
     });
 });
 </script>

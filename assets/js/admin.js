@@ -95,6 +95,11 @@
      * Form Validierung
      */
     function initFormValidation() {
+        // Nur auf new-block Seite ausführen (hat #block-slug Element)
+        if (!$('#block-slug').length) {
+            return;
+        }
+        
         $('#cbd-block-form').on('submit', function(e) {
             let isValid = true;
             const errors = [];
@@ -106,8 +111,9 @@
                 isValid = false;
             }
             
-            // Slug validieren
-            const slug = $('#block-slug').val().trim();
+            // Slug validieren (nur wenn Element existiert)
+            const $slugField = $('#block-slug');
+            const slug = $slugField.length ? $slugField.val().trim() : '';
             if (!slug) {
                 errors.push(cbdAdmin.strings.slugRequired || 'Slug ist erforderlich');
                 isValid = false;
