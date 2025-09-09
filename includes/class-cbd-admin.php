@@ -323,7 +323,8 @@ class CBD_Admin {
             $features = array(
                 'icon' => array(
                     'enabled' => isset($_POST['features']['icon']['enabled']) ? true : false,
-                    'value' => sanitize_text_field($_POST['features']['icon']['value'] ?? 'dashicons-admin-generic')
+                    'value' => sanitize_text_field($_POST['features']['icon']['value'] ?? 'dashicons-admin-generic'),
+                    'position' => sanitize_text_field($_POST['features']['icon']['position'] ?? 'top-left')
                 ),
                 'collapse' => array(
                     'enabled' => isset($_POST['features']['collapse']['enabled']) ? true : false,
@@ -331,7 +332,8 @@ class CBD_Admin {
                 ),
                 'numbering' => array(
                     'enabled' => isset($_POST['features']['numbering']['enabled']) ? true : false,
-                    'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric')
+                    'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric'),
+                    'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left')
                 ),
                 'copyText' => array(
                     'enabled' => isset($_POST['features']['copyText']['enabled']) ? true : false,
@@ -788,7 +790,8 @@ class CBD_Admin {
         $features = array(
             'icon' => array(
                 'enabled' => isset($_POST['features']['icon']['enabled']) ? true : false,
-                'value' => sanitize_text_field($_POST['features']['icon']['value'] ?? 'dashicons-admin-generic')
+                'value' => sanitize_text_field($_POST['features']['icon']['value'] ?? 'dashicons-admin-generic'),
+                'position' => sanitize_text_field($_POST['features']['icon']['position'] ?? 'top-left')
             ),
             'collapse' => array(
                 'enabled' => isset($_POST['features']['collapse']['enabled']) ? true : false,
@@ -796,7 +799,8 @@ class CBD_Admin {
             ),
             'numbering' => array(
                 'enabled' => isset($_POST['features']['numbering']['enabled']) ? true : false,
-                'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric')
+                'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric'),
+                'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left')
             ),
             'copyText' => array(
                 'enabled' => isset($_POST['features']['copyText']['enabled']) ? true : false,
@@ -1084,7 +1088,8 @@ class CBD_Admin {
         $features = array(
             'icon' => array(
                 'enabled' => isset($_POST['features']['icon']['enabled']) ? true : false,
-                'value' => sanitize_text_field($_POST['features']['icon']['value'] ?? 'dashicons-admin-generic')
+                'value' => sanitize_text_field($_POST['features']['icon']['value'] ?? 'dashicons-admin-generic'),
+                'position' => sanitize_text_field($_POST['features']['icon']['position'] ?? 'top-left')
             ),
             'collapse' => array(
                 'enabled' => isset($_POST['features']['collapse']['enabled']) ? true : false,
@@ -1092,7 +1097,8 @@ class CBD_Admin {
             ),
             'numbering' => array(
                 'enabled' => isset($_POST['features']['numbering']['enabled']) ? true : false,
-                'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric')
+                'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric'),
+                'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left')
             ),
             'copyText' => array(
                 'enabled' => isset($_POST['features']['copyText']['enabled']) ? true : false,

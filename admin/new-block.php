@@ -722,6 +722,82 @@ if ($block_id > 0) {
                                         <button type="button" class="cbd-open-icon-picker button"><?php _e('Icon ändern', 'container-block-designer'); ?></button>
                                     </div>
                                     
+                                    <!-- Icon Position Controls -->
+                                    <div class="cbd-icon-position-controls" style="margin-top: 15px;">
+                                        <label><?php _e('Icon Position:', 'container-block-designer'); ?></label>
+                                        <div class="cbd-position-grid">
+                                            <div class="cbd-position-row">
+                                                <label class="cbd-position-option">
+                                                    <input type="radio" name="features[icon][position]" value="top-left" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'top-left'); ?>>
+                                                    <span class="cbd-position-visual">
+                                                        <span class="cbd-position-indicator top-left"></span>
+                                                    </span>
+                                                    <span class="cbd-position-label"><?php _e('Oben Links', 'container-block-designer'); ?></span>
+                                                </label>
+                                                <label class="cbd-position-option">
+                                                    <input type="radio" name="features[icon][position]" value="top-center" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'top-center'); ?>>
+                                                    <span class="cbd-position-visual">
+                                                        <span class="cbd-position-indicator top-center"></span>
+                                                    </span>
+                                                    <span class="cbd-position-label"><?php _e('Oben Mitte', 'container-block-designer'); ?></span>
+                                                </label>
+                                                <label class="cbd-position-option">
+                                                    <input type="radio" name="features[icon][position]" value="top-right" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'top-right'); ?>>
+                                                    <span class="cbd-position-visual">
+                                                        <span class="cbd-position-indicator top-right"></span>
+                                                    </span>
+                                                    <span class="cbd-position-label"><?php _e('Oben Rechts', 'container-block-designer'); ?></span>
+                                                </label>
+                                            </div>
+                                            <div class="cbd-position-row">
+                                                <label class="cbd-position-option">
+                                                    <input type="radio" name="features[icon][position]" value="middle-left" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'middle-left'); ?>>
+                                                    <span class="cbd-position-visual">
+                                                        <span class="cbd-position-indicator middle-left"></span>
+                                                    </span>
+                                                    <span class="cbd-position-label"><?php _e('Mitte Links', 'container-block-designer'); ?></span>
+                                                </label>
+                                                <label class="cbd-position-option">
+                                                    <input type="radio" name="features[icon][position]" value="middle-center" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'middle-center'); ?>>
+                                                    <span class="cbd-position-visual">
+                                                        <span class="cbd-position-indicator middle-center"></span>
+                                                    </span>
+                                                    <span class="cbd-position-label"><?php _e('Mitte', 'container-block-designer'); ?></span>
+                                                </label>
+                                                <label class="cbd-position-option">
+                                                    <input type="radio" name="features[icon][position]" value="middle-right" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'middle-right'); ?>>
+                                                    <span class="cbd-position-visual">
+                                                        <span class="cbd-position-indicator middle-right"></span>
+                                                    </span>
+                                                    <span class="cbd-position-label"><?php _e('Mitte Rechts', 'container-block-designer'); ?></span>
+                                                </label>
+                                            </div>
+                                            <div class="cbd-position-row">
+                                                <label class="cbd-position-option">
+                                                    <input type="radio" name="features[icon][position]" value="bottom-left" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'bottom-left'); ?>>
+                                                    <span class="cbd-position-visual">
+                                                        <span class="cbd-position-indicator bottom-left"></span>
+                                                    </span>
+                                                    <span class="cbd-position-label"><?php _e('Unten Links', 'container-block-designer'); ?></span>
+                                                </label>
+                                                <label class="cbd-position-option">
+                                                    <input type="radio" name="features[icon][position]" value="bottom-center" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'bottom-center'); ?>>
+                                                    <span class="cbd-position-visual">
+                                                        <span class="cbd-position-indicator bottom-center"></span>
+                                                    </span>
+                                                    <span class="cbd-position-label"><?php _e('Unten Mitte', 'container-block-designer'); ?></span>
+                                                </label>
+                                                <label class="cbd-position-option">
+                                                    <input type="radio" name="features[icon][position]" value="bottom-right" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'bottom-right'); ?>>
+                                                    <span class="cbd-position-visual">
+                                                        <span class="cbd-position-indicator bottom-right"></span>
+                                                    </span>
+                                                    <span class="cbd-position-label"><?php _e('Unten Rechts', 'container-block-designer'); ?></span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <!-- Icon Picker Modal -->
                                     <div class="cbd-icon-picker-modal" style="display: none;">
                                         <div class="cbd-icon-picker-backdrop">
@@ -789,6 +865,82 @@ if ($block_id > 0) {
                                     <option value="alphabetic" <?php selected($block['features']['numbering']['format'] ?? 'numeric', 'alphabetic'); ?>><?php _e('A, B, C...', 'container-block-designer'); ?></option>
                                     <option value="roman" <?php selected($block['features']['numbering']['format'] ?? 'numeric', 'roman'); ?>><?php _e('I, II, III...', 'container-block-designer'); ?></option>
                                 </select>
+                                
+                                <!-- Numbering Position Controls -->
+                                <div class="cbd-numbering-position-controls" style="margin-top: 15px;">
+                                    <label><?php _e('Nummerierung Position:', 'container-block-designer'); ?></label>
+                                    <div class="cbd-position-grid">
+                                        <div class="cbd-position-row">
+                                            <label class="cbd-position-option">
+                                                <input type="radio" name="features[numbering][position]" value="top-left" <?php checked($block['features']['numbering']['position'] ?? 'top-left', 'top-left'); ?>>
+                                                <span class="cbd-position-visual">
+                                                    <span class="cbd-position-indicator top-left"></span>
+                                                </span>
+                                                <span class="cbd-position-label"><?php _e('Oben Links', 'container-block-designer'); ?></span>
+                                            </label>
+                                            <label class="cbd-position-option">
+                                                <input type="radio" name="features[numbering][position]" value="top-center" <?php checked($block['features']['numbering']['position'] ?? 'top-left', 'top-center'); ?>>
+                                                <span class="cbd-position-visual">
+                                                    <span class="cbd-position-indicator top-center"></span>
+                                                </span>
+                                                <span class="cbd-position-label"><?php _e('Oben Mitte', 'container-block-designer'); ?></span>
+                                            </label>
+                                            <label class="cbd-position-option">
+                                                <input type="radio" name="features[numbering][position]" value="top-right" <?php checked($block['features']['numbering']['position'] ?? 'top-left', 'top-right'); ?>>
+                                                <span class="cbd-position-visual">
+                                                    <span class="cbd-position-indicator top-right"></span>
+                                                </span>
+                                                <span class="cbd-position-label"><?php _e('Oben Rechts', 'container-block-designer'); ?></span>
+                                            </label>
+                                        </div>
+                                        <div class="cbd-position-row">
+                                            <label class="cbd-position-option">
+                                                <input type="radio" name="features[numbering][position]" value="middle-left" <?php checked($block['features']['numbering']['position'] ?? 'top-left', 'middle-left'); ?>>
+                                                <span class="cbd-position-visual">
+                                                    <span class="cbd-position-indicator middle-left"></span>
+                                                </span>
+                                                <span class="cbd-position-label"><?php _e('Mitte Links', 'container-block-designer'); ?></span>
+                                            </label>
+                                            <label class="cbd-position-option">
+                                                <input type="radio" name="features[numbering][position]" value="middle-center" <?php checked($block['features']['numbering']['position'] ?? 'top-left', 'middle-center'); ?>>
+                                                <span class="cbd-position-visual">
+                                                    <span class="cbd-position-indicator middle-center"></span>
+                                                </span>
+                                                <span class="cbd-position-label"><?php _e('Mitte', 'container-block-designer'); ?></span>
+                                            </label>
+                                            <label class="cbd-position-option">
+                                                <input type="radio" name="features[numbering][position]" value="middle-right" <?php checked($block['features']['numbering']['position'] ?? 'top-left', 'middle-right'); ?>>
+                                                <span class="cbd-position-visual">
+                                                    <span class="cbd-position-indicator middle-right"></span>
+                                                </span>
+                                                <span class="cbd-position-label"><?php _e('Mitte Rechts', 'container-block-designer'); ?></span>
+                                            </label>
+                                        </div>
+                                        <div class="cbd-position-row">
+                                            <label class="cbd-position-option">
+                                                <input type="radio" name="features[numbering][position]" value="bottom-left" <?php checked($block['features']['numbering']['position'] ?? 'top-left', 'bottom-left'); ?>>
+                                                <span class="cbd-position-visual">
+                                                    <span class="cbd-position-indicator bottom-left"></span>
+                                                </span>
+                                                <span class="cbd-position-label"><?php _e('Unten Links', 'container-block-designer'); ?></span>
+                                            </label>
+                                            <label class="cbd-position-option">
+                                                <input type="radio" name="features[numbering][position]" value="bottom-center" <?php checked($block['features']['numbering']['position'] ?? 'top-left', 'bottom-center'); ?>>
+                                                <span class="cbd-position-visual">
+                                                    <span class="cbd-position-indicator bottom-center"></span>
+                                                </span>
+                                                <span class="cbd-position-label"><?php _e('Unten Mitte', 'container-block-designer'); ?></span>
+                                            </label>
+                                            <label class="cbd-position-option">
+                                                <input type="radio" name="features[numbering][position]" value="bottom-right" <?php checked($block['features']['numbering']['position'] ?? 'top-left', 'bottom-right'); ?>>
+                                                <span class="cbd-position-visual">
+                                                    <span class="cbd-position-indicator bottom-right"></span>
+                                                </span>
+                                                <span class="cbd-position-label"><?php _e('Unten Rechts', 'container-block-designer'); ?></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         
@@ -1353,6 +1505,149 @@ if ($block_id > 0) {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
+}
+
+/* Icon Position Controls */
+.cbd-icon-position-controls,
+.cbd-numbering-position-controls {
+    padding: 15px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.cbd-icon-position-controls > label,
+.cbd-numbering-position-controls > label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #23282d;
+}
+
+.cbd-position-grid {
+    display: grid;
+    gap: 8px;
+}
+
+.cbd-position-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.cbd-position-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 8px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.cbd-position-option:hover {
+    border-color: #007cba;
+    background: #f0f8ff;
+}
+
+.cbd-position-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.cbd-position-option input[type="radio"]:checked + .cbd-position-visual {
+    background: #007cba;
+    border-color: #007cba;
+}
+
+.cbd-position-option input[type="radio"]:checked + .cbd-position-visual .cbd-position-indicator {
+    background: white;
+}
+
+.cbd-position-option input[type="radio"]:checked ~ .cbd-position-label {
+    color: #007cba;
+    font-weight: 600;
+}
+
+.cbd-position-visual {
+    width: 50px;
+    height: 40px;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    background: #f9f9f9;
+    position: relative;
+    margin-bottom: 8px;
+    transition: all 0.2s ease;
+}
+
+.cbd-position-indicator {
+    width: 8px;
+    height: 8px;
+    background: #666;
+    border-radius: 50%;
+    position: absolute;
+    transition: all 0.2s ease;
+}
+
+.cbd-position-indicator.top-left {
+    top: 4px;
+    left: 4px;
+}
+
+.cbd-position-indicator.top-center {
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-position-indicator.top-right {
+    top: 4px;
+    right: 4px;
+}
+
+.cbd-position-indicator.middle-left {
+    top: 50%;
+    left: 4px;
+    transform: translateY(-50%);
+}
+
+.cbd-position-indicator.middle-center {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.cbd-position-indicator.middle-right {
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+}
+
+.cbd-position-indicator.bottom-left {
+    bottom: 4px;
+    left: 4px;
+}
+
+.cbd-position-indicator.bottom-center {
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-position-indicator.bottom-right {
+    bottom: 4px;
+    right: 4px;
+}
+
+.cbd-position-label {
+    font-size: 11px;
+    color: #666;
+    transition: all 0.2s ease;
 }
 </style>
 
