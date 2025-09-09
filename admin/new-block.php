@@ -38,7 +38,15 @@ if (isset($_POST['cbd_save_block']) && isset($_POST['cbd_nonce']) && wp_verify_n
             'left' => intval($_POST['styles']['padding']['left'] ?? $_POST['padding_left'] ?? 20)
         ),
         'background' => array(
-            'color' => sanitize_hex_color($_POST['styles']['background']['color'] ?? $_POST['background_color'] ?? '#ffffff')
+            'type' => sanitize_text_field($_POST['styles']['background']['type'] ?? 'color'),
+            'color' => sanitize_hex_color($_POST['styles']['background']['color'] ?? $_POST['background_color'] ?? '#ffffff'),
+            'gradient' => array(
+                'type' => sanitize_text_field($_POST['styles']['background']['gradient']['type'] ?? 'linear'),
+                'angle' => intval($_POST['styles']['background']['gradient']['angle'] ?? 45),
+                'color1' => sanitize_hex_color($_POST['styles']['background']['gradient']['color1'] ?? '#ff6b6b'),
+                'color2' => sanitize_hex_color($_POST['styles']['background']['gradient']['color2'] ?? '#4ecdc4'),
+                'color3' => sanitize_hex_color($_POST['styles']['background']['gradient']['color3'] ?? '')
+            )
         ),
         'border' => array(
             'width' => intval($_POST['styles']['border']['width'] ?? $_POST['border_width'] ?? 1),
@@ -66,6 +74,33 @@ if (isset($_POST['cbd_save_block']) && isset($_POST['cbd_nonce']) && wp_verify_n
                 'blur' => intval($_POST['styles']['shadow']['inner']['blur'] ?? 4),
                 'spread' => intval($_POST['styles']['shadow']['inner']['spread'] ?? 0),
                 'color' => sanitize_hex_color($_POST['styles']['shadow']['inner']['color'] ?? '#00000030')
+            )
+        ),
+        'effects' => array(
+            'glassmorphism' => array(
+                'enabled' => isset($_POST['styles']['effects']['glassmorphism']['enabled']),
+                'opacity' => floatval($_POST['styles']['effects']['glassmorphism']['opacity'] ?? 0.1),
+                'blur' => intval($_POST['styles']['effects']['glassmorphism']['blur'] ?? 10),
+                'saturate' => intval($_POST['styles']['effects']['glassmorphism']['saturate'] ?? 100),
+                'color' => sanitize_hex_color($_POST['styles']['effects']['glassmorphism']['color'] ?? '#ffffff')
+            ),
+            'filters' => array(
+                'brightness' => intval($_POST['styles']['effects']['filters']['brightness'] ?? 100),
+                'contrast' => intval($_POST['styles']['effects']['filters']['contrast'] ?? 100),
+                'hue' => intval($_POST['styles']['effects']['filters']['hue'] ?? 0)
+            ),
+            'neumorphism' => array(
+                'enabled' => isset($_POST['styles']['effects']['neumorphism']['enabled']),
+                'style' => sanitize_text_field($_POST['styles']['effects']['neumorphism']['style'] ?? 'raised'),
+                'intensity' => intval($_POST['styles']['effects']['neumorphism']['intensity'] ?? 10),
+                'background' => sanitize_hex_color($_POST['styles']['effects']['neumorphism']['background'] ?? '#e0e0e0'),
+                'distance' => intval($_POST['styles']['effects']['neumorphism']['distance'] ?? 15)
+            ),
+            'animation' => array(
+                'hover' => sanitize_text_field($_POST['styles']['effects']['animation']['hover'] ?? 'none'),
+                'origin' => sanitize_text_field($_POST['styles']['effects']['animation']['origin'] ?? 'center'),
+                'duration' => intval($_POST['styles']['effects']['animation']['duration'] ?? 300),
+                'easing' => sanitize_text_field($_POST['styles']['effects']['animation']['easing'] ?? 'ease')
             )
         )
     );
@@ -374,11 +409,61 @@ if ($block_id > 0) {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row">
-                                    <label for="background_color"><?php _e('Hintergrundfarbe', 'container-block-designer'); ?></label>
-                                </th>
+                                <th scope="row"><?php _e('Hintergrund', 'container-block-designer'); ?></th>
                                 <td>
-                                    <input type="color" id="background_color" name="styles[background][color]" value="<?php echo esc_attr($block['styles']['background']['color'] ?? '#ffffff'); ?>" class="cbd-color-picker">
+                                    <div class="cbd-background-controls">
+                                        <fieldset>
+                                            <legend><?php _e('Hintergrund-Typ', 'container-block-designer'); ?></legend>
+                                            <label>
+                                                <input type="radio" name="styles[background][type]" value="color" <?php checked($block['styles']['background']['type'] ?? 'color', 'color'); ?>>
+                                                <?php _e('Farbe', 'container-block-designer'); ?>
+                                            </label>
+                                            <label>
+                                                <input type="radio" name="styles[background][type]" value="gradient" <?php checked($block['styles']['background']['type'] ?? 'color', 'gradient'); ?>>
+                                                <?php _e('Gradient', 'container-block-designer'); ?>
+                                            </label>
+                                        </fieldset>
+                                        
+                                        <!-- Farbe Optionen -->
+                                        <div class="cbd-bg-color-options" style="<?php echo ($block['styles']['background']['type'] ?? 'color') !== 'color' ? 'display: none;' : ''; ?>">
+                                            <label>
+                                                <?php _e('Farbe:', 'container-block-designer'); ?>
+                                                <input type="color" name="styles[background][color]" value="<?php echo esc_attr($block['styles']['background']['color'] ?? '#ffffff'); ?>" class="cbd-color-picker">
+                                            </label>
+                                        </div>
+                                        
+                                        <!-- Gradient Optionen -->
+                                        <div class="cbd-bg-gradient-options" style="<?php echo ($block['styles']['background']['type'] ?? 'color') !== 'gradient' ? 'display: none;' : ''; ?>">
+                                            <div class="cbd-gradient-controls">
+                                                <label>
+                                                    <?php _e('Gradient-Typ:', 'container-block-designer'); ?>
+                                                    <select name="styles[background][gradient][type]">
+                                                        <option value="linear" <?php selected($block['styles']['background']['gradient']['type'] ?? 'linear', 'linear'); ?>><?php _e('Linear', 'container-block-designer'); ?></option>
+                                                        <option value="radial" <?php selected($block['styles']['background']['gradient']['type'] ?? 'linear', 'radial'); ?>><?php _e('Radial', 'container-block-designer'); ?></option>
+                                                        <option value="conic" <?php selected($block['styles']['background']['gradient']['type'] ?? 'linear', 'conic'); ?>><?php _e('Konisch', 'container-block-designer'); ?></option>
+                                                    </select>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Richtung (Grad):', 'container-block-designer'); ?>
+                                                    <input type="range" name="styles[background][gradient][angle]" min="0" max="360" value="<?php echo esc_attr($block['styles']['background']['gradient']['angle'] ?? 45); ?>" class="cbd-range-input">
+                                                    <span class="cbd-range-value"><?php echo esc_attr($block['styles']['background']['gradient']['angle'] ?? 45); ?>°</span>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Startfarbe:', 'container-block-designer'); ?>
+                                                    <input type="color" name="styles[background][gradient][color1]" value="<?php echo esc_attr($block['styles']['background']['gradient']['color1'] ?? '#ff6b6b'); ?>" class="cbd-color-picker">
+                                                </label>
+                                                <label>
+                                                    <?php _e('Endfarbe:', 'container-block-designer'); ?>
+                                                    <input type="color" name="styles[background][gradient][color2]" value="<?php echo esc_attr($block['styles']['background']['gradient']['color2'] ?? '#4ecdc4'); ?>" class="cbd-color-picker">
+                                                </label>
+                                                <label>
+                                                    <?php _e('Mittlere Farbe (optional):', 'container-block-designer'); ?>
+                                                    <input type="color" name="styles[background][gradient][color3]" value="<?php echo esc_attr($block['styles']['background']['gradient']['color3'] ?? ''); ?>" class="cbd-color-picker">
+                                                    <small><?php _e('Leer lassen für 2-Farben-Gradient', 'container-block-designer'); ?></small>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                             <tr>
@@ -400,6 +485,143 @@ if ($block_id > 0) {
                                         <option value="right" <?php selected($block['styles']['text']['alignment'] ?? 'left', 'right'); ?>><?php _e('Rechts', 'container-block-designer'); ?></option>
                                         <option value="justify" <?php selected($block['styles']['text']['alignment'] ?? 'left', 'justify'); ?>><?php _e('Blocksatz', 'container-block-designer'); ?></option>
                                     </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><?php _e('Moderne Effekte', 'container-block-designer'); ?></th>
+                                <td>
+                                    <div class="cbd-effects-controls">
+                                        <!-- Glassmorphism -->
+                                        <fieldset>
+                                            <legend><?php _e('Glassmorphism', 'container-block-designer'); ?></legend>
+                                            <label>
+                                                <input type="checkbox" name="styles[effects][glassmorphism][enabled]" value="1" <?php checked($block['styles']['effects']['glassmorphism']['enabled'] ?? false); ?>>
+                                                <?php _e('Glaseffekt aktivieren', 'container-block-designer'); ?>
+                                            </label>
+                                            <br><br>
+                                            <div class="cbd-glassmorphism-options">
+                                                <label>
+                                                    <?php _e('Hintergrund-Transparenz:', 'container-block-designer'); ?>
+                                                    <input type="range" name="styles[effects][glassmorphism][opacity]" min="0" max="1" step="0.1" value="<?php echo esc_attr($block['styles']['effects']['glassmorphism']['opacity'] ?? 0.1); ?>" class="cbd-range-input">
+                                                    <span class="cbd-range-value"><?php echo esc_attr($block['styles']['effects']['glassmorphism']['opacity'] ?? 0.1); ?></span>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Unschärfe-Stärke:', 'container-block-designer'); ?>
+                                                    <input type="range" name="styles[effects][glassmorphism][blur]" min="0" max="50" value="<?php echo esc_attr($block['styles']['effects']['glassmorphism']['blur'] ?? 10); ?>" class="cbd-range-input">
+                                                    <span class="cbd-range-value"><?php echo esc_attr($block['styles']['effects']['glassmorphism']['blur'] ?? 10); ?>px</span>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Sättigung:', 'container-block-designer'); ?>
+                                                    <input type="range" name="styles[effects][glassmorphism][saturate]" min="0" max="200" value="<?php echo esc_attr($block['styles']['effects']['glassmorphism']['saturate'] ?? 100); ?>" class="cbd-range-input">
+                                                    <span class="cbd-range-value"><?php echo esc_attr($block['styles']['effects']['glassmorphism']['saturate'] ?? 100); ?>%</span>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Glasfarbe:', 'container-block-designer'); ?>
+                                                    <input type="color" name="styles[effects][glassmorphism][color]" value="<?php echo esc_attr($block['styles']['effects']['glassmorphism']['color'] ?? '#ffffff'); ?>" class="cbd-color-picker">
+                                                </label>
+                                            </div>
+                                        </fieldset>
+                                        
+                                        <!-- Neumorphism -->
+                                        <fieldset>
+                                            <legend><?php _e('Neumorphism', 'container-block-designer'); ?></legend>
+                                            <label>
+                                                <input type="checkbox" name="styles[effects][neumorphism][enabled]" value="1" <?php checked($block['styles']['effects']['neumorphism']['enabled'] ?? false); ?>>
+                                                <?php _e('Neumorphism-Effekt aktivieren', 'container-block-designer'); ?>
+                                            </label>
+                                            <br><br>
+                                            <div class="cbd-neumorphism-options">
+                                                <label>
+                                                    <?php _e('Stil:', 'container-block-designer'); ?>
+                                                    <select name="styles[effects][neumorphism][style]">
+                                                        <option value="raised" <?php selected($block['styles']['effects']['neumorphism']['style'] ?? 'raised', 'raised'); ?>><?php _e('Erhaben', 'container-block-designer'); ?></option>
+                                                        <option value="inset" <?php selected($block['styles']['effects']['neumorphism']['style'] ?? 'raised', 'inset'); ?>><?php _e('Eingedrückt', 'container-block-designer'); ?></option>
+                                                        <option value="flat" <?php selected($block['styles']['effects']['neumorphism']['style'] ?? 'raised', 'flat'); ?>><?php _e('Flach', 'container-block-designer'); ?></option>
+                                                    </select>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Schatten-Intensität:', 'container-block-designer'); ?>
+                                                    <input type="range" name="styles[effects][neumorphism][intensity]" min="1" max="20" value="<?php echo esc_attr($block['styles']['effects']['neumorphism']['intensity'] ?? 10); ?>" class="cbd-range-input">
+                                                    <span class="cbd-range-value"><?php echo esc_attr($block['styles']['effects']['neumorphism']['intensity'] ?? 10); ?>px</span>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Hintergrundfarbe:', 'container-block-designer'); ?>
+                                                    <input type="color" name="styles[effects][neumorphism][background]" value="<?php echo esc_attr($block['styles']['effects']['neumorphism']['background'] ?? '#e0e0e0'); ?>" class="cbd-color-picker">
+                                                    <small><?php _e('Neumorphism funktioniert am besten mit neutralen Farben', 'container-block-designer'); ?></small>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Schatten-Distanz:', 'container-block-designer'); ?>
+                                                    <input type="range" name="styles[effects][neumorphism][distance]" min="5" max="30" value="<?php echo esc_attr($block['styles']['effects']['neumorphism']['distance'] ?? 15); ?>" class="cbd-range-input">
+                                                    <span class="cbd-range-value"><?php echo esc_attr($block['styles']['effects']['neumorphism']['distance'] ?? 15); ?>px</span>
+                                                </label>
+                                            </div>
+                                        </fieldset>
+                                        
+                                        <!-- Weitere moderne Effekte -->
+                                        <fieldset>
+                                            <legend><?php _e('CSS Filter', 'container-block-designer'); ?></legend>
+                                            <div class="cbd-filter-controls">
+                                                <label>
+                                                    <?php _e('Helligkeit:', 'container-block-designer'); ?>
+                                                    <input type="range" name="styles[effects][filters][brightness]" min="0" max="200" value="<?php echo esc_attr($block['styles']['effects']['filters']['brightness'] ?? 100); ?>" class="cbd-range-input">
+                                                    <span class="cbd-range-value"><?php echo esc_attr($block['styles']['effects']['filters']['brightness'] ?? 100); ?>%</span>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Kontrast:', 'container-block-designer'); ?>
+                                                    <input type="range" name="styles[effects][filters][contrast]" min="0" max="200" value="<?php echo esc_attr($block['styles']['effects']['filters']['contrast'] ?? 100); ?>" class="cbd-range-input">
+                                                    <span class="cbd-range-value"><?php echo esc_attr($block['styles']['effects']['filters']['contrast'] ?? 100); ?>%</span>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Farbton-Rotation:', 'container-block-designer'); ?>
+                                                    <input type="range" name="styles[effects][filters][hue]" min="0" max="360" value="<?php echo esc_attr($block['styles']['effects']['filters']['hue'] ?? 0); ?>" class="cbd-range-input">
+                                                    <span class="cbd-range-value"><?php echo esc_attr($block['styles']['effects']['filters']['hue'] ?? 0); ?>°</span>
+                                                </label>
+                                            </div>
+                                        </fieldset>
+                                        
+                                        <!-- Animations & Transform -->
+                                        <fieldset>
+                                            <legend><?php _e('Animation & Transform', 'container-block-designer'); ?></legend>
+                                            <div class="cbd-animation-controls">
+                                                <label>
+                                                    <?php _e('Hover-Animation:', 'container-block-designer'); ?>
+                                                    <select name="styles[effects][animation][hover]">
+                                                        <option value="none" <?php selected($block['styles']['effects']['animation']['hover'] ?? 'none', 'none'); ?>><?php _e('Keine', 'container-block-designer'); ?></option>
+                                                        <option value="lift" <?php selected($block['styles']['effects']['animation']['hover'] ?? 'none', 'lift'); ?>><?php _e('Anheben', 'container-block-designer'); ?></option>
+                                                        <option value="scale" <?php selected($block['styles']['effects']['animation']['hover'] ?? 'none', 'scale'); ?>><?php _e('Vergrößern', 'container-block-designer'); ?></option>
+                                                        <option value="rotate" <?php selected($block['styles']['effects']['animation']['hover'] ?? 'none', 'rotate'); ?>><?php _e('Rotieren', 'container-block-designer'); ?></option>
+                                                        <option value="pulse" <?php selected($block['styles']['effects']['animation']['hover'] ?? 'none', 'pulse'); ?>><?php _e('Pulsieren', 'container-block-designer'); ?></option>
+                                                        <option value="bounce" <?php selected($block['styles']['effects']['animation']['hover'] ?? 'none', 'bounce'); ?>><?php _e('Springen', 'container-block-designer'); ?></option>
+                                                    </select>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Transformations-Ursprung:', 'container-block-designer'); ?>
+                                                    <select name="styles[effects][animation][origin]">
+                                                        <option value="center" <?php selected($block['styles']['effects']['animation']['origin'] ?? 'center', 'center'); ?>><?php _e('Zentrum', 'container-block-designer'); ?></option>
+                                                        <option value="top left" <?php selected($block['styles']['effects']['animation']['origin'] ?? 'center', 'top left'); ?>><?php _e('Oben Links', 'container-block-designer'); ?></option>
+                                                        <option value="top right" <?php selected($block['styles']['effects']['animation']['origin'] ?? 'center', 'top right'); ?>><?php _e('Oben Rechts', 'container-block-designer'); ?></option>
+                                                        <option value="bottom left" <?php selected($block['styles']['effects']['animation']['origin'] ?? 'center', 'bottom left'); ?>><?php _e('Unten Links', 'container-block-designer'); ?></option>
+                                                        <option value="bottom right" <?php selected($block['styles']['effects']['animation']['origin'] ?? 'center', 'bottom right'); ?>><?php _e('Unten Rechts', 'container-block-designer'); ?></option>
+                                                    </select>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Animation-Dauer:', 'container-block-designer'); ?>
+                                                    <input type="range" name="styles[effects][animation][duration]" min="100" max="2000" step="100" value="<?php echo esc_attr($block['styles']['effects']['animation']['duration'] ?? 300); ?>" class="cbd-range-input">
+                                                    <span class="cbd-range-value"><?php echo esc_attr($block['styles']['effects']['animation']['duration'] ?? 300); ?>ms</span>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Easing-Funktion:', 'container-block-designer'); ?>
+                                                    <select name="styles[effects][animation][easing]">
+                                                        <option value="ease" <?php selected($block['styles']['effects']['animation']['easing'] ?? 'ease', 'ease'); ?>><?php _e('Standard', 'container-block-designer'); ?></option>
+                                                        <option value="ease-in" <?php selected($block['styles']['effects']['animation']['easing'] ?? 'ease', 'ease-in'); ?>><?php _e('Beschleunigen', 'container-block-designer'); ?></option>
+                                                        <option value="ease-out" <?php selected($block['styles']['effects']['animation']['easing'] ?? 'ease', 'ease-out'); ?>><?php _e('Verlangsamen', 'container-block-designer'); ?></option>
+                                                        <option value="ease-in-out" <?php selected($block['styles']['effects']['animation']['easing'] ?? 'ease', 'ease-in-out'); ?>><?php _e('Smooth', 'container-block-designer'); ?></option>
+                                                        <option value="cubic-bezier(0.68, -0.55, 0.265, 1.55)" <?php selected($block['styles']['effects']['animation']['easing'] ?? 'ease', 'cubic-bezier(0.68, -0.55, 0.265, 1.55)'); ?>><?php _e('Elastisch', 'container-block-designer'); ?></option>
+                                                    </select>
+                                                </label>
+                                            </div>
+                                        </fieldset>
+                                    </div>
                                 </td>
                             </tr>
                             <tr>
@@ -489,9 +711,55 @@ if ($block_id > 0) {
                                 <strong><?php _e('Icon', 'container-block-designer'); ?></strong>
                             </label>
                             <div class="cbd-feature-options" <?php echo !($block['features']['icon']['enabled'] ?? false) ? 'style="display:none;"' : ''; ?>>
-                                <label for="icon_value"><?php _e('Icon-Klasse:', 'container-block-designer'); ?></label>
-                                <input type="text" id="icon_value" name="features[icon][value]" value="<?php echo esc_attr($block['features']['icon']['value'] ?? 'dashicons-admin-generic'); ?>" placeholder="dashicons-admin-generic" class="regular-text">
-                                <p class="description"><?php _e('Verwenden Sie Dashicon-Klassen wie "dashicons-admin-generic"', 'container-block-designer'); ?></p>
+                                <label><?php _e('Icon auswählen:', 'container-block-designer'); ?></label>
+                                <div class="cbd-icon-picker">
+                                    <input type="hidden" id="icon_value" name="features[icon][value]" value="<?php echo esc_attr($block['features']['icon']['value'] ?? 'dashicons-admin-generic'); ?>">
+                                    
+                                    <!-- Selected Icon Display -->
+                                    <div class="cbd-selected-icon">
+                                        <span class="dashicons <?php echo esc_attr($block['features']['icon']['value'] ?? 'dashicons-admin-generic'); ?>"></span>
+                                        <span class="cbd-icon-name"><?php echo esc_html($block['features']['icon']['value'] ?? 'dashicons-admin-generic'); ?></span>
+                                        <button type="button" class="cbd-open-icon-picker button"><?php _e('Icon ändern', 'container-block-designer'); ?></button>
+                                    </div>
+                                    
+                                    <!-- Icon Picker Modal -->
+                                    <div class="cbd-icon-picker-modal" style="display: none;">
+                                        <div class="cbd-icon-picker-backdrop">
+                                            <div class="cbd-icon-picker-content">
+                                                <div class="cbd-icon-picker-header">
+                                                    <h3><?php _e('Icon auswählen', 'container-block-designer'); ?></h3>
+                                                    <button type="button" class="cbd-close-icon-picker">&times;</button>
+                                                </div>
+                                                
+                                                <!-- Search -->
+                                                <div class="cbd-icon-search">
+                                                    <input type="text" placeholder="<?php _e('Icons durchsuchen...', 'container-block-designer'); ?>" class="cbd-icon-search-input">
+                                                </div>
+                                                
+                                                <!-- Icon Categories -->
+                                                <div class="cbd-icon-categories">
+                                                    <button type="button" class="cbd-icon-category active" data-category="all"><?php _e('Alle', 'container-block-designer'); ?></button>
+                                                    <button type="button" class="cbd-icon-category" data-category="admin"><?php _e('Admin', 'container-block-designer'); ?></button>
+                                                    <button type="button" class="cbd-icon-category" data-category="post"><?php _e('Posts', 'container-block-designer'); ?></button>
+                                                    <button type="button" class="cbd-icon-category" data-category="media"><?php _e('Medien', 'container-block-designer'); ?></button>
+                                                    <button type="button" class="cbd-icon-category" data-category="misc"><?php _e('Verschiedenes', 'container-block-designer'); ?></button>
+                                                    <button type="button" class="cbd-icon-category" data-category="social"><?php _e('Social', 'container-block-designer'); ?></button>
+                                                </div>
+                                                
+                                                <!-- Icon Grid -->
+                                                <div class="cbd-icon-grid">
+                                                    <!-- Icons will be populated by JavaScript -->
+                                                </div>
+                                                
+                                                <div class="cbd-icon-picker-footer">
+                                                    <button type="button" class="button button-secondary cbd-close-icon-picker"><?php _e('Abbrechen', 'container-block-designer'); ?></button>
+                                                    <button type="button" class="button button-primary cbd-select-icon"><?php _e('Icon auswählen', 'container-block-designer'); ?></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p class="description"><?php _e('Klicken Sie auf "Icon ändern" um ein Icon aus der visuellen Liste auszuwählen', 'container-block-designer'); ?></p>
                             </div>
                         </div>
                         
@@ -749,6 +1017,343 @@ if ($block_id > 0) {
 .cbd-shadow-options input {
     margin-top: 5px;
 }
+
+/* Background Controls Styles */
+.cbd-background-controls fieldset {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.cbd-background-controls legend {
+    font-weight: 600;
+    padding: 0 10px;
+}
+
+.cbd-background-controls label {
+    display: inline-block;
+    margin-right: 15px;
+    margin-bottom: 10px;
+}
+
+.cbd-bg-color-options,
+.cbd-bg-gradient-options {
+    margin-top: 15px;
+}
+
+.cbd-gradient-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.cbd-gradient-controls label {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.cbd-range-input {
+    margin: 5px 0;
+    width: 100%;
+}
+
+.cbd-range-value {
+    font-weight: bold;
+    color: #007cba;
+}
+
+.cbd-gradient-controls small {
+    font-style: italic;
+    color: #666;
+    margin-top: 5px;
+}
+
+/* Effects Controls Styles */
+.cbd-effects-controls fieldset {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.cbd-effects-controls legend {
+    font-weight: 600;
+    padding: 0 10px;
+}
+
+.cbd-glassmorphism-options,
+.cbd-filter-controls,
+.cbd-neumorphism-options,
+.cbd-animation-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.cbd-glassmorphism-options label,
+.cbd-filter-controls label,
+.cbd-neumorphism-options label,
+.cbd-animation-controls label {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.cbd-effects-controls .cbd-range-input {
+    margin: 5px 0;
+    width: 100%;
+}
+
+.cbd-effects-controls .cbd-range-value {
+    font-weight: bold;
+    color: #007cba;
+}
+
+/* Glassmorphism Preview Helper */
+.cbd-glassmorphism-preview {
+    position: relative;
+    overflow: hidden;
+}
+
+.cbd-glassmorphism-preview::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    z-index: -1;
+}
+
+/* Animation Preview Styles */
+.cbd-preview-block {
+    transition: all 300ms ease;
+    transform-origin: center;
+}
+
+.cbd-animation-lift:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+}
+
+.cbd-animation-scale:hover {
+    transform: scale(1.05);
+}
+
+.cbd-animation-rotate:hover {
+    transform: rotate(5deg);
+}
+
+.cbd-animation-pulse {
+    animation: cbd-pulse 2s infinite;
+}
+
+@keyframes cbd-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+    100% { transform: scale(1); }
+}
+
+.cbd-animation-bounce:hover {
+    animation: cbd-bounce 0.6s ease;
+}
+
+@keyframes cbd-bounce {
+    0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+    40% { transform: translateY(-10px); }
+    60% { transform: translateY(-5px); }
+}
+
+/* Icon Picker Styles */
+.cbd-selected-icon {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+.cbd-selected-icon .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    color: #666;
+}
+
+.cbd-icon-name {
+    font-family: monospace;
+    color: #666;
+    flex-grow: 1;
+}
+
+.cbd-icon-picker-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100000;
+}
+
+.cbd-icon-picker-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cbd-icon-picker-content {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 800px;
+    max-height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+
+.cbd-icon-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #ddd;
+}
+
+.cbd-icon-picker-header h3 {
+    margin: 0;
+}
+
+.cbd-close-icon-picker {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cbd-close-icon-picker:hover {
+    color: #333;
+}
+
+.cbd-icon-search {
+    padding: 15px 20px;
+    border-bottom: 1px solid #ddd;
+}
+
+.cbd-icon-search-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.cbd-icon-categories {
+    display: flex;
+    gap: 5px;
+    padding: 15px 20px;
+    border-bottom: 1px solid #ddd;
+    flex-wrap: wrap;
+}
+
+.cbd-icon-category {
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.cbd-icon-category:hover,
+.cbd-icon-category.active {
+    background: #007cba;
+    color: white;
+    border-color: #007cba;
+}
+
+.cbd-icon-grid {
+    flex-grow: 1;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.cbd-icon-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #f9f9f9;
+}
+
+.cbd-icon-item:hover {
+    border-color: #007cba;
+    background: #e7f5ff;
+}
+
+.cbd-icon-item.selected {
+    border-color: #007cba;
+    background: #007cba;
+    color: white;
+}
+
+.cbd-icon-item .dashicons {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+    margin-bottom: 5px;
+}
+
+.cbd-icon-item.selected .dashicons {
+    color: white;
+}
+
+.cbd-icon-label {
+    font-size: 10px;
+    text-align: center;
+    word-break: break-word;
+    line-height: 1.2;
+}
+
+.cbd-icon-picker-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #ddd;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
 </style>
 
 <script>
@@ -756,6 +1361,162 @@ jQuery(document).ready(function($) {
     // Color Picker initialisieren
     if ($.fn.wpColorPicker) {
         $('.cbd-color-picker').wpColorPicker();
+    }
+    
+    // Dashicons Liste
+    var dashicons = {
+        'admin': [
+            'dashicons-admin-appearance', 'dashicons-admin-collapse', 'dashicons-admin-comments',
+            'dashicons-admin-generic', 'dashicons-admin-home', 'dashicons-admin-media',
+            'dashicons-admin-network', 'dashicons-admin-page', 'dashicons-admin-plugins',
+            'dashicons-admin-settings', 'dashicons-admin-site', 'dashicons-admin-tools',
+            'dashicons-admin-users', 'dashicons-dashboard', 'dashicons-database'
+        ],
+        'post': [
+            'dashicons-align-center', 'dashicons-align-left', 'dashicons-align-right',
+            'dashicons-edit', 'dashicons-trash', 'dashicons-sticky', 'dashicons-book',
+            'dashicons-book-alt', 'dashicons-archive', 'dashicons-tagcloud',
+            'dashicons-category', 'dashicons-post-status', 'dashicons-menu-alt'
+        ],
+        'media': [
+            'dashicons-camera', 'dashicons-images-alt', 'dashicons-images-alt2',
+            'dashicons-video-alt', 'dashicons-video-alt2', 'dashicons-video-alt3',
+            'dashicons-media-archive', 'dashicons-media-audio', 'dashicons-media-code',
+            'dashicons-media-default', 'dashicons-media-document', 'dashicons-media-interactive',
+            'dashicons-media-spreadsheet', 'dashicons-media-text', 'dashicons-media-video',
+            'dashicons-playlist-audio', 'dashicons-playlist-video'
+        ],
+        'misc': [
+            'dashicons-arrow-down', 'dashicons-arrow-down-alt', 'dashicons-arrow-down-alt2',
+            'dashicons-arrow-left', 'dashicons-arrow-left-alt', 'dashicons-arrow-left-alt2',
+            'dashicons-arrow-right', 'dashicons-arrow-right-alt', 'dashicons-arrow-right-alt2',
+            'dashicons-arrow-up', 'dashicons-arrow-up-alt', 'dashicons-arrow-up-alt2',
+            'dashicons-controls-back', 'dashicons-controls-forward', 'dashicons-controls-pause',
+            'dashicons-controls-play', 'dashicons-controls-repeat', 'dashicons-controls-skipback',
+            'dashicons-controls-skipforward', 'dashicons-controls-volumeoff', 'dashicons-controls-volumeon',
+            'dashicons-exit', 'dashicons-fullscreen-alt', 'dashicons-fullscreen-exit-alt',
+            'dashicons-image-crop', 'dashicons-image-filter', 'dashicons-image-flip-horizontal',
+            'dashicons-image-flip-vertical', 'dashicons-image-rotate', 'dashicons-image-rotate-left',
+            'dashicons-image-rotate-right', 'dashicons-undo', 'dashicons-redo',
+            'dashicons-editor-bold', 'dashicons-editor-customchar', 'dashicons-editor-distractionfree',
+            'dashicons-editor-help', 'dashicons-editor-indent', 'dashicons-editor-insertmore',
+            'dashicons-editor-italic', 'dashicons-editor-justify', 'dashicons-editor-kitchensink',
+            'dashicons-editor-ol', 'dashicons-editor-outdent', 'dashicons-editor-paragraph',
+            'dashicons-editor-paste-text', 'dashicons-editor-paste-word', 'dashicons-editor-quote',
+            'dashicons-editor-removeformatting', 'dashicons-editor-rtl', 'dashicons-editor-spellcheck',
+            'dashicons-editor-strikethrough', 'dashicons-editor-table', 'dashicons-editor-textcolor',
+            'dashicons-editor-ul', 'dashicons-editor-underline', 'dashicons-editor-unlink',
+            'dashicons-editor-video', 'dashicons-align-center', 'dashicons-align-left',
+            'dashicons-align-none', 'dashicons-align-right', 'dashicons-lock', 'dashicons-unlock',
+            'dashicons-calendar', 'dashicons-calendar-alt', 'dashicons-hidden', 'dashicons-visibility',
+            'dashicons-post-status', 'dashicons-edit', 'dashicons-post-trash', 'dashicons-sticky',
+            'dashicons-external', 'dashicons-insert', 'dashicons-table-col-after', 'dashicons-table-col-before',
+            'dashicons-table-col-delete', 'dashicons-table-row-after', 'dashicons-table-row-before',
+            'dashicons-table-row-delete', 'dashicons-saved', 'dashicons-smartphone', 'dashicons-tablet'
+        ],
+        'social': [
+            'dashicons-email', 'dashicons-email-alt', 'dashicons-facebook', 'dashicons-facebook-alt',
+            'dashicons-googleplus', 'dashicons-networking', 'dashicons-hammer', 'dashicons-art',
+            'dashicons-migrate', 'dashicons-performance', 'dashicons-universal-access',
+            'dashicons-universal-access-alt', 'dashicons-tickets', 'dashicons-nametag',
+            'dashicons-clipboard', 'dashicons-heart', 'dashicons-megaphone', 'dashicons-schedule'
+        ]
+    };
+    
+    var selectedIcon = '';
+    var currentCategory = 'all';
+    
+    // Icon Picker Modal öffnen
+    $('.cbd-open-icon-picker').on('click', function(e) {
+        e.preventDefault();
+        var $modal = $('.cbd-icon-picker-modal');
+        selectedIcon = $('#icon_value').val();
+        populateIconGrid(currentCategory);
+        $modal.show();
+        $('body').addClass('modal-open');
+    });
+    
+    // Icon Picker Modal schließen
+    $('.cbd-close-icon-picker, .cbd-icon-picker-backdrop').on('click', function(e) {
+        if (e.target === this) {
+            $('.cbd-icon-picker-modal').hide();
+            $('body').removeClass('modal-open');
+        }
+    });
+    
+    // Kategorie wechseln
+    $('.cbd-icon-category').on('click', function() {
+        $('.cbd-icon-category').removeClass('active');
+        $(this).addClass('active');
+        currentCategory = $(this).data('category');
+        populateIconGrid(currentCategory);
+    });
+    
+    // Icon suchen
+    $('.cbd-icon-search-input').on('input', function() {
+        var searchTerm = $(this).val().toLowerCase();
+        filterIcons(searchTerm);
+    });
+    
+    // Icon auswählen
+    $(document).on('click', '.cbd-icon-item', function() {
+        $('.cbd-icon-item').removeClass('selected');
+        $(this).addClass('selected');
+        selectedIcon = $(this).data('icon');
+    });
+    
+    // Icon bestätigen
+    $('.cbd-select-icon').on('click', function() {
+        if (selectedIcon) {
+            $('#icon_value').val(selectedIcon);
+            $('.cbd-selected-icon .dashicons').removeClass().addClass('dashicons ' + selectedIcon);
+            $('.cbd-icon-name').text(selectedIcon);
+            $('.cbd-icon-picker-modal').hide();
+            $('body').removeClass('modal-open');
+            updateLivePreview();
+        }
+    });
+    
+    function populateIconGrid(category) {
+        var $grid = $('.cbd-icon-grid');
+        $grid.empty();
+        
+        var iconsToShow = [];
+        
+        if (category === 'all') {
+            // Alle Icons aus allen Kategorien
+            Object.keys(dashicons).forEach(function(cat) {
+                iconsToShow = iconsToShow.concat(dashicons[cat]);
+            });
+        } else {
+            iconsToShow = dashicons[category] || [];
+        }
+        
+        // Icons sortieren
+        iconsToShow.sort();
+        
+        iconsToShow.forEach(function(icon) {
+            var iconName = icon.replace('dashicons-', '');
+            var isSelected = icon === selectedIcon ? 'selected' : '';
+            var $iconItem = $('<div class="cbd-icon-item ' + isSelected + '" data-icon="' + icon + '">' +
+                '<span class="dashicons ' + icon + '"></span>' +
+                '<div class="cbd-icon-label">' + iconName + '</div>' +
+                '</div>');
+            $grid.append($iconItem);
+        });
+    }
+    
+    function filterIcons(searchTerm) {
+        $('.cbd-icon-item').each(function() {
+            var iconName = $(this).data('icon').toLowerCase();
+            var iconLabel = $(this).find('.cbd-icon-label').text().toLowerCase();
+            
+            if (iconName.includes(searchTerm) || iconLabel.includes(searchTerm)) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
     }
     
     // Feature Toggle Funktionalität
@@ -768,6 +1529,41 @@ jQuery(document).ready(function($) {
         } else {
             $options.slideUp(300);
         }
+    });
+    
+    // Background Type Toggle
+    $('input[name="styles[background][type]"]').on('change', function() {
+        var selectedType = $(this).val();
+        
+        $('.cbd-bg-color-options, .cbd-bg-gradient-options').hide();
+        
+        if (selectedType === 'color') {
+            $('.cbd-bg-color-options').show();
+        } else if (selectedType === 'gradient') {
+            $('.cbd-bg-gradient-options').show();
+        }
+        
+        updateLivePreview();
+    });
+    
+    // Range Input Live Update
+    $('.cbd-range-input').on('input', function() {
+        var $input = $(this);
+        var $valueSpan = $input.siblings('.cbd-range-value');
+        var value = $input.val();
+        
+        // Different units for different ranges
+        if ($input.attr('name').includes('angle') || $input.attr('name').includes('hue')) {
+            $valueSpan.text(value + '°');
+        } else if ($input.attr('name').includes('opacity')) {
+            $valueSpan.text(value);
+        } else if ($input.attr('name').includes('blur')) {
+            $valueSpan.text(value + 'px');
+        } else {
+            $valueSpan.text(value + '%');
+        }
+        
+        updateLivePreview();
     });
     
     // Name validierung
@@ -806,6 +1602,49 @@ jQuery(document).ready(function($) {
         updateLivePreview();
     }
     
+    // Helper function to convert hex to RGB
+    function hexToRgb(hex) {
+        var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+            r: parseInt(result[1], 16),
+            g: parseInt(result[2], 16),
+            b: parseInt(result[3], 16)
+        } : null;
+    }
+    
+    // Helper function to lighten/darken a hex color
+    function adjustColor(hex, amount) {
+        var rgb = hexToRgb(hex);
+        if (!rgb) return hex;
+        
+        var r = Math.max(0, Math.min(255, rgb.r + amount));
+        var g = Math.max(0, Math.min(255, rgb.g + amount));
+        var b = Math.max(0, Math.min(255, rgb.b + amount));
+        
+        return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    }
+    
+    // Generate neumorphism shadows
+    function generateNeumorphismShadows(style, intensity, distance, background) {
+        var lightShadow = adjustColor(background, parseInt(intensity) * 2);
+        var darkShadow = adjustColor(background, -parseInt(intensity));
+        
+        var shadows = [];
+        var dist = parseInt(distance);
+        
+        if (style === 'raised') {
+            shadows.push(dist + 'px ' + dist + 'px ' + (dist * 2) + 'px ' + darkShadow);
+            shadows.push('-' + dist + 'px -' + dist + 'px ' + (dist * 2) + 'px ' + lightShadow);
+        } else if (style === 'inset') {
+            shadows.push('inset ' + dist + 'px ' + dist + 'px ' + (dist * 2) + 'px ' + darkShadow);
+            shadows.push('inset -' + dist + 'px -' + dist + 'px ' + (dist * 2) + 'px ' + lightShadow);
+        } else if (style === 'flat') {
+            shadows.push(dist + 'px ' + dist + 'px ' + dist + 'px ' + darkShadow);
+        }
+        
+        return shadows.join(', ');
+    }
+    
     // Live Preview Update Function
     function updateLivePreview() {
         var $previewBlock = $('#cbd-preview-block');
@@ -821,7 +1660,29 @@ jQuery(document).ready(function($) {
         $previewDescription.text(description);
         
         // Update styles
+        var bgType = $('input[name="styles[background][type]"]:checked').val() || 'color';
         var bgColor = $('input[name="styles[background][color]"]').val() || '#ffffff';
+        
+        // Background gradient styles
+        var gradientType = $('select[name="styles[background][gradient][type]"]').val() || 'linear';
+        var gradientAngle = $('input[name="styles[background][gradient][angle]"]').val() || '45';
+        var gradientColor1 = $('input[name="styles[background][gradient][color1]"]').val() || '#ff6b6b';
+        var gradientColor2 = $('input[name="styles[background][gradient][color2]"]').val() || '#4ecdc4';
+        var gradientColor3 = $('input[name="styles[background][gradient][color3]"]').val() || '';
+        
+        // Build background value
+        var backgroundValue = bgColor;
+        if (bgType === 'gradient') {
+            var colors = gradientColor3 ? gradientColor1 + ', ' + gradientColor3 + ', ' + gradientColor2 : gradientColor1 + ', ' + gradientColor2;
+            
+            if (gradientType === 'linear') {
+                backgroundValue = 'linear-gradient(' + gradientAngle + 'deg, ' + colors + ')';
+            } else if (gradientType === 'radial') {
+                backgroundValue = 'radial-gradient(circle, ' + colors + ')';
+            } else if (gradientType === 'conic') {
+                backgroundValue = 'conic-gradient(from ' + gradientAngle + 'deg, ' + colors + ')';
+            }
+        }
         var textColor = $('input[name="styles[text][color]"]').val() || '#333333';
         var borderWidth = $('input[name="styles[border][width]"]').val() || '1';
         var borderColor = $('input[name="styles[border][color]"]').val() || '#e0e0e0';
@@ -856,13 +1717,120 @@ jQuery(document).ready(function($) {
             boxShadows.push('inset ' + innerX + 'px ' + innerY + 'px ' + innerBlur + 'px ' + innerSpread + 'px ' + innerColor);
         }
         
+        // Glassmorphism and filters
+        var glassmorphismEnabled = $('input[name="styles[effects][glassmorphism][enabled]"]').is(':checked');
+        var glassOpacity = $('input[name="styles[effects][glassmorphism][opacity]"]').val() || '0.1';
+        var glassBlur = $('input[name="styles[effects][glassmorphism][blur]"]').val() || '10';
+        var glassSaturate = $('input[name="styles[effects][glassmorphism][saturate]"]').val() || '100';
+        var glassColor = $('input[name="styles[effects][glassmorphism][color]"]').val() || '#ffffff';
+        
+        var filterBrightness = $('input[name="styles[effects][filters][brightness]"]').val() || '100';
+        var filterContrast = $('input[name="styles[effects][filters][contrast]"]').val() || '100';
+        var filterHue = $('input[name="styles[effects][filters][hue]"]').val() || '0';
+        
+        // Build filter and backdrop-filter values
+        var filters = [];
+        if (filterBrightness != 100) filters.push('brightness(' + filterBrightness + '%)');
+        if (filterContrast != 100) filters.push('contrast(' + filterContrast + '%)');
+        if (filterHue != 0) filters.push('hue-rotate(' + filterHue + 'deg)');
+        
+        var backdropFilters = [];
+        if (glassmorphismEnabled) {
+            backdropFilters.push('blur(' + glassBlur + 'px)');
+            backdropFilters.push('saturate(' + glassSaturate + '%)');
+        }
+        
+        // Apply glassmorphism background if enabled
+        var finalBackground = backgroundValue;
+        if (glassmorphismEnabled) {
+            // Create semi-transparent background with glass color
+            var rgbColor = hexToRgb(glassColor);
+            if (rgbColor) {
+                finalBackground = 'rgba(' + rgbColor.r + ', ' + rgbColor.g + ', ' + rgbColor.b + ', ' + glassOpacity + ')';
+            }
+        }
+        
         $previewBlock.css({
-            'background-color': bgColor,
+            'background': finalBackground,
             'color': textColor,
             'border': borderWidth + 'px ' + borderStyle + ' ' + borderColor,
             'border-radius': borderRadius + 'px',
             'padding': paddingTop + 'px ' + paddingRight + 'px ' + paddingBottom + 'px ' + paddingLeft + 'px',
-            'box-shadow': boxShadows.length > 0 ? boxShadows.join(', ') : 'none'
+            'box-shadow': boxShadows.length > 0 ? boxShadows.join(', ') : 'none',
+            'filter': filters.length > 0 ? filters.join(' ') : 'none',
+            'backdrop-filter': backdropFilters.length > 0 ? backdropFilters.join(' ') : 'none',
+            '-webkit-backdrop-filter': backdropFilters.length > 0 ? backdropFilters.join(' ') : 'none'
+        });
+        
+        // Neumorphism effects
+        var neumorphismEnabled = $('input[name="styles[effects][neumorphism][enabled]"]').is(':checked');
+        var neumoStyle = $('select[name="styles[effects][neumorphism][style]"]').val() || 'raised';
+        var neumoIntensity = $('input[name="styles[effects][neumorphism][intensity]"]').val() || '10';
+        var neumoBackground = $('input[name="styles[effects][neumorphism][background]"]').val() || '#e0e0e0';
+        var neumoDistance = $('input[name="styles[effects][neumorphism][distance]"]').val() || '15';
+        
+        // Apply neumorphism if enabled (overrides other shadow effects)
+        if (neumorphismEnabled) {
+            var neumoBoxShadows = generateNeumorphismShadows(neumoStyle, neumoIntensity, neumoDistance, neumoBackground);
+            finalBackground = neumoBackground; // Use neumorphism background color
+            
+            $previewBlock.css({
+                'background': finalBackground,
+                'color': textColor,
+                'border': borderWidth + 'px ' + borderStyle + ' ' + borderColor,
+                'border-radius': borderRadius + 'px',
+                'padding': paddingTop + 'px ' + paddingRight + 'px ' + paddingBottom + 'px ' + paddingLeft + 'px',
+                'box-shadow': neumoBoxShadows,
+                'filter': filters.length > 0 ? filters.join(' ') : 'none',
+                'backdrop-filter': backdropFilters.length > 0 ? backdropFilters.join(' ') : 'none',
+                '-webkit-backdrop-filter': backdropFilters.length > 0 ? backdropFilters.join(' ') : 'none'
+            });
+        } else {
+            $previewBlock.css({
+                'background': finalBackground,
+                'color': textColor,
+                'border': borderWidth + 'px ' + borderStyle + ' ' + borderColor,
+                'border-radius': borderRadius + 'px',
+                'padding': paddingTop + 'px ' + paddingRight + 'px ' + paddingBottom + 'px ' + paddingLeft + 'px',
+                'box-shadow': boxShadows.length > 0 ? boxShadows.join(', ') : 'none',
+                'filter': filters.length > 0 ? filters.join(' ') : 'none',
+                'backdrop-filter': backdropFilters.length > 0 ? backdropFilters.join(' ') : 'none',
+                '-webkit-backdrop-filter': backdropFilters.length > 0 ? backdropFilters.join(' ') : 'none'
+            });
+        }
+        
+        // Add classes for additional styling
+        if (glassmorphismEnabled) {
+            $previewBlock.addClass('cbd-glassmorphism-preview');
+        } else {
+            $previewBlock.removeClass('cbd-glassmorphism-preview');
+        }
+        
+        if (neumorphismEnabled) {
+            $previewBlock.addClass('cbd-neumorphism-preview');
+        } else {
+            $previewBlock.removeClass('cbd-neumorphism-preview');
+        }
+        
+        // Animation effects
+        var hoverAnimation = $('select[name="styles[effects][animation][hover]"]').val() || 'none';
+        var animOrigin = $('select[name="styles[effects][animation][origin]"]').val() || 'center';
+        var animDuration = $('input[name="styles[effects][animation][duration]"]').val() || '300';
+        var animEasing = $('select[name="styles[effects][animation][easing]"]').val() || 'ease';
+        
+        // Remove existing animation classes
+        $previewBlock.removeClass('cbd-animation-lift cbd-animation-scale cbd-animation-rotate cbd-animation-pulse cbd-animation-bounce');
+        
+        // Apply animation class
+        if (hoverAnimation !== 'none') {
+            $previewBlock.addClass('cbd-animation-' + hoverAnimation);
+        }
+        
+        // Apply animation properties
+        $previewBlock.css({
+            'transform-origin': animOrigin,
+            'transition-duration': animDuration + 'ms',
+            'transition-timing-function': animEasing
         });
         
         // Update features

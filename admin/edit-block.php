@@ -31,7 +31,17 @@ if (!$block) {
 // Standardwerte setzen
 $styles = $block['styles'] ?: array(
     'padding' => array('top' => 20, 'right' => 20, 'bottom' => 20, 'left' => 20),
-    'background' => array('color' => '#ffffff'),
+    'background' => array(
+        'type' => 'color',
+        'color' => '#ffffff',
+        'gradient' => array(
+            'type' => 'linear',
+            'angle' => 45,
+            'color1' => '#ff6b6b',
+            'color2' => '#4ecdc4',
+            'color3' => ''
+        )
+    ),
     'text' => array('color' => '#333333', 'alignment' => 'left'),
     'border' => array('width' => 1, 'color' => '#e0e0e0', 'style' => 'solid', 'radius' => 4),
     'shadow' => array(
@@ -232,13 +242,61 @@ $config = $block['config'] ?: array(
                             
                             <!-- Background -->
                             <tr>
-                                <th scope="row">
-                                    <label for="bg-color"><?php _e('Hintergrundfarbe', 'container-block-designer'); ?></label>
-                                </th>
+                                <th scope="row"><?php _e('Hintergrund', 'container-block-designer'); ?></th>
                                 <td>
-                                    <input type="text" id="bg-color" name="styles[background][color]" 
-                                           value="<?php echo esc_attr($styles['background']['color'] ?? '#ffffff'); ?>" 
-                                           class="cbd-color-picker">
+                                    <div class="cbd-background-controls">
+                                        <fieldset>
+                                            <legend><?php _e('Hintergrund-Typ', 'container-block-designer'); ?></legend>
+                                            <label>
+                                                <input type="radio" name="styles[background][type]" value="color" <?php checked($styles['background']['type'] ?? 'color', 'color'); ?>>
+                                                <?php _e('Farbe', 'container-block-designer'); ?>
+                                            </label>
+                                            <label>
+                                                <input type="radio" name="styles[background][type]" value="gradient" <?php checked($styles['background']['type'] ?? 'color', 'gradient'); ?>>
+                                                <?php _e('Gradient', 'container-block-designer'); ?>
+                                            </label>
+                                        </fieldset>
+                                        
+                                        <!-- Farbe Optionen -->
+                                        <div class="cbd-bg-color-options" style="<?php echo ($styles['background']['type'] ?? 'color') !== 'color' ? 'display: none;' : ''; ?>">
+                                            <label>
+                                                <?php _e('Farbe:', 'container-block-designer'); ?>
+                                                <input type="text" name="styles[background][color]" value="<?php echo esc_attr($styles['background']['color'] ?? '#ffffff'); ?>" class="cbd-color-picker">
+                                            </label>
+                                        </div>
+                                        
+                                        <!-- Gradient Optionen -->
+                                        <div class="cbd-bg-gradient-options" style="<?php echo ($styles['background']['type'] ?? 'color') !== 'gradient' ? 'display: none;' : ''; ?>">
+                                            <div class="cbd-gradient-controls">
+                                                <label>
+                                                    <?php _e('Gradient-Typ:', 'container-block-designer'); ?>
+                                                    <select name="styles[background][gradient][type]">
+                                                        <option value="linear" <?php selected($styles['background']['gradient']['type'] ?? 'linear', 'linear'); ?>><?php _e('Linear', 'container-block-designer'); ?></option>
+                                                        <option value="radial" <?php selected($styles['background']['gradient']['type'] ?? 'linear', 'radial'); ?>><?php _e('Radial', 'container-block-designer'); ?></option>
+                                                        <option value="conic" <?php selected($styles['background']['gradient']['type'] ?? 'linear', 'conic'); ?>><?php _e('Konisch', 'container-block-designer'); ?></option>
+                                                    </select>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Richtung (Grad):', 'container-block-designer'); ?>
+                                                    <input type="range" name="styles[background][gradient][angle]" min="0" max="360" value="<?php echo esc_attr($styles['background']['gradient']['angle'] ?? 45); ?>" class="cbd-range-input">
+                                                    <span class="cbd-range-value"><?php echo esc_attr($styles['background']['gradient']['angle'] ?? 45); ?>°</span>
+                                                </label>
+                                                <label>
+                                                    <?php _e('Startfarbe:', 'container-block-designer'); ?>
+                                                    <input type="text" name="styles[background][gradient][color1]" value="<?php echo esc_attr($styles['background']['gradient']['color1'] ?? '#ff6b6b'); ?>" class="cbd-color-picker">
+                                                </label>
+                                                <label>
+                                                    <?php _e('Endfarbe:', 'container-block-designer'); ?>
+                                                    <input type="text" name="styles[background][gradient][color2]" value="<?php echo esc_attr($styles['background']['gradient']['color2'] ?? '#4ecdc4'); ?>" class="cbd-color-picker">
+                                                </label>
+                                                <label>
+                                                    <?php _e('Mittlere Farbe (optional):', 'container-block-designer'); ?>
+                                                    <input type="text" name="styles[background][gradient][color3]" value="<?php echo esc_attr($styles['background']['gradient']['color3'] ?? ''); ?>" class="cbd-color-picker">
+                                                    <small><?php _e('Leer lassen für 2-Farben-Gradient', 'container-block-designer'); ?></small>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                             
@@ -313,11 +371,54 @@ $config = $block['config'] ?: array(
                                         <?php _e('Icon anzeigen', 'container-block-designer'); ?>
                                     </label>
                                     <br><br>
-                                    <input type="text" name="features[icon][value]" 
-                                           value="<?php echo esc_attr($features['icon']['value'] ?? 'dashicons-admin-generic'); ?>" 
-                                           class="regular-text" 
-                                           placeholder="dashicons-admin-generic">
-                                    <p class="description"><?php _e('Dashicon-Klasse eingeben', 'container-block-designer'); ?></p>
+                                    <div class="cbd-icon-picker">
+                                        <input type="hidden" name="features[icon][value]" value="<?php echo esc_attr($features['icon']['value'] ?? 'dashicons-admin-generic'); ?>">
+                                        
+                                        <!-- Selected Icon Display -->
+                                        <div class="cbd-selected-icon">
+                                            <span class="dashicons <?php echo esc_attr($features['icon']['value'] ?? 'dashicons-admin-generic'); ?>"></span>
+                                            <span class="cbd-icon-name"><?php echo esc_html($features['icon']['value'] ?? 'dashicons-admin-generic'); ?></span>
+                                            <button type="button" class="cbd-open-icon-picker button"><?php _e('Icon ändern', 'container-block-designer'); ?></button>
+                                        </div>
+                                        
+                                        <!-- Icon Picker Modal -->
+                                        <div class="cbd-icon-picker-modal" style="display: none;">
+                                            <div class="cbd-icon-picker-backdrop">
+                                                <div class="cbd-icon-picker-content">
+                                                    <div class="cbd-icon-picker-header">
+                                                        <h3><?php _e('Icon auswählen', 'container-block-designer'); ?></h3>
+                                                        <button type="button" class="cbd-close-icon-picker">&times;</button>
+                                                    </div>
+                                                    
+                                                    <!-- Search -->
+                                                    <div class="cbd-icon-search">
+                                                        <input type="text" placeholder="<?php _e('Icons durchsuchen...', 'container-block-designer'); ?>" class="cbd-icon-search-input">
+                                                    </div>
+                                                    
+                                                    <!-- Icon Categories -->
+                                                    <div class="cbd-icon-categories">
+                                                        <button type="button" class="cbd-icon-category active" data-category="all"><?php _e('Alle', 'container-block-designer'); ?></button>
+                                                        <button type="button" class="cbd-icon-category" data-category="admin"><?php _e('Admin', 'container-block-designer'); ?></button>
+                                                        <button type="button" class="cbd-icon-category" data-category="post"><?php _e('Posts', 'container-block-designer'); ?></button>
+                                                        <button type="button" class="cbd-icon-category" data-category="media"><?php _e('Medien', 'container-block-designer'); ?></button>
+                                                        <button type="button" class="cbd-icon-category" data-category="misc"><?php _e('Verschiedenes', 'container-block-designer'); ?></button>
+                                                        <button type="button" class="cbd-icon-category" data-category="social"><?php _e('Social', 'container-block-designer'); ?></button>
+                                                    </div>
+                                                    
+                                                    <!-- Icon Grid -->
+                                                    <div class="cbd-icon-grid">
+                                                        <!-- Icons will be populated by JavaScript -->
+                                                    </div>
+                                                    
+                                                    <div class="cbd-icon-picker-footer">
+                                                        <button type="button" class="button button-secondary cbd-close-icon-picker"><?php _e('Abbrechen', 'container-block-designer'); ?></button>
+                                                        <button type="button" class="button button-primary cbd-select-icon"><?php _e('Icon auswählen', 'container-block-designer'); ?></button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p class="description"><?php _e('Klicken Sie auf "Icon ändern" um ein Icon aus der visuellen Liste auszuwählen', 'container-block-designer'); ?></p>
                                 </td>
                             </tr>
                             
@@ -612,6 +713,244 @@ $config = $block['config'] ?: array(
 .cbd-shadow-options input {
     margin-top: 5px;
 }
+
+/* Icon Picker Styles */
+.cbd-selected-icon {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 10px;
+}
+
+.cbd-selected-icon .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    color: #666;
+}
+
+.cbd-icon-name {
+    font-family: monospace;
+    color: #666;
+    flex-grow: 1;
+}
+
+.cbd-icon-picker-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100000;
+}
+
+.cbd-icon-picker-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cbd-icon-picker-content {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 800px;
+    max-height: 90%;
+    display: flex;
+    flex-direction: column;
+}
+
+.cbd-icon-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #ddd;
+}
+
+.cbd-icon-picker-header h3 {
+    margin: 0;
+}
+
+.cbd-close-icon-picker {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cbd-close-icon-picker:hover {
+    color: #333;
+}
+
+.cbd-icon-search {
+    padding: 15px 20px;
+    border-bottom: 1px solid #ddd;
+}
+
+.cbd-icon-search-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.cbd-icon-categories {
+    display: flex;
+    gap: 5px;
+    padding: 15px 20px;
+    border-bottom: 1px solid #ddd;
+    flex-wrap: wrap;
+}
+
+.cbd-icon-category {
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.cbd-icon-category:hover,
+.cbd-icon-category.active {
+    background: #007cba;
+    color: white;
+    border-color: #007cba;
+}
+
+.cbd-icon-grid {
+    flex-grow: 1;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.cbd-icon-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #f9f9f9;
+}
+
+.cbd-icon-item:hover {
+    border-color: #007cba;
+    background: #e7f5ff;
+}
+
+.cbd-icon-item.selected {
+    border-color: #007cba;
+    background: #007cba;
+    color: white;
+}
+
+.cbd-icon-item .dashicons {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+    margin-bottom: 5px;
+}
+
+.cbd-icon-item.selected .dashicons {
+    color: white;
+}
+
+.cbd-icon-label {
+    font-size: 10px;
+    text-align: center;
+    word-break: break-word;
+    line-height: 1.2;
+}
+
+.cbd-icon-picker-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #ddd;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Background Controls Styles */
+.cbd-background-controls fieldset {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.cbd-background-controls legend {
+    font-weight: 600;
+    padding: 0 10px;
+}
+
+.cbd-background-controls label {
+    display: inline-block;
+    margin-right: 15px;
+    margin-bottom: 10px;
+}
+
+.cbd-bg-color-options,
+.cbd-bg-gradient-options {
+    margin-top: 15px;
+}
+
+.cbd-gradient-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.cbd-gradient-controls label {
+    display: flex;
+    flex-direction: column;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.cbd-range-input {
+    margin: 5px 0;
+    width: 100%;
+}
+
+.cbd-range-value {
+    font-weight: bold;
+    color: #007cba;
+}
+
+.cbd-gradient-controls small {
+    font-style: italic;
+    color: #666;
+    margin-top: 5px;
+}
 </style>
 
 <script>
@@ -622,6 +961,185 @@ jQuery(document).ready(function($) {
     if ($.fn.wpColorPicker) {
         $('.cbd-color-picker').wpColorPicker();
     }
+    
+    // Dashicons Liste (identisch zu new-block.php)
+    var dashicons = {
+        'admin': [
+            'dashicons-admin-appearance', 'dashicons-admin-collapse', 'dashicons-admin-comments',
+            'dashicons-admin-generic', 'dashicons-admin-home', 'dashicons-admin-media',
+            'dashicons-admin-network', 'dashicons-admin-page', 'dashicons-admin-plugins',
+            'dashicons-admin-settings', 'dashicons-admin-site', 'dashicons-admin-tools',
+            'dashicons-admin-users', 'dashicons-dashboard', 'dashicons-database'
+        ],
+        'post': [
+            'dashicons-align-center', 'dashicons-align-left', 'dashicons-align-right',
+            'dashicons-edit', 'dashicons-trash', 'dashicons-sticky', 'dashicons-book',
+            'dashicons-book-alt', 'dashicons-archive', 'dashicons-tagcloud',
+            'dashicons-category', 'dashicons-post-status', 'dashicons-menu-alt'
+        ],
+        'media': [
+            'dashicons-camera', 'dashicons-images-alt', 'dashicons-images-alt2',
+            'dashicons-video-alt', 'dashicons-video-alt2', 'dashicons-video-alt3',
+            'dashicons-media-archive', 'dashicons-media-audio', 'dashicons-media-code',
+            'dashicons-media-default', 'dashicons-media-document', 'dashicons-media-interactive',
+            'dashicons-media-spreadsheet', 'dashicons-media-text', 'dashicons-media-video',
+            'dashicons-playlist-audio', 'dashicons-playlist-video'
+        ],
+        'misc': [
+            'dashicons-arrow-down', 'dashicons-arrow-down-alt', 'dashicons-arrow-down-alt2',
+            'dashicons-arrow-left', 'dashicons-arrow-left-alt', 'dashicons-arrow-left-alt2',
+            'dashicons-arrow-right', 'dashicons-arrow-right-alt', 'dashicons-arrow-right-alt2',
+            'dashicons-arrow-up', 'dashicons-arrow-up-alt', 'dashicons-arrow-up-alt2',
+            'dashicons-controls-back', 'dashicons-controls-forward', 'dashicons-controls-pause',
+            'dashicons-controls-play', 'dashicons-controls-repeat', 'dashicons-controls-skipback',
+            'dashicons-controls-skipforward', 'dashicons-controls-volumeoff', 'dashicons-controls-volumeon',
+            'dashicons-exit', 'dashicons-fullscreen-alt', 'dashicons-fullscreen-exit-alt',
+            'dashicons-image-crop', 'dashicons-image-filter', 'dashicons-image-flip-horizontal',
+            'dashicons-image-flip-vertical', 'dashicons-image-rotate', 'dashicons-image-rotate-left',
+            'dashicons-image-rotate-right', 'dashicons-undo', 'dashicons-redo',
+            'dashicons-editor-bold', 'dashicons-editor-customchar', 'dashicons-editor-distractionfree',
+            'dashicons-editor-help', 'dashicons-editor-indent', 'dashicons-editor-insertmore',
+            'dashicons-editor-italic', 'dashicons-editor-justify', 'dashicons-editor-kitchensink',
+            'dashicons-editor-ol', 'dashicons-editor-outdent', 'dashicons-editor-paragraph',
+            'dashicons-editor-paste-text', 'dashicons-editor-paste-word', 'dashicons-editor-quote',
+            'dashicons-editor-removeformatting', 'dashicons-editor-rtl', 'dashicons-editor-spellcheck',
+            'dashicons-editor-strikethrough', 'dashicons-editor-table', 'dashicons-editor-textcolor',
+            'dashicons-editor-ul', 'dashicons-editor-underline', 'dashicons-editor-unlink',
+            'dashicons-editor-video', 'dashicons-align-center', 'dashicons-align-left',
+            'dashicons-align-none', 'dashicons-align-right', 'dashicons-lock', 'dashicons-unlock',
+            'dashicons-calendar', 'dashicons-calendar-alt', 'dashicons-hidden', 'dashicons-visibility',
+            'dashicons-post-status', 'dashicons-edit', 'dashicons-post-trash', 'dashicons-sticky',
+            'dashicons-external', 'dashicons-insert', 'dashicons-table-col-after', 'dashicons-table-col-before',
+            'dashicons-table-col-delete', 'dashicons-table-row-after', 'dashicons-table-row-before',
+            'dashicons-table-row-delete', 'dashicons-saved', 'dashicons-smartphone', 'dashicons-tablet'
+        ],
+        'social': [
+            'dashicons-email', 'dashicons-email-alt', 'dashicons-facebook', 'dashicons-facebook-alt',
+            'dashicons-googleplus', 'dashicons-networking', 'dashicons-hammer', 'dashicons-art',
+            'dashicons-migrate', 'dashicons-performance', 'dashicons-universal-access',
+            'dashicons-universal-access-alt', 'dashicons-tickets', 'dashicons-nametag',
+            'dashicons-clipboard', 'dashicons-heart', 'dashicons-megaphone', 'dashicons-schedule'
+        ]
+    };
+    
+    var selectedIcon = '';
+    var currentCategory = 'all';
+    
+    // Icon Picker Modal öffnen
+    $('.cbd-open-icon-picker').on('click', function(e) {
+        e.preventDefault();
+        var $modal = $('.cbd-icon-picker-modal');
+        selectedIcon = $('input[name="features[icon][value]"]').val();
+        populateIconGrid(currentCategory);
+        $modal.show();
+        $('body').addClass('modal-open');
+    });
+    
+    // Icon Picker Modal schließen
+    $('.cbd-close-icon-picker, .cbd-icon-picker-backdrop').on('click', function(e) {
+        if (e.target === this) {
+            $('.cbd-icon-picker-modal').hide();
+            $('body').removeClass('modal-open');
+        }
+    });
+    
+    // Kategorie wechseln
+    $('.cbd-icon-category').on('click', function() {
+        $('.cbd-icon-category').removeClass('active');
+        $(this).addClass('active');
+        currentCategory = $(this).data('category');
+        populateIconGrid(currentCategory);
+    });
+    
+    // Icon suchen
+    $('.cbd-icon-search-input').on('input', function() {
+        var searchTerm = $(this).val().toLowerCase();
+        filterIcons(searchTerm);
+    });
+    
+    // Icon auswählen
+    $(document).on('click', '.cbd-icon-item', function() {
+        $('.cbd-icon-item').removeClass('selected');
+        $(this).addClass('selected');
+        selectedIcon = $(this).data('icon');
+    });
+    
+    // Icon bestätigen
+    $('.cbd-select-icon').on('click', function() {
+        if (selectedIcon) {
+            $('input[name="features[icon][value]"]').val(selectedIcon);
+            $('.cbd-selected-icon .dashicons').removeClass().addClass('dashicons ' + selectedIcon);
+            $('.cbd-icon-name').text(selectedIcon);
+            $('.cbd-icon-picker-modal').hide();
+            $('body').removeClass('modal-open');
+            updateLivePreview();
+        }
+    });
+    
+    function populateIconGrid(category) {
+        var $grid = $('.cbd-icon-grid');
+        $grid.empty();
+        
+        var iconsToShow = [];
+        
+        if (category === 'all') {
+            // Alle Icons aus allen Kategorien
+            Object.keys(dashicons).forEach(function(cat) {
+                iconsToShow = iconsToShow.concat(dashicons[cat]);
+            });
+        } else {
+            iconsToShow = dashicons[category] || [];
+        }
+        
+        // Icons sortieren
+        iconsToShow.sort();
+        
+        iconsToShow.forEach(function(icon) {
+            var iconName = icon.replace('dashicons-', '');
+            var isSelected = icon === selectedIcon ? 'selected' : '';
+            var $iconItem = $('<div class="cbd-icon-item ' + isSelected + '" data-icon="' + icon + '">' +
+                '<span class="dashicons ' + icon + '"></span>' +
+                '<div class="cbd-icon-label">' + iconName + '</div>' +
+                '</div>');
+            $grid.append($iconItem);
+        });
+    }
+    
+    function filterIcons(searchTerm) {
+        $('.cbd-icon-item').each(function() {
+            var iconName = $(this).data('icon').toLowerCase();
+            var iconLabel = $(this).find('.cbd-icon-label').text().toLowerCase();
+            
+            if (iconName.includes(searchTerm) || iconLabel.includes(searchTerm)) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+    }
+    
+    // Background Type Toggle
+    $('input[name="styles[background][type]"]').on('change', function() {
+        var selectedType = $(this).val();
+        
+        $('.cbd-bg-color-options, .cbd-bg-gradient-options').hide();
+        
+        if (selectedType === 'color') {
+            $('.cbd-bg-color-options').show();
+        } else if (selectedType === 'gradient') {
+            $('.cbd-bg-gradient-options').show();
+        }
+        
+        updateLivePreview();
+    });
+    
+    // Range Input Live Update
+    $('.cbd-range-input').on('input', function() {
+        var $input = $(this);
+        var $valueSpan = $input.siblings('.cbd-range-value');
+        $valueSpan.text($input.val() + '°');
+        updateLivePreview();
+    });
     
     // Form Submit Handler - mit höherer Priorität
     $(document).off('submit', '#cbd-block-form');
@@ -700,7 +1218,29 @@ jQuery(document).ready(function($) {
         $previewDescription.text(description);
         
         // Update styles
+        var bgType = $('input[name="styles[background][type]"]:checked').val() || 'color';
         var bgColor = $('input[name="styles[background][color]"]').val() || '#ffffff';
+        
+        // Background gradient styles
+        var gradientType = $('select[name="styles[background][gradient][type]"]').val() || 'linear';
+        var gradientAngle = $('input[name="styles[background][gradient][angle]"]').val() || '45';
+        var gradientColor1 = $('input[name="styles[background][gradient][color1]"]').val() || '#ff6b6b';
+        var gradientColor2 = $('input[name="styles[background][gradient][color2]"]').val() || '#4ecdc4';
+        var gradientColor3 = $('input[name="styles[background][gradient][color3]"]').val() || '';
+        
+        // Build background value
+        var backgroundValue = bgColor;
+        if (bgType === 'gradient') {
+            var colors = gradientColor3 ? gradientColor1 + ', ' + gradientColor3 + ', ' + gradientColor2 : gradientColor1 + ', ' + gradientColor2;
+            
+            if (gradientType === 'linear') {
+                backgroundValue = 'linear-gradient(' + gradientAngle + 'deg, ' + colors + ')';
+            } else if (gradientType === 'radial') {
+                backgroundValue = 'radial-gradient(circle, ' + colors + ')';
+            } else if (gradientType === 'conic') {
+                backgroundValue = 'conic-gradient(from ' + gradientAngle + 'deg, ' + colors + ')';
+            }
+        }
         var textColor = $('input[name="styles[text][color]"]').val() || '#333333';
         var borderWidth = $('input[name="styles[border][width]"]').val() || '1';
         var borderColor = $('input[name="styles[border][color]"]').val() || '#e0e0e0';
@@ -736,7 +1276,7 @@ jQuery(document).ready(function($) {
         }
         
         $previewBlock.css({
-            'background-color': bgColor,
+            'background': backgroundValue,
             'color': textColor,
             'border': borderWidth + 'px ' + borderStyle + ' ' + borderColor,
             'border-radius': borderRadius + 'px',

@@ -762,7 +762,15 @@ class CBD_Admin {
                 'left' => intval($_POST['styles']['padding']['left'] ?? 20)
             ),
             'background' => array(
-                'color' => sanitize_hex_color($_POST['styles']['background']['color'] ?? '#ffffff')
+                'type' => sanitize_text_field($_POST['styles']['background']['type'] ?? 'color'),
+                'color' => sanitize_hex_color($_POST['styles']['background']['color'] ?? '#ffffff'),
+                'gradient' => array(
+                    'type' => sanitize_text_field($_POST['styles']['background']['gradient']['type'] ?? 'linear'),
+                    'angle' => intval($_POST['styles']['background']['gradient']['angle'] ?? 45),
+                    'color1' => sanitize_hex_color($_POST['styles']['background']['gradient']['color1'] ?? '#ff6b6b'),
+                    'color2' => sanitize_hex_color($_POST['styles']['background']['gradient']['color2'] ?? '#4ecdc4'),
+                    'color3' => sanitize_hex_color($_POST['styles']['background']['gradient']['color3'] ?? '')
+                )
             ),
             'border' => array(
                 'width' => intval($_POST['styles']['border']['width'] ?? 1),
@@ -1005,7 +1013,15 @@ class CBD_Admin {
                 'left' => intval($_POST['styles']['padding']['left'] ?? 20)
             ),
             'background' => array(
-                'color' => sanitize_hex_color($_POST['styles']['background']['color'] ?? '#ffffff')
+                'type' => sanitize_text_field($_POST['styles']['background']['type'] ?? 'color'),
+                'color' => sanitize_hex_color($_POST['styles']['background']['color'] ?? '#ffffff'),
+                'gradient' => array(
+                    'type' => sanitize_text_field($_POST['styles']['background']['gradient']['type'] ?? 'linear'),
+                    'angle' => intval($_POST['styles']['background']['gradient']['angle'] ?? 45),
+                    'color1' => sanitize_hex_color($_POST['styles']['background']['gradient']['color1'] ?? '#ff6b6b'),
+                    'color2' => sanitize_hex_color($_POST['styles']['background']['gradient']['color2'] ?? '#4ecdc4'),
+                    'color3' => sanitize_hex_color($_POST['styles']['background']['gradient']['color3'] ?? '')
+                )
             ),
             'border' => array(
                 'width' => intval($_POST['styles']['border']['width'] ?? 1),
@@ -1033,6 +1049,33 @@ class CBD_Admin {
                     'blur' => intval($_POST['styles']['shadow']['inner']['blur'] ?? 4),
                     'spread' => intval($_POST['styles']['shadow']['inner']['spread'] ?? 0),
                     'color' => sanitize_hex_color($_POST['styles']['shadow']['inner']['color'] ?? '#00000030')
+                )
+            ),
+            'effects' => array(
+                'glassmorphism' => array(
+                    'enabled' => isset($_POST['styles']['effects']['glassmorphism']['enabled']),
+                    'opacity' => floatval($_POST['styles']['effects']['glassmorphism']['opacity'] ?? 0.1),
+                    'blur' => intval($_POST['styles']['effects']['glassmorphism']['blur'] ?? 10),
+                    'saturate' => intval($_POST['styles']['effects']['glassmorphism']['saturate'] ?? 100),
+                    'color' => sanitize_hex_color($_POST['styles']['effects']['glassmorphism']['color'] ?? '#ffffff')
+                ),
+                'filters' => array(
+                    'brightness' => intval($_POST['styles']['effects']['filters']['brightness'] ?? 100),
+                    'contrast' => intval($_POST['styles']['effects']['filters']['contrast'] ?? 100),
+                    'hue' => intval($_POST['styles']['effects']['filters']['hue'] ?? 0)
+                ),
+                'neumorphism' => array(
+                    'enabled' => isset($_POST['styles']['effects']['neumorphism']['enabled']),
+                    'style' => sanitize_text_field($_POST['styles']['effects']['neumorphism']['style'] ?? 'raised'),
+                    'intensity' => intval($_POST['styles']['effects']['neumorphism']['intensity'] ?? 10),
+                    'background' => sanitize_hex_color($_POST['styles']['effects']['neumorphism']['background'] ?? '#e0e0e0'),
+                    'distance' => intval($_POST['styles']['effects']['neumorphism']['distance'] ?? 15)
+                ),
+                'animation' => array(
+                    'hover' => sanitize_text_field($_POST['styles']['effects']['animation']['hover'] ?? 'none'),
+                    'origin' => sanitize_text_field($_POST['styles']['effects']['animation']['origin'] ?? 'center'),
+                    'duration' => intval($_POST['styles']['effects']['animation']['duration'] ?? 300),
+                    'easing' => sanitize_text_field($_POST['styles']['effects']['animation']['easing'] ?? 'ease')
                 )
             )
         );
