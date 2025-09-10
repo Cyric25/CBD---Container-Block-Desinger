@@ -178,7 +178,7 @@ class CBD_Style_Loader {
     }
     
     /**
-     * Block-Vorschau-Styles im Editor laden
+     * Block-Vorschau-Styles im Editor laden - NATIVE WORDPRESS METHOD
      */
     private function enqueue_block_preview_styles() {
         $blocks = $this->get_all_blocks();
@@ -187,12 +187,292 @@ class CBD_Style_Loader {
             return;
         }
         
+        // Generate dynamic CSS for all blocks using WordPress native wp_add_inline_style
+        $dynamic_css = $this->generate_editor_dynamic_css($blocks);
+        
+        if (!empty($dynamic_css)) {
+            // Use WordPress native method instead of JavaScript DOM manipulation
+            wp_add_inline_style('cbd-editor-base', $dynamic_css);
+            
+            if ($this->debug_mode) {
+                error_log('CBD: Generated dynamic editor CSS: ' . strlen($dynamic_css) . ' characters');
+            }
+        }
+        
         // Inline-Styles für alle Blocks generieren
         $preview_css = $this->generate_all_block_styles($blocks, true);
         
         if (!empty($preview_css)) {
             wp_add_inline_style('cbd-editor-base', $preview_css);
         }
+    }
+    
+    /**
+     * Generate dynamic CSS for editor with current block styles
+     */
+    private function generate_editor_dynamic_css($blocks) {
+        $css = "/* Container Block Designer - Dynamic Editor Styles */\n";
+        $css .= "/* Generated: " . date('Y-m-d H:i:s') . " */\n\n";
+        
+        // FIRST: Always add the empty selection warning CSS at the top with high priority
+        $css .= $this->generate_empty_selection_warning();
+        
+        foreach ($blocks as $block) {
+            if (empty($block['slug'])) {
+                continue;
+            }
+            
+            $slug = sanitize_html_class($block['slug']);
+            
+            // Parse styles from database (check both 'styles' and other possible locations)
+            $styles = array();
+            $has_real_styles = false;
+            
+            if (!empty($block['styles'])) {
+                $styles = is_array($block['styles']) ? $block['styles'] : json_decode($block['styles'], true);
+                $has_real_styles = $this->has_valid_css_styles($styles);
+            } elseif (!empty($block['css_styles'])) {
+                $styles = is_array($block['css_styles']) ? $block['css_styles'] : json_decode($block['css_styles'], true);
+                $has_real_styles = $this->has_valid_css_styles($styles);
+            } elseif (!empty($block['config']['styles'])) {
+                $styles = $block['config']['styles'];
+                $has_real_styles = $this->has_valid_css_styles($styles);
+            }
+            
+            if ($has_real_styles && !empty($styles) && is_array($styles)) {
+                $css .= $this->generate_dynamic_block_editor_css($slug, $styles);
+            } else {
+                // Generate warning styles for blocks without real CSS styles
+                $css .= $this->generate_warning_css($slug);
+                if ($this->debug_mode) {
+                    error_log("CBD: No valid styles found for block: {$slug}");
+                }
+            }
+        }
+        
+        return $css;
+    }
+    
+    /**
+     * Generate CSS for specific block in editor - NEW METHOD
+     */
+    private function generate_dynamic_block_editor_css($slug, $styles) {
+        $css = "/* SPECIFIC BLOCK STYLES: {$slug} - HIGHER SPECIFICITY THAN WARNING */\n";
+        
+        // Editor-specific selectors with ULTRA HIGH specificity to override warning styles
+        $selectors = array(
+            // Ultra-high specificity to ensure these styles override the warning
+            "html body.wp-admin .block-editor-page .wp-block[data-type*=\"container-block-designer\"].wp-block-container-block-designer-{$slug}",
+            "body.wp-admin .wp-block.is-selected[data-type*=\"container-block-designer\"].wp-block-container-block-designer-{$slug}",
+            "body.wp-admin .wp-block[data-type*=\"container-block-designer\"][class*=\"{$slug}\"]",
+            "html body .wp-block-container-block-designer-{$slug}",
+        );
+        
+        $css .= implode(",\n", $selectors) . " {\n";
+        
+        // Background
+        if (!empty($styles['background']['color'])) {
+            $css .= "    background-color: {$styles['background']['color']} !important;\n";
+            $css .= "    background: {$styles['background']['color']} !important;\n";
+            $css .= "    background-image: none !important;\n";
+        }
+        
+        // Border
+        if (!empty($styles['border'])) {
+            if (!empty($styles['border']['width']) && !empty($styles['border']['color'])) {
+                $border_style = $styles['border']['style'] ?? 'solid';
+                $css .= "    border: {$styles['border']['width']}px {$border_style} {$styles['border']['color']} !important;\n";
+                $css .= "    border-color: {$styles['border']['color']} !important;\n";
+                $css .= "    border-style: {$border_style} !important;\n";
+                $css .= "    border-width: {$styles['border']['width']}px !important;\n";
+            }
+            if (!empty($styles['border']['radius'])) {
+                $css .= "    border-radius: {$styles['border']['radius']}px !important;\n";
+            }
+        }
+        
+        // Padding
+        if (!empty($styles['padding'])) {
+            if (is_array($styles['padding'])) {
+                $padding = sprintf('%spx %spx %spx %spx',
+                    $styles['padding']['top'] ?? 20,
+                    $styles['padding']['right'] ?? 20,
+                    $styles['padding']['bottom'] ?? 20,
+                    $styles['padding']['left'] ?? 20
+                );
+                $css .= "    padding: {$padding} !important;\n";
+            } else {
+                $css .= "    padding: {$styles['padding']} !important;\n";
+            }
+        }
+        
+        // Text color
+        if (!empty($styles['color'])) {
+            $css .= "    color: {$styles['color']} !important;\n";
+        }
+        
+        // Override any warning pseudo-elements for this specific block
+        $css .= "}\n\n";
+        
+        // Remove warning pseudo-elements for specific blocks
+        $css .= implode(",\n", $selectors) . "::before,\n";
+        $css .= implode(",\n", $selectors) . "::after {\n";
+        $css .= "    content: none !important;\n";
+        $css .= "    display: none !important;\n";
+        $css .= "}\n\n";
+        
+        // Reset inner elements
+        $css .= implode(",\n", $selectors) . " .block-editor-inner-blocks,\n";
+        $css .= implode(",\n", $selectors) . " .block-editor-block-list__layout {\n";
+        $css .= "    background: transparent !important;\n";
+        $css .= "    border: none !important;\n";
+        $css .= "    padding: 0 !important;\n";
+        $css .= "}\n\n";
+        
+        if ($this->debug_mode) {
+            error_log("CBD: Generated specific block CSS for: {$slug}");
+        }
+        
+        return $css;
+    }
+    
+    /**
+     * Generate warning CSS for blocks without styles
+     */
+    private function generate_warning_css($slug) {
+        $css = "/* Warning for undefined block: {$slug} */\n";
+        
+        $selectors = array(
+            ".wp-block.is-selected[data-type*=\"container-block-designer\"][class*=\"{$slug}\"]",
+            ".wp-block[data-type*=\"container-block-designer\"].wp-block-container-block-designer-{$slug}"
+        );
+        
+        $css .= implode(",\n", $selectors) . " {\n";
+        $css .= "    background-color: #fff3cd !important;\n";
+        $css .= "    border: 2px dashed #ffc107 !important;\n";
+        $css .= "    color: #856404 !important;\n";
+        $css .= "    padding: 20px !important;\n";
+        $css .= "    text-align: center !important;\n";
+        $css .= "    position: relative !important;\n";
+        $css .= "}\n\n";
+        
+        $css .= implode(",\n", $selectors) . "::before {\n";
+        $css .= "    content: '⚠️ Kein Style gewählt für: {$slug}' !important;\n";
+        $css .= "    display: block !important;\n";
+        $css .= "    font-weight: bold !important;\n";
+        $css .= "    margin-bottom: 5px !important;\n";
+        $css .= "}\n\n";
+        
+        $css .= implode(",\n", $selectors) . "::after {\n";
+        $css .= "    content: 'Bitte definieren Sie Styles für diesen Block.' !important;\n";
+        $css .= "    display: block !important;\n";
+        $css .= "    font-size: 0.9em !important;\n";
+        $css .= "}\n\n";
+        
+        return $css;
+    }
+    
+    /**
+     * Check if styles contain real CSS properties (not just block config)
+     */
+    private function has_valid_css_styles($styles) {
+        if (!is_array($styles)) {
+            return false;
+        }
+        
+        // Check for actual CSS properties
+        $css_properties = array('background', 'border', 'padding', 'margin', 'color', 'font', 'text');
+        
+        foreach ($css_properties as $property) {
+            if (!empty($styles[$property])) {
+                return true;
+            }
+        }
+        
+        // Check for nested style properties
+        if (!empty($styles['background']['color']) || 
+            !empty($styles['border']['color']) || 
+            !empty($styles['border']['width'])) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Generate warning CSS for empty selectedBlock values
+     */
+    private function generate_empty_selection_warning() {
+        $css = "/* WARNING SYSTEM FOR EMPTY SELECTIONS - ULTRA HIGH SPECIFICITY */\n";
+        
+        // STRATEGY: Use ultra-high specificity selectors that will definitely match
+        // Target the generic container block class that WordPress applies when no specific block is selected
+        $genericSelectors = array(
+            // When selectedBlock is empty, WordPress uses the generic class name
+            "body.wp-admin .wp-block[data-type*=\"container-block-designer\"].wp-block-container-block-designer-container", 
+            "html body.wp-admin .block-editor-page .wp-block[data-type*=\"container-block-designer\"].wp-block-container-block-designer-container",
+            "body.wp-admin .wp-block.is-selected[data-type*=\"container-block-designer\"].wp-block-container-block-designer-container",
+        );
+        
+        // Apply warning styles to generic container blocks (no specific style selected)
+        $css .= implode(",\n", $genericSelectors) . " {\n";
+        $css .= "    background-color: #fff3cd !important;\n";
+        $css .= "    background-image: none !important;\n";
+        $css .= "    background: #fff3cd !important;\n";
+        $css .= "    border: 3px dashed #ffc107 !important;\n";
+        $css .= "    color: #856404 !important;\n";
+        $css .= "    padding: 30px !important;\n";
+        $css .= "    text-align: center !important;\n";
+        $css .= "    position: relative !important;\n";
+        $css .= "    min-height: 120px !important;\n";
+        $css .= "    box-shadow: none !important;\n";
+        $css .= "    transition: none !important;\n";
+        $css .= "}\n\n";
+        
+        // Add warning text with pseudo-elements
+        $css .= implode(",\n", $genericSelectors) . "::before {\n";
+        $css .= "    content: '⚠️ Kein Container-Style ausgewählt!' !important;\n";
+        $css .= "    display: block !important;\n";
+        $css .= "    font-weight: bold !important;\n";
+        $css .= "    font-size: 16px !important;\n";
+        $css .= "    margin-bottom: 10px !important;\n";
+        $css .= "    color: #856404 !important;\n";
+        $css .= "    position: absolute !important;\n";
+        $css .= "    top: 50% !important;\n";
+        $css .= "    left: 50% !important;\n";
+        $css .= "    transform: translate(-50%, -50%) !important;\n";
+        $css .= "    z-index: 1000 !important;\n";
+        $css .= "}\n\n";
+        
+        $css .= implode(",\n", $genericSelectors) . "::after {\n";
+        $css .= "    content: 'Wählen Sie bitte einen Container-Style im Dropdown-Menü rechts aus.' !important;\n";
+        $css .= "    display: block !important;\n";
+        $css .= "    font-size: 14px !important;\n";
+        $css .= "    line-height: 1.4 !important;\n";
+        $css .= "    color: #856404 !important;\n";
+        $css .= "    position: absolute !important;\n";
+        $css .= "    top: 60% !important;\n";
+        $css .= "    left: 50% !important;\n";
+        $css .= "    transform: translate(-50%, -50%) !important;\n";
+        $css .= "    z-index: 1000 !important;\n";
+        $css .= "    max-width: 80% !important;\n";
+        $css .= "}\n\n";
+        
+        // OVERRIDE any existing styles that might conflict
+        $css .= "/* OVERRIDE EXISTING STYLES THAT MIGHT SHOW THE FIRST BLOCK */\n";
+        $css .= implode(",\n", $genericSelectors) . " {\n";
+        $css .= "    /* Force override any inherited styles from first block */\n";
+        $css .= "    background-color: #fff3cd !important;\n";
+        $css .= "    border-color: #ffc107 !important;\n";
+        $css .= "    border-style: dashed !important;\n";
+        $css .= "    border-width: 3px !important;\n";
+        $css .= "}\n\n";
+        
+        if ($this->debug_mode) {
+            error_log("CBD: Generated empty selection warning CSS with " . count($genericSelectors) . " selectors");
+        }
+        
+        return $css;
     }
     
     /**
@@ -460,14 +740,31 @@ class CBD_Style_Loader {
         
         // Debug: Load and show blocks
         $blocks = $this->get_all_blocks();
-        echo "<!-- DEBUG: Found " . count($blocks) . " blocks -->\n";
+        echo "<!-- CBD DEBUG: Found " . count($blocks) . " blocks -->\n";
         
-        // Debug each block
+        // Debug each block with FULL details
         if (!empty($blocks)) {
             foreach ($blocks as $i => $block) {
-                echo "<!-- DEBUG Block " . ($i+1) . ": " . $block['name'] . " (Slug: " . $block['slug'] . ") -->\n";
-                echo "<!-- DEBUG Styles: " . substr($block['styles'], 0, 100) . "... -->\n";
-                echo "<!-- DEBUG Features: " . substr($block['features'], 0, 100) . "... -->\n";
+                echo "<!-- CBD DEBUG Block " . ($i+1) . ": " . $block['name'] . " (Slug: " . $block['slug'] . ") -->\n";
+                echo "<!-- CBD DEBUG Full Styles for " . $block['slug'] . ": " . $block['styles'] . " -->\n";
+                echo "<!-- CBD DEBUG Features: " . substr($block['features'], 0, 100) . "... -->\n";
+                
+                // Parse and debug styles
+                $parsed_styles = json_decode($block['styles'], true);
+                if ($parsed_styles) {
+                    echo "<!-- CBD DEBUG Parsed Styles for " . $block['slug'] . ": -->\n";
+                    if (isset($parsed_styles['background']['color'])) {
+                        echo "<!-- CBD DEBUG - Background Color: " . $parsed_styles['background']['color'] . " -->\n";
+                    }
+                    if (isset($parsed_styles['border']['color'])) {
+                        echo "<!-- CBD DEBUG - Border Color: " . $parsed_styles['border']['color'] . " -->\n";
+                    }
+                    if (isset($parsed_styles['border']['width'])) {
+                        echo "<!-- CBD DEBUG - Border Width: " . $parsed_styles['border']['width'] . " -->\n";
+                    }
+                } else {
+                    echo "<!-- CBD DEBUG: Could not parse styles JSON for " . $block['slug'] . " -->\n";
+                }
             }
         }
         
@@ -475,24 +772,66 @@ class CBD_Style_Loader {
         <style id="cbd-production-editor-styles">
         /* Container Block Designer - Production Editor Styles */
         
-        /* Base Container Block Styling - Working selectors */
+        /* TARGETED WARNING SYSTEM - ONLY FOR GENERIC CONTAINER BLOCKS */
+        /* Target ONLY the base container class without specific style extensions */
+        .wp-block-container-block-designer-container:not([class*="-infotext"]):not([class*="-basic"]):not([class*="-card"]) {
+            background-color: #fff3cd !important;
+            background-image: none !important;
+            background: #fff3cd !important;
+            border: 3px dashed #ffc107 !important;
+            color: #856404 !important;
+            padding: 30px !important;
+            text-align: center !important;
+            position: relative !important;
+            min-height: 120px !important;
+            box-shadow: none !important;
+            transition: none !important;
+        }
+        
+        /* Warning text - ONLY for base container without specific styles */
+        .wp-block-container-block-designer-container:not([class*="-infotext"]):not([class*="-basic"]):not([class*="-card"])::before {
+            content: '⚠️ Kein Container-Style ausgewählt!' !important;
+            display: block !important;
+            font-weight: bold !important;
+            font-size: 16px !important;
+            color: #856404 !important;
+            position: absolute !important;
+            top: 40% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            z-index: 1000 !important;
+            white-space: nowrap !important;
+        }
+        
+        .wp-block-container-block-designer-container:not([class*="-infotext"]):not([class*="-basic"]):not([class*="-card"])::after {
+            content: 'Wählen Sie bitte einen Container-Style im Dropdown-Menü rechts aus.' !important;
+            display: block !important;
+            font-size: 14px !important;
+            line-height: 1.4 !important;
+            color: #856404 !important;
+            position: absolute !important;
+            top: 60% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            z-index: 1000 !important;
+            max-width: 80% !important;
+            text-align: center !important;
+        }
+        
+        /* Base Container Block Styling - MINIMAL DEFAULT STYLES */
+        /* Only apply minimal positioning and layout styles, NO colors or borders */
         .wp-block[data-type*="container-block-designer"] .cbd-container-block,
         [class*="wp-block-container-block-designer"] .cbd-container-block,
         .wp-block[data-type*="container-block-designer"],
         [class*="wp-block-container-block-designer"],
         div[class*="container-block-designer"],
         *[class*="container-block-designer"],
-        [data-type*="container-block-designer"],
-        [class*="dfgdfgdfg"] {
+        [data-type*="container-block-designer"] {
             position: relative !important;
             min-height: 60px !important;
-            padding: 20px !important;
-            margin: 15px 0 !important;
-            border-radius: 8px !important;
-            background: #ffffff !important;
-            border: 1px solid #e0e0e0 !important;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
-            transition: all 0.2s ease !important;
+            box-sizing: border-box !important;
+            /* DO NOT apply background, border, or other visual styles here */
+            /* Those should come from the selected block style or warning system */
         }
         
         /* Hover effects */
@@ -522,19 +861,21 @@ class CBD_Style_Loader {
                 if (!empty($styles) || !empty($features)) {
                     echo "\n/* Block: " . esc_attr($block['name']) . " (Slug: " . esc_attr($block['slug']) . ") */\n";
                     
-                    // Use ALL working selectors from the test
-                    $selectors = [
-                        '.wp-block[data-type*="container-block-designer"]',
-                        '[class*="wp-block-container-block-designer"]',
-                        'div[class*="container-block-designer"]',
-                        '*[class*="container-block-designer"]',
-                        '[data-type*="container-block-designer"]'
-                    ];
+                    // FIXED: Only use SPECIFIC selectors for each block, not broad selectors
+                    // This was the root cause - broad selectors applied first block to all blocks!
+                    $selectors = [];
                     
-                    // Add specific block slug selectors if slug exists
+                    // Add specific block slug selectors with ULTRA HIGH specificity to override warning
                     if (!empty($block['slug'])) {
-                        $selectors[] = '[class*="' . esc_attr($block['slug']) . '"]';
-                        $selectors[] = '.wp-block-container-block-designer-' . esc_attr($block['slug']);
+                        $selectors[] = 'html body.wp-admin .wp-block-container-block-designer-' . esc_attr($block['slug']);
+                        $selectors[] = 'html body.wp-admin .wp-block[data-type*="container-block-designer"].wp-block-container-block-designer-' . esc_attr($block['slug']);
+                        $selectors[] = 'html body.wp-admin .block-editor-page .wp-block[data-type*="container-block-designer"].wp-block-container-block-designer-' . esc_attr($block['slug']);
+                        $selectors[] = 'body.wp-admin [data-type*="container-block-designer"][class*="' . esc_attr($block['slug']) . '"]';
+                    }
+                    
+                    // Only proceed if we have specific selectors
+                    if (empty($selectors)) {
+                        continue; // Skip blocks without proper slug
                     }
                     
                     $selector_string = implode(', ', $selectors);
@@ -549,9 +890,12 @@ class CBD_Style_Loader {
                         echo '    background: ' . esc_attr($styles['background']['gradient']) . ' !important;' . "\n";
                     }
                     
-                    // Text styles
+                    // Text styles - OVERRIDE WARNING COLOR
                     if (!empty($styles['text']['color'])) {
                         echo '    color: ' . esc_attr($styles['text']['color']) . ' !important;' . "\n";
+                    } else {
+                        // Default text color to override warning color
+                        echo '    color: #333333 !important;' . "\n";
                     }
                     
                     // Border styles
@@ -586,6 +930,8 @@ class CBD_Style_Loader {
                     }
                     
                     echo '}' . "\n\n";
+                    
+                    // No need to remove pseudo-elements since warning only targets generic blocks
                     
                     // Icon styles
                     if (!empty($features['icon']['enabled'])) {
