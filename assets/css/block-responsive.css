@@ -1,0 +1,130 @@
+/**
+ * Container Block Designer - Responsive Styles
+ * Responsive breakpoints and mobile-first styles
+ */
+
+/* Mobile First - Base styles for mobile devices */
+.cbd-container-block {
+    min-height: auto;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+/* Small mobile devices (320px and up) */
+@media (min-width: 320px) {
+    .cbd-container-block {
+        padding: 0.75rem;
+    }
+    
+    .cbd-container-block .cbd-block-icon {
+        font-size: 1em;
+    }
+    
+    .cbd-container-block .cbd-block-number {
+        font-size: 0.8em;
+    }
+}
+
+/* Large mobile devices (480px and up) */
+@media (min-width: 480px) {
+    .cbd-container-block {
+        padding: 1rem;
+    }
+    
+    .cbd-container-block .cbd-block-icon {
+        font-size: 1.1em;
+    }
+    
+    .cbd-container-block .cbd-block-number {
+        font-size: 0.85em;
+    }
+}
+
+/* Tablets (768px and up) */
+@media (min-width: 768px) {
+    .cbd-container-block {
+        padding: 1.25rem;
+    }
+    
+    .cbd-container-block .cbd-block-icon {
+        font-size: 1.2em;
+    }
+    
+    .cbd-container-block .cbd-block-number {
+        font-size: 0.9em;
+    }
+    
+    /* Feature buttons in row on tablets */
+    .cbd-container-block .cbd-feature-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5em;
+    }
+}
+
+/* Desktop (1024px and up) */
+@media (min-width: 1024px) {
+    .cbd-container-block {
+        padding: 1.5rem;
+    }
+    
+    .cbd-container-block .cbd-block-icon {
+        font-size: 1.3em;
+    }
+    
+    .cbd-container-block .cbd-block-number {
+        font-size: 1em;
+    }
+}
+
+/* Large desktop (1200px and up) */
+@media (min-width: 1200px) {
+    .cbd-container-block {
+        max-width: none;
+    }
+    
+    .cbd-container-block .cbd-block-icon {
+        font-size: 1.4em;
+    }
+    
+    .cbd-container-block .cbd-block-number {
+        font-size: 1.1em;
+    }
+}
+
+/* Position adjustments for mobile */
+@media (max-width: 767px) {
+    .cbd-container-block .cbd-block-icon,
+    .cbd-container-block .cbd-block-number {
+        position: static;
+        display: inline-block;
+        margin-right: 0.5em;
+    }
+    
+    .cbd-container-block .cbd-block-icon.top-left,
+    .cbd-container-block .cbd-block-icon.top-center,
+    .cbd-container-block .cbd-block-icon.top-right,
+    .cbd-container-block .cbd-block-number.top-left,
+    .cbd-container-block .cbd-block-number.top-center,
+    .cbd-container-block .cbd-block-number.top-right {
+        position: static;
+        display: inline-block;
+    }
+}
+
+/* Print styles */
+@media print {
+    .cbd-container-block {
+        break-inside: avoid;
+        padding: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .cbd-container-block .cbd-feature-button {
+        display: none;
+    }
+    
+    .cbd-container-block .cbd-collapsible-content {
+        max-height: none !important;
+    }
+}

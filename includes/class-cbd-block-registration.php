@@ -144,6 +144,8 @@ class CBD_Block_Registration {
         // Block registrieren - nutze den sanitized block_name
         $result = register_block_type($block_name, array(
             'editor_script' => 'cbd-block-editor',
+            'editor_style' => 'cbd-editor-base',
+            'style' => 'cbd-editor-frontend-consolidated',
             'script' => null,
             'render_callback' => array($this, 'render_block'),
             'attributes' => $attributes,
@@ -184,6 +186,8 @@ class CBD_Block_Registration {
         
         register_block_type($block_name, array(
             'editor_script' => 'cbd-block-editor',
+            'editor_style' => 'cbd-editor-base',
+            'style' => 'cbd-editor-frontend-consolidated',
             'render_callback' => array($this, 'render_block'),
             'attributes' => array(
                 'selectedBlock' => array(

@@ -866,6 +866,27 @@ if ($block_id > 0) {
                                     <option value="roman" <?php selected($block['features']['numbering']['format'] ?? 'numeric', 'roman'); ?>><?php _e('I, II, III...', 'container-block-designer'); ?></option>
                                 </select>
                                 
+                                <!-- Counting Mode -->
+                                <div style="margin-top: 15px;">
+                                    <label><?php _e('Zählmodus:', 'container-block-designer'); ?></label>
+                                    <div class="cbd-counting-mode-options">
+                                        <label class="cbd-radio-option">
+                                            <input type="radio" name="features[numbering][countingMode]" value="same-design" <?php checked($block['features']['numbering']['countingMode'] ?? 'same-design', 'same-design'); ?>>
+                                            <span class="cbd-radio-label">
+                                                <strong><?php _e('Zähle Blöcke mit diesem Design', 'container-block-designer'); ?></strong>
+                                                <small><?php _e('Nummerierung beginnt bei 1 für jeden Block-Typ', 'container-block-designer'); ?></small>
+                                            </span>
+                                        </label>
+                                        <label class="cbd-radio-option">
+                                            <input type="radio" name="features[numbering][countingMode]" value="all-blocks" <?php checked($block['features']['numbering']['countingMode'] ?? 'same-design', 'all-blocks'); ?>>
+                                            <span class="cbd-radio-label">
+                                                <strong><?php _e('Zähle alle Container-Blöcke', 'container-block-designer'); ?></strong>
+                                                <small><?php _e('Durchgängige Nummerierung über alle Block-Typen hinweg', 'container-block-designer'); ?></small>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
+                                
                                 <!-- Numbering Position Controls -->
                                 <div class="cbd-numbering-position-controls" style="margin-top: 15px;">
                                     <label><?php _e('Nummerierung Position:', 'container-block-designer'); ?></label>
@@ -1648,6 +1669,63 @@ if ($block_id > 0) {
     font-size: 11px;
     color: #666;
     transition: all 0.2s ease;
+}
+
+/* Counting Mode Options */
+.cbd-counting-mode-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.cbd-radio-option {
+    display: flex;
+    align-items: flex-start;
+    padding: 12px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cbd-radio-option:hover {
+    border-color: #007cba;
+    background: #f0f8ff;
+}
+
+.cbd-radio-option input[type="radio"] {
+    margin-right: 12px;
+    margin-top: 2px;
+    flex-shrink: 0;
+}
+
+.cbd-radio-option input[type="radio"]:checked {
+    accent-color: #007cba;
+}
+
+.cbd-radio-option input[type="radio"]:checked + .cbd-radio-label {
+    color: #007cba;
+}
+
+.cbd-radio-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cbd-radio-label strong {
+    font-size: 14px;
+    color: #23282d;
+    transition: color 0.2s ease;
+}
+
+.cbd-radio-label small {
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+    line-height: 1.4;
 }
 </style>
 

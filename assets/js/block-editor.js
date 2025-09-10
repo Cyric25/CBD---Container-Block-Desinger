@@ -271,6 +271,156 @@
             }
         `;
         document.head.appendChild(style);
+        
+        // Real-time style updates when block selection changes
+        const refreshBlockStyles = () => {
+            // Find all container blocks in editor
+            const containerBlocks = document.querySelectorAll('[class*="container-block-designer"], [data-type*="container-block-designer"]');
+            
+            containerBlocks.forEach(block => {
+                // Force style recalculation
+                if (block.style) {
+                    block.style.opacity = '0.99';
+                    setTimeout(() => {
+                        block.style.opacity = '';
+                    }, 1);
+                }
+            });
+        };
+        
+        // Listen for block selection changes
+        let lastSelectedBlock = null;
+        const observer = new MutationObserver(() => {
+            const selectedBlock = document.querySelector('.wp-block.is-selected[class*="container-block-designer"]');
+            if (selectedBlock && selectedBlock !== lastSelectedBlock) {
+                lastSelectedBlock = selectedBlock;
+                // Delay to let the dropdown change process
+                setTimeout(refreshBlockStyles, 100);
+            }
+        });
+        
+        // Start observing
+        observer.observe(document.body, {
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class']
+        });
+        
+        // Add refresh function to global scope for manual use
+        window.cbdRefreshEditorStyles = refreshBlockStyles;
+        
+        // Real-time style application system
+        const applyBlockStyles = (blockSlug) => {
+            if (!window.cbdBlockData || !window.cbdBlockData.blocks) {
+                console.log('CBD: Block data not available for real-time updates');
+                return;
+            }
+            
+            // Find the block data
+            const blockData = window.cbdBlockData.blocks.find(block => block.slug === blockSlug);
+            if (!blockData) {
+                console.log('CBD: Block data not found for slug:', blockSlug);
+                return;
+            }
+            
+            // Parse styles
+            let styles = {};
+            try {
+                styles = JSON.parse(blockData.styles || '{}');
+            } catch (e) {
+                console.log('CBD: Error parsing styles for', blockSlug, e);
+                return;
+            }
+            
+            // Create dynamic style element
+            let dynamicStyleEl = document.getElementById('cbd-realtime-styles');
+            if (!dynamicStyleEl) {
+                dynamicStyleEl = document.createElement('style');
+                dynamicStyleEl.id = 'cbd-realtime-styles';
+                document.head.appendChild(dynamicStyleEl);
+            }
+            
+            // Build CSS for this specific block
+            let css = `/* Real-time styles for ${blockSlug} */\n`;
+            const selectors = [
+                `.wp-block-container-block-designer-${blockSlug}`,
+                `[class*="${blockSlug}"]`,
+                `[data-type*="container-block-designer"]`,
+                `div[class*="container-block-designer"]`
+            ];
+            
+            const selectorString = selectors.join(', ');
+            css += `${selectorString} {\n`;
+            
+            // Apply background color
+            if (styles.background && styles.background.color) {
+                css += `  background-color: ${styles.background.color} !important;\n`;
+            }
+            
+            // Apply background gradient
+            if (styles.background && styles.background.gradient) {
+                css += `  background: ${styles.background.gradient} !important;\n`;
+            }
+            
+            // Apply text color
+            if (styles.text && styles.text.color) {
+                css += `  color: ${styles.text.color} !important;\n`;
+            }
+            
+            // Apply border
+            if (styles.border) {
+                if (styles.border.width && styles.border.color) {
+                    css += `  border: ${styles.border.width}px ${styles.border.style || 'solid'} ${styles.border.color} !important;\n`;
+                }
+                if (styles.border.radius) {
+                    css += `  border-radius: ${styles.border.radius}px !important;\n`;
+                }
+            }
+            
+            // Apply box shadow
+            if (styles.boxShadow && styles.boxShadow.enabled) {
+                const shadow = styles.boxShadow;
+                css += `  box-shadow: ${shadow.x || 0}px ${shadow.y || 2}px ${shadow.blur || 4}px ${shadow.spread || 0}px ${shadow.color || 'rgba(0,0,0,0.1)'} !important;\n`;
+            }
+            
+            // Apply padding
+            if (styles.padding) {
+                css += `  padding: ${styles.padding.top || 20}px ${styles.padding.right || 20}px ${styles.padding.bottom || 20}px ${styles.padding.left || 20}px !important;\n`;
+            }
+            
+            css += '}\n';
+            
+            // Update the style element
+            dynamicStyleEl.textContent = css;
+            
+            console.log('CBD: Applied real-time styles for', blockSlug);
+        };
+        
+        // Hook into WordPress block editor selection changes
+        if (window.wp && window.wp.data) {
+            const { subscribe, select } = window.wp.data;
+            let lastSelectedBlockId = null;
+            
+            subscribe(() => {
+                const selectedBlockId = select('core/block-editor').getSelectedBlockClientId();
+                if (selectedBlockId && selectedBlockId !== lastSelectedBlockId) {
+                    lastSelectedBlockId = selectedBlockId;
+                    
+                    const block = select('core/block-editor').getBlock(selectedBlockId);
+                    if (block && block.name && block.name.includes('container-block-designer')) {
+                        // Extract block slug from attributes
+                        const blockSlug = block.attributes && block.attributes.selectedBlock;
+                        if (blockSlug) {
+                            console.log('CBD: Block selected, applying styles for:', blockSlug);
+                            setTimeout(() => applyBlockStyles(blockSlug), 100);
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Make function globally available
+        window.cbdApplyBlockStyles = applyBlockStyles;
     });
     
 })(window.wp);

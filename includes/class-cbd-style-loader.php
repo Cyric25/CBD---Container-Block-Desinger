@@ -64,6 +64,10 @@ class CBD_Style_Loader {
         // Dynamische Styles generieren
         add_action('wp_head', array($this, 'output_dynamic_styles'), 100);
         add_action('admin_head', array($this, 'output_editor_dynamic_styles'), 100);
+        add_action('admin_footer', array($this, 'output_editor_dynamic_styles'), 100);
+        add_action('admin_footer', array($this, 'output_emergency_editor_styles'), 999);
+        add_action('admin_print_styles', array($this, 'output_emergency_editor_styles'), 999);
+        add_action('admin_print_footer_scripts', array($this, 'output_emergency_editor_styles'), 999);
         
         // AJAX für Style-Updates
         add_action('wp_ajax_cbd_refresh_styles', array($this, 'ajax_refresh_styles'));
@@ -101,16 +105,44 @@ class CBD_Style_Loader {
      * Editor-Styles laden
      */
     public function enqueue_editor_styles() {
-        // Editor-spezifische Basis-Styles
+        // Load frontend styles in editor for accurate preview
         wp_enqueue_style(
-            'cbd-editor-base',
-            CBD_PLUGIN_URL . 'assets/css/editor-base.css',
+            'cbd-editor-frontend-base',
+            CBD_PLUGIN_URL . 'assets/css/block-base.css',
             array('wp-edit-blocks'),
             CBD_VERSION
         );
         
+        wp_enqueue_style(
+            'cbd-editor-frontend-responsive',
+            CBD_PLUGIN_URL . 'assets/css/block-responsive.css',
+            array('cbd-editor-frontend-base'),
+            CBD_VERSION
+        );
+        
+        wp_enqueue_style(
+            'cbd-editor-frontend-consolidated',
+            CBD_PLUGIN_URL . 'assets/css/frontend-consolidated.css',
+            array('cbd-editor-frontend-responsive'),
+            CBD_VERSION
+        );
+        
+        // Editor-spezifische Anpassungen
+        wp_enqueue_style(
+            'cbd-editor-base',
+            CBD_PLUGIN_URL . 'assets/css/editor-base.css',
+            array('cbd-editor-frontend-consolidated'),
+            CBD_VERSION
+        );
+        
+        // Dashicons für Icons im Editor
+        wp_enqueue_style('dashicons');
+        
         // Alle aktiven Block-Styles für Vorschau
         $this->enqueue_block_preview_styles();
+        
+        // Force add inline styles to ensure they load
+        $this->add_inline_editor_styles();
     }
     
     /**
@@ -194,20 +226,717 @@ class CBD_Style_Loader {
             return;
         }
         
-        $blocks = $this->get_all_blocks();
+        // Force load editor base styles inline
+        echo "\n<!-- Container Block Designer Editor Styles -->\n";
+        echo '<style id="cbd-editor-styles">' . "\n";
         
-        if (empty($blocks)) {
+        // Load base editor CSS inline
+        $editor_css_path = CBD_PLUGIN_DIR . 'assets/css/editor-base.css';
+        if (file_exists($editor_css_path)) {
+            $base_css = file_get_contents($editor_css_path);
+            // Replace @import with actual CSS content
+            $base_css = str_replace('@import url(\'block-base.css\');', $this->get_css_file_content('block-base.css'), $base_css);
+            $base_css = str_replace('@import url(\'block-responsive.css\');', $this->get_css_file_content('block-responsive.css'), $base_css);
+            $base_css = str_replace('@import url(\'frontend-consolidated.css\');', $this->get_css_file_content('frontend-consolidated.css'), $base_css);
+            echo $base_css . "\n";
+        }
+        
+        // Add dynamic block styles
+        $blocks = $this->get_all_blocks();
+        if (!empty($blocks)) {
+            $css = $this->generate_all_block_styles($blocks, true);
+            if (!empty($css)) {
+                echo $css . "\n";
+            }
+        }
+        
+        echo "\n</style>\n";
+    }
+    
+    /**
+     * Get CSS file content
+     */
+    private function get_css_file_content($filename) {
+        $file_path = CBD_PLUGIN_DIR . 'assets/css/' . $filename;
+        if (file_exists($file_path)) {
+            return file_get_contents($file_path) . "\n";
+        }
+        return '';
+    }
+    
+    /**
+     * Add inline editor styles directly
+     */
+    private function add_inline_editor_styles() {
+        // Get all CSS content and add as inline styles
+        $css_content = '';
+        
+        // Essential editor CSS
+        $css_content .= "
+        /* Essential Container Block Designer Editor Styles */
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-container-block,
+        [class*=\"wp-block-container-block-designer\"] .cbd-container-block {
+            position: relative;
+            display: block;
+            width: 100%;
+            min-height: 50px;
+            padding: 20px;
+            margin: 10px 0;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background: #fff;
+            transition: all 0.2s ease;
+        }
+        
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-container-block:hover,
+        [class*=\"wp-block-container-block-designer\"] .cbd-container-block:hover {
+            outline: 2px solid #007cba;
+            outline-offset: 2px;
+        }
+        
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-block-icon,
+        [class*=\"wp-block-container-block-designer\"] .cbd-block-icon {
+            position: absolute;
+            z-index: 10;
+            font-family: dashicons;
+            font-size: 20px;
+            width: 20px;
+            height: 20px;
+            line-height: 1;
+            color: #666;
+        }
+        
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-block-icon.top-left,
+        [class*=\"wp-block-container-block-designer\"] .cbd-block-icon.top-left {
+            top: 10px;
+            left: 10px;
+        }
+        
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-block-icon.top-center,
+        [class*=\"wp-block-container-block-designer\"] .cbd-block-icon.top-center {
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-block-icon.top-right,
+        [class*=\"wp-block-container-block-designer\"] .cbd-block-icon.top-right {
+            top: 10px;
+            right: 10px;
+        }
+        
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-block-number,
+        [class*=\"wp-block-container-block-designer\"] .cbd-block-number {
+            position: absolute;
+            z-index: 10;
+            font-weight: bold;
+            font-size: 16px;
+            color: #333;
+            background: rgba(255,255,255,0.9);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-block-number.top-left,
+        [class*=\"wp-block-container-block-designer\"] .cbd-block-number.top-left {
+            top: 5px;
+            left: 5px;
+        }
+        
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-feature-buttons,
+        [class*=\"wp-block-container-block-designer\"] .cbd-feature-buttons {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 8px;
+        }
+        
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-feature-button,
+        [class*=\"wp-block-container-block-designer\"] .cbd-feature-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 6px 10px;
+            font-size: 12px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            background: #f9f9f9;
+            color: #666;
+            pointer-events: none;
+            opacity: 0.8;
+        }
+        
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-container-error,
+        [class*=\"wp-block-container-block-designer\"] .cbd-container-error {
+            border: 2px dashed #e74c3c;
+            background: #fdf2f2;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            color: #e74c3c;
+            font-weight: 600;
+        }
+        
+        .wp-block[data-type*=\"container-block-designer\"] .cbd-container-error a,
+        [class*=\"wp-block-container-block-designer\"] .cbd-container-error a {
+            color: #007cba;
+            text-decoration: none;
+        }
+        ";
+        
+        // Add dynamic block styles
+        $blocks = $this->get_all_blocks();
+        if (!empty($blocks)) {
+            foreach ($blocks as $block) {
+                $styles = json_decode($block->styles, true);
+                if (!empty($styles)) {
+                    $block_class = '.wp-block-container-block-designer-' . sanitize_html_class($block->slug);
+                    $css_content .= $this->generate_block_editor_css($styles, $block_class, $block->slug);
+                }
+            }
+        }
+        
+        // Add inline styles
+        wp_add_inline_style('wp-edit-blocks', $css_content);
+    }
+    
+    /**
+     * Generate CSS for a specific block in editor
+     */
+    private function generate_block_editor_css($styles, $block_class, $block_slug) {
+        $css = '';
+        
+        if (empty($styles)) {
+            return $css;
+        }
+        
+        $css .= "\n/* Block: " . $block_slug . " */\n";
+        $css .= $block_class . ' .cbd-container-block {';
+        
+        // Background
+        if (!empty($styles['background']['color'])) {
+            $css .= 'background-color: ' . esc_attr($styles['background']['color']) . ' !important;';
+        }
+        
+        // Text color
+        if (!empty($styles['text']['color'])) {
+            $css .= 'color: ' . esc_attr($styles['text']['color']) . ' !important;';
+        }
+        
+        // Border
+        if (!empty($styles['border'])) {
+            $border = $styles['border'];
+            if (!empty($border['width']) && !empty($border['color']) && !empty($border['style'])) {
+                $css .= sprintf('border: %dpx %s %s !important;', 
+                    intval($border['width']), 
+                    esc_attr($border['style']), 
+                    esc_attr($border['color'])
+                );
+            }
+            
+            if (!empty($border['radius'])) {
+                $css .= 'border-radius: ' . intval($border['radius']) . 'px !important;';
+            }
+        }
+        
+        $css .= '}';
+        
+        return $css;
+    }
+    
+    /**
+     * Production editor styles with professional appearance
+     */
+    public function output_emergency_editor_styles() {
+        $screen = get_current_screen();
+        
+        // Only output on block editor screens or when screen is not detected
+        if ($screen && !$screen->is_block_editor()) {
             return;
         }
         
-        $css = $this->generate_all_block_styles($blocks, true);
+        echo "\n<!-- Container Block Designer Production Editor Styles -->\n";
         
-        if (!empty($css)) {
-            echo "\n<!-- Container Block Designer Editor Dynamic Styles -->\n";
-            echo '<style id="cbd-editor-dynamic-styles">' . "\n";
-            echo $this->minify_css($css);
-            echo "\n</style>\n";
+        // Debug: Load and show blocks
+        $blocks = $this->get_all_blocks();
+        echo "<!-- DEBUG: Found " . count($blocks) . " blocks -->\n";
+        
+        // Debug each block
+        if (!empty($blocks)) {
+            foreach ($blocks as $i => $block) {
+                echo "<!-- DEBUG Block " . ($i+1) . ": " . $block['name'] . " (Slug: " . $block['slug'] . ") -->\n";
+                echo "<!-- DEBUG Styles: " . substr($block['styles'], 0, 100) . "... -->\n";
+                echo "<!-- DEBUG Features: " . substr($block['features'], 0, 100) . "... -->\n";
+            }
         }
+        
+        ?>
+        <style id="cbd-production-editor-styles">
+        /* Container Block Designer - Production Editor Styles */
+        
+        /* Base Container Block Styling - Working selectors */
+        .wp-block[data-type*="container-block-designer"] .cbd-container-block,
+        [class*="wp-block-container-block-designer"] .cbd-container-block,
+        .wp-block[data-type*="container-block-designer"],
+        [class*="wp-block-container-block-designer"],
+        div[class*="container-block-designer"],
+        *[class*="container-block-designer"],
+        [data-type*="container-block-designer"],
+        [class*="dfgdfgdfg"] {
+            position: relative !important;
+            min-height: 60px !important;
+            padding: 20px !important;
+            margin: 15px 0 !important;
+            border-radius: 8px !important;
+            background: #ffffff !important;
+            border: 1px solid #e0e0e0 !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+            transition: all 0.2s ease !important;
+        }
+        
+        /* Hover effects */
+        .wp-block[data-type*="container-block-designer"]:hover .cbd-container-block,
+        [class*="wp-block-container-block-designer"]:hover .cbd-container-block,
+        .wp-block[data-type*="container-block-designer"]:hover,
+        [class*="wp-block-container-block-designer"]:hover,
+        div[class*="container-block-designer"]:hover,
+        *[class*="container-block-designer"]:hover,
+        [data-type*="container-block-designer"]:hover,
+        [class*="dfgdfgdfg"]:hover {
+            border-color: #007cba !important;
+            box-shadow: 0 4px 12px rgba(0,123,186,0.15) !important;
+            transform: translateY(-2px) !important;
+        }
+        
+        <?php
+        // Load dynamic block styles directly
+        if (!empty($blocks)) {
+            echo "\n/* DYNAMIC BLOCK STYLES START */\n";
+            foreach ($blocks as $block) {
+                $styles = json_decode($block['styles'], true);
+                $features = json_decode($block['features'], true);
+                
+                echo "/* Processing Block: " . $block['name'] . " */\n";
+                
+                if (!empty($styles) || !empty($features)) {
+                    echo "\n/* Block: " . esc_attr($block['name']) . " (Slug: " . esc_attr($block['slug']) . ") */\n";
+                    
+                    // Use ALL working selectors from the test
+                    $selectors = [
+                        '.wp-block[data-type*="container-block-designer"]',
+                        '[class*="wp-block-container-block-designer"]',
+                        'div[class*="container-block-designer"]',
+                        '*[class*="container-block-designer"]',
+                        '[data-type*="container-block-designer"]'
+                    ];
+                    
+                    // Add specific block slug selectors if slug exists
+                    if (!empty($block['slug'])) {
+                        $selectors[] = '[class*="' . esc_attr($block['slug']) . '"]';
+                        $selectors[] = '.wp-block-container-block-designer-' . esc_attr($block['slug']);
+                    }
+                    
+                    $selector_string = implode(', ', $selectors);
+                    
+                    echo $selector_string . ' {' . "\n";
+                    
+                    // Background styles
+                    if (!empty($styles['background']['color'])) {
+                        echo '    background-color: ' . esc_attr($styles['background']['color']) . ' !important;' . "\n";
+                    }
+                    if (!empty($styles['background']['gradient'])) {
+                        echo '    background: ' . esc_attr($styles['background']['gradient']) . ' !important;' . "\n";
+                    }
+                    
+                    // Text styles
+                    if (!empty($styles['text']['color'])) {
+                        echo '    color: ' . esc_attr($styles['text']['color']) . ' !important;' . "\n";
+                    }
+                    
+                    // Border styles
+                    if (!empty($styles['border']['width']) && !empty($styles['border']['color'])) {
+                        echo '    border: ' . intval($styles['border']['width']) . 'px ' . 
+                             esc_attr($styles['border']['style'] ?? 'solid') . ' ' . 
+                             esc_attr($styles['border']['color']) . ' !important;' . "\n";
+                    }
+                    if (!empty($styles['border']['radius'])) {
+                        echo '    border-radius: ' . intval($styles['border']['radius']) . 'px !important;' . "\n";
+                    }
+                    
+                    // Box shadow
+                    if (!empty($styles['boxShadow']['enabled'])) {
+                        $shadow = $styles['boxShadow'];
+                        echo '    box-shadow: ' . 
+                             intval($shadow['x'] ?? 0) . 'px ' . 
+                             intval($shadow['y'] ?? 2) . 'px ' . 
+                             intval($shadow['blur'] ?? 4) . 'px ' . 
+                             intval($shadow['spread'] ?? 0) . 'px ' . 
+                             esc_attr($shadow['color'] ?? 'rgba(0,0,0,0.1)') . ' !important;' . "\n";
+                    }
+                    
+                    // Padding
+                    if (!empty($styles['padding'])) {
+                        $padding = $styles['padding'];
+                        echo '    padding: ' . 
+                             intval($padding['top'] ?? 20) . 'px ' . 
+                             intval($padding['right'] ?? 20) . 'px ' . 
+                             intval($padding['bottom'] ?? 20) . 'px ' . 
+                             intval($padding['left'] ?? 20) . 'px !important;' . "\n";
+                    }
+                    
+                    echo '}' . "\n\n";
+                    
+                    // Icon styles
+                    if (!empty($features['icon']['enabled'])) {
+                        $icon = $features['icon'];
+                        $icon_selectors = [
+                            '.wp-block[data-type*="container-block-designer"] .cbd-block-icon',
+                            '[class*="wp-block-container-block-designer"] .cbd-block-icon',
+                            '.wp-block-container-block-designer-' . esc_attr($block['slug']) . ' .cbd-block-icon',
+                            '[class*="' . esc_attr($block['slug']) . '"] .cbd-block-icon'
+                        ];
+                        $icon_selector = implode(', ', $icon_selectors);
+                        echo $icon_selector . ' {' . "\n";
+                        if (!empty($icon['color'])) {
+                            echo '    color: ' . esc_attr($icon['color']) . ' !important;' . "\n";
+                        }
+                        if (!empty($icon['size'])) {
+                            echo '    font-size: ' . intval($icon['size']) . 'px !important;' . "\n";
+                        }
+                        echo '}' . "\n\n";
+                    }
+                    
+                    // Numbering styles
+                    if (!empty($features['numbering']['enabled'])) {
+                        $numbering = $features['numbering'];
+                        $number_selectors = [
+                            '.wp-block[data-type*="container-block-designer"] .cbd-block-number',
+                            '[class*="wp-block-container-block-designer"] .cbd-block-number',
+                            '.wp-block-container-block-designer-' . esc_attr($block['slug']) . ' .cbd-block-number',
+                            '[class*="' . esc_attr($block['slug']) . '"] .cbd-block-number'
+                        ];
+                        $number_selector = implode(', ', $number_selectors);
+                        echo $number_selector . ' {' . "\n";
+                        if (!empty($numbering['color'])) {
+                            echo '    color: ' . esc_attr($numbering['color']) . ' !important;' . "\n";
+                        }
+                        if (!empty($numbering['backgroundColor'])) {
+                            echo '    background-color: ' . esc_attr($numbering['backgroundColor']) . ' !important;' . "\n";
+                        }
+                        echo '}' . "\n\n";
+                    }
+                }
+            }
+        }
+        ?>
+        
+        /* Base Universal Styles */
+        
+        /* Universal selectors for all container block variants */
+        *[class*="container-block-designer"],
+        *[data-type*="container-block-designer"],
+        div[class*="dfgdfgdfg"],
+        .wp-block[data-type*="dfgdfgdfg"],
+        .wp-block-container-block-designer-dfgdfgdfg,
+        [class*="dfgdfgdfg"] {
+            position: relative !important;
+            min-height: 80px !important;
+            padding: 20px !important;
+            margin: 15px 0 !important;
+            border-radius: 8px !important;
+            background: #ffffff !important;
+            border: 1px solid #e0e0e0 !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+            transition: all 0.2s ease !important;
+        }
+        
+        /* Professional hover effect for better UX */
+        .block-editor-page [class*="dfgdfgdfg"]:hover,
+        .editor-styles-wrapper [class*="dfgdfgdfg"]:hover,
+        .wp-block-container-block-designer-dfgdfgdfg:hover {
+            border-color: #007cba !important;
+            box-shadow: 0 4px 12px rgba(0,123,186,0.15) !important;
+            transform: translateY(-2px) !important;
+        }
+        
+        /* Inner content styling */
+        [class*="dfgdfgdfg"] .cbd-block-content,
+        [class*="container-block-designer"] .cbd-block-content,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-content {
+            position: relative !important;
+            z-index: 1 !important;
+            min-height: 50px !important;
+            line-height: 1.6 !important;
+        }
+        
+        /* Icon positioning system - all 9 positions */
+        [class*="dfgdfgdfg"] .cbd-block-icon,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-icon {
+            position: absolute !important;
+            z-index: 10 !important;
+            font-family: dashicons !important;
+            font-size: 20px !important;
+            width: 20px !important;
+            height: 20px !important;
+            line-height: 1 !important;
+            color: #666 !important;
+            transition: color 0.2s ease !important;
+        }
+        
+        /* Icon positions */
+        [class*="dfgdfgdfg"] .cbd-block-icon.top-left,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-icon.top-left { 
+            top: 10px !important; left: 10px !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-icon.top-center,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-icon.top-center { 
+            top: 10px !important; left: 50% !important; transform: translateX(-50%) !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-icon.top-right,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-icon.top-right { 
+            top: 10px !important; right: 10px !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-icon.middle-left,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-icon.middle-left { 
+            top: 50% !important; left: 10px !important; transform: translateY(-50%) !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-icon.middle-center,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-icon.middle-center { 
+            top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-icon.middle-right,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-icon.middle-right { 
+            top: 50% !important; right: 10px !important; transform: translateY(-50%) !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-icon.bottom-left,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-icon.bottom-left { 
+            bottom: 10px !important; left: 10px !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-icon.bottom-center,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-icon.bottom-center { 
+            bottom: 10px !important; left: 50% !important; transform: translateX(-50%) !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-icon.bottom-right,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-icon.bottom-right { 
+            bottom: 10px !important; right: 10px !important; 
+        }
+        
+        /* Numbering positioning system - all 9 positions */
+        [class*="dfgdfgdfg"] .cbd-block-number,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-number {
+            position: absolute !important;
+            z-index: 10 !important;
+            font-weight: bold !important;
+            font-size: 14px !important;
+            color: #333 !important;
+            background: rgba(255,255,255,0.95) !important;
+            padding: 4px 8px !important;
+            border-radius: 12px !important;
+            border: 1px solid #ddd !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15) !important;
+            min-width: 24px !important;
+            text-align: center !important;
+        }
+        
+        /* Numbering positions */
+        [class*="dfgdfgdfg"] .cbd-block-number.top-left,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-number.top-left { 
+            top: 5px !important; left: 5px !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-number.top-center,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-number.top-center { 
+            top: 5px !important; left: 50% !important; transform: translateX(-50%) !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-number.top-right,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-number.top-right { 
+            top: 5px !important; right: 5px !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-number.middle-left,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-number.middle-left { 
+            top: 50% !important; left: 5px !important; transform: translateY(-50%) !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-number.middle-center,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-number.middle-center { 
+            top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-number.middle-right,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-number.middle-right { 
+            top: 50% !important; right: 5px !important; transform: translateY(-50%) !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-number.bottom-left,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-number.bottom-left { 
+            bottom: 5px !important; left: 5px !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-number.bottom-center,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-number.bottom-center { 
+            bottom: 5px !important; left: 50% !important; transform: translateX(-50%) !important; 
+        }
+        [class*="dfgdfgdfg"] .cbd-block-number.bottom-right,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-block-number.bottom-right { 
+            bottom: 5px !important; right: 5px !important; 
+        }
+        
+        /* Feature buttons preview */
+        [class*="dfgdfgdfg"] .cbd-feature-buttons,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-feature-buttons {
+            margin-top: 20px !important;
+            padding: 12px 0 !important;
+            border-top: 1px solid #e0e0e0 !important;
+            display: flex !important;
+            gap: 8px !important;
+            align-items: center !important;
+            flex-wrap: wrap !important;
+        }
+        
+        [class*="dfgdfgdfg"] .cbd-feature-button,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-feature-button {
+            display: inline-flex !important;
+            align-items: center !important;
+            gap: 6px !important;
+            padding: 8px 12px !important;
+            font-size: 12px !important;
+            border: 1px solid #ddd !important;
+            border-radius: 4px !important;
+            background: linear-gradient(to bottom, #fafafa, #f0f0f0) !important;
+            color: #666 !important;
+            pointer-events: none !important;
+            opacity: 0.8 !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
+        }
+        
+        [class*="dfgdfgdfg"] .cbd-feature-button .dashicons,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-feature-button .dashicons {
+            font-size: 14px !important;
+            width: 14px !important;
+            height: 14px !important;
+        }
+        
+        /* Collapse toggle styling */
+        [class*="dfgdfgdfg"] .cbd-collapse-toggle,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-collapse-toggle {
+            cursor: not-allowed !important;
+            background: #f8f9fa !important;
+            border: 1px solid #dee2e6 !important;
+            padding: 4px 8px !important;
+            border-radius: 3px !important;
+            font-size: 11px !important;
+            color: #6c757d !important;
+        }
+        
+        /* Error state styling */
+        [class*="dfgdfgdfg"] .cbd-container-error,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-container-error {
+            background: #fff5f5 !important;
+            border: 2px dashed #e53e3e !important;
+            padding: 20px !important;
+            border-radius: 8px !important;
+            margin: 10px 0 !important;
+            color: #c53030 !important;
+            font-size: 14px !important;
+            line-height: 1.5 !important;
+        }
+        
+        [class*="dfgdfgdfg"] .cbd-container-error strong,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-container-error strong {
+            color: #c53030 !important;
+            font-weight: 600 !important;
+            display: block !important;
+            margin-bottom: 8px !important;
+        }
+        
+        [class*="dfgdfgdfg"] .cbd-container-error a,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-container-error a {
+            color: #2b6cb0 !important;
+            text-decoration: underline !important;
+            font-weight: 500 !important;
+        }
+        
+        [class*="dfgdfgdfg"] .cbd-container-error a:hover,
+        .wp-block-container-block-designer-dfgdfgdfg .cbd-container-error a:hover {
+            color: #2c5aa0 !important;
+        }
+        
+        /* Selected block styling in editor */
+        .wp-block.is-selected[class*="dfgdfgdfg"],
+        .wp-block.is-selected.wp-block-container-block-designer-dfgdfgdfg {
+            outline: 2px solid #007cba !important;
+            outline-offset: -2px !important;
+        }
+        
+        /* Modern effects preview in editor */
+        [class*="dfgdfgdfg"].cbd-glassmorphism .cbd-container-block,
+        .wp-block-container-block-designer-dfgdfgdfg.cbd-glassmorphism .cbd-container-block {
+            backdrop-filter: blur(8px) !important;
+            -webkit-backdrop-filter: blur(8px) !important;
+            background: rgba(255,255,255,0.8) !important;
+        }
+        
+        [class*="dfgdfgdfg"].cbd-neumorphism .cbd-container-block,
+        .wp-block-container-block-designer-dfgdfgdfg.cbd-neumorphism .cbd-container-block {
+            box-shadow: 6px 6px 12px rgba(0,0,0,0.15), -6px -6px 12px rgba(255,255,255,0.8) !important;
+        }
+        
+        [class*="dfgdfgdfg"].cbd-animated:hover .cbd-container-block,
+        .wp-block-container-block-designer-dfgdfgdfg.cbd-animated:hover .cbd-container-block {
+            transform: translateY(-3px) !important;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1) !important;
+        }
+        
+        </style>
+        
+        <script>
+        // Add real-time style refresh capability
+        (function() {
+            // Function to refresh dynamic styles
+            window.cbdRefreshDynamicStyles = function() {
+                // Remove old dynamic styles
+                const oldStyles = document.getElementById('cbd-production-editor-styles');
+                if (oldStyles) {
+                    // Create new style element with updated styles
+                    fetch(window.location.href, {
+                        method: 'GET',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    }).then(response => response.text()).then(html => {
+                        // Extract new styles from response
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const newStyles = doc.getElementById('cbd-production-editor-styles');
+                        
+                        if (newStyles) {
+                            // Replace old styles with new ones
+                            oldStyles.innerHTML = newStyles.innerHTML;
+                        }
+                    }).catch(console.error);
+                }
+            };
+            
+            // Auto-refresh styles when container blocks change
+            if (window.wp && window.wp.data) {
+                const { subscribe, select } = window.wp.data;
+                let lastBlockCount = 0;
+                
+                subscribe(() => {
+                    const blocks = select('core/block-editor').getBlocks();
+                    const containerBlocks = blocks.filter(block => 
+                        block.name && block.name.includes('container-block-designer')
+                    );
+                    
+                    if (containerBlocks.length !== lastBlockCount) {
+                        lastBlockCount = containerBlocks.length;
+                        setTimeout(window.cbdRefreshDynamicStyles, 500);
+                    }
+                });
+            }
+            
+            console.log('CBD: Dynamic style refresh system loaded');
+        })();
+        </script>
+        
+        <?php
     }
     
     /**

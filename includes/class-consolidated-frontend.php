@@ -371,10 +371,62 @@ class CBD_Consolidated_Frontend {
      * Render error block
      */
     private function render_error_block($selected_block) {
-        return '<div class="cbd-container-error">' . 
-               sprintf(__('Container-Block "%s" nicht gefunden.', 'container-block-designer'), 
-                       esc_html($selected_block)) . 
+        // Check if user can manage options (admin)
+        $is_admin = current_user_can('manage_options');
+        
+        $error_message = sprintf(__('Container-Block "%s" nicht gefunden.', 'container-block-designer'), 
+                                esc_html($selected_block));
+        
+        // Get similar blocks suggestion
+        $similar_blocks = $this->get_similar_blocks($selected_block);
+        $suggestions = '';
+        
+        if (!empty($similar_blocks)) {
+            $suggestions = '<p style="margin-top: 15px; font-size: 0.9em; color: #666;">' .
+                          __('Verfügbare Container-Blöcke:', 'container-block-designer') . '</p>' .
+                          '<ul style="margin: 5px 0; padding-left: 20px; font-size: 0.9em; color: #2271b1;">';
+            foreach ($similar_blocks as $block) {
+                $suggestions .= '<li><code>' . esc_html($block['name']) . '</code> - ' . esc_html($block['title'] ?: $block['name']) . '</li>';
+            }
+            $suggestions .= '</ul>';
+        }
+        
+        $admin_help = '';
+        if ($is_admin) {
+            $admin_help = '<p style="margin-top: 10px; font-size: 0.9em; color: #666;">' .
+                         __('Als Administrator können Sie:', 'container-block-designer') . '</p>' .
+                         '<ul style="margin: 5px 0; padding-left: 20px; font-size: 0.9em; color: #666;">' .
+                         '<li>' . sprintf(__('<a href="%s">Einen neuen Block erstellen</a>', 'container-block-designer'), admin_url('admin.php?page=cbd-new-block')) . '</li>' .
+                         '<li>' . sprintf(__('<a href="%s">Vorhandene Blöcke verwalten</a>', 'container-block-designer'), admin_url('admin.php?page=container-block-designer')) . '</li>' .
+                         '<li>' . __('Oder den Block-Namen in diesem Gutenberg-Block ändern', 'container-block-designer') . '</li>' .
+                         '</ul>';
+        } else {
+            $admin_help = '<p style="margin-top: 10px; font-size: 0.9em; color: #666;">' .
+                         __('Bitte wenden Sie sich an den Administrator, um dieses Problem zu beheben.', 'container-block-designer') . '</p>';
+        }
+        
+        return '<div class="cbd-container-error" style="border: 2px dashed #e74c3c; background: #fdf2f2; padding: 20px; border-radius: 8px; margin: 10px 0;">' . 
+               '<div style="color: #e74c3c; font-weight: 600; margin-bottom: 5px;">' . 
+               '⚠️ ' . $error_message . 
+               '</div>' .
+               $suggestions .
+               $admin_help .
                '</div>';
+    }
+    
+    /**
+     * Get similar or available blocks
+     */
+    private function get_similar_blocks($search_name) {
+        global $wpdb;
+        
+        // Get all active blocks
+        $blocks = $wpdb->get_results(
+            "SELECT name, title FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active' ORDER BY name ASC LIMIT 10",
+            ARRAY_A
+        );
+        
+        return $blocks ?: array();
     }
     
     /**
@@ -403,7 +455,7 @@ class CBD_Consolidated_Frontend {
      * Generate complete container HTML
      */
     private function generate_container_html($styles, $features, $config, $content, $block_slug) {
-        $container_classes = array('cbd-container');
+        $container_classes = array('cbd-container-block');
         $container_attributes = array();
         
         // Add block-specific class
@@ -414,16 +466,28 @@ class CBD_Consolidated_Frontend {
             $container_classes[] = sanitize_html_class($config['customClass']);
         }
         
-        // Feature-based classes
-        if (!empty($features['collapsible']['enabled'])) {
+        // Feature-based classes and data attributes
+        if (!empty($features['collapse']['enabled'])) {
             $container_classes[] = 'cbd-collapsible';
-            if ($features['collapsible']['defaultState'] === 'collapsed') {
+            if (($features['collapse']['defaultState'] ?? 'expanded') === 'collapsed') {
                 $container_classes[] = 'cbd-collapsed';
             }
         }
         
         if (!empty($features['icon']['enabled'])) {
             $container_classes[] = 'cbd-has-icon';
+        }
+        
+        if (!empty($features['numbering']['enabled'])) {
+            $container_classes[] = 'cbd-has-numbering';
+            $container_attributes['data-block-type'] = $block_slug;
+            $container_attributes['data-number-format'] = $features['numbering']['format'] ?? 'numeric';
+            $container_attributes['data-counting-mode'] = $features['numbering']['countingMode'] ?? 'same-design';
+        }
+        
+        // Add animation class if effects are enabled
+        if (!empty($styles['effects']['animation']['hover']) && $styles['effects']['animation']['hover'] !== 'none') {
+            $container_classes[] = 'cbd-animated';
         }
         
         // Check for positioned elements
@@ -435,6 +499,12 @@ class CBD_Consolidated_Frontend {
         $container_id = 'cbd-container-' . uniqid();
         $container_attributes['id'] = $container_id;
         $container_attributes['class'] = implode(' ', $container_classes);
+        
+        // Generate inline styles
+        $inline_styles = $this->generate_inline_styles($styles, $features);
+        if (!empty($inline_styles)) {
+            $container_attributes['style'] = $inline_styles;
+        }
         
         // Build HTML
         $html = '';
@@ -454,23 +524,43 @@ class CBD_Consolidated_Frontend {
         // Add icon if enabled
         if (!empty($features['icon']['enabled'])) {
             $icon_class = sanitize_html_class($features['icon']['value'] ?? 'dashicons-admin-generic');
+            $icon_position = $features['icon']['position'] ?? 'top-left';
             $icon_color = !empty($features['icon']['color']) ? 
                 'style="color: ' . esc_attr($features['icon']['color']) . '"' : '';
-            $html .= '<span class="cbd-icon dashicons ' . $icon_class . '" ' . $icon_color . '></span>';
+            $html .= '<span class="cbd-block-icon dashicons ' . $icon_class . ' ' . $icon_position . '" ' . $icon_color . '></span>';
+        }
+        
+        // Add numbering if enabled
+        if (!empty($features['numbering']['enabled'])) {
+            $number_position = $features['numbering']['position'] ?? 'top-left';
+            $number_format = $features['numbering']['format'] ?? 'numeric';
+            $counting_mode = $features['numbering']['countingMode'] ?? 'same-design';
+            $html .= '<span class="cbd-block-number ' . $number_position . '" data-format="' . esc_attr($number_format) . '" data-counting-mode="' . esc_attr($counting_mode) . '" data-block-type="' . esc_attr($block_slug) . '"></span>';
         }
         
         // Add collapse button if enabled
-        if (!empty($features['collapsible']['enabled'])) {
-            $expanded = $features['collapsible']['defaultState'] !== 'collapsed';
+        if (!empty($features['collapse']['enabled'])) {
+            $expanded = ($features['collapse']['defaultState'] ?? 'expanded') !== 'collapsed';
             $html .= '<button class="cbd-collapse-toggle" type="button" aria-expanded="' . ($expanded ? 'true' : 'false') . '" title="' . esc_attr__('Ein-/Ausklappen', 'container-block-designer') . '">';
-            $html .= '<span class="cbd-collapse-icon"></span>';
+            $html .= '<span class="cbd-collapse-icon">▼</span>';
             $html .= '</button>';
         }
         
-        // Content wrapper
-        $html .= '<div class="cbd-content">';
+        // Content wrapper (collapsible if needed)
+        $content_class = 'cbd-block-content';
+        if (!empty($features['collapse']['enabled'])) {
+            $content_class .= ' cbd-collapsible-content';
+        }
+        
+        $html .= '<div class="' . $content_class . '">';
         $html .= $content;
         $html .= '</div>';
+        
+        // Add feature buttons at the bottom
+        $feature_buttons = $this->generate_feature_buttons($features, $block_slug);
+        if (!empty($feature_buttons)) {
+            $html .= '<div class="cbd-feature-buttons">' . $feature_buttons . '</div>';
+        }
         
         $html .= '</div>'; // Close main container
         
@@ -483,15 +573,170 @@ class CBD_Consolidated_Frontend {
     }
     
     /**
+     * Generate feature buttons (copy, screenshot, etc.)
+     */
+    private function generate_feature_buttons($features, $block_slug) {
+        $buttons = '';
+        
+        // Copy text button
+        if (!empty($features['copyText']['enabled'])) {
+            $button_text = $features['copyText']['buttonText'] ?? __('Text kopieren', 'container-block-designer');
+            $buttons .= '<button type="button" class="cbd-copy-text-btn cbd-feature-button" title="' . esc_attr($button_text) . '">';
+            $buttons .= '<span class="dashicons dashicons-clipboard"></span>';
+            $buttons .= '<span class="cbd-button-text">' . esc_html($button_text) . '</span>';
+            $buttons .= '</button>';
+        }
+        
+        // Screenshot button
+        if (!empty($features['screenshot']['enabled'])) {
+            $button_text = $features['screenshot']['buttonText'] ?? __('Screenshot', 'container-block-designer');
+            $buttons .= '<button type="button" class="cbd-screenshot-btn cbd-feature-button" title="' . esc_attr($button_text) . '">';
+            $buttons .= '<span class="dashicons dashicons-camera"></span>';
+            $buttons .= '<span class="cbd-button-text">' . esc_html($button_text) . '</span>';
+            $buttons .= '</button>';
+        }
+        
+        return $buttons;
+    }
+    
+    /**
+     * Generate inline styles for the container
+     */
+    private function generate_inline_styles($styles, $features) {
+        $css_rules = array();
+        
+        // Basic styles
+        if (!empty($styles['background']['color'])) {
+            $css_rules[] = 'background-color: ' . esc_attr($styles['background']['color']);
+        }
+        
+        if (!empty($styles['text']['color'])) {
+            $css_rules[] = 'color: ' . esc_attr($styles['text']['color']);
+        }
+        
+        // Border styles
+        if (!empty($styles['border'])) {
+            $border = $styles['border'];
+            if (!empty($border['width']) && !empty($border['color']) && !empty($border['style'])) {
+                $css_rules[] = sprintf('border: %dpx %s %s', 
+                    intval($border['width']), 
+                    esc_attr($border['style']), 
+                    esc_attr($border['color'])
+                );
+            }
+            
+            if (!empty($border['radius'])) {
+                $css_rules[] = 'border-radius: ' . intval($border['radius']) . 'px';
+            }
+        }
+        
+        // Background gradient
+        if (!empty($styles['background']['type']) && $styles['background']['type'] === 'gradient') {
+            $gradient = $styles['background']['gradient'];
+            if (!empty($gradient['color1']) && !empty($gradient['color2'])) {
+                $angle = intval($gradient['angle'] ?? 45);
+                $gradient_css = sprintf('linear-gradient(%ddeg, %s, %s', 
+                    $angle, 
+                    esc_attr($gradient['color1']), 
+                    esc_attr($gradient['color2'])
+                );
+                
+                if (!empty($gradient['color3'])) {
+                    $gradient_css .= ', ' . esc_attr($gradient['color3']);
+                }
+                $gradient_css .= ')';
+                
+                $css_rules[] = 'background: ' . $gradient_css;
+            }
+        }
+        
+        // Modern effects
+        if (!empty($styles['effects'])) {
+            $effects = $styles['effects'];
+            
+            // Glassmorphism
+            if (!empty($effects['glassmorphism']['enabled'])) {
+                $glass = $effects['glassmorphism'];
+                $opacity = floatval($glass['opacity'] ?? 0.1);
+                $blur = intval($glass['blur'] ?? 10);
+                $saturate = intval($glass['saturate'] ?? 100);
+                
+                $css_rules[] = sprintf('backdrop-filter: blur(%dpx) saturate(%d%%)', $blur, $saturate);
+                $css_rules[] = sprintf('-webkit-backdrop-filter: blur(%dpx) saturate(%d%%)', $blur, $saturate);
+                
+                if (!empty($glass['color'])) {
+                    $css_rules[] = sprintf('background-color: rgba(%s, %f)', 
+                        $this->hex_to_rgb($glass['color']), 
+                        $opacity
+                    );
+                }
+            }
+            
+            // Neumorphism
+            if (!empty($effects['neumorphism']['enabled'])) {
+                $neuro = $effects['neumorphism'];
+                $intensity = intval($neuro['intensity'] ?? 10);
+                $distance = intval($neuro['distance'] ?? 15);
+                $style = $neuro['style'] ?? 'raised';
+                
+                if ($style === 'raised') {
+                    $css_rules[] = sprintf('box-shadow: %dpx %dpx %dpx rgba(0,0,0,0.1), -%dpx -%dpx %dpx rgba(255,255,255,0.7)', 
+                        $distance/3, $distance/3, $intensity,
+                        $distance/3, $distance/3, $intensity
+                    );
+                } else {
+                    $css_rules[] = sprintf('box-shadow: inset %dpx %dpx %dpx rgba(0,0,0,0.1), inset -%dpx -%dpx %dpx rgba(255,255,255,0.7)', 
+                        $distance/3, $distance/3, $intensity,
+                        $distance/3, $distance/3, $intensity
+                    );
+                }
+            }
+        }
+        
+        return implode('; ', $css_rules);
+    }
+    
+    /**
+     * Convert hex color to RGB values
+     */
+    private function hex_to_rgb($hex) {
+        $hex = ltrim($hex, '#');
+        return sprintf('%d, %d, %d', 
+            hexdec(substr($hex, 0, 2)),
+            hexdec(substr($hex, 2, 2)),
+            hexdec(substr($hex, 4, 2))
+        );
+    }
+    
+    /**
      * Get block data from database
      */
     private function get_block_data($block_name) {
         global $wpdb;
         
-        return $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE name = %s AND status = 'active'",
+        // First try slug match (most common case for Gutenberg blocks)
+        $block = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE slug = %s AND status = 'active'",
             $block_name
         ), ARRAY_A);
+        
+        // If not found by slug, try exact name match
+        if (!$block) {
+            $block = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE name = %s AND status = 'active'",
+                $block_name
+            ), ARRAY_A);
+        }
+        
+        // If still not found, try case-insensitive name search
+        if (!$block) {
+            $block = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE LOWER(name) = LOWER(%s) AND status = 'active'",
+                $block_name
+            ), ARRAY_A);
+        }
+        
+        return $block;
     }
     
     /**

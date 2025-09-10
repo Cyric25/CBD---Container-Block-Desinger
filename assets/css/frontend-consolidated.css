@@ -1,0 +1,177 @@
+/**
+ * Container Block Designer - Consolidated Frontend Styles
+ * All frontend styles combined for better performance
+ */
+
+/* Import all component styles */
+@import url('block-base.css');
+@import url('block-responsive.css');
+
+/* Additional consolidated styles */
+.cbd-container-block {
+    /* Modern CSS Grid and Flexbox support */
+    display: block;
+    contain: layout style;
+}
+
+/* Icon positioning styles */
+.cbd-container-block .cbd-block-icon.top-left {
+    top: 0.5rem;
+    left: 0.5rem;
+}
+
+.cbd-container-block .cbd-block-icon.top-center {
+    top: 0.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-container-block .cbd-block-icon.top-right {
+    top: 0.5rem;
+    right: 0.5rem;
+}
+
+.cbd-container-block .cbd-block-icon.middle-left {
+    top: 50%;
+    left: 0.5rem;
+    transform: translateY(-50%);
+}
+
+.cbd-container-block .cbd-block-icon.middle-center {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.cbd-container-block .cbd-block-icon.middle-right {
+    top: 50%;
+    right: 0.5rem;
+    transform: translateY(-50%);
+}
+
+.cbd-container-block .cbd-block-icon.bottom-left {
+    bottom: 0.5rem;
+    left: 0.5rem;
+}
+
+.cbd-container-block .cbd-block-icon.bottom-center {
+    bottom: 0.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-container-block .cbd-block-icon.bottom-right {
+    bottom: 0.5rem;
+    right: 0.5rem;
+}
+
+/* Numbering positioning styles */
+.cbd-container-block .cbd-block-number.top-left {
+    top: 0.5rem;
+    left: 0.5rem;
+}
+
+.cbd-container-block .cbd-block-number.top-center {
+    top: 0.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-container-block .cbd-block-number.top-right {
+    top: 0.5rem;
+    right: 0.5rem;
+}
+
+.cbd-container-block .cbd-block-number.middle-left {
+    top: 50%;
+    left: 0.5rem;
+    transform: translateY(-50%);
+}
+
+.cbd-container-block .cbd-block-number.middle-center {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.cbd-container-block .cbd-block-number.middle-right {
+    top: 50%;
+    right: 0.5rem;
+    transform: translateY(-50%);
+}
+
+.cbd-container-block .cbd-block-number.bottom-left {
+    bottom: 0.5rem;
+    left: 0.5rem;
+}
+
+.cbd-container-block .cbd-block-number.bottom-center {
+    bottom: 0.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.cbd-container-block .cbd-block-number.bottom-right {
+    bottom: 0.5rem;
+    right: 0.5rem;
+}
+
+/* Modern effects support */
+.cbd-container-block.cbd-glassmorphism {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.cbd-container-block.cbd-neumorphism {
+    box-shadow: 
+        5px 5px 10px rgba(0, 0, 0, 0.1),
+        -5px -5px 10px rgba(255, 255, 255, 0.7);
+}
+
+/* Animation support */
+.cbd-container-block.cbd-animated {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.cbd-container-block.cbd-animated:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Accessibility improvements */
+.cbd-container-block:focus-within {
+    outline: 2px solid #007cba;
+    outline-offset: 2px;
+}
+
+.cbd-container-block .cbd-feature-button:focus {
+    outline: 2px solid #007cba;
+    outline-offset: 1px;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .cbd-container-block {
+        color: #e0e0e0;
+    }
+    
+    .cbd-container-block .cbd-feature-button {
+        background: #2a2a2a;
+        border-color: #555;
+        color: #e0e0e0;
+    }
+    
+    .cbd-container-block .cbd-feature-button:hover {
+        background: #3a3a3a;
+        border-color: #777;
+    }
+}
+
+/* Performance optimizations */
+.cbd-container-block * {
+    will-change: auto;
+}
+
+.cbd-container-block.cbd-animated * {
+    will-change: transform, opacity;
+}

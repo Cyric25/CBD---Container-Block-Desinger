@@ -333,7 +333,8 @@ class CBD_Admin {
                 'numbering' => array(
                     'enabled' => isset($_POST['features']['numbering']['enabled']) ? true : false,
                     'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric'),
-                    'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left')
+                    'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left'),
+                    'countingMode' => sanitize_text_field($_POST['features']['numbering']['countingMode'] ?? 'same-design')
                 ),
                 'copyText' => array(
                     'enabled' => isset($_POST['features']['copyText']['enabled']) ? true : false,
@@ -800,7 +801,8 @@ class CBD_Admin {
             'numbering' => array(
                 'enabled' => isset($_POST['features']['numbering']['enabled']) ? true : false,
                 'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric'),
-                'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left')
+                'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left'),
+                'countingMode' => sanitize_text_field($_POST['features']['numbering']['countingMode'] ?? 'same-design')
             ),
             'copyText' => array(
                 'enabled' => isset($_POST['features']['copyText']['enabled']) ? true : false,
@@ -1098,7 +1100,8 @@ class CBD_Admin {
             'numbering' => array(
                 'enabled' => isset($_POST['features']['numbering']['enabled']) ? true : false,
                 'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric'),
-                'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left')
+                'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left'),
+                'countingMode' => sanitize_text_field($_POST['features']['numbering']['countingMode'] ?? 'same-design')
             ),
             'copyText' => array(
                 'enabled' => isset($_POST['features']['copyText']['enabled']) ? true : false,
