@@ -427,20 +427,30 @@
         
         console.log('CBD: Container-Block registriert');
         
-        // Test function - apply styles to any container block after 3 seconds
+        // Add direct event listener for dropdown changes
         setTimeout(() => {
-            console.log('CBD TEST: Looking for container blocks to test styling...');
-            const testBlock = document.querySelector('[data-type*="container-block-designer"]');
-            if (testBlock) {
-                console.log('CBD TEST: Found container block, applying test styling');
-                testBlock.style.setProperty('background-color', 'rgb(221, 153, 51)', 'important');
-                testBlock.style.setProperty('border', '2px solid red', 'important');
-                testBlock.style.setProperty('padding', '30px', 'important');
-                console.log('CBD TEST: Test styling applied');
-            } else {
-                console.log('CBD TEST: No container blocks found');
-            }
-        }, 3000);
+            console.log('CBD: Setting up dropdown change listeners...');
+            
+            // Listen for any select changes in the inspector
+            document.addEventListener('change', (e) => {
+                if (e.target && e.target.tagName === 'SELECT') {
+                    console.log('CBD DEBUG: Select change detected!', e.target, 'Value:', e.target.value);
+                    
+                    // Check if this might be our dropdown
+                    const selectValue = e.target.value;
+                    if (selectValue === 'infotext_k1' || selectValue === 'infotext_k2' || selectValue === '') {
+                        console.log('CBD DEBUG: This looks like our container block dropdown! Value:', selectValue);
+                        
+                        // Apply styles immediately
+                        setTimeout(() => {
+                            applyRealStyles(selectValue);
+                        }, 100);
+                    }
+                }
+            });
+            
+            console.log('CBD: Dropdown listeners set up');
+        }, 1000);
     });
     
 })(window.wp);
