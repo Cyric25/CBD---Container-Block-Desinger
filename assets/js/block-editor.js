@@ -349,13 +349,22 @@
                     background: { color: 'rgb(221, 153, 51)' },
                     border: { width: 1, style: 'solid', color: 'rgb(224, 224, 224)', radius: 4 },
                     padding: '20px',
-                    color: 'rgb(51, 51, 51)'
+                    color: 'rgb(51, 51, 51)',
+                    minHeight: '100px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                    fontSize: '14px',
+                    lineHeight: '1.5'
                 },
                 'infotext_k2': {
                     background: { color: 'rgb(128, 128, 128)' },
                     border: { width: 8, style: 'solid', color: 'rgb(64, 64, 64)', radius: 4 },
                     padding: '20px',
-                    color: 'rgb(255, 255, 255)'
+                    color: 'rgb(255, 255, 255)',
+                    minHeight: '100px',
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                    fontSize: '14px',
+                    lineHeight: '1.5',
+                    fontWeight: 'normal'
                 }
             };
             
@@ -363,8 +372,10 @@
             if (styles) {
                 console.log('CBD DEBUG: Applying styles:', styles);
                 
+                // Apply all style properties
                 if (styles.background && styles.background.color) {
                     element.style.setProperty('background-color', styles.background.color, 'important');
+                    element.style.setProperty('background', styles.background.color, 'important');
                 }
                 if (styles.border) {
                     const border = `${styles.border.width}px ${styles.border.style} ${styles.border.color}`;
@@ -379,6 +390,21 @@
                 if (styles.color) {
                     element.style.setProperty('color', styles.color, 'important');
                 }
+                if (styles.minHeight) {
+                    element.style.setProperty('min-height', styles.minHeight, 'important');
+                }
+                if (styles.boxShadow) {
+                    element.style.setProperty('box-shadow', styles.boxShadow, 'important');
+                }
+                if (styles.fontSize) {
+                    element.style.setProperty('font-size', styles.fontSize, 'important');
+                }
+                if (styles.lineHeight) {
+                    element.style.setProperty('line-height', styles.lineHeight, 'important');
+                }
+                if (styles.fontWeight) {
+                    element.style.setProperty('font-weight', styles.fontWeight, 'important');
+                }
                 
                 console.log('CBD DEBUG: Styles applied successfully to element');
             }
@@ -387,8 +413,56 @@
         // Apply database styles
         function applyBlockStyles(element, blockData) {
             console.log('CBD DEBUG: Applying database styles for block:', blockData);
-            // This would apply styles from database - currently using fallbacks
-            applyFallbackStyles(element, blockData.slug);
+            
+            // Try to parse database styles
+            let styles = null;
+            
+            if (blockData.styles) {
+                try {
+                    styles = typeof blockData.styles === 'string' ? JSON.parse(blockData.styles) : blockData.styles;
+                } catch (e) {
+                    console.log('CBD DEBUG: Could not parse blockData.styles:', e);
+                }
+            } else if (blockData.css_styles) {
+                try {
+                    styles = typeof blockData.css_styles === 'string' ? JSON.parse(blockData.css_styles) : blockData.css_styles;
+                } catch (e) {
+                    console.log('CBD DEBUG: Could not parse blockData.css_styles:', e);
+                }
+            } else if (blockData.config && blockData.config.styles) {
+                styles = blockData.config.styles;
+            }
+            
+            if (styles && typeof styles === 'object') {
+                console.log('CBD DEBUG: Found database styles:', styles);
+                
+                // Apply database styles similar to fallback styles
+                if (styles.background && styles.background.color) {
+                    element.style.setProperty('background-color', styles.background.color, 'important');
+                }
+                if (styles.border) {
+                    if (styles.border.width && styles.border.color) {
+                        const border = `${styles.border.width}px ${styles.border.style || 'solid'} ${styles.border.color}`;
+                        element.style.setProperty('border', border, 'important');
+                    }
+                    if (styles.border.radius) {
+                        element.style.setProperty('border-radius', styles.border.radius + 'px', 'important');
+                    }
+                }
+                if (styles.padding) {
+                    element.style.setProperty('padding', typeof styles.padding === 'string' ? styles.padding : '20px', 'important');
+                }
+                if (styles.text && styles.text.color) {
+                    element.style.setProperty('color', styles.text.color, 'important');
+                } else if (styles.color) {
+                    element.style.setProperty('color', styles.color, 'important');
+                }
+                
+                console.log('CBD DEBUG: Database styles applied successfully');
+            } else {
+                console.log('CBD DEBUG: No valid database styles found, using fallbacks');
+                applyFallbackStyles(element, blockData.slug);
+            }
         }
         
         // Registriere Block
