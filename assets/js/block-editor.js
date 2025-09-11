@@ -159,6 +159,16 @@
                         }),
                         
                         el(TextControl, {
+                            label: 'Block-Titel (Header)',
+                            value: attributes.blockTitle || '',
+                            onChange: (value) => setAttributes({ blockTitle: value }),
+                            placeholder: 'z.B. Wichtige Information',
+                            help: 'Wird im Header des Blocks angezeigt',
+                            __next40pxDefaultSize: true,
+                            __nextHasNoMarginBottom: true
+                        }),
+                        
+                        el(TextControl, {
                             label: 'Zusätzliche CSS-Klassen',
                             value: customClasses,
                             onChange: (value) => setAttributes({ customClasses: value }),
@@ -479,6 +489,10 @@
             },
             attributes: {
                 selectedBlock: {
+                    type: 'string',
+                    default: ''
+                },
+                blockTitle: {
                     type: 'string',
                     default: ''
                 },

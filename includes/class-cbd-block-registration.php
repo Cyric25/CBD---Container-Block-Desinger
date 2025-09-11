@@ -455,31 +455,8 @@ class CBD_Block_Registration {
             $html .= '</div>';
         }
         
-        // Action Buttons
-        $has_copy = !empty($features['copyText']['enabled']);
-        $has_screenshot = !empty($features['screenshot']['enabled']);
-        
-        if ($has_copy || $has_screenshot) {
-            $html .= '<div class="cbd-container-actions">';
-            
-            if ($has_copy) {
-                $copy_text = $features['copyText']['buttonText'] ?? 'Text kopieren';
-                $html .= '<button class="cbd-copy-button" data-container-id="' . esc_attr($block_id) . '" title="' . esc_attr($copy_text) . '">';
-                $html .= '<span class="dashicons dashicons-clipboard"></span>';
-                $html .= '<span class="sr-only">' . esc_html($copy_text) . '</span>';
-                $html .= '</button>';
-            }
-            
-            if ($has_screenshot) {
-                $screenshot_text = $features['screenshot']['buttonText'] ?? 'Screenshot';
-                $html .= '<button class="cbd-screenshot-button" data-container-id="' . esc_attr($block_id) . '" title="' . esc_attr($screenshot_text) . '">';
-                $html .= '<span class="dashicons dashicons-camera"></span>';
-                $html .= '<span class="sr-only">' . esc_html($screenshot_text) . '</span>';
-                $html .= '</button>';
-            }
-            
-            $html .= '</div>';
-        }
+        // Action Buttons - DISABLED: All buttons now in dropdown menu only
+        // No separate action buttons are generated - all functionality is in the dropdown menu
         
         return $html;
     }

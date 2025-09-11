@@ -198,24 +198,11 @@
     }
     
     /**
-     * Initialize Copy Text Feature
+     * Initialize Copy Text Feature - DISABLED: All buttons now in dropdown menu only
      */
     function initializeCopyText($container) {
-        if ($container.data('copy-text') !== 'true') return;
-        
-        const buttonText = $container.data('copy-button-text') || 'Text kopieren';
-        const position = $container.data('copy-position') || 'top-right';
-        
-        // Remove existing button if any
-        $container.find('.cbd-copy-button').remove();
-        
-        // Create copy button
-        const $button = $('<button class="cbd-copy-button"></button>')
-            .html('<span class="dashicons dashicons-clipboard"></span> ' + buttonText)
-            .addClass('position-' + position);
-        
-        $container.append($button);
-        $container.addClass('has-copy-text');
+        // Feature disabled - all functionality is now in the dropdown menu
+        return;
         
         // Handle click
         $button.on('click', function(e) {
@@ -238,22 +225,11 @@
     }
     
     /**
-     * Initialize Screenshot Feature
+     * Initialize Screenshot Feature - DISABLED: All buttons now in dropdown menu only
      */
     function initializeScreenshot($container) {
-        if ($container.data('screenshot') !== 'true') return;
-        
-        const buttonText = $container.data('screenshot-button-text') || 'Screenshot';
-        
-        // Remove existing button if any
-        $container.find('.cbd-screenshot-button').remove();
-        
-        // Create screenshot button
-        const $button = $('<button class="cbd-screenshot-button"></button>')
-            .html('<span class="dashicons dashicons-camera"></span> ' + buttonText);
-        
-        $container.append($button);
-        $container.addClass('has-screenshot');
+        // Feature disabled - all functionality is now in the dropdown menu
+        return;
         
         // Handle click
         $button.on('click', function(e) {

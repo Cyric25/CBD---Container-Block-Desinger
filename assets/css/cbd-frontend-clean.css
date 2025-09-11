@@ -145,26 +145,159 @@
    FEATURE ELEMENTS (Outside styled container)
    ============================================ */
 
-/* Header and Collapse Functionality - Can be inside or outside content */
+/* ============================================
+   NEW HEADER SYSTEM - Title + Dropdown Menu
+   ============================================ */
+
+/* Header with title and dropdown menu */
+.cbd-container-block .cbd-header {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 15px 20px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px 8px 0 0;
+    margin-bottom: 0;
+    z-index: 10;
+    gap: 15px;
+}
+
+/* Block title */
+.cbd-header-title {
+    flex: 1;
+    font-size: 1.2em;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 0;
+    line-height: 1.4;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* When title is long, allow wrapping */
+.cbd-header-title {
+    max-width: calc(100% - 120px); /* Leave space for dropdown */
+}
+
+/* Dropdown menu container */
+.cbd-header-menu {
+    position: relative;
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+
+/* Dropdown toggle button */
+.cbd-menu-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #495057;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.cbd-menu-toggle:hover {
+    background: #f8f9fa;
+    border-color: #007cba;
+    color: #007cba;
+}
+
+.cbd-menu-toggle .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* Dropdown arrow */
+.cbd-menu-toggle::after {
+    content: '▼';
+    font-size: 10px;
+    margin-left: 5px;
+    transition: transform 0.2s ease;
+}
+
+.cbd-menu-toggle.active::after {
+    transform: rotate(180deg);
+}
+
+/* Dropdown menu */
+.cbd-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    min-width: 180px;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-5px);
+    transition: all 0.2s ease;
+}
+
+.cbd-dropdown-menu.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* Dropdown items */
+.cbd-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    font-size: 14px;
+    color: #495057;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.cbd-dropdown-item:hover {
+    background: #f8f9fa;
+}
+
+.cbd-dropdown-item:first-child {
+    border-radius: 6px 6px 0 0;
+}
+
+.cbd-dropdown-item:last-child {
+    border-radius: 0 0 6px 6px;
+}
+
+.cbd-dropdown-item .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: #6c757d;
+}
+
+/* Separator */
+.cbd-dropdown-separator {
+    height: 1px;
+    background: #e9ecef;
+    margin: 4px 0;
+}
+
+/* Old header styles - keep for compatibility but hidden */
 .cbd-container .cbd-header {
     position: relative;
     z-index: 2;
     margin-bottom: 15px;
-    /* No background or visual styles - just positioning */
-}
-
-/* Header inside content block - positioned at top */
-.cbd-container-block .cbd-header {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 10;
-    margin-bottom: 0;
-    padding: 10px 15px;
-    background: rgba(0, 0, 0, 0.05);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 8px 8px 0 0;
 }
 
 .cbd-collapse-toggle {
@@ -240,26 +373,36 @@
     transform: translateY(0);
 }
 
-.cbd-copy-text,
-.cbd-screenshot {
-    background: rgba(0, 0, 0, 0.7);
-    color: white;
-    border: none;
-    border-radius: 4px;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 14px;
-    transition: all 0.3s ease;
+/* DISABLED: All separate buttons hidden - only dropdown menu allowed */
+.cbd-copy-text:not(.cbd-dropdown-item),
+.cbd-screenshot:not(.cbd-dropdown-item) {
+    display: none !important;
+    visibility: hidden !important;
 }
 
-.cbd-copy-text:hover,
-.cbd-screenshot:hover {
-    background: rgba(0, 0, 0, 0.9);
-    transform: scale(1.1);
+/* Only allow dropdown buttons */
+.cbd-dropdown-item.cbd-copy-text,
+.cbd-dropdown-item.cbd-screenshot {
+    background: transparent;
+    color: inherit;
+    border: none;
+    border-radius: 0;
+    width: 100%;
+    height: auto;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    position: relative;
+    font-size: 14px;
+    padding: 8px 12px;
+    transition: background-color 0.2s ease;
+}
+
+/* Only dropdown buttons get hover effect */
+.cbd-dropdown-item.cbd-copy-text:hover,
+.cbd-dropdown-item.cbd-screenshot:hover {
+    background: rgba(0, 0, 0, 0.1);
 }
 
 .cbd-copy-text.cbd-copied {
@@ -406,19 +549,19 @@
 }
 
 /* Ensure controls are ONLY visible outside content block */
-.cbd-container > .cbd-copy-text,
-.cbd-container > .cbd-screenshot,
-.cbd-container > .cbd-collapse-toggle,
-.cbd-container > .cbd-actions,
 .cbd-container > .cbd-header,
 .cbd-container > .cbd-icon {
     display: flex !important;
     visibility: visible !important;
 }
 
-/* Make sure action buttons container is properly positioned outside */
+/* HIDE ALL SEPARATE BUTTONS - Only dropdown menu allowed */
+.cbd-container > .cbd-copy-text,
+.cbd-container > .cbd-screenshot,
+.cbd-container > .cbd-collapse-toggle,
 .cbd-container > .cbd-actions {
-    display: flex !important;
+    display: none !important;
+    visibility: hidden !important;
 }
 
 /* Additional protection against theme interference */
@@ -586,4 +729,25 @@
         background: #fff;
         color: #000;
     }
+}
+
+/* ============================================
+   COPY FEEDBACK NOTIFICATION
+   ============================================ */
+
+.cbd-copy-feedback {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 9999;
+    display: none;
+    white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
 }

@@ -327,49 +327,11 @@ class CBD_Block_Renderer {
     }
     
     /**
-     * Generate action buttons (copy, screenshot, etc.)
+     * Generate action buttons - DISABLED: All buttons now in dropdown menu only
      */
     private static function generate_action_buttons($features, $container_id) {
-        $html = '';
-        $buttons = array();
-        
-        // Copy text button
-        if (!empty($features['copyText']['enabled'])) {
-            $button_text = $features['copyText']['buttonText'] ?? __('Text kopieren', 'container-block-designer');
-            
-            $buttons[] = sprintf(
-                '<button type="button" class="cbd-copy-button cbd-action-button" data-container="%s" title="%s">
-                    <span class="dashicons dashicons-clipboard"></span>
-                    <span class="cbd-button-text">%s</span>
-                </button>',
-                esc_attr($container_id),
-                esc_attr($button_text),
-                esc_html($button_text)
-            );
-        }
-        
-        // Screenshot button
-        if (!empty($features['screenshot']['enabled'])) {
-            $button_text = $features['screenshot']['buttonText'] ?? __('Screenshot', 'container-block-designer');
-            
-            $buttons[] = sprintf(
-                '<button type="button" class="cbd-screenshot-button cbd-action-button" data-container="%s" title="%s">
-                    <span class="dashicons dashicons-camera"></span>
-                    <span class="cbd-button-text">%s</span>
-                </button>',
-                esc_attr($container_id),
-                esc_attr($button_text),
-                esc_html($button_text)
-            );
-        }
-        
-        if (!empty($buttons)) {
-            $html .= '<div class="cbd-action-buttons">';
-            $html .= implode('', $buttons);
-            $html .= '</div>';
-        }
-        
-        return $html;
+        // All buttons are now in the dropdown menu only - no separate buttons
+        return '';
     }
     
     /**

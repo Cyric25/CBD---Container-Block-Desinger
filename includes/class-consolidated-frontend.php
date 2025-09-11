@@ -497,8 +497,8 @@ class CBD_Consolidated_Frontend {
             }
         }
         
-        if (!empty($features['copy-text']['enabled'])) {
-            $wrapper_attributes['data-copy-text'] = json_encode($features['copy-text']);
+        if (!empty($features['copyText']['enabled'])) {
+            $wrapper_attributes['data-copy-text'] = json_encode($features['copyText']);
         }
         
         if (!empty($features['screenshot']['enabled'])) {
@@ -563,11 +563,7 @@ class CBD_Consolidated_Frontend {
             $html .= '</span>';
         }
         
-        // Add action buttons (outside the styled content)
-        $action_buttons = $this->generate_action_buttons($features, $container_id);
-        if (!empty($action_buttons)) {
-            $html .= '<div class="cbd-actions">' . $action_buttons . '</div>';
-        }
+        // Action buttons are now only in the dropdown menu - no separate buttons
         
         // Content wrapper div with proper ID for collapse functionality
         $content_wrapper_class = 'cbd-content';
@@ -582,15 +578,58 @@ class CBD_Consolidated_Frontend {
         }
         $html .= '>';
         
-        // Add header area for collapse toggle (inside the styled content at top)
-        if (!empty($features['collapse']['enabled'])) {
+        // NEW: Header with title and dropdown menu
+        $block_title = !empty($config['blockTitle']) ? $config['blockTitle'] : '';
+        $has_features = !empty($features['collapse']['enabled']) || !empty($features['copyText']['enabled']) || !empty($features['screenshot']['enabled']);
+        
+        if ($block_title || $has_features) {
             $html .= '<div class="cbd-header">';
-            $expanded = ($features['collapse']['defaultState'] ?? 'expanded') !== 'collapsed';
-            $html .= '<button class="cbd-collapse-toggle" type="button" aria-expanded="' . ($expanded ? 'true' : 'false') . '" aria-controls="' . esc_attr($container_id) . '-content">';
-            $html .= '<span class="cbd-toggle-icon"><i class="dashicons dashicons-arrow-' . ($expanded ? 'up' : 'down') . '-alt2"></i></span>';
-            $html .= '<span class="cbd-toggle-text">' . esc_html($features['collapse']['label'] ?? 'Toggle') . '</span>';
-            $html .= '</button>';
-            $html .= '</div>';
+            
+            // Block title
+            if ($block_title) {
+                $html .= '<h3 class="cbd-header-title">' . esc_html($block_title) . '</h3>';
+            }
+            
+            // Feature dropdown menu
+            if ($has_features) {
+                $html .= '<div class="cbd-header-menu">';
+                $html .= '<button class="cbd-menu-toggle" type="button" aria-expanded="false">';
+                $html .= '<i class="dashicons dashicons-admin-generic"></i>';
+                $html .= '<span>Features</span>';
+                $html .= '</button>';
+                
+                $html .= '<div class="cbd-dropdown-menu">';
+                
+                // Collapse toggle
+                if (!empty($features['collapse']['enabled'])) {
+                    $expanded = ($features['collapse']['defaultState'] ?? 'expanded') !== 'collapsed';
+                    $html .= '<button class="cbd-dropdown-item cbd-collapse-toggle" type="button" aria-expanded="' . ($expanded ? 'true' : 'false') . '" aria-controls="' . esc_attr($container_id) . '-content">';
+                    $html .= '<i class="dashicons dashicons-arrow-' . ($expanded ? 'up' : 'down') . '-alt2"></i>';
+                    $html .= '<span>' . esc_html($features['collapse']['label'] ?? 'Einklappen') . '</span>';
+                    $html .= '</button>';
+                }
+                
+                // Copy text
+                if (!empty($features['copyText']['enabled'])) {
+                    $html .= '<button class="cbd-dropdown-item cbd-copy-text" data-container-id="' . esc_attr($container_id) . '">';
+                    $html .= '<i class="dashicons dashicons-clipboard"></i>';
+                    $html .= '<span>' . esc_html($features['copyText']['buttonText'] ?? 'Text kopieren') . '</span>';
+                    $html .= '</button>';
+                }
+                
+                // Screenshot
+                if (!empty($features['screenshot']['enabled'])) {
+                    $html .= '<button class="cbd-dropdown-item cbd-screenshot" data-container-id="' . esc_attr($container_id) . '">';
+                    $html .= '<i class="dashicons dashicons-camera"></i>';
+                    $html .= '<span>' . esc_html($features['screenshot']['buttonText'] ?? 'Screenshot') . '</span>';
+                    $html .= '</button>';
+                }
+                
+                $html .= '</div>'; // Close dropdown menu
+                $html .= '</div>'; // Close header menu
+            }
+            
+            $html .= '</div>'; // Close header
         }
         
         // Wrap the actual content (not the header) in a collapsible container
@@ -614,32 +653,11 @@ class CBD_Consolidated_Frontend {
     }
     
     /**
-     * Generate action buttons (copy, screenshot, etc.) for outer container
+     * Generate action buttons - DISABLED: All buttons now in dropdown menu only
      */
     private function generate_action_buttons($features, $container_id) {
-        $buttons = '';
-        
-        // Copy text button
-        if (!empty($features['copy-text']['enabled'])) {
-            $button_text = $features['copy-text']['label'] ?? __('Kopieren', 'container-block-designer');
-            $button_tooltip = $features['copy-text']['tooltip'] ?? __('Text kopieren', 'container-block-designer');
-            $buttons .= '<button type="button" class="cbd-copy-text" title="' . esc_attr($button_tooltip) . '" data-container-id="' . esc_attr($container_id) . '">';
-            $buttons .= '<i class="dashicons dashicons-clipboard"></i>';
-            $buttons .= '<span class="cbd-copy-label">' . esc_html($button_text) . '</span>';
-            $buttons .= '</button>';
-        }
-        
-        // Screenshot button
-        if (!empty($features['screenshot']['enabled'])) {
-            $button_text = $features['screenshot']['label'] ?? __('Screenshot', 'container-block-designer');
-            $button_tooltip = $features['screenshot']['tooltip'] ?? __('Screenshot erstellen', 'container-block-designer');
-            $buttons .= '<button type="button" class="cbd-screenshot" title="' . esc_attr($button_tooltip) . '" data-container-id="' . esc_attr($container_id) . '">';
-            $buttons .= '<i class="dashicons dashicons-camera"></i>';
-            $buttons .= '<span class="cbd-screenshot-label">' . esc_html($button_text) . '</span>';
-            $buttons .= '</button>';
-        }
-        
-        return $buttons;
+        // All buttons are now in the dropdown menu only - no separate buttons
+        return '';
     }
     
     /**
