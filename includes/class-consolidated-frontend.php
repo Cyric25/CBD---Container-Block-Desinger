@@ -88,6 +88,31 @@ class CBD_Consolidated_Frontend {
             true
         );
         
+        // html2canvas for screenshot functionality (only load if screenshots are enabled)
+        $script_dependencies = array('jquery');
+        if ($this->page_has_screenshot_features()) {
+            wp_enqueue_script(
+                'html2canvas',
+                'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+                array(),
+                '1.4.1',
+                true
+            );
+            
+            // Update dependencies to include html2canvas
+            $script_dependencies[] = 'html2canvas';
+        }
+        
+        // Re-enqueue with updated dependencies
+        wp_deregister_script('cbd-frontend-consolidated');
+        wp_enqueue_script(
+            'cbd-frontend-consolidated',
+            CBD_PLUGIN_URL . 'assets/js/frontend-consolidated.js',
+            $script_dependencies,
+            CBD_VERSION,
+            true
+        );
+        
         // Dashicons for frontend icons
         wp_enqueue_style('dashicons');
         
@@ -95,7 +120,8 @@ class CBD_Consolidated_Frontend {
         wp_localize_script('cbd-frontend-consolidated', 'cbdFrontend', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('cbd-frontend'),
-            'strings' => $this->get_frontend_strings()
+            'strings' => $this->get_frontend_strings(),
+            'hasScreenshots' => $this->page_has_screenshot_features()
         ));
     }
     
@@ -842,6 +868,50 @@ class CBD_Consolidated_Frontend {
     private function has_icon_containers() {
         // Similar implementation to collapsible check
         return false; // Simplified for now
+    }
+    
+    /**
+     * Check if page has screenshot features enabled
+     */
+    private function page_has_screenshot_features() {
+        global $post;
+        
+        if (!$post || !has_blocks($post->post_content)) {
+            return false;
+        }
+        
+        $blocks = parse_blocks($post->post_content);
+        return $this->search_for_screenshot_blocks($blocks);
+    }
+    
+    /**
+     * Search for blocks with screenshot features
+     */
+    private function search_for_screenshot_blocks($blocks) {
+        foreach ($blocks as $block) {
+            if ($block['blockName'] === 'container-block-designer/container') {
+                $attrs = $block['attrs'] ?? array();
+                $selected_block = $attrs['selectedBlock'] ?? '';
+                
+                if ($selected_block) {
+                    $block_data = $this->get_block_data($selected_block);
+                    if ($block_data) {
+                        $features = json_decode($block_data['features'], true) ?: array();
+                        if (!empty($features['screenshot']['enabled'])) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            if (!empty($block['innerBlocks'])) {
+                if ($this->search_for_screenshot_blocks($block['innerBlocks'])) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
     
     /**

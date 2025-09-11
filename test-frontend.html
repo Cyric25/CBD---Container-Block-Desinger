@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Container Block Designer - Frontend Test</title>
+    
+    <!-- WordPress Dashicons -->
+    <link rel="stylesheet" href="https://wordpress.org/style/wp-includes/css/dashicons.min.css">
+    
+    <!-- CBD Frontend CSS -->
+    <link rel="stylesheet" href="assets/css/cbd-frontend.css">
+    
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <!-- html2canvas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <!-- CBD Frontend JS -->
+    <script src="assets/js/frontend-consolidated.js"></script>
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: #f6f7f8;
+        }
+        
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #1e1e1e;
+            border-bottom: 3px solid #007cba;
+            padding-bottom: 10px;
+        }
+        
+        .demo-section {
+            margin: 40px 0;
+        }
+        
+        .demo-title {
+            font-size: 1.4em;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .demo-description {
+            background: #f8f9fa;
+            padding: 15px;
+            border-left: 4px solid #007cba;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Container Block Designer - Frontend Test</h1>
+        
+        <!-- Demo Section 1: Collapsible Container -->
+        <div class="demo-section">
+            <h2 class="demo-title">1. Collapsible Container</h2>
+            <div class="demo-description">
+                Teste die Ein-/Ausklapp-Funktionalität. Klicke auf den Toggle-Button.
+            </div>
+            
+            <div class="cbd-container" 
+                 id="test-container-1" 
+                 data-collapse='{"enabled": true, "defaultState": "expanded", "label": "Ein-/Ausklappen"}'>
+                <div class="cbd-content">
+                    <h3>Dies ist ein testbarer Container</h3>
+                    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.</p>
+                    <ul>
+                        <li>Erstes Test-Element</li>
+                        <li>Zweites Test-Element</li>
+                        <li>Drittes Test-Element</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Demo Section 2: Container with Copy and Screenshot -->
+        <div class="demo-section">
+            <h2 class="demo-title">2. Container mit Copy & Screenshot</h2>
+            <div class="demo-description">
+                Teste die Copy-Text und Screenshot-Funktionalität über die Buttons in der Ecke.
+            </div>
+            
+            <div class="cbd-container" 
+                 id="test-container-2" 
+                 data-copy-text='{"enabled": true, "label": "Kopieren", "tooltip": "Text kopieren"}' 
+                 data-screenshot='{"enabled": true, "label": "Screenshot", "tooltip": "Screenshot erstellen"}'>
+                <div class="cbd-content">
+                    <h3>Container mit Features</h3>
+                    <p>Dieser Container kann kopiert und als Screenshot gespeichert werden.</p>
+                    <blockquote style="border-left: 4px solid #007cba; padding-left: 15px; margin: 20px 0; font-style: italic; color: #666;">
+                        "Ein gutes Plugin macht komplexe Dinge einfach."
+                    </blockquote>
+                    <p><strong>Features:</strong></p>
+                    <ul>
+                        <li>✅ Text kopieren in die Zwischenablage</li>
+                        <li>📸 Screenshot als PNG-Download</li>
+                        <li>🎨 Moderne UI mit Hover-Effekten</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Demo Section 3: Container with Icon and Numbering -->
+        <div class="demo-section">
+            <h2 class="demo-title">3. Container mit Icon und Nummerierung</h2>
+            <div class="demo-description">
+                Container mit Icon und automatischer Nummerierung der Überschriften.
+            </div>
+            
+            <div class="cbd-container" 
+                 id="test-container-3" 
+                 data-icon='{"enabled": true, "value": "dashicons-star-filled", "position": "top-right", "color": "#ff6b35"}' 
+                 data-numbering='{"enabled": true, "format": "numeric", "prefix": "", "suffix": ".", "selector": "h3, h4"}'>
+                <div class="cbd-content">
+                    <h3>Erste Überschrift</h3>
+                    <p>Diese Überschrift sollte automatisch nummeriert werden.</p>
+                    
+                    <h4>Unterüberschrift</h4>
+                    <p>Auch diese bekommt eine Nummer.</p>
+                    
+                    <h3>Zweite Hauptüberschrift</h3>
+                    <p>Die Nummerierung läuft weiter.</p>
+                    
+                    <h4>Noch eine Unterüberschrift</h4>
+                    <p>Perfekt für strukturierte Inhalte.</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Demo Section 4: All Features Combined -->
+        <div class="demo-section">
+            <h2 class="demo-title">4. Alle Features kombiniert</h2>
+            <div class="demo-description">
+                Ein Container mit allen verfügbaren Features aktiviert.
+            </div>
+            
+            <div class="cbd-container" 
+                 id="test-container-4" 
+                 data-collapse='{"enabled": true, "defaultState": "collapsed", "label": "Erweitern"}' 
+                 data-copy-text='{"enabled": true, "label": "Kopieren"}' 
+                 data-screenshot='{"enabled": true, "label": "Screenshot"}' 
+                 data-icon='{"enabled": true, "value": "dashicons-admin-tools", "position": "top-left", "color": "#007cba"}' 
+                 data-numbering='{"enabled": true, "format": "roman", "prefix": "(", "suffix": ") ", "selector": "h3"}'>
+                <div class="cbd-content">
+                    <h3>Vollständig ausgestatteter Container</h3>
+                    <p>Dieser Container kombiniert alle verfügbaren Features:</p>
+                    
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <h3>Styled Content Block</h3>
+                        <p>Mit modernen CSS-Styles und Verlaufseffekten.</p>
+                        <ul style="list-style: none; padding: 0;">
+                            <li>🎯 Zielgerichtetes Design</li>
+                            <li>⚡ Schnelle Performance</li>
+                            <li>♿ Accessibility-Features</li>
+                            <li>📱 Responsive Design</li>
+                        </ul>
+                    </div>
+                    
+                    <h3>Technische Details</h3>
+                    <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd; background: #f9f9f9;"><strong>Feature</strong></td>
+                            <td style="padding: 10px; border: 1px solid #ddd; background: #f9f9f9;"><strong>Status</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">Collapse/Expand</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">✅ Aktiv</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">Copy Text</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">✅ Aktiv</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">Screenshot</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">✅ Aktiv</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">Icon Display</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">✅ Aktiv</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px; border: 1px solid #ddd;">Auto Numbering</td>
+                            <td style="padding: 10px; border: 1px solid #ddd;">✅ Aktiv (Römisch)</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Test Status -->
+        <div class="demo-section" style="background: #e8f4fd; padding: 20px; border-radius: 8px; border: 1px solid #007cba;">
+            <h2 style="color: #007cba; margin-top: 0;">🔧 Test-Status & Debug-Info</h2>
+            <div id="test-status">
+                <p><strong>JavaScript-Status:</strong> <span id="js-status">Wird geladen...</span></p>
+                <p><strong>jQuery:</strong> <span id="jquery-status">Prüfen...</span></p>
+                <p><strong>html2canvas:</strong> <span id="html2canvas-status">Prüfen...</span></p>
+                <p><strong>CBDFrontend:</strong> <span id="cbd-status">Prüfen...</span></p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Test-Script um den Status zu prüfen
+        document.addEventListener('DOMContentLoaded', function() {
+            // jQuery Test
+            const jqueryStatus = typeof jQuery !== 'undefined' ? '✅ Geladen' : '❌ Fehlt';
+            document.getElementById('jquery-status').textContent = jqueryStatus;
+            
+            // html2canvas Test
+            const html2canvasStatus = typeof html2canvas !== 'undefined' ? '✅ Geladen' : '❌ Fehlt';
+            document.getElementById('html2canvas-status').textContent = html2canvasStatus;
+            
+            // CBDFrontend Test
+            const cbdStatus = typeof CBDFrontend !== 'undefined' ? '✅ Geladen' : '❌ Fehlt';
+            document.getElementById('cbd-status').textContent = cbdStatus;
+            
+            // Gesamt-Status
+            const allLoaded = typeof jQuery !== 'undefined' && typeof html2canvas !== 'undefined' && typeof CBDFrontend !== 'undefined';
+            document.getElementById('js-status').textContent = allLoaded ? '✅ Alle Skripte geladen' : '⚠️ Einige Skripte fehlen';
+            
+            // Teste Container-Initialisierung nach kurzer Verzögerung
+            setTimeout(function() {
+                if (typeof CBDFrontend !== 'undefined') {
+                    console.log('✅ CBDFrontend ist verfügbar');
+                    console.log('Container gefunden:', document.querySelectorAll('.cbd-container').length);
+                    
+                    // Manuell Features testen
+                    document.querySelectorAll('.cbd-container').forEach(function(container, index) {
+                        console.log('Container ' + (index + 1) + ':', container);
+                        console.log('- ID:', container.id);
+                        console.log('- Data attributes:', container.dataset);
+                    });
+                } else {
+                    console.error('❌ CBDFrontend ist nicht verfügbar');
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
