@@ -217,20 +217,33 @@
             if (title) {
                 $container.attr('aria-label', title);
             }
+
+            // Add click handler to show action buttons
+            $container.on('click focus', function() {
+                // Add selected class to show action buttons
+                $('.cbd-container').removeClass('cbd-selected');
+                $(this).addClass('cbd-selected');
+            });
+
+            // Remove selected class when clicking elsewhere
+            $(document).on('click', function(e) {
+                if (!$(e.target).closest('.cbd-container').length) {
+                    $('.cbd-container').removeClass('cbd-selected');
+                }
+            });
         },
 
         /**
          * Bind global events
          */
         bindGlobalEvents: function() {
-            // Collapse/Expand events
-            $(document).on('click', '.cbd-collapse-toggle', this.toggleCollapse);
+            // Remove any existing handlers to prevent double-binding
+            $(document).off('click.cbd-frontend');
             
-            // Copy text events
-            $(document).on('click', '.cbd-copy-text', this.copyText);
-            
-            // Screenshot events
-            $(document).on('click', '.cbd-screenshot', this.takeScreenshot);
+            // Bind events with namespace to prevent conflicts
+            $(document).on('click.cbd-frontend', '.cbd-collapse-toggle', this.toggleCollapse);
+            $(document).on('click.cbd-frontend', '.cbd-copy-text', this.copyText);
+            $(document).on('click.cbd-frontend', '.cbd-screenshot', this.takeScreenshot);
         },
 
         /**
@@ -289,8 +302,8 @@
 
             if (!$container.length) return;
 
-            // Get text content
-            var textContent = $container.find('.cbd-content').text().trim();
+            // Get text content from the inner container block
+            var textContent = $container.find('.cbd-content .cbd-container-block').text().trim();
 
             // Copy to clipboard
             if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -330,9 +343,12 @@
             e.preventDefault();
             var $button = $(this);
             var containerId = $button.data('container-id');
-            var container = document.getElementById(containerId);
+            var $container = $('#' + containerId);
+            
+            // Screenshot the inner content block, not the entire wrapper
+            var contentBlock = $container.find('.cbd-content .cbd-container-block')[0];
 
-            if (!container || typeof html2canvas === 'undefined') {
+            if (!contentBlock || typeof html2canvas === 'undefined') {
                 CBDFrontend.showToast('Screenshot-Funktion nicht verfügbar', 'error');
                 return;
             }
@@ -340,7 +356,7 @@
             $button.prop('disabled', true);
             $button.addClass('cbd-loading');
 
-            html2canvas(container, {
+            html2canvas(contentBlock, {
                 scale: 2,
                 useCORS: true,
                 allowTaint: true,
@@ -351,7 +367,7 @@
                     var url = URL.createObjectURL(blob);
                     var a = document.createElement('a');
                     a.href = url;
-                    a.download = 'container-' + containerId + '-' + Date.now() + '.png';
+                    a.download = 'container-block-' + Date.now() + '.png';
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);

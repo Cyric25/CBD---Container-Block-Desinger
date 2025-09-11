@@ -3,14 +3,13 @@
  * Styles for the frontend display of container blocks
  */
 
-/* Base Container Styles */
+/* Base Container Styles - Wrapper only */
 .cbd-container {
     position: relative;
     width: 100%;
     box-sizing: border-box;
-    transition: all 0.3s ease;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
+    /* Remove visual styles - this is just a functional wrapper */
+    /* All visual styling should be on .cbd-container-block instead */
 }
 
 .cbd-container * {
@@ -18,13 +17,13 @@
 }
 
 /* Container Alignments */
-.cbd-container.alignwide {
+.cbd-container-block.alignwide {
     max-width: 1140px;
     margin-left: auto;
     margin-right: auto;
 }
 
-.cbd-container.alignfull {
+.cbd-container-block.alignfull {
     max-width: 100%;
     width: 100vw;
     position: relative;
@@ -34,7 +33,7 @@
     margin-right: -50vw;
 }
 
-.cbd-container.aligncenter {
+.cbd-container-block.aligncenter {
     display: block;
     margin-left: auto;
     margin-right: auto;

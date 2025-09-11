@@ -3,24 +3,34 @@
  * Styles for Gutenberg editor to match frontend appearance
  */
 
-/* Import all frontend styles for editor preview */
-@import url('block-base.css');
-@import url('block-responsive.css');
-@import url('frontend-consolidated.css');
+/* Import clean frontend styles for editor preview */
+@import url('cbd-frontend-clean.css');
 
 /* Editor-specific wrapper - Universal selectors for all container blocks */
 .wp-block[data-type*="container-block-designer"],
 [class*="wp-block-container-block-designer"] {
-    /* Reset editor margins */
-    margin: 1.5em 0;
+    /* Remove margins from outer wrapper to prevent double spacing */
+    margin: 0;
 }
 
-/* Specific selector for dfgdfgdfg block */
-.wp-block-container-block-designer-dfgdfgdfg {
-    margin: 1.5em 0;
+/* Ensure inner container blocks get proper spacing in editor */
+.wp-block[data-type*="container-block-designer"] .cbd-container-block,
+[class*="wp-block-container-block-designer"] .cbd-container-block {
+    margin: 1.5em 0; /* This matches the frontend spacing */
 }
 
-/* Editor container block styling - Universal selectors */
+/* Make sure the outer .cbd-container has no visual styling in editor */
+.wp-block[data-type*="container-block-designer"] .cbd-container,
+[class*="wp-block-container-block-designer"] .cbd-container {
+    /* Override any inherited margins or padding */
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    box-shadow: none;
+}
+
+/* Editor container block styling - Additional editor-specific styles */
 .wp-block[data-type*="container-block-designer"] .cbd-container-block,
 [class*="wp-block-container-block-designer"] .cbd-container-block {
     /* Ensure proper display in editor */

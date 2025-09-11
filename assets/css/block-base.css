@@ -5,10 +5,15 @@
 
 .cbd-container-block {
     position: relative;
-    margin-bottom: 1.5em;
+    margin: 1.5em 0; /* Proper spacing for the actual content block */
     padding: 1rem;
     border-radius: 4px;
     box-sizing: border-box;
+    width: 100%;
+    transition: all 0.3s ease;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    /* This is where all visual styling should be applied */
 }
 
 .cbd-container-block * {

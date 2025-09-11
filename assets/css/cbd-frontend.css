@@ -3,11 +3,12 @@
  * Styles für die Frontend-Ausgabe der Container-Blöcke
  */
 
-/* Container Base Styles */
+/* Container Base Styles - Wrapper only, no visual styling */
 .cbd-container {
     position: relative;
-    margin: 20px 0;
+    margin: 0; /* Remove margin to avoid double spacing */
     clear: both;
+    /* Remove any visual styling - this is just a functional wrapper */
 }
 
 .cbd-container-content {
