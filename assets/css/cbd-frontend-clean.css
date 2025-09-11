@@ -92,6 +92,25 @@
     /* This is the ONLY visible container - everything else is transparent */
 }
 
+/* Add top padding when header is inside content block */
+.cbd-container-block:has(.cbd-header) {
+    padding-top: 60px;
+}
+
+/* Fallback for browsers without :has() support */
+.cbd-container-block .cbd-header ~ * {
+    margin-top: 10px;
+}
+
+.cbd-container-block .cbd-header:first-child ~ *:first-of-type {
+    margin-top: 0;
+}
+
+/* Ensure content after header has proper spacing */
+.cbd-container-block .cbd-header + * {
+    margin-top: 15px !important;
+}
+
 .cbd-container-block * {
     box-sizing: border-box;
 }
@@ -126,13 +145,26 @@
    FEATURE ELEMENTS (Outside styled container)
    ============================================ */
 
-/* Header and Collapse Functionality - Outside the styled content */
+/* Header and Collapse Functionality - Can be inside or outside content */
 .cbd-container .cbd-header {
     position: relative;
     z-index: 2;
     margin-bottom: 15px;
-    /* No background or visual styles - just positioning outside content */
-    /* This ensures the header is clearly separated from the styled content */
+    /* No background or visual styles - just positioning */
+}
+
+/* Header inside content block - positioned at top */
+.cbd-container-block .cbd-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    margin-bottom: 0;
+    padding: 10px 15px;
+    background: rgba(0, 0, 0, 0.05);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px 8px 0 0;
 }
 
 .cbd-collapse-toggle {
@@ -167,12 +199,18 @@
 }
 
 .cbd-content {
-    overflow: hidden;
-    transition: all 0.3s ease;
+    overflow: visible;
+    /* Removed transition - can cause display issues */
 }
 
-.cbd-container.cbd-collapsed .cbd-content {
-    display: none;
+/* Simple collapse logic - just hide/show content */
+.cbd-container-content {
+    /* No special styling needed - JavaScript handles visibility */
+}
+
+/* Collapsed state - handled by JavaScript show/hide */
+.cbd-container.cbd-collapsed .cbd-container-content {
+    /* JavaScript will set display: none directly */
 }
 
 /* ============================================
@@ -351,15 +389,20 @@
 /* Hide old feature buttons inside content blocks - they should be outside now */
 .cbd-feature-buttons,
 .cbd-container-block .cbd-feature-buttons,
-/* Hide any buttons that might accidentally appear inside content */
+/* Hide any buttons that might accidentally appear inside content - EXCEPT toggle button */
 .cbd-container-block .cbd-copy-text,
 .cbd-container-block .cbd-screenshot,
-.cbd-container-block .cbd-collapse-toggle,
 .cbd-container-block .cbd-actions,
-.cbd-container-block .cbd-header,
 .cbd-container-block .cbd-icon {
     display: none !important;
     visibility: hidden !important;
+}
+
+/* Allow toggle button and header inside content block */
+.cbd-container-block .cbd-collapse-toggle,
+.cbd-container-block .cbd-header {
+    display: flex !important;
+    visibility: visible !important;
 }
 
 /* Ensure controls are ONLY visible outside content block */

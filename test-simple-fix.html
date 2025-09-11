@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Fix Test</title>
+    <link rel="stylesheet" href="https://wordpress.org/style/wp-includes/css/dashicons.min.css">
+    <link rel="stylesheet" href="assets/css/cbd-frontend-clean.css">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(45deg, #f0f2f5, #e1e8ed);
+            padding: 20px;
+            margin: 0;
+        }
+        .test-area {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .instructions {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-area">
+        <h1>🛠️ Simple Fix Test</h1>
+        
+        <div class="instructions">
+            <strong>Test mit einfachstem JavaScript:</strong><br>
+            ✅ Kein jQuery<br>
+            ✅ Kein komplexes Event-System<br>
+            ✅ Direktes JavaScript<br>
+            ✅ Expliziter Container-Schutz<br><br>
+            <strong>Klick mehrmals auf Toggle - Container soll NIEMALS verschwinden!</strong>
+        </div>
+        
+        <!-- Test Container mit echter Plugin-Struktur -->
+        <div class="cbd-container" 
+             id="simple-test-container" 
+             data-collapse='{"enabled": true, "defaultState": "expanded", "label": "Simple Toggle"}'>
+            
+            <!-- Actions außerhalb -->
+            <div class="cbd-actions">
+                <button class="cbd-copy-text" title="Copy">
+                    <i class="dashicons dashicons-clipboard"></i>
+                </button>
+                <button class="cbd-screenshot" title="Screenshot">
+                    <i class="dashicons dashicons-camera"></i>
+                </button>
+            </div>
+            
+            <!-- Content -->
+            <div class="cbd-content">
+                <div class="cbd-container-block">
+                    
+                    <!-- Header INNEN -->
+                    <div class="cbd-header">
+                        <button class="cbd-collapse-toggle">
+                            <span class="cbd-toggle-icon">
+                                <i class="dashicons dashicons-arrow-up-alt2"></i>
+                            </span>
+                            <span class="cbd-toggle-text">Simple Toggle</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Content zum Togglen -->
+                    <div class="cbd-container-content">
+                        <h2>✅ Simple Fix Test</h2>
+                        <p>Dieser Container verwendet das einfachste JavaScript ohne jQuery oder komplexe Event-Handler.</p>
+                        
+                        <div style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                            <strong>Test:</strong> Klick mehrmals auf den Toggle-Button. Der Header soll IMMER sichtbar bleiben!
+                        </div>
+                        
+                        <ul>
+                            <li>Vanilla JavaScript (kein jQuery)</li>
+                            <li>Direkte Event-Handler</li>
+                            <li>Expliziter Container-Schutz</li>
+                            <li>Keine komplexen CSS-Transitions</li>
+                        </ul>
+                        
+                        <p><strong>Erwartung:</strong> Container verschwindet NIEMALS, auch nach 10+ Klicks nicht!</p>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <strong>Wenn das funktioniert:</strong> Problem liegt in der komplexen jQuery-Implementierung<br>
+            <strong>Wenn das nicht funktioniert:</strong> Problem liegt in CSS oder HTML-Struktur
+        </div>
+    </div>
+    
+    <!-- NUR das einfache Script, KEIN jQuery -->
+    <script src="assets/js/simple-frontend.js"></script>
+</body>
+</html>

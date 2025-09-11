@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Collapse Test</title>
+    <link rel="stylesheet" href="https://wordpress.org/style/wp-includes/css/dashicons.min.css">
+    <link rel="stylesheet" href="assets/css/cbd-frontend-clean.css">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(45deg, #f0f2f5, #e1e8ed);
+            padding: 20px;
+            margin: 0;
+        }
+        .test-area {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .debug-info {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-area">
+        <h1>🔧 Simple Collapse Test</h1>
+        
+        <div class="debug-info">
+            <strong>Debug Info:</strong><br>
+            - Open browser console (F12) for logs<br>
+            - Click toggle button once<br>
+            - Header should stay, content should hide<br>
+        </div>
+        
+        <!-- Simple Test Container -->
+        <div class="cbd-container" id="simple-test">
+            
+            <!-- Actions outside (copy/screenshot) -->
+            <div class="cbd-actions">
+                <button class="cbd-copy-text" title="Copy">
+                    <i class="dashicons dashicons-clipboard"></i>
+                </button>
+                <button class="cbd-screenshot" title="Screenshot">
+                    <i class="dashicons dashicons-camera"></i>
+                </button>
+            </div>
+            
+            <!-- Content wrapper -->
+            <div class="cbd-content">
+                <div class="cbd-container-block">
+                    
+                    <!-- Header INSIDE content block -->
+                    <div class="cbd-header">
+                        <button class="cbd-collapse-toggle">
+                            <span class="cbd-toggle-icon">
+                                <i class="dashicons dashicons-arrow-up-alt2"></i>
+                            </span>
+                            <span class="cbd-toggle-text">Toggle Content</span>
+                        </button>
+                    </div>
+                    
+                    <!-- This content should hide/show -->
+                    <div class="cbd-container-content">
+                        <h2>✅ This content should hide when collapsed</h2>
+                        <p>Click the toggle button above. This content should disappear, but the button should remain visible.</p>
+                        <div style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                            <strong>Test Content:</strong> This entire section should be hidden when collapsed.
+                        </div>
+                        <ul>
+                            <li>Item 1</li>
+                            <li>Item 2</li>
+                            <li>Item 3</li>
+                        </ul>
+                        <p><strong>Expected:</strong> When you click toggle, this disappears but the toggle button stays visible at the top.</p>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+        
+        <div class="debug-info">
+            <strong>Expected Result:</strong><br>
+            ✅ Toggle button always visible at top of styled container<br>
+            ✅ Content below disappears when toggled<br>
+            ✅ No rapid toggling or disappearing<br>
+            ✅ One click = one action<br>
+        </div>
+    </div>
+    
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Use ONLY the simple collapse script -->
+    <script src="assets/js/simple-collapse.js"></script>
+</body>
+</html>

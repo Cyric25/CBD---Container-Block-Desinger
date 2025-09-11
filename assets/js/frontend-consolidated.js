@@ -1,7 +1,8 @@
 /**
  * Container Block Designer - Unified Frontend JavaScript
- * Version: 2.6.0
+ * Version: 2.6.1-FIXED
  * All frontend functionality consolidated for better performance and consistency
+ * Fixed: Double event handler causing collapse issues
  */
 
 (function($) {
@@ -43,13 +44,13 @@
                     $container.attr('id', 'cbd-container-' + blockId);
                 }
                 
-                // Initialize all features
-                CBDFrontend.initCollapsible($container);
+                // Initialize non-collapse features only
                 CBDFrontend.initCopyText($container);
                 CBDFrontend.initScreenshot($container);
                 CBDFrontend.initNumbering($container);
                 CBDFrontend.initIcon($container);
                 CBDFrontend.initAccessibility($container);
+                // NOTE: Collapse is handled by global event handler only
             });
         },
 
@@ -60,11 +61,18 @@
             var collapseData = $container.data('collapse');
             if (!collapseData || !collapseData.enabled) return;
 
-            // Find or create header
+            // Find header (can be inside or outside content block)
             var $header = $container.find('.cbd-header');
             if (!$header.length) {
-                $container.prepend('<div class="cbd-header"></div>');
-                $header = $container.find('.cbd-header');
+                // Create header inside content block at the top
+                var $contentBlock = $container.find('.cbd-container-block');
+                if ($contentBlock.length) {
+                    $contentBlock.prepend('<div class="cbd-header"></div>');
+                    $header = $contentBlock.find('.cbd-header');
+                } else {
+                    $container.prepend('<div class="cbd-header"></div>');
+                    $header = $container.find('.cbd-header');
+                }
             }
 
             // Create toggle button
@@ -79,19 +87,79 @@
 
             if (!$header.find('.cbd-collapse-toggle').length) {
                 $header.append(toggleHtml);
+                
+                // DIRECT button binding instead of delegation
+                var $toggleButton = $header.find('.cbd-collapse-toggle');
+                var containerId = $container.attr('id');
+                
+                // Remove any existing handlers on this specific button
+                $toggleButton.off('click.cbd-toggle');
+                
+                // Bind directly to this button
+                $toggleButton.on('click.cbd-toggle', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    console.log('Direct toggle clicked for container:', containerId);
+                    
+                    var $thisContainer = $('#' + containerId);
+                    var $contentToHide = $thisContainer.find('.cbd-container-content');
+                    
+                    console.log('Found content elements:', $contentToHide.length);
+                    console.log('Container still exists:', $thisContainer.length);
+                    
+                    if ($contentToHide.length === 0) {
+                        console.log('No content found - aborting');
+                        return;
+                    }
+                    
+                    // CRITICAL: Ensure container and its parts stay visible
+                    $thisContainer.css('display', 'block');
+                    $thisContainer.find('.cbd-content').css('display', 'block');
+                    $thisContainer.find('.cbd-container-block').css('display', 'block');
+                    $thisContainer.find('.cbd-header').css('display', 'block');
+                    $(this).css('display', 'flex'); // Keep button visible
+                    
+                    if ($contentToHide.is(':visible')) {
+                        // Hide content only
+                        console.log('Hiding content');
+                        $contentToHide.hide();
+                        $thisContainer.addClass('cbd-collapsed');
+                        $(this).find('.dashicons')
+                            .removeClass('dashicons-arrow-up-alt2')
+                            .addClass('dashicons-arrow-down-alt2');
+                    } else {
+                        // Show content
+                        console.log('Showing content');
+                        $contentToHide.show();
+                        $thisContainer.removeClass('cbd-collapsed');
+                        $(this).find('.dashicons')
+                            .removeClass('dashicons-arrow-down-alt2')
+                            .addClass('dashicons-arrow-up-alt2');
+                    }
+                    
+                    console.log('Toggle complete, container visible:', $thisContainer.is(':visible'));
+                });
+                
+                console.log('Direct button handler attached for:', containerId);
             }
 
-            // Wrap content
+            // Find content wrapper (should already exist)
             var $content = $container.find('.cbd-content');
             if (!$content.length) {
-                $container.children().not('.cbd-header, .cbd-icon, .cbd-actions').wrapAll('<div class="cbd-content" id="' + $container.attr('id') + '-content"></div>');
+                // If no content wrapper exists, create one wrapping everything except external controls
+                $container.children().not('.cbd-icon, .cbd-actions').wrapAll('<div class="cbd-content" id="' + $container.attr('id') + '-content"></div>');
                 $content = $container.find('.cbd-content');
             }
 
             // Set initial state
             if (collapseData.defaultState === 'collapsed') {
                 $container.addClass('cbd-collapsed');
-                $content.hide();
+                // Simply hide the content wrapper
+                var $contentWrapper = $container.find('.cbd-container-content');
+                if ($contentWrapper.length) {
+                    $contentWrapper.hide();
+                }
             }
         },
 
@@ -237,11 +305,52 @@
          * Bind global events
          */
         bindGlobalEvents: function() {
-            // Remove any existing handlers to prevent double-binding
+            // Remove any old handlers
             $(document).off('click.cbd-frontend');
             
-            // Bind events with namespace to prevent conflicts
-            $(document).on('click.cbd-frontend', '.cbd-collapse-toggle', this.toggleCollapse);
+            // MINIMAL collapse handler - absolute minimum code
+            $(document).on('click.cbd-frontend', '.cbd-collapse-toggle', function(e) {
+                e.preventDefault();
+                
+                console.log('CBD Toggle: Button clicked');
+                
+                var $container = $(this).closest('.cbd-container');
+                var $contentToToggle = $container.find('.cbd-container-content');
+                
+                console.log('CBD Toggle: Found content to toggle:', $contentToToggle.length);
+                
+                if ($contentToToggle.length === 0) {
+                    console.log('CBD Toggle: No content found - aborting');
+                    return;
+                }
+                
+                // CRITICAL: Force container visible FIRST
+                $container.css({
+                    'display': 'block',
+                    'visibility': 'visible'
+                });
+                $container.find('.cbd-container-block').css('display', 'block');
+                $container.find('.cbd-header').css('display', 'block');
+                $(this).css('display', 'flex');
+                
+                // Simple toggle of ONLY the content
+                if ($contentToToggle.is(':visible')) {
+                    console.log('CBD Toggle: Hiding content');
+                    $contentToToggle.hide();
+                    $(this).find('.dashicons')
+                        .removeClass('dashicons-arrow-up-alt2')
+                        .addClass('dashicons-arrow-down-alt2');
+                } else {
+                    console.log('CBD Toggle: Showing content');
+                    $contentToToggle.show();
+                    $(this).find('.dashicons')
+                        .removeClass('dashicons-arrow-down-alt2')
+                        .addClass('dashicons-arrow-up-alt2');
+                }
+                
+                console.log('CBD Toggle: Complete');
+            });
+            
             $(document).on('click.cbd-frontend', '.cbd-copy-text', this.copyText);
             $(document).on('click.cbd-frontend', '.cbd-screenshot', this.takeScreenshot);
         },
@@ -259,37 +368,7 @@
             }
         },
 
-        /**
-         * Toggle collapse state
-         */
-        toggleCollapse: function(e) {
-            e.preventDefault();
-            var $button = $(this);
-            var $container = $button.closest('.cbd-container');
-            var $content = $container.find('.cbd-content');
-            var isCollapsed = $container.hasClass('cbd-collapsed');
-
-            if (isCollapsed) {
-                // Expand
-                $content.slideDown(CBDFrontend.config.animationSpeed);
-                $container.removeClass('cbd-collapsed');
-                $button.attr('aria-expanded', 'true');
-                $button.find('.dashicons')
-                    .removeClass('dashicons-arrow-down-alt2')
-                    .addClass('dashicons-arrow-up-alt2');
-            } else {
-                // Collapse
-                $content.slideUp(CBDFrontend.config.animationSpeed);
-                $container.addClass('cbd-collapsed');
-                $button.attr('aria-expanded', 'false');
-                $button.find('.dashicons')
-                    .removeClass('dashicons-arrow-up-alt2')
-                    .addClass('dashicons-arrow-down-alt2');
-            }
-
-            // Trigger custom event
-            $container.trigger('cbd:toggle', [!isCollapsed]);
-        },
+        // Old toggleCollapse function removed - using simple inline handler instead
 
         /**
          * Copy text to clipboard
@@ -428,6 +507,14 @@
 
     // Initialize when DOM is ready
     $(document).ready(function() {
+        // Prevent multiple initializations
+        if (window.CBDFrontendInitialized) {
+            console.log('CBD Frontend already initialized, skipping...');
+            return;
+        }
+        
+        console.log('CBD Frontend: Starting initialization...');
+        window.CBDFrontendInitialized = true;
         CBDFrontend.init();
     });
 

@@ -75,16 +75,16 @@ class CBD_Consolidated_Frontend {
         wp_enqueue_style(
             'cbd-position-frontend',
             CBD_PLUGIN_URL . 'assets/css/frontend-positioning.css',
-            array('cbd-frontend-consolidated'),
+            array('cbd-frontend-clean'),
             CBD_VERSION
         );
         
-        // Frontend JavaScript
+        // Frontend JavaScript - Working simple version
         wp_enqueue_script(
-            'cbd-frontend-consolidated',
-            CBD_PLUGIN_URL . 'assets/js/frontend-consolidated.js',
+            'cbd-frontend-working',
+            CBD_PLUGIN_URL . 'assets/js/frontend-working.js',
             array('jquery'),
-            CBD_VERSION,
+            CBD_VERSION . '-working',
             true
         );
         
@@ -103,21 +103,21 @@ class CBD_Consolidated_Frontend {
             $script_dependencies[] = 'html2canvas';
         }
         
-        // Re-enqueue with updated dependencies
-        wp_deregister_script('cbd-frontend-consolidated');
+        // Re-enqueue working frontend with updated dependencies
+        wp_deregister_script('cbd-frontend-working');
         wp_enqueue_script(
-            'cbd-frontend-consolidated',
-            CBD_PLUGIN_URL . 'assets/js/frontend-consolidated.js',
+            'cbd-frontend-working',
+            CBD_PLUGIN_URL . 'assets/js/frontend-working.js',
             $script_dependencies,
-            CBD_VERSION,
+            CBD_VERSION . '-working',
             true
         );
         
         // Dashicons for frontend icons
         wp_enqueue_style('dashicons');
         
-        // Localize script with all frontend strings
-        wp_localize_script('cbd-frontend-consolidated', 'cbdFrontend', array(
+        // Localize script with all frontend strings (for working version)
+        wp_localize_script('cbd-frontend-working', 'cbdFrontend', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('cbd-frontend'),
             'strings' => $this->get_frontend_strings(),
@@ -550,16 +550,7 @@ class CBD_Consolidated_Frontend {
         }
         $html .= '>';
         
-        // Add header area for collapse toggle (outside the styled content)
-        if (!empty($features['collapse']['enabled'])) {
-            $html .= '<div class="cbd-header">';
-            $expanded = ($features['collapse']['defaultState'] ?? 'expanded') !== 'collapsed';
-            $html .= '<button class="cbd-collapse-toggle" type="button" aria-expanded="' . ($expanded ? 'true' : 'false') . '" aria-controls="' . esc_attr($container_id) . '-content">';
-            $html .= '<span class="cbd-toggle-icon"><i class="dashicons dashicons-arrow-' . ($expanded ? 'up' : 'down') . '-alt2"></i></span>';
-            $html .= '<span class="cbd-toggle-text">' . esc_html($features['collapse']['label'] ?? 'Toggle') . '</span>';
-            $html .= '</button>';
-            $html .= '</div>';
-        }
+        // Header will be added inside content block now
         
         // Add icons (outside the styled content)
         if (!empty($features['icon']['enabled'])) {
@@ -591,6 +582,20 @@ class CBD_Consolidated_Frontend {
         }
         $html .= '>';
         
+        // Add header area for collapse toggle (inside the styled content at top)
+        if (!empty($features['collapse']['enabled'])) {
+            $html .= '<div class="cbd-header">';
+            $expanded = ($features['collapse']['defaultState'] ?? 'expanded') !== 'collapsed';
+            $html .= '<button class="cbd-collapse-toggle" type="button" aria-expanded="' . ($expanded ? 'true' : 'false') . '" aria-controls="' . esc_attr($container_id) . '-content">';
+            $html .= '<span class="cbd-toggle-icon"><i class="dashicons dashicons-arrow-' . ($expanded ? 'up' : 'down') . '-alt2"></i></span>';
+            $html .= '<span class="cbd-toggle-text">' . esc_html($features['collapse']['label'] ?? 'Toggle') . '</span>';
+            $html .= '</button>';
+            $html .= '</div>';
+        }
+        
+        // Wrap the actual content (not the header) in a collapsible container
+        $html .= '<div class="cbd-container-content">';
+        
         // Add numbering inside the content block
         if (!empty($features['numbering']['enabled'])) {
             // Numbering will be handled by JavaScript after rendering
@@ -598,6 +603,8 @@ class CBD_Consolidated_Frontend {
         
         // Actual content
         $html .= $content;
+        
+        $html .= '</div>'; // Close .cbd-container-content
         
         $html .= '</div>'; // Close .cbd-container-block
         $html .= '</div>'; // Close .cbd-content wrapper

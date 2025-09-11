@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collapse Debug - Isoliert</title>
+    <link rel="stylesheet" href="https://wordpress.org/style/wp-includes/css/dashicons.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .debug-container {
+            background: white;
+            border: 2px solid #007cba;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            max-width: 600px;
+        }
+        
+        .debug-header {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        
+        .debug-toggle {
+            background: #007cba;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .debug-toggle:hover {
+            background: #005a87;
+        }
+        
+        .debug-content {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .log {
+            background: #333;
+            color: #00ff00;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            height: 150px;
+            overflow-y: scroll;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Collapse Problem Debug</h1>
+    
+    <div id="log" class="log"></div>
+    
+    <div class="debug-container">
+        <div class="debug-header">
+            <button class="debug-toggle" id="debugToggle">
+                <span class="icon">▼</span>
+                <span class="text">Toggle Content</span>
+            </button>
+        </div>
+        
+        <div class="debug-content" id="debugContent">
+            <h3>Dieser Content sollte ein/ausklappbar sein</h3>
+            <p>Wenn du den Button oben klickst, sollte dieser Text verschwinden, aber der Button soll sichtbar bleiben.</p>
+            <ul>
+                <li>Test Element 1</li>
+                <li>Test Element 2</li>
+                <li>Test Element 3</li>
+            </ul>
+            <p><strong>Wichtig:</strong> Der Button darf nicht verschwinden!</p>
+        </div>
+    </div>
+    
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        let isCollapsed = false;
+        let clickCount = 0;
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logElement = document.getElementById('log');
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+        
+        $(document).ready(function() {
+            log('Document ready');
+            log('jQuery version: ' + $.fn.jquery);
+            
+            // Alle möglichen Event-Handler entfernen
+            $('#debugToggle').off();
+            $(document).off('click', '#debugToggle');
+            
+            // Einfachster möglicher Event-Handler
+            $('#debugToggle').on('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                clickCount++;
+                log(`Click #${clickCount} - Button clicked`);
+                
+                const $content = $('#debugContent');
+                const $icon = $(this).find('.icon');
+                
+                log(`Content visible: ${$content.is(':visible')}`);
+                log(`isCollapsed state: ${isCollapsed}`);
+                
+                if (isCollapsed) {
+                    // Expand
+                    log('Expanding content');
+                    $content.show();
+                    $icon.text('▼');
+                    isCollapsed = false;
+                    log('Content expanded - new state: expanded');
+                } else {
+                    // Collapse
+                    log('Collapsing content');
+                    $content.hide();
+                    $icon.text('▶');
+                    isCollapsed = true;
+                    log('Content collapsed - new state: collapsed');
+                }
+                
+                log(`Final content visible: ${$content.is(':visible')}`);
+                log('---');
+            });
+            
+            log('Event handler attached');
+            
+            // Check for multiple script loads
+            if (window.debugScriptLoaded) {
+                log('WARNING: Script loaded multiple times!');
+            } else {
+                window.debugScriptLoaded = true;
+                log('Script loaded once (good)');
+            }
+        });
+    </script>
+</body>
+</html>
