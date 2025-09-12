@@ -271,6 +271,232 @@ class CBD_Block_Registration {
         
         // Frontend JavaScript für interaktive Features
         $this->enqueue_frontend_scripts();
+        
+        // Enqueue html2canvas for screenshot functionality
+        wp_enqueue_script(
+            'html2canvas',
+            CBD_PLUGIN_URL . 'assets/lib/html2canvas.min.js',
+            array(),
+            '1.4.1',
+            true
+        );
+        
+        // Add inline JavaScript for direct button functionality
+        wp_add_inline_script('cbd-frontend-working', '
+            jQuery(document).ready(function($) {
+                console.log("CBD: Direct button handlers loaded - REMOVING OLD HANDLERS");
+                
+                // REMOVE ALL EXISTING HANDLERS to prevent conflicts
+                $(document).off("click", ".cbd-collapse-toggle");
+                $(document).off("click.cbd-working", ".cbd-collapse-toggle");
+                
+                // Direct collapse button handler - ONLY hide content, keep buttons visible
+                $(document).on("click.cbd-direct", ".cbd-collapse-toggle", function(e) {
+                    e.preventDefault();
+                    console.log("CBD: Direct collapse clicked");
+                    
+                    var button = $(this);
+                    var container = button.closest(".cbd-container");
+                    var contentToHide = container.find(".cbd-container-content"); // ONLY the inner content
+                    
+                    console.log("CBD: Container found:", container.length);
+                    console.log("CBD: Content to hide found:", contentToHide.length);
+                    console.log("CBD: Content currently visible:", contentToHide.is(":visible"));
+                    
+                    if (contentToHide.length > 0) {
+                        // Check current state BEFORE animation
+                        var isCurrentlyVisible = contentToHide.is(":visible");
+                        
+                        // Change button icon BEFORE animation starts
+                        if (isCurrentlyVisible) {
+                            button.html("🔽"); // Will be collapsed after animation
+                            console.log("CBD: Setting icon to collapsed (🔽)");
+                        } else {
+                            button.html("🔼"); // Will be expanded after animation
+                            console.log("CBD: Setting icon to expanded (🔼)");
+                        }
+                        
+                        // Start the animation
+                        contentToHide.slideToggle(300, function() {
+                            console.log("CBD: Animation complete, content now visible:", $(this).is(":visible"));
+                        });
+                        
+                    } else {
+                        console.log("CBD: No content found to collapse");
+                    }
+                });
+                
+                // Enhanced copy text handler
+                $(document).on("click.cbd-direct", ".cbd-copy-text", function(e) {
+                    e.preventDefault();
+                    console.log("CBD: Direct copy clicked");
+                    
+                    var button = $(this);
+                    var container = button.closest(".cbd-container");
+                    var contentElement = container.find(".cbd-container-content");
+                    
+                    // Get both plain text and formatted text
+                    var plainText = contentElement.text().trim();
+                    var htmlContent = contentElement.html();
+                    
+                    console.log("CBD: Text to copy:", plainText.substring(0, 100) + "...");
+                    
+                    if (!plainText) {
+                        // Visual feedback for empty content
+                        button.html("❌");
+                        setTimeout(function() { button.html("📋"); }, 1000);
+                        console.log("CBD: No text found to copy");
+                        return;
+                    }
+                    
+                    // Try modern clipboard API first
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(plainText).then(function() {
+                            console.log("CBD: Text copied successfully via Clipboard API");
+                            // Visual feedback - change icon temporarily
+                            button.html("✅");
+                            setTimeout(function() { button.html("📋"); }, 1500);
+                        }).catch(function(err) {
+                            console.log("CBD: Clipboard API failed:", err);
+                            fallbackCopy(plainText, button);
+                        });
+                    } else {
+                        console.log("CBD: Clipboard API not available, using fallback");
+                        fallbackCopy(plainText, button);
+                    }
+                });
+                
+                // Fallback copy method for older browsers
+                function fallbackCopy(text, button) {
+                    try {
+                        // Create temporary textarea
+                        var textarea = $("<textarea>");
+                        textarea.val(text);
+                        textarea.css({
+                            position: "fixed",
+                            top: "-1000px",
+                            left: "-1000px",
+                            opacity: "0"
+                        });
+                        $("body").append(textarea);
+                        textarea[0].select();
+                        textarea[0].setSelectionRange(0, 99999);
+                        
+                        // Try to copy
+                        var successful = document.execCommand("copy");
+                        textarea.remove();
+                        
+                        if (successful) {
+                            console.log("CBD: Text copied successfully via execCommand");
+                            button.html("✅");
+                            setTimeout(function() { button.html("📋"); }, 1500);
+                        } else {
+                            console.log("CBD: execCommand copy failed");
+                            button.html("❌");
+                            setTimeout(function() { button.html("📋"); }, 1000);
+                        }
+                    } catch (err) {
+                        console.log("CBD: Fallback copy failed:", err);
+                        button.html("❌");
+                        setTimeout(function() { button.html("📋"); }, 1000);
+                    }
+                }
+                
+                // Enhanced screenshot handler
+                $(document).on("click.cbd-direct", ".cbd-screenshot", function(e) {
+                    e.preventDefault();
+                    console.log("CBD: Direct screenshot clicked");
+                    
+                    var button = $(this);
+                    var container = button.closest(".cbd-container");
+                    var contentElement = container.find(".cbd-container-block");
+                    
+                    // Check if html2canvas is available
+                    if (typeof html2canvas === "undefined") {
+                        console.log("CBD: html2canvas not loaded");
+                        button.html("❌");
+                        setTimeout(function() { button.html("📷"); }, 1500);
+                        return;
+                    }
+                    
+                    if (contentElement.length === 0) {
+                        console.log("CBD: No content found for screenshot");
+                        button.html("❌");
+                        setTimeout(function() { button.html("📷"); }, 1500);
+                        return;
+                    }
+                    
+                    // Show loading state
+                    button.html("⏳");
+                    console.log("CBD: Starting screenshot capture...");
+                    
+                    // Temporarily hide the buttons for clean screenshot
+                    var buttonContainer = container.find(".cbd-action-buttons");
+                    var numbering = container.find(".cbd-container-number");
+                    var originalButtonDisplay = buttonContainer.css("display");
+                    var originalNumberDisplay = numbering.css("display");
+                    
+                    buttonContainer.hide();
+                    numbering.hide();
+                    
+                    // html2canvas options
+                    var options = {
+                        backgroundColor: null, // Transparent background
+                        scale: 2, // Higher quality
+                        useCORS: true,
+                        allowTaint: false,
+                        logging: false,
+                        width: contentElement.outerWidth(),
+                        height: contentElement.outerHeight(),
+                        scrollX: 0,
+                        scrollY: 0
+                    };
+                    
+                    html2canvas(contentElement[0], options).then(function(canvas) {
+                        console.log("CBD: Screenshot captured successfully");
+                        
+                        // Restore hidden elements
+                        buttonContainer.css("display", originalButtonDisplay);
+                        numbering.css("display", originalNumberDisplay);
+                        
+                        // Convert to blob and download
+                        canvas.toBlob(function(blob) {
+                            var url = URL.createObjectURL(blob);
+                            var timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+                            var filename = "container-block-" + timestamp + ".png";
+                            
+                            // Create download link
+                            var link = document.createElement("a");
+                            link.download = filename;
+                            link.href = url;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            
+                            // Clean up
+                            URL.revokeObjectURL(url);
+                            
+                            // Success feedback
+                            button.html("✅");
+                            setTimeout(function() { button.html("📷"); }, 2000);
+                            
+                            console.log("CBD: Screenshot downloaded as " + filename);
+                        }, "image/png");
+                        
+                    }).catch(function(error) {
+                        console.log("CBD: Screenshot failed:", error);
+                        
+                        // Restore hidden elements
+                        buttonContainer.css("display", originalButtonDisplay);
+                        numbering.css("display", originalNumberDisplay);
+                        
+                        // Error feedback
+                        button.html("❌");
+                        setTimeout(function() { button.html("📷"); }, 1500);
+                    });
+                });
+            });
+        ');
     }
     
     /**
@@ -464,10 +690,11 @@ class CBD_Block_Registration {
         }
         $html .= '>';
         
-        // Add numbering OUTSIDE everything (in the main container)
-        // ALWAYS show numbering for now until we fix the feature detection
-        $numbering_counter = 1; // Simple counter for now
-        $html .= '<div class="cbd-container-number cbd-outside-number" data-number="' . esc_attr($numbering_counter) . '">';
+        // Add numbering OUTSIDE everything (in the main container) - ALWAYS for now
+        static $numbering_counter = 0;
+        $numbering_counter++;
+        
+        $html .= '<div class="cbd-container-number cbd-outside-number" data-number="' . esc_attr($numbering_counter) . '" style="position: absolute !important; top: -40px !important; left: -40px !important; background: rgba(0,0,0,0.9) !important; color: white !important; width: 34px !important; height: 34px !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 15px !important; font-weight: bold !important; z-index: 99999 !important; border: 2px solid white !important;">';
         $html .= esc_html($numbering_counter);
         $html .= '</div>';
         
@@ -484,36 +711,26 @@ class CBD_Block_Registration {
         }
         $html .= '>';
         
-        // Selection-based feature menu - ALWAYS show for now
-        // Simplified: Always show all features until we fix feature detection
-        $html .= '<!-- CBD DEBUG: Always showing feature menu -->';
-        $html .= '<div class="cbd-selection-menu" style="display: none;">';
-        $html .= '<button class="cbd-menu-toggle" type="button" aria-expanded="false">';
-        $html .= '<i class="dashicons dashicons-admin-generic"></i>';
+        // DEBUG: Force all buttons to be visible
+        $html .= '<!-- CBD: THREE BUTTONS - FORCED VISIBILITY -->';
+        $html .= '<div style="position: absolute !important; top: 10px !important; right: 10px !important; z-index: 9999 !important; display: flex !important; gap: 5px !important; background: rgba(255,0,0,0.8) !important; padding: 5px !important; border: 2px solid yellow !important;">';
+        
+        // Button 1: Collapse - with proper class and data attributes
+        $html .= '<button type="button" class="cbd-collapse-toggle" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,0,0,0.8) !important; color: white !important; border: none !important; padding: 8px !important; border-radius: 4px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important;" title="Einklappen">';
+        $html .= '🔼';
         $html .= '</button>';
         
-        $html .= '<div class="cbd-dropdown-menu">';
-        
-        // Always show collapse
-        $html .= '<button class="cbd-dropdown-item cbd-collapse-toggle" type="button" aria-expanded="true" aria-controls="' . esc_attr($container_id) . '-content">';
-        $html .= '<i class="dashicons dashicons-arrow-up-alt2"></i>';
-        $html .= '<span>Einklappen</span>';
+        // Button 2: Copy - FORCED VISIBILITY
+        $html .= '<button type="button" class="cbd-copy-text" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,100,0,0.8) !important; color: white !important; border: 2px solid lime !important; padding: 8px !important; border-radius: 4px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important; visibility: visible !important; opacity: 1 !important;" title="Text kopieren">';
+        $html .= '📋';
         $html .= '</button>';
         
-        // Always show copy text
-        $html .= '<button class="cbd-dropdown-item cbd-copy-text" data-container-id="' . esc_attr($container_id) . '">';
-        $html .= '<i class="dashicons dashicons-clipboard"></i>';
-        $html .= '<span>Text kopieren</span>';
+        // Button 3: Screenshot - FORCED VISIBILITY
+        $html .= '<button type="button" class="cbd-screenshot" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,0,100,0.8) !important; color: white !important; border: 2px solid blue !important; padding: 8px !important; border-radius: 4px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important; visibility: visible !important; opacity: 1 !important;" title="Screenshot">';
+        $html .= '📷';
         $html .= '</button>';
         
-        // Always show screenshot
-        $html .= '<button class="cbd-dropdown-item cbd-screenshot" data-container-id="' . esc_attr($container_id) . '">';
-        $html .= '<i class="dashicons dashicons-camera"></i>';
-        $html .= '<span>Screenshot</span>';
-        $html .= '</button>';
-        
-        $html .= '</div>'; // Close dropdown menu
-        $html .= '</div>'; // Close selection menu
+        $html .= '</div>'; // Close buttons
         
         // Add block header with icon and title (always top-left, visible when collapsed)
         $block_title = '';
@@ -528,7 +745,8 @@ class CBD_Block_Registration {
         
         $has_icon = !empty($features['icon']['enabled']);
         
-        // Only show icon if actually configured in the database
+        // DEBUG: Always show icon for testing until we fix feature detection
+        $has_icon = true; // Force icon display for now
         
         // Always show header if there's a title OR icon
         if ($has_icon || !empty($block_title)) {
@@ -539,7 +757,11 @@ class CBD_Block_Registration {
                 $icon_class = sanitize_html_class($features['icon']['value'] ?? 'dashicons-admin-generic');
                 $icon_color = !empty($features['icon']['color']) ? 
                     'style="color: ' . esc_attr($features['icon']['color']) . '"' : '';
-                $html .= '<span class="cbd-header-icon" ' . $icon_color . '>';
+                    
+                // Add inline styles to ensure visibility
+                $icon_style = 'position: absolute; top: 12px; left: 12px; font-size: 20px; z-index: 10;' . ($icon_color ? ' ' . substr($icon_color, 7, -1) : '');
+                
+                $html .= '<span class="cbd-header-icon" style="' . esc_attr($icon_style) . '">';
                 $html .= '<i class="dashicons ' . $icon_class . '"></i>';
                 $html .= '</span>';
             }

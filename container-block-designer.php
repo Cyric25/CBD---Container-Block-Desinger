@@ -100,12 +100,11 @@ class ContainerBlockDesigner {
             require_once CBD_PLUGIN_DIR . 'includes/class-cbd-admin.php';
         }
         
-        // Frontend-Renderer (MASTER - overrides all others)
-        if (!is_admin() || wp_doing_ajax()) {
-            require_once CBD_PLUGIN_DIR . 'includes/class-master-renderer.php';
-            // Disable other renderers by not loading them
-            // require_once CBD_PLUGIN_DIR . 'includes/class-cbd-frontend-renderer.php';
-        }
+        // Frontend-Renderer - DISABLED to prevent conflicts with block registration
+        // Master Renderer caused double rendering when block registration is active
+        // if (!is_admin() || wp_doing_ajax()) {
+        //     require_once CBD_PLUGIN_DIR . 'includes/class-master-renderer.php';
+        // }
     }
     
     /**
@@ -180,9 +179,9 @@ class ContainerBlockDesigner {
             // Initialize services through container
             $style_loader = $this->container->get('style_loader');
             
-            // Block registration - DISABLED (Master Renderer handles this)
-            // $block_registration = $this->container->get('block_registration');
-            // $block_registration->register_blocks();
+            // Block registration - RE-ENABLED for editor
+            $block_registration = $this->container->get('block_registration');
+            $block_registration->register_blocks();
             
             // AJAX handler
             $this->container->get('ajax_handler');
@@ -195,7 +194,7 @@ class ContainerBlockDesigner {
                 }
             }
             
-            // Frontend renderer - DISABLED (Master Renderer is loaded directly)
+            // Frontend renderer - DISABLED (Block Registration handles rendering)
             // if (!is_admin() || wp_doing_ajax()) {
             //     $frontend_renderer = $this->container->get('consolidated_frontend');
             // }
@@ -241,11 +240,11 @@ class ContainerBlockDesigner {
             CBD_Style_Loader::get_instance();
         }
         
-        // Legacy block registration disabled
-        // if (class_exists('CBD_Block_Registration')) {
-        //     $registration = CBD_Block_Registration::get_instance();
-        //     $registration->register_blocks();
-        // }
+        // Legacy block registration fallback
+        if (class_exists('CBD_Block_Registration')) {
+            $registration = CBD_Block_Registration::get_instance();
+            $registration->register_blocks();
+        }
         
         if (class_exists('CBD_Ajax_Handler')) {
             new CBD_Ajax_Handler();
@@ -255,7 +254,7 @@ class ContainerBlockDesigner {
             CBD_Admin::get_instance();
         }
         
-        // Legacy fallback disabled - Master Renderer handles everything
+        // Legacy frontend renderers disabled - Block Registration handles rendering
         // if ((!is_admin() || wp_doing_ajax()) && class_exists('CBD_Consolidated_Frontend')) {
         //     CBD_Consolidated_Frontend::get_instance();
         // }
