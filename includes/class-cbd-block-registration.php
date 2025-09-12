@@ -430,7 +430,17 @@ class CBD_Block_Registration {
                     button.html("⏳");
                     console.log("CBD: Starting screenshot capture...");
                     
-                    // Temporarily hide the buttons for clean screenshot
+                    // Check if content is collapsed and expand if needed
+                    var contentToCheck = container.find(".cbd-container-content");
+                    var wasCollapsed = false;
+                    
+                    if (contentToCheck.length > 0 && !contentToCheck.is(":visible")) {
+                        console.log("CBD: Content is collapsed, expanding for screenshot...");
+                        wasCollapsed = true;
+                        contentToCheck.show(); // Show immediately without animation
+                    }
+                    
+                    // Temporarily hide the buttons and numbering for clean screenshot
                     var buttonContainer = container.find(".cbd-action-buttons");
                     var numbering = container.find(".cbd-container-number");
                     var originalButtonDisplay = buttonContainer.css("display");
@@ -458,6 +468,12 @@ class CBD_Block_Registration {
                         // Restore hidden elements
                         buttonContainer.css("display", originalButtonDisplay);
                         numbering.css("display", originalNumberDisplay);
+                        
+                        // Restore collapsed state if it was collapsed before
+                        if (wasCollapsed) {
+                            console.log("CBD: Restoring collapsed state...");
+                            contentToCheck.hide();
+                        }
                         
                         // Convert to blob and download
                         canvas.toBlob(function(blob) {
@@ -489,6 +505,12 @@ class CBD_Block_Registration {
                         // Restore hidden elements
                         buttonContainer.css("display", originalButtonDisplay);
                         numbering.css("display", originalNumberDisplay);
+                        
+                        // Restore collapsed state if it was collapsed before
+                        if (wasCollapsed) {
+                            console.log("CBD: Error occurred, restoring collapsed state...");
+                            contentToCheck.hide();
+                        }
                         
                         // Error feedback
                         button.html("❌");
@@ -711,22 +733,22 @@ class CBD_Block_Registration {
         }
         $html .= '>';
         
-        // DEBUG: Force all buttons to be visible
-        $html .= '<!-- CBD: THREE BUTTONS - FORCED VISIBILITY -->';
-        $html .= '<div style="position: absolute !important; top: 10px !important; right: 10px !important; z-index: 9999 !important; display: flex !important; gap: 5px !important; background: rgba(255,0,0,0.8) !important; padding: 5px !important; border: 2px solid yellow !important;">';
+        // Professional button styling - all buttons visible and functional
+        $html .= '<!-- CBD: THREE BUTTONS - PROFESSIONAL STYLING -->';
+        $html .= '<div class="cbd-action-buttons" style="position: absolute !important; top: 10px !important; right: 10px !important; z-index: 9999 !important; display: flex !important; gap: 4px !important; background: rgba(0,0,0,0.1) !important; padding: 4px !important; border-radius: 8px !important; backdrop-filter: blur(5px) !important;">';
         
-        // Button 1: Collapse - with proper class and data attributes
-        $html .= '<button type="button" class="cbd-collapse-toggle" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,0,0,0.8) !important; color: white !important; border: none !important; padding: 8px !important; border-radius: 4px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important;" title="Einklappen">';
+        // Button 1: Collapse
+        $html .= '<button type="button" class="cbd-collapse-toggle" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,0,0,0.75) !important; color: white !important; border: none !important; padding: 8px !important; border-radius: 6px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10000 !important; transition: all 0.2s ease !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;" title="Einklappen" onmouseover="this.style.background=\'rgba(0,0,0,0.9)\'" onmouseout="this.style.background=\'rgba(0,0,0,0.75)\'">';
         $html .= '🔼';
         $html .= '</button>';
         
-        // Button 2: Copy - FORCED VISIBILITY
-        $html .= '<button type="button" class="cbd-copy-text" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,100,0,0.8) !important; color: white !important; border: 2px solid lime !important; padding: 8px !important; border-radius: 4px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important; visibility: visible !important; opacity: 1 !important;" title="Text kopieren">';
+        // Button 2: Copy Text
+        $html .= '<button type="button" class="cbd-copy-text" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,0,0,0.75) !important; color: white !important; border: none !important; padding: 8px !important; border-radius: 6px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10000 !important; transition: all 0.2s ease !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;" title="Text kopieren" onmouseover="this.style.background=\'rgba(0,0,0,0.9)\'" onmouseout="this.style.background=\'rgba(0,0,0,0.75)\'">';
         $html .= '📋';
         $html .= '</button>';
         
-        // Button 3: Screenshot - FORCED VISIBILITY
-        $html .= '<button type="button" class="cbd-screenshot" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,0,100,0.8) !important; color: white !important; border: 2px solid blue !important; padding: 8px !important; border-radius: 4px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important; visibility: visible !important; opacity: 1 !important;" title="Screenshot">';
+        // Button 3: Screenshot
+        $html .= '<button type="button" class="cbd-screenshot" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,0,0,0.75) !important; color: white !important; border: none !important; padding: 8px !important; border-radius: 6px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10000 !important; transition: all 0.2s ease !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;" title="Screenshot" onmouseover="this.style.background=\'rgba(0,0,0,0.9)\'" onmouseout="this.style.background=\'rgba(0,0,0,0.75)\'">';
         $html .= '📷';
         $html .= '</button>';
         
