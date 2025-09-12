@@ -17,6 +17,12 @@
         $(document).off('click', '.cbd-collapse-toggle');
         $('.cbd-collapse-toggle').off();
         
+        // Initialize selection-based menu system
+        initializeSelectionMenu();
+        
+        // Set initial collapse states
+        initializeCollapseStates();
+        
         // ONE SIMPLE GLOBAL HANDLER
         $(document).on('click.cbd-working', '.cbd-collapse-toggle', function(e) {
             e.preventDefault();
@@ -47,12 +53,14 @@
             if ($contentToToggle.is(':visible')) {
                 console.log('CBD Working: Hiding content');
                 $contentToToggle.hide();
+                $container.addClass('cbd-collapsed');
                 $(this).find('.dashicons')
                     .removeClass('dashicons-arrow-up-alt2')
                     .addClass('dashicons-arrow-down-alt2');
             } else {
                 console.log('CBD Working: Showing content');
                 $contentToToggle.show();
+                $container.removeClass('cbd-collapsed');
                 $(this).find('.dashicons')
                     .removeClass('dashicons-arrow-down-alt2')
                     .addClass('dashicons-arrow-up-alt2');
@@ -107,14 +115,118 @@
                 return; // Let the existing collapse handler take care of it
             }
             
-            // Close dropdown after action (except for collapse which handles its own state)
-            if (!$button.hasClass('cbd-collapse-toggle')) {
-                $(this).closest('.cbd-dropdown-menu').removeClass('show');
-            }
+            // Close dropdown and deselect container after action
+            $(this).closest('.cbd-dropdown-menu').removeClass('show');
+            $(this).closest('.cbd-container').removeClass('cbd-selected');
         });
         
         console.log('CBD Working Frontend: Ready');
     });
+    
+    // SELECTION-BASED MENU SYSTEM
+    function initializeSelectionMenu() {
+        console.log('CBD Working: Initializing selection menu');
+        
+        // Detect touch device
+        const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        
+        if (isTouchDevice) {
+            // Touch device: tap to select/deselect
+            $(document).on('touchstart.cbd-selection', '.cbd-container', function(e) {
+                e.stopPropagation();
+                const $container = $(this);
+                
+                // Toggle selection
+                if ($container.hasClass('cbd-selected')) {
+                    $container.removeClass('cbd-selected');
+                } else {
+                    $('.cbd-container').removeClass('cbd-selected'); // Clear other selections
+                    $container.addClass('cbd-selected');
+                }
+            });
+            
+            // Close menu when tapping outside
+            $(document).on('touchstart.cbd-outside', function(e) {
+                if (!$(e.target).closest('.cbd-container, .cbd-selection-menu').length) {
+                    $('.cbd-container').removeClass('cbd-selected');
+                    $('.cbd-dropdown-menu').removeClass('show');
+                }
+            });
+            
+        } else {
+            // Desktop: hover to show menu
+            $(document).on('mouseenter.cbd-hover', '.cbd-container', function() {
+                const $container = $(this);
+                $container.addClass('cbd-selected');
+            });
+            
+            $(document).on('mouseleave.cbd-hover', '.cbd-container', function(e) {
+                const $container = $(this);
+                const $menu = $container.find('.cbd-selection-menu');
+                
+                // Don't hide if moving to the menu or dropdown
+                if ($(e.relatedTarget).closest('.cbd-selection-menu, .cbd-dropdown-menu').length > 0) {
+                    return;
+                }
+                
+                // Only remove if dropdown is not open
+                if (!$container.find('.cbd-dropdown-menu').hasClass('show')) {
+                    $container.removeClass('cbd-selected');
+                }
+            });
+            
+            // Keep container selected when hovering menu
+            $(document).on('mouseenter.cbd-menu-hover', '.cbd-selection-menu', function() {
+                $(this).closest('.cbd-container').addClass('cbd-selected');
+            });
+            
+            $(document).on('mouseleave.cbd-menu-hover', '.cbd-selection-menu', function() {
+                const $container = $(this).closest('.cbd-container');
+                if (!$container.find('.cbd-dropdown-menu').hasClass('show')) {
+                    $container.removeClass('cbd-selected');
+                }
+            });
+            
+            // Close menu when clicking outside
+            $(document).on('click.cbd-outside', function(e) {
+                if (!$(e.target).closest('.cbd-container, .cbd-selection-menu').length) {
+                    $('.cbd-container').removeClass('cbd-selected');
+                    $('.cbd-dropdown-menu').removeClass('show');
+                }
+            });
+        }
+    }
+    
+    // INITIALIZE COLLAPSE STATES
+    function initializeCollapseStates() {
+        console.log('CBD Working: Initializing collapse states');
+        
+        $('.cbd-container').each(function() {
+            const $container = $(this);
+            const collapseData = $container.data('collapse');
+            
+            if (collapseData && collapseData.enabled) {
+                const defaultState = collapseData.defaultState || 'expanded';
+                const $content = $container.find('.cbd-container-content');
+                
+                if (defaultState === 'collapsed') {
+                    console.log('CBD Working: Setting initial collapsed state');
+                    $content.hide();
+                    $container.addClass('cbd-collapsed');
+                    $container.find('.cbd-collapse-toggle .dashicons')
+                        .removeClass('dashicons-arrow-up-alt2')
+                        .addClass('dashicons-arrow-down-alt2');
+                } else {
+                    console.log('CBD Working: Setting initial expanded state');
+                    $content.show();
+                    $container.removeClass('cbd-collapsed');
+                    $container.find('.cbd-collapse-toggle .dashicons')
+                        .removeClass('dashicons-arrow-down-alt2')
+                        .addClass('dashicons-arrow-up-alt2');
+                }
+            }
+        });
+    }
     
     // SCREENSHOT FUNCTIONALITY
     function takeScreenshot($container) {

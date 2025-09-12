@@ -1,6 +1,6 @@
 /**
  * Container Block Designer - Clean Frontend Styles
- * Version: 2.6.0
+ * Version: 2.6.0 - UPDATED 10:55
  * 
  * Fixed structure to prevent double container styling:
  * - .cbd-container = invisible wrapper (no visual styling)
@@ -14,7 +14,7 @@
 /* .cbd-container is INVISIBLE - only for positioning controls outside content */
 .cbd-container {
     position: relative;
-    margin: 2.5em 0; /* Spacing between blocks */
+    margin: 40px 0; /* Even more spacing between blocks for better separation */
     /* IMPORTANT: Absolutely no visual styling - completely transparent wrapper */
     background: none !important;
     background-color: transparent !important;
@@ -146,7 +146,7 @@
    ============================================ */
 
 /* ============================================
-   NEW HEADER SYSTEM - Title + Dropdown Menu
+   SELECTION-BASED MENU SYSTEM
    ============================================ */
 
 /* Header with title and dropdown menu */
@@ -750,4 +750,296 @@
     display: none;
     white-space: nowrap;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================
+   NEW SELECTION-BASED MENU SYSTEM
+   ============================================ */
+
+/* Hide old header styles */
+.cbd-header,
+.cbd-header-title,
+.cbd-header-menu {
+    display: none !important;
+}
+
+/* Selection menu - appears on hover/tap */
+.cbd-selection-menu {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    transition: all 0.2s ease;
+    pointer-events: auto;
+}
+
+/* Menu toggle button */
+.cbd-selection-menu .cbd-menu-toggle {
+    background: rgba(0, 0, 0, 0.7);
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.cbd-selection-menu .cbd-menu-toggle::after {
+    display: none !important;
+}
+
+.cbd-selection-menu .cbd-menu-toggle:hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: scale(1.1);
+}
+
+.cbd-selection-menu .cbd-menu-toggle .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+/* Dropdown menu */
+.cbd-selection-menu .cbd-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    z-index: 1001;
+    min-width: 180px;
+    display: none;
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+    transition: all 0.2s ease;
+    overflow: hidden;
+    visibility: hidden;
+}
+
+.cbd-selection-menu .cbd-dropdown-menu.show {
+    display: block !important;
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+}
+
+/* Dropdown items */
+.cbd-selection-menu .cbd-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 16px;
+    border: none;
+    background: none;
+    color: #2c3e50;
+    cursor: pointer;
+    font-size: 14px;
+    text-align: left;
+    transition: background-color 0.2s ease;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.cbd-selection-menu .cbd-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.cbd-selection-menu .cbd-dropdown-item:hover {
+    background: #f8f9fa;
+}
+
+.cbd-selection-menu .cbd-dropdown-item:active {
+    background: #e9ecef;
+}
+
+.cbd-selection-menu .cbd-dropdown-item .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: #666;
+    flex-shrink: 0;
+}
+
+.cbd-selection-menu .cbd-dropdown-item span {
+    flex: 1;
+}
+
+/* Show menu on container hover/selection */
+.cbd-container:hover .cbd-selection-menu,
+.cbd-container.cbd-selected .cbd-selection-menu {
+    display: block !important;
+}
+
+/* Keep menu visible when dropdown is open */
+.cbd-container .cbd-selection-menu:hover,
+.cbd-container .cbd-selection-menu .cbd-dropdown-menu.show {
+    display: block !important;
+}
+
+.cbd-container:has(.cbd-dropdown-menu.show) .cbd-selection-menu {
+    display: block !important;
+}
+
+/* Touch-optimized styles */
+@media (hover: none) and (pointer: coarse) {
+    .cbd-selection-menu .cbd-menu-toggle {
+        width: 44px;
+        height: 44px;
+    }
+    
+    .cbd-selection-menu .cbd-dropdown-item {
+        padding: 16px 18px;
+        font-size: 16px;
+        min-height: 48px;
+    }
+    
+    .cbd-selection-menu .cbd-dropdown-item .dashicons {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+    }
+}
+
+/* ============================================
+   ICON & NUMBERING POSITIONING
+   ============================================ */
+
+/* Icons inside styled container */
+.cbd-icon-inside {
+    position: absolute;
+    z-index: 5;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cbd-icon-inside.top-left {
+    top: 10px;
+    left: 10px;
+}
+
+.cbd-icon-inside.top-right {
+    top: 10px;
+    right: 10px;
+}
+
+.cbd-icon-inside.bottom-left {
+    bottom: 10px;
+    left: 10px;
+}
+
+.cbd-icon-inside.bottom-right {
+    bottom: 10px;
+    right: 10px;
+}
+
+/* Transparent wrapper - no special padding needed now */
+.cbd-transparent-wrapper {
+    position: relative;
+    background: transparent;
+}
+
+/* Numbering COMPLETELY outside any styling - in main container */
+.cbd-container-number.cbd-outside-number {
+    position: absolute !important;
+    top: -40px !important;
+    left: -40px !important;
+    background: rgba(0, 0, 0, 0.9) !important;
+    color: white !important;
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 15px !important;
+    font-weight: bold !important;
+    z-index: 99999 !important;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5) !important;
+    border: 2px solid white !important;
+}
+
+/* ============================================
+   BLOCK HEADER SYSTEM (Icon + Title)
+   ============================================ */
+
+/* Block header with icon and title */
+.cbd-block-header {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 10;
+    max-width: calc(100% - 60px); /* Leave space for menu */
+    pointer-events: none; /* Don't interfere with interactions */
+}
+
+.cbd-block-header * {
+    pointer-events: auto; /* But allow child elements to be interactive */
+}
+
+/* Header icon - only visible when collapsed */
+.cbd-header-icon {
+    display: none; /* Hidden by default */
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/* Show icon only when container is collapsed - using JavaScript-set class */
+.cbd-container.cbd-collapsed .cbd-header-icon {
+    display: flex !important;
+}
+
+.cbd-header-icon .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* Block title */
+.cbd-block-title {
+    margin: 0;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2c3e50;
+    line-height: 1.2;
+    word-break: break-word;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    max-width: 200px;
+}
+
+/* Responsive title wrapping */
+@media (max-width: 768px) {
+    .cbd-block-title {
+        max-width: 150px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 480px) {
+    .cbd-block-title {
+        max-width: 120px;
+        font-size: 12px;
+    }
 }

@@ -26,26 +26,36 @@ class CBD_Block_Renderer {
     private static $container_counter = array();
     
     /**
-     * Render container block
+     * Render container block - Updated with new structure
      */
     public static function render_container_block($attributes, $content) {
+        // DEBUG: Add HTML comment to verify this renderer is active
+        $html = '<!-- ======================================== -->';
+        $html .= '<!-- CBD DEBUG: BLOCK RENDERER IS ACTIVE!!! -->';
+        $html .= '<!-- TIME: ' . date('Y-m-d H:i:s') . ' -->';
+        $html .= '<!-- ======================================== -->';
+        
         // Get block data
         $selected_block = $attributes['selectedBlock'] ?? '';
         
         if (empty($selected_block)) {
-            return '<div class="cbd-container-placeholder">' . __('Bitte wählen Sie einen Container-Block aus.', 'container-block-designer') . '</div>';
+            return $html . '<div class="cbd-container-placeholder">' . __('Bitte wählen Sie einen Container-Block aus.', 'container-block-designer') . '</div>';
         }
         
         $block_data = cbd_get_block_by_slug($selected_block);
         
         if (!$block_data) {
-            return '<div class="cbd-container-error">' . __('Container-Block nicht gefunden.', 'container-block-designer') . '</div>';
+            return $html . '<div class="cbd-container-error">' . __('Container-Block nicht gefunden.', 'container-block-designer') . '</div>';
         }
         
         // Parse block data
         $styles = json_decode($block_data['styles'], true) ?: array();
         $features = json_decode($block_data['features'], true) ?: array();
         $config = json_decode($block_data['config'], true) ?: array();
+        
+        // DEBUG: Add debug output to see what features are available
+        $html .= '<!-- CBD DEBUG: Features available: ' . json_encode($features) . ' -->';
+        $html .= '<!-- CBD DEBUG: Config available: ' . json_encode($config) . ' -->';
         
         // Override with block attributes if present
         if (!empty($attributes['blockFeatures'])) {
@@ -56,8 +66,141 @@ class CBD_Block_Renderer {
             $config = array_merge($config, $attributes['blockConfig']);
         }
         
-        // Generate container
-        return self::generate_container_html($styles, $features, $config, $content, $selected_block);
+        // Generate unique container ID
+        $container_id = 'cbd-container-' . uniqid();
+        
+        // Build wrapper classes (.cbd-container - transparent wrapper)
+        $wrapper_classes = array('cbd-container');
+        $wrapper_attributes = array('id' => $container_id);
+        
+        // Add legacy classes for backward compatibility
+        $wrapper_classes[] = 'cbd-block-' . sanitize_html_class($selected_block);
+        
+        // Add custom class if set
+        if (!empty($config['customClass'])) {
+            $wrapper_classes[] = sanitize_html_class($config['customClass']);
+        }
+        
+        $wrapper_attributes['class'] = implode(' ', $wrapper_classes);
+        
+        // Inner content block classes (.cbd-container-block)
+        $content_classes = array('cbd-container-block');
+        $content_attributes = array();
+        
+        // Add block-specific class to content block
+        $content_classes[] = 'cbd-block-' . sanitize_html_class($selected_block);
+        
+        $content_attributes['class'] = implode(' ', $content_classes);
+        
+        // Generate inline styles for content block only
+        $inline_styles = self::generate_container_styles($styles);
+        if (!empty($inline_styles)) {
+            $content_attributes['style'] = implode('; ', $inline_styles);
+        }
+        
+        // Start outer wrapper (.cbd-container) - for controls and positioning
+        $html .= '<div';
+        foreach ($wrapper_attributes as $attr => $value) {
+            $html .= ' ' . $attr . '="' . esc_attr($value) . '"';
+        }
+        $html .= '>';
+        
+        // Add numbering OUTSIDE everything (in the main container)
+        // ALWAYS show numbering for now until we fix the feature detection
+        $numbering_counter = 1; // Simple counter for now
+        $html .= '<div class="cbd-container-number cbd-outside-number" data-number="' . esc_attr($numbering_counter) . '">';
+        $html .= esc_html($numbering_counter);
+        $html .= '</div>';
+        
+        // Content wrapper div for collapse functionality
+        $content_wrapper_class = 'cbd-content';
+        $content_wrapper_id = $container_id . '-content';
+        
+        $html .= '<div class="' . $content_wrapper_class . '" id="' . esc_attr($content_wrapper_id) . '">';
+        
+        // Inner content block (.cbd-container-block) - this gets the visual styling
+        $html .= '<div';
+        foreach ($content_attributes as $attr => $value) {
+            $html .= ' ' . $attr . '="' . esc_attr($value) . '"';
+        }
+        $html .= '>';
+        
+        // Selection-based feature menu - ALWAYS show for now
+        $html .= '<!-- CBD DEBUG: Always showing feature menu -->';
+        $html .= '<div class="cbd-selection-menu" style="display: none;">';
+        $html .= '<button class="cbd-menu-toggle" type="button" aria-expanded="false">';
+        $html .= '<i class="dashicons dashicons-admin-generic"></i>';
+        $html .= '</button>';
+        
+        $html .= '<div class="cbd-dropdown-menu">';
+        
+        // Always show collapse
+        $html .= '<button class="cbd-dropdown-item cbd-collapse-toggle" type="button" aria-expanded="true" aria-controls="' . esc_attr($container_id) . '-content">';
+        $html .= '<i class="dashicons dashicons-arrow-up-alt2"></i>';
+        $html .= '<span>Einklappen</span>';
+        $html .= '</button>';
+        
+        // Always show copy text
+        $html .= '<button class="cbd-dropdown-item cbd-copy-text" data-container-id="' . esc_attr($container_id) . '">';
+        $html .= '<i class="dashicons dashicons-clipboard"></i>';
+        $html .= '<span>Text kopieren</span>';
+        $html .= '</button>';
+        
+        // Always show screenshot
+        $html .= '<button class="cbd-dropdown-item cbd-screenshot" data-container-id="' . esc_attr($container_id) . '">';
+        $html .= '<i class="dashicons dashicons-camera"></i>';
+        $html .= '<span>Screenshot</span>';
+        $html .= '</button>';
+        
+        $html .= '</div>'; // Close dropdown menu
+        $html .= '</div>'; // Close selection menu
+        
+        // Add block header with icon and title (always top-left, visible when collapsed)
+        $block_title = '';
+        
+        // Only use editor-entered titles, not database block titles
+        if (!empty($attributes['blockTitle'])) {
+            $block_title = $attributes['blockTitle'];
+        } elseif (!empty($attributes['title'])) {
+            $block_title = $attributes['title'];  
+        }
+        
+        $has_icon = !empty($features['icon']['enabled']);
+        
+        // Always show header if there's a title OR icon
+        if ($has_icon || !empty($block_title)) {
+            $html .= '<div class="cbd-block-header">';
+            
+            // Icon (always top-left if enabled)
+            if ($has_icon) {
+                $icon_class = sanitize_html_class($features['icon']['value'] ?? 'dashicons-admin-generic');
+                $icon_color = !empty($features['icon']['color']) ? 
+                    'style="color: ' . esc_attr($features['icon']['color']) . '"' : '';
+                $html .= '<span class="cbd-header-icon" ' . $icon_color . '>';
+                $html .= '<i class="dashicons ' . $icon_class . '"></i>';
+                $html .= '</span>';
+            }
+            
+            // Block title (next to icon, responsive) - ALWAYS if not empty
+            if (!empty($block_title)) {
+                $html .= '<h3 class="cbd-block-title">' . esc_html($block_title) . '</h3>';
+            }
+            
+            $html .= '</div>'; // Close block header
+        }
+        
+        // Wrap the actual content in a collapsible container
+        $html .= '<div class="cbd-container-content">';
+        
+        // Actual content
+        $html .= $content;
+        
+        $html .= '</div>'; // Close .cbd-container-content
+        $html .= '</div>'; // Close .cbd-container-block
+        $html .= '</div>'; // Close .cbd-content
+        $html .= '</div>'; // Close .cbd-container
+        
+        return $html;
     }
     
     /**

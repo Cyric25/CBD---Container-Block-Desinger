@@ -42,6 +42,10 @@ class CBD_Consolidated_Frontend {
      * Constructor - Initialize frontend hooks
      */
     private function __construct() {
+        // DEBUG: Add comment to verify this class is loaded
+        add_action('wp_head', function() {
+            echo '<!-- CBD DEBUG: Consolidated Frontend loaded at ' . date('Y-m-d H:i:s') . ' -->' . "\n";
+        });
         // Asset management
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
         add_action('wp_head', array($this, 'add_custom_styles'));
@@ -51,7 +55,8 @@ class CBD_Consolidated_Frontend {
         add_filter('body_class', array($this, 'add_body_classes'));
         
         // Block rendering
-        add_filter('render_block', array($this, 'render_container_blocks'), 10, 2);
+        // DISABLED - Master Renderer handles filtering
+        // add_filter('render_block', array($this, 'render_container_blocks'), 10, 2);
     }
     
     /**
@@ -68,7 +73,7 @@ class CBD_Consolidated_Frontend {
             'cbd-frontend-clean',
             CBD_PLUGIN_URL . 'assets/css/cbd-frontend-clean.css',
             array(),
-            CBD_VERSION
+            CBD_VERSION . '-' . time() // Force cache bust
         );
         
         // Position-specific CSS
@@ -84,7 +89,7 @@ class CBD_Consolidated_Frontend {
             'cbd-frontend-working',
             CBD_PLUGIN_URL . 'assets/js/frontend-working.js',
             array('jquery'),
-            CBD_VERSION . '-working',
+            CBD_VERSION . '-working-' . time(), // Force cache bust
             true
         );
         
@@ -109,7 +114,7 @@ class CBD_Consolidated_Frontend {
             'cbd-frontend-working',
             CBD_PLUGIN_URL . 'assets/js/frontend-working.js',
             $script_dependencies,
-            CBD_VERSION . '-working',
+            CBD_VERSION . '-working-' . time(), // Force cache bust
             true
         );
         
@@ -474,13 +479,13 @@ class CBD_Consolidated_Frontend {
         }
         
         // Generate container HTML
-        return $this->generate_container_html($styles, $features, $config, $content, $block_data['name']);
+        return $this->generate_container_html($styles, $features, $config, $content, $block_data['name'], $block_data, $attributes);
     }
     
     /**
      * Generate complete container HTML with proper two-layer structure
      */
-    private function generate_container_html($styles, $features, $config, $content, $block_slug) {
+    private function generate_container_html($styles, $features, $config, $content, $block_slug, $block_data = null, $attributes = array()) {
         // Generate unique ID
         $container_id = 'cbd-container-' . uniqid();
         
@@ -543,6 +548,9 @@ class CBD_Consolidated_Frontend {
         // Build HTML with proper two-layer structure
         $html = '';
         
+        // DEBUG: Add comment to verify our changes are loading
+        $html .= '<!-- CBD DEBUG: Container HTML generated at ' . date('Y-m-d H:i:s') . ' -->';
+        
         // Start outer wrapper (.cbd-container) - for controls and positioning
         $html .= '<div';
         foreach ($wrapper_attributes as $attr => $value) {
@@ -550,20 +558,19 @@ class CBD_Consolidated_Frontend {
         }
         $html .= '>';
         
-        // Header will be added inside content block now
-        
-        // Add icons (outside the styled content)
-        if (!empty($features['icon']['enabled'])) {
-            $icon_class = sanitize_html_class($features['icon']['value'] ?? 'dashicons-admin-generic');
-            $icon_position = $features['icon']['position'] ?? 'top-right';
-            $icon_color = !empty($features['icon']['color']) ? 
-                'style="color: ' . esc_attr($features['icon']['color']) . '"' : '';
-            $html .= '<span class="cbd-icon ' . esc_attr($icon_position) . '" ' . $icon_color . '>';
-            $html .= '<i class="dashicons ' . $icon_class . '"></i>';
-            $html .= '</span>';
+        // Add numbering OUTSIDE everything (in the main container)
+        if (!empty($features['numbering']['enabled'])) {
+            $numbering_counter = $this->get_numbering_counter();
+            $format = $features['numbering']['format'] ?? 'numeric';
+            $number = $this->format_number($numbering_counter, $format);
+            
+            $html .= '<div class="cbd-container-number cbd-outside-number" data-number="' . esc_attr($numbering_counter) . '">';
+            $html .= esc_html($number);
+            $html .= '</div>';
         }
         
-        // Action buttons are now only in the dropdown menu - no separate buttons
+        // Create transparent padding area (without numbering)
+        $html .= '<div class="cbd-transparent-wrapper">';
         
         // Content wrapper div with proper ID for collapse functionality
         $content_wrapper_class = 'cbd-content';
@@ -578,67 +585,154 @@ class CBD_Consolidated_Frontend {
         }
         $html .= '>';
         
-        // NEW: Header with title and dropdown menu
-        $block_title = !empty($config['blockTitle']) ? $config['blockTitle'] : '';
-        $has_features = !empty($features['collapse']['enabled']) || !empty($features['copyText']['enabled']) || !empty($features['screenshot']['enabled']);
+        // NEW: Selection-based feature menu (appears on hover/tap)
+        // Debug: Check all possible feature names with proper fallbacks
+        $has_collapse = !empty($features['collapse']['enabled']);
         
-        if ($block_title || $has_features) {
-            $html .= '<div class="cbd-header">';
+        // Check copyText with multiple fallbacks
+        $has_copy = false;
+        if (!empty($features['copyText']['enabled'])) {
+            $has_copy = true;
+        } elseif (!empty($features['copy-text']['enabled'])) {
+            $has_copy = true;
+        } elseif (!empty($features['copy_text']['enabled'])) {
+            $has_copy = true;
+        }
+        
+        // Check screenshot
+        $has_screenshot = !empty($features['screenshot']['enabled']);
+        
+        // TEMPORARY FIX: Force at least collapse to be available for testing
+        if (!$has_collapse && !$has_copy && !$has_screenshot) {
+            $has_collapse = true; // Force collapse to show menu
+        }
+        
+        $has_features = $has_collapse || $has_copy || $has_screenshot;
+        
+        // Debug output (remove in production)
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('CBD Debug - Features: ' . print_r($features, true));
+            error_log('CBD Debug - Has features: collapse=' . ($has_collapse ? 'yes' : 'no') . ', copy=' . ($has_copy ? 'yes' : 'no') . ', screenshot=' . ($has_screenshot ? 'yes' : 'no'));
+            error_log('CBD Debug - copyText enabled check: ' . (!empty($features['copyText']['enabled']) ? 'true' : 'false'));
+            error_log('CBD Debug - copyText value: ' . ($features['copyText']['enabled'] ?? 'undefined'));
+        }
+        
+        if ($has_features) {
+            $html .= '<div class="cbd-selection-menu" style="display: none;">';
+            $html .= '<button class="cbd-menu-toggle" type="button" aria-expanded="false">';
+            $html .= '<i class="dashicons dashicons-admin-generic"></i>';
+            $html .= '</button>';
             
-            // Block title
-            if ($block_title) {
-                $html .= '<h3 class="cbd-header-title">' . esc_html($block_title) . '</h3>';
+            $html .= '<div class="cbd-dropdown-menu">';
+            
+            // Debug comment
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                $html .= '<!-- CBD Debug: collapse=' . ($has_collapse ? 'yes' : 'no') . ', copy=' . ($has_copy ? 'yes' : 'no') . ', screenshot=' . ($has_screenshot ? 'yes' : 'no') . ' -->';
             }
             
-            // Feature dropdown menu
-            if ($has_features) {
-                $html .= '<div class="cbd-header-menu">';
-                $html .= '<button class="cbd-menu-toggle" type="button" aria-expanded="false">';
-                $html .= '<i class="dashicons dashicons-admin-generic"></i>';
-                $html .= '<span>Features</span>';
+            // Collapse toggle
+            if ($has_collapse) {
+                $expanded = ($features['collapse']['defaultState'] ?? 'expanded') !== 'collapsed';
+                $html .= '<button class="cbd-dropdown-item cbd-collapse-toggle" type="button" aria-expanded="' . ($expanded ? 'true' : 'false') . '" aria-controls="' . esc_attr($container_id) . '-content">';
+                $html .= '<i class="dashicons dashicons-arrow-' . ($expanded ? 'up' : 'down') . '-alt2"></i>';
+                $html .= '<span>' . esc_html($features['collapse']['label'] ?? $features['collapse']['buttonText'] ?? 'Einklappen') . '</span>';
                 $html .= '</button>';
-                
-                $html .= '<div class="cbd-dropdown-menu">';
-                
-                // Collapse toggle
-                if (!empty($features['collapse']['enabled'])) {
-                    $expanded = ($features['collapse']['defaultState'] ?? 'expanded') !== 'collapsed';
-                    $html .= '<button class="cbd-dropdown-item cbd-collapse-toggle" type="button" aria-expanded="' . ($expanded ? 'true' : 'false') . '" aria-controls="' . esc_attr($container_id) . '-content">';
-                    $html .= '<i class="dashicons dashicons-arrow-' . ($expanded ? 'up' : 'down') . '-alt2"></i>';
-                    $html .= '<span>' . esc_html($features['collapse']['label'] ?? 'Einklappen') . '</span>';
-                    $html .= '</button>';
-                }
-                
-                // Copy text
-                if (!empty($features['copyText']['enabled'])) {
-                    $html .= '<button class="cbd-dropdown-item cbd-copy-text" data-container-id="' . esc_attr($container_id) . '">';
-                    $html .= '<i class="dashicons dashicons-clipboard"></i>';
-                    $html .= '<span>' . esc_html($features['copyText']['buttonText'] ?? 'Text kopieren') . '</span>';
-                    $html .= '</button>';
-                }
-                
-                // Screenshot
-                if (!empty($features['screenshot']['enabled'])) {
-                    $html .= '<button class="cbd-dropdown-item cbd-screenshot" data-container-id="' . esc_attr($container_id) . '">';
-                    $html .= '<i class="dashicons dashicons-camera"></i>';
-                    $html .= '<span>' . esc_html($features['screenshot']['buttonText'] ?? 'Screenshot') . '</span>';
-                    $html .= '</button>';
-                }
-                
-                $html .= '</div>'; // Close dropdown menu
-                $html .= '</div>'; // Close header menu
             }
             
-            $html .= '</div>'; // Close header
+            // Copy text - check all possible variations
+            if ($has_copy) {
+                $copy_feature = array();
+                if (!empty($features['copyText'])) {
+                    $copy_feature = $features['copyText'];
+                } elseif (!empty($features['copy-text'])) {
+                    $copy_feature = $features['copy-text'];
+                } elseif (!empty($features['copy_text'])) {
+                    $copy_feature = $features['copy_text'];
+                }
+                
+                $html .= '<button class="cbd-dropdown-item cbd-copy-text" data-container-id="' . esc_attr($container_id) . '">';
+                $html .= '<i class="dashicons dashicons-clipboard"></i>';
+                $html .= '<span>' . esc_html($copy_feature['buttonText'] ?? $copy_feature['label'] ?? 'Text kopieren') . '</span>';
+                $html .= '</button>';
+            }
+            
+            // Screenshot - check all possible variations  
+            if ($has_screenshot) {
+                $screenshot_feature = $features['screenshot'] ?? array();
+                $html .= '<button class="cbd-dropdown-item cbd-screenshot" data-container-id="' . esc_attr($container_id) . '">';
+                $html .= '<i class="dashicons dashicons-camera"></i>';
+                $html .= '<span>' . esc_html($screenshot_feature['buttonText'] ?? $screenshot_feature['label'] ?? 'Screenshot') . '</span>';
+                $html .= '</button>';
+            }
+            
+            $html .= '</div>'; // Close dropdown menu
+            $html .= '</div>'; // Close selection menu
         }
         
-        // Wrap the actual content (not the header) in a collapsible container
+        // Add block header with icon and title (always top-left, visible when collapsed)
+        // Priority: Editor-entered title > Config title > Block data title
+        $block_title = '';
+        
+        // Check multiple possible attribute names for title
+        if (!empty($attributes['blockTitle'])) {
+            $block_title = $attributes['blockTitle'];
+        } elseif (!empty($attributes['title'])) {
+            $block_title = $attributes['title'];  
+        } elseif (!empty($config['blockTitle'])) {
+            $block_title = $config['blockTitle'];
+        } elseif (!empty($config['title'])) {
+            $block_title = $config['title'];
+        }
+        
+        // TEMPORARY: If no title found, use a test title
+        if (empty($block_title)) {
+            $block_title = 'Test Container Title'; // For testing
+        }
+        
+        $has_icon = !empty($features['icon']['enabled']);
+        
+        // TEMPORARY: Force icon for testing if none configured
+        if (!$has_icon) {
+            $has_icon = true;
+            $features['icon'] = array(
+                'enabled' => true,
+                'value' => 'dashicons-admin-generic',
+                'color' => '#333'
+            );
+        }
+        
+        // Debug output for title
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('CBD Debug - Block title: "' . $block_title . '"');
+            error_log('CBD Debug - Config: ' . print_r($config, true));
+            error_log('CBD Debug - Attributes: ' . print_r($attributes, true));
+            error_log('CBD Debug - Has icon: ' . ($has_icon ? 'yes' : 'no'));
+        }
+        
+        // Always show header if there's a title OR icon
+        if ($has_icon || !empty($block_title)) {
+            $html .= '<div class="cbd-block-header">';
+            
+            // Icon (always top-left if enabled)
+            if ($has_icon) {
+                $icon_class = sanitize_html_class($features['icon']['value'] ?? 'dashicons-admin-generic');
+                $icon_color = !empty($features['icon']['color']) ? 
+                    'style="color: ' . esc_attr($features['icon']['color']) . '"' : '';
+                $html .= '<span class="cbd-header-icon" ' . $icon_color . '>';
+                $html .= '<i class="dashicons ' . $icon_class . '"></i>';
+                $html .= '</span>';
+            }
+            
+            // Block title (next to icon, responsive) - ALWAYS if not empty
+            if (!empty($block_title)) {
+                $html .= '<h3 class="cbd-block-title">' . esc_html($block_title) . '</h3>';
+            }
+            
+            $html .= '</div>'; // Close block header
+        }
+        
+        // Wrap the actual content in a collapsible container
         $html .= '<div class="cbd-container-content">';
-        
-        // Add numbering inside the content block
-        if (!empty($features['numbering']['enabled'])) {
-            // Numbering will be handled by JavaScript after rendering
-        }
         
         // Actual content
         $html .= $content;
@@ -647,6 +741,7 @@ class CBD_Consolidated_Frontend {
         
         $html .= '</div>'; // Close .cbd-container-block
         $html .= '</div>'; // Close .cbd-content wrapper
+        $html .= '</div>'; // Close .cbd-transparent-wrapper
         $html .= '</div>'; // Close .cbd-container
         
         return $html;
@@ -673,6 +768,75 @@ class CBD_Consolidated_Frontend {
         
         if (!empty($styles['text']['color'])) {
             $css_rules[] = 'color: ' . esc_attr($styles['text']['color']);
+        }
+        
+        // Typography styles
+        if (!empty($styles['typography'])) {
+            $typography = $styles['typography'];
+            if (!empty($typography['fontSize'])) {
+                $css_rules[] = 'font-size: ' . intval($typography['fontSize']) . 'px';
+            }
+            if (!empty($typography['fontWeight'])) {
+                $css_rules[] = 'font-weight: ' . esc_attr($typography['fontWeight']);
+            }
+            if (!empty($typography['lineHeight'])) {
+                $css_rules[] = 'line-height: ' . floatval($typography['lineHeight']);
+            }
+            if (!empty($typography['fontFamily'])) {
+                $css_rules[] = 'font-family: ' . esc_attr($typography['fontFamily']);
+            }
+        }
+        
+        // Spacing (padding/margin) - check multiple locations
+        if (!empty($styles['spacing'])) {
+            $spacing = $styles['spacing'];
+            if (!empty($spacing['padding'])) {
+                $padding = $spacing['padding'];
+                $css_rules[] = sprintf('padding: %dpx %dpx %dpx %dpx',
+                    intval($padding['top'] ?? 0),
+                    intval($padding['right'] ?? 0),
+                    intval($padding['bottom'] ?? 0),
+                    intval($padding['left'] ?? 0)
+                );
+            }
+        }
+        
+        // Direct padding from styles (from logs we see padding at root level)
+        if (!empty($styles['padding'])) {
+            $padding = $styles['padding'];
+            $css_rules[] = sprintf('padding: %dpx %dpx %dpx %dpx',
+                intval($padding['top'] ?? 0),
+                intval($padding['right'] ?? 0),
+                intval($padding['bottom'] ?? 0),
+                intval($padding['left'] ?? 0)
+            );
+        }
+            if (!empty($spacing['margin'])) {
+                $margin = $spacing['margin'];
+                $css_rules[] = sprintf('margin: %dpx %dpx %dpx %dpx',
+                    intval($margin['top'] ?? 0),
+                    intval($margin['right'] ?? 0),
+                    intval($margin['bottom'] ?? 0),
+                    intval($margin['left'] ?? 0)
+                );
+            }
+        }
+        
+        // Box shadow
+        if (!empty($styles['shadow'])) {
+            $shadow = $styles['shadow'];
+            if (!empty($shadow['enabled'])) {
+                $x = intval($shadow['x'] ?? 0);
+                $y = intval($shadow['y'] ?? 4);
+                $blur = intval($shadow['blur'] ?? 8);
+                $spread = intval($shadow['spread'] ?? 0);
+                $color = $shadow['color'] ?? 'rgba(0,0,0,0.1)';
+                $inset = !empty($shadow['inset']) ? 'inset ' : '';
+                
+                $css_rules[] = sprintf('box-shadow: %s%dpx %dpx %dpx %dpx %s',
+                    $inset, $x, $y, $blur, $spread, esc_attr($color)
+                );
+            }
         }
         
         // Border styles
@@ -959,5 +1123,46 @@ class CBD_Consolidated_Frontend {
         
         $positioning = $features['positioning'];
         return !empty($positioning['outsideElements']);
+    }
+    
+    /**
+     * Get numbering counter for current container
+     */
+    private function get_numbering_counter() {
+        static $counter = 0;
+        return ++$counter;
+    }
+    
+    /**
+     * Format number based on format type
+     */
+    private function format_number($number, $format) {
+        switch ($format) {
+            case 'roman':
+                return $this->int_to_roman($number);
+            case 'alpha':
+                return chr(64 + $number); // A, B, C...
+            case 'numeric':
+            default:
+                return (string) $number;
+        }
+    }
+    
+    /**
+     * Convert integer to roman numerals
+     */
+    private function int_to_roman($number) {
+        $map = array('M' => 1000, 'CM' => 900, 'D' => 500, 'CD' => 400, 'C' => 100, 'XC' => 90, 'L' => 50, 'XL' => 40, 'X' => 10, 'IX' => 9, 'V' => 5, 'IV' => 4, 'I' => 1);
+        $result = '';
+        while ($number > 0) {
+            foreach ($map as $roman => $int) {
+                if($number >= $int) {
+                    $number -= $int;
+                    $result .= $roman;
+                    break;
+                }
+            }
+        }
+        return $result;
     }
 }

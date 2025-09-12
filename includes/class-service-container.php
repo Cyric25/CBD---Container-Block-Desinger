@@ -211,10 +211,10 @@ class CBD_Service_Container {
             return new \ContainerBlockDesigner\API\APIManager();
         });
         
-        // Consolidated frontend - Use existing singleton
-        $this->register('consolidated_frontend', function($container, $config) {
-            return CBD_Consolidated_Frontend::get_instance();
-        });
+        // Consolidated frontend - DISABLED (Master Renderer takes over)
+        // $this->register('consolidated_frontend', function($container, $config) {
+        //     return CBD_Consolidated_Frontend::get_instance();
+        // });
         
         // Admin - Use existing singleton
         $this->register('admin', function($container, $config) {

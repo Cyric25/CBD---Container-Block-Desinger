@@ -377,7 +377,8 @@ class CBD_Blocks_Manager {
      * Constructor
      */
     public function __construct() {
-        add_action('init', array($this, 'register_blocks'));
+        // DISABLED - Master Renderer handles block registration
+        // add_action('init', array($this, 'register_blocks'));
         add_action('enqueue_block_editor_assets', array($this, 'enqueue_block_assets'));
         add_filter('block_categories_all', array($this, 'add_block_category'));
     }
