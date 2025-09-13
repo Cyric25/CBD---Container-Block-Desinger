@@ -649,25 +649,21 @@ class CBD_Block_Registration {
         // DEBUG: Always show icon for testing until we fix feature detection
         $has_icon = true; // Force icon display for now
         
-        // Always show header if there's a title OR icon
+        // Always show header if there's a title OR icon - inline layout
         if ($has_icon || !empty($block_title)) {
-            $html .= '<div class="cbd-block-header">';
+            $html .= '<div class="cbd-block-header" style="margin-bottom: 15px; padding: 12px 20px;">';
             
-            // Icon (always top-left if enabled)
+            // Icon (always visible, inline with title)
             if ($has_icon) {
                 $icon_class = sanitize_html_class($features['icon']['value'] ?? 'dashicons-admin-generic');
-                $icon_color = !empty($features['icon']['color']) ? 
-                    'style="color: ' . esc_attr($features['icon']['color']) . '"' : '';
+                $icon_color = !empty($features['icon']['color']) ? $features['icon']['color'] : 'inherit';
                     
-                // Add inline styles to ensure visibility
-                $icon_style = "position: absolute; top: 12px; left: 12px; font-size: 20px; z-index: 10;" . ($icon_color ? " " . substr($icon_color, 7, -1) : "");
-                
-                $html .= '<span class="cbd-header-icon" style="' . esc_attr($icon_style) . '">';
+                $html .= '<span class="cbd-header-icon" style="color: ' . esc_attr($icon_color) . ';">';
                 $html .= '<i class="dashicons ' . $icon_class . '"></i>';
                 $html .= '</span>';
             }
             
-            // Block title (next to icon, responsive) - ALWAYS if not empty
+            // Block title (inline next to icon) - ALWAYS if not empty
             if (!empty($block_title)) {
                 $html .= '<h3 class="cbd-block-title">' . esc_html($block_title) . '</h3>';
             }

@@ -722,80 +722,12 @@ if ($block_id > 0) {
                                         <button type="button" class="cbd-open-icon-picker button"><?php _e('Icon ändern', 'container-block-designer'); ?></button>
                                     </div>
                                     
-                                    <!-- Icon Position Controls -->
-                                    <div class="cbd-icon-position-controls" style="margin-top: 15px;">
-                                        <label><?php _e('Icon Position:', 'container-block-designer'); ?></label>
-                                        <div class="cbd-position-grid">
-                                            <div class="cbd-position-row">
-                                                <label class="cbd-position-option">
-                                                    <input type="radio" name="features[icon][position]" value="top-left" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'top-left'); ?>>
-                                                    <span class="cbd-position-visual">
-                                                        <span class="cbd-position-indicator top-left"></span>
-                                                    </span>
-                                                    <span class="cbd-position-label"><?php _e('Oben Links', 'container-block-designer'); ?></span>
-                                                </label>
-                                                <label class="cbd-position-option">
-                                                    <input type="radio" name="features[icon][position]" value="top-center" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'top-center'); ?>>
-                                                    <span class="cbd-position-visual">
-                                                        <span class="cbd-position-indicator top-center"></span>
-                                                    </span>
-                                                    <span class="cbd-position-label"><?php _e('Oben Mitte', 'container-block-designer'); ?></span>
-                                                </label>
-                                                <label class="cbd-position-option">
-                                                    <input type="radio" name="features[icon][position]" value="top-right" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'top-right'); ?>>
-                                                    <span class="cbd-position-visual">
-                                                        <span class="cbd-position-indicator top-right"></span>
-                                                    </span>
-                                                    <span class="cbd-position-label"><?php _e('Oben Rechts', 'container-block-designer'); ?></span>
-                                                </label>
-                                            </div>
-                                            <div class="cbd-position-row">
-                                                <label class="cbd-position-option">
-                                                    <input type="radio" name="features[icon][position]" value="middle-left" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'middle-left'); ?>>
-                                                    <span class="cbd-position-visual">
-                                                        <span class="cbd-position-indicator middle-left"></span>
-                                                    </span>
-                                                    <span class="cbd-position-label"><?php _e('Mitte Links', 'container-block-designer'); ?></span>
-                                                </label>
-                                                <label class="cbd-position-option">
-                                                    <input type="radio" name="features[icon][position]" value="middle-center" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'middle-center'); ?>>
-                                                    <span class="cbd-position-visual">
-                                                        <span class="cbd-position-indicator middle-center"></span>
-                                                    </span>
-                                                    <span class="cbd-position-label"><?php _e('Mitte', 'container-block-designer'); ?></span>
-                                                </label>
-                                                <label class="cbd-position-option">
-                                                    <input type="radio" name="features[icon][position]" value="middle-right" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'middle-right'); ?>>
-                                                    <span class="cbd-position-visual">
-                                                        <span class="cbd-position-indicator middle-right"></span>
-                                                    </span>
-                                                    <span class="cbd-position-label"><?php _e('Mitte Rechts', 'container-block-designer'); ?></span>
-                                                </label>
-                                            </div>
-                                            <div class="cbd-position-row">
-                                                <label class="cbd-position-option">
-                                                    <input type="radio" name="features[icon][position]" value="bottom-left" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'bottom-left'); ?>>
-                                                    <span class="cbd-position-visual">
-                                                        <span class="cbd-position-indicator bottom-left"></span>
-                                                    </span>
-                                                    <span class="cbd-position-label"><?php _e('Unten Links', 'container-block-designer'); ?></span>
-                                                </label>
-                                                <label class="cbd-position-option">
-                                                    <input type="radio" name="features[icon][position]" value="bottom-center" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'bottom-center'); ?>>
-                                                    <span class="cbd-position-visual">
-                                                        <span class="cbd-position-indicator bottom-center"></span>
-                                                    </span>
-                                                    <span class="cbd-position-label"><?php _e('Unten Mitte', 'container-block-designer'); ?></span>
-                                                </label>
-                                                <label class="cbd-position-option">
-                                                    <input type="radio" name="features[icon][position]" value="bottom-right" <?php checked($block['features']['icon']['position'] ?? 'top-left', 'bottom-right'); ?>>
-                                                    <span class="cbd-position-visual">
-                                                        <span class="cbd-position-indicator bottom-right"></span>
-                                                    </span>
-                                                    <span class="cbd-position-label"><?php _e('Unten Rechts', 'container-block-designer'); ?></span>
-                                                </label>
-                                            </div>
-                                        </div>
+                                    <!-- Icon is now fixed in top-left position with title -->
+                                    <div style="margin-top: 15px; padding: 10px; background: #e8f4f8; border: 1px solid #2196f3; border-radius: 4px;">
+                                        <p style="margin: 0; color: #1976d2; font-weight: 600;">
+                                            <span class="dashicons dashicons-info" style="margin-right: 5px;"></span>
+                                            <?php _e('Das Icon wird automatisch in der linken oberen Ecke neben dem Titel angezeigt.', 'container-block-designer'); ?>
+                                        </p>
                                     </div>
 
                                     <!-- Icon Picker Modal -->
