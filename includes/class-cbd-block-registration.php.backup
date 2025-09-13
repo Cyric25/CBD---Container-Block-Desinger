@@ -299,124 +299,610 @@ class CBD_Block_Registration {
             true
         );
         
-        // Fixed inline JavaScript for basic functionality
+        // Simple inline JavaScript for basic functionality only
         wp_add_inline_script('cbd-frontend-working', '
             console.log("CBD: JavaScript loading...");
             jQuery(document).ready(function($) {
                 console.log("CBD: jQuery ready - Starting CBD functionality");
+                console.log("CBD: Direct button handlers loaded - REMOVING OLD HANDLERS");
                 
-                // Remove old event handlers
-                $(document).off("click", ".cbd-collapse-toggle, .cbd-copy-text, .cbd-screenshot");
+                // REMOVE ALL EXISTING HANDLERS to prevent conflicts
+                $(document).off("click", ".cbd-collapse-toggle");
+                $(document).off("click.cbd-working", ".cbd-collapse-toggle");
                 
-                // Toggle functionality
-                $(document).on("click", ".cbd-collapse-toggle", function(e) {
+                // Direct collapse button handler - ONLY hide content, keep buttons visible
+                $(document).on("click.cbd-direct", ".cbd-collapse-toggle", function(e) {
                     e.preventDefault();
-                    e.stopPropagation();
-                    console.log("CBD: Toggle clicked");
+                    console.log("CBD: Direct collapse clicked");
                     
                     var button = $(this);
                     var container = button.closest(".cbd-container");
-                    var content = container.find(".cbd-container-content");
-                    var icon = button.find(".dashicons");
+                    var contentToHide = container.find(".cbd-container-content"); // ONLY the inner content
                     
-                    if (content.length > 0) {
-                        if (content.is(":visible")) {
-                            content.slideUp(300);
-                            icon.removeClass("dashicons-arrow-up-alt2").addClass("dashicons-arrow-down-alt2");
-                            console.log("CBD: Content collapsed");
+                    console.log("CBD: Container found:", container.length);
+                    console.log("CBD: Content to hide found:", contentToHide.length);
+                    console.log("CBD: Content currently visible:", contentToHide.is(":visible"));
+                    
+                    if (contentToHide.length > 0) {
+                        // Check current state BEFORE animation
+                        var isCurrentlyVisible = contentToHide.is(":visible");
+                        
+                        // Change button icon BEFORE animation starts
+                        if (isCurrentlyVisible) {
+                            button.html("<span class=\"dashicons dashicons-arrow-down-alt2\"></span>"); // Will be collapsed after animation
+                            console.log("CBD: Setting icon to collapsed (down arrow)");
                         } else {
-                            content.slideDown(300);
-                            icon.removeClass("dashicons-arrow-down-alt2").addClass("dashicons-arrow-up-alt2");
-                            console.log("CBD: Content expanded");
+                            button.html("<span class=\"dashicons dashicons-arrow-up-alt2\"></span>"); // Will be expanded after animation
+                            console.log("CBD: Setting icon to expanded (up arrow)");
                         }
+                        
+                        // Start the animation
+                        contentToHide.slideToggle(300, function() {
+                            console.log("CBD: Animation complete, content now visible:", $(this).is(":visible"));
+                        });
+                        
                     } else {
-                        console.log("CBD: Content element not found");
+                        console.log("CBD: No content found to collapse");
                     }
                 });
                 
-                // Copy functionality
-                $(document).on("click", ".cbd-copy-text", function(e) {
+                // Enhanced copy text handler
+                $(document).on("click.cbd-direct", ".cbd-copy-text", function(e) {
                     e.preventDefault();
-                    e.stopPropagation();
-                    console.log("CBD: Copy clicked");
+                    console.log("CBD: Direct copy clicked");
                     
                     var button = $(this);
                     var container = button.closest(".cbd-container");
-                    var content = container.find(".cbd-container-content");
+                    var contentElement = container.find(".cbd-container-content");
                     
-                    if (content.length > 0) {
-                        var textToCopy = content.text().trim();
-                        console.log("CBD: Text to copy:", textToCopy.substring(0, 50) + "...");
+                    // Get both plain text and formatted text
+                    var plainText = contentElement.text().trim();
+                    var htmlContent = contentElement.html();
+                    
+                    console.log("CBD: Text to copy:", plainText.substring(0, 100) + "...");
+                    
+                    if (!plainText) {
+                        // Visual feedback for empty content
+                        button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                        setTimeout(function() { button.html("<span class=\"dashicons dashicons-clipboard\"></span>"); }, 1000);
+                        console.log("CBD: No text found to copy");
+                        return;
+                    }
+                    
+                    // Try modern clipboard API first
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(plainText).then(function() {
+                            console.log("CBD: Text copied successfully via Clipboard API");
+                            // Visual feedback - change icon temporarily
+                            button.html("<span class=\"dashicons dashicons-yes-alt\"></span>");
+                            setTimeout(function() { button.html("<span class=\"dashicons dashicons-clipboard\"></span>"); }, 1500);
+                        }).catch(function(err) {
+                            console.log("CBD: Clipboard API failed:", err);
+                            fallbackCopy(plainText, button);
+                        });
+                    } else {
+                        console.log("CBD: Clipboard API not available, using fallback");
+                        fallbackCopy(plainText, button);
+                    }
+                });
+                
+                // Fallback copy method for older browsers
+                function fallbackCopy(text, button) {
+                    try {
+                        // Create temporary textarea
+                        var textarea = $("<textarea>");
+                        textarea.val(text);
+                        textarea.css({
+                            position: "fixed",
+                            top: "-1000px",
+                            left: "-1000px",
+                            opacity: "0"
+                        });
+                        $("body").append(textarea);
+                        textarea[0].select();
+                        textarea[0].setSelectionRange(0, 99999);
                         
-                        if (navigator.clipboard) {
-                            navigator.clipboard.writeText(textToCopy).then(function() {
-                                button.find(".dashicons").removeClass("dashicons-clipboard").addClass("dashicons-yes-alt");
-                                console.log("CBD: Copy successful");
-                                setTimeout(function() { 
-                                    button.find(".dashicons").removeClass("dashicons-yes-alt").addClass("dashicons-clipboard"); 
-                                }, 2000);
-                            }).catch(function() {
-                                console.log("CBD: Copy failed");
-                            });
+                        // Try to copy
+                        var successful = document.execCommand("copy");
+                        textarea.remove();
+                        
+                        if (successful) {
+                            console.log("CBD: Text copied successfully via execCommand");
+                            button.html("<span class=\"dashicons dashicons-yes-alt\"></span>");
+                            setTimeout(function() { button.html("<span class=\"dashicons dashicons-clipboard\"></span>"); }, 1500);
+                        } else {
+                            console.log("CBD: execCommand copy failed");
+                            button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                            setTimeout(function() { button.html("<span class=\"dashicons dashicons-clipboard\"></span>"); }, 1000);
                         }
+                    } catch (err) {
+                        console.log("CBD: Fallback copy failed:", err);
+                        button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                        setTimeout(function() { button.html("<span class=\"dashicons dashicons-clipboard\"></span>"); }, 1000);
                     }
-                });
+                }
                 
-                // Screenshot functionality
-                $(document).on("click", ".cbd-screenshot", function(e) {
+                // Enhanced screenshot handler
+                $(document).on("click.cbd-direct", ".cbd-screenshot", function(e) {
                     e.preventDefault();
-                    e.stopPropagation();
-                    console.log("CBD: Screenshot clicked");
+                    console.log("CBD: Direct screenshot clicked");
                     
                     var button = $(this);
                     var container = button.closest(".cbd-container");
-                    var content = container.find(".cbd-container-content");
+                    var contentElement = container.find(".cbd-container-block");
                     
-                    // Expand if collapsed before screenshot
-                    var wasCollapsed = !content.is(":visible");
-                    if (wasCollapsed) {
-                        content.show();
+                    // Check if html2canvas is available
+                    if (typeof html2canvas === "undefined") {
+                        console.log("CBD: html2canvas not loaded");
+                        button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                        setTimeout(function() { button.html("<span class=\"dashicons dashicons-camera\"></span>"); }, 1500);
+                        return;
                     }
                     
-                    if (typeof html2canvas !== "undefined") {
-                        button.find(".dashicons").removeClass("dashicons-camera").addClass("dashicons-update-alt");
+                    if (contentElement.length === 0) {
+                        console.log("CBD: No content found for screenshot");
+                        button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                        setTimeout(function() { button.html("<span class=\"dashicons dashicons-camera\"></span>"); }, 1500);
+                        return;
+                    }
+                    
+                    // Show loading state
+                    button.html("<span class=\"dashicons dashicons-update-alt\"></span>");
+                    console.log("CBD: Starting screenshot capture...");
+                    
+                    // Check if content is collapsed and expand if needed
+                    var contentToCheck = container.find(".cbd-container-content");
+                    var wasCollapsed = false;
+                    
+                    if (contentToCheck.length > 0 && !contentToCheck.is(":visible")) {
+                        console.log("CBD: Content is collapsed, expanding for screenshot...");
+                        wasCollapsed = true;
+                        contentToCheck.show(); // Show immediately without animation
+                    }
+                    
+                    // Temporarily hide the buttons and numbering for clean screenshot
+                    var buttonContainer = container.find(".cbd-action-buttons");
+                    var numbering = container.find(".cbd-container-number");
+                    var originalButtonDisplay = buttonContainer.css("display");
+                    var originalNumberDisplay = numbering.css("display");
+                    
+                    buttonContainer.hide();
+                    numbering.hide();
+                    
+                    // html2canvas options
+                    var options = {
+                        backgroundColor: null, // Transparent background
+                        scale: 2, // Higher quality
+                        useCORS: true,
+                        allowTaint: false,
+                        logging: false,
+                        width: contentElement.outerWidth(),
+                        height: contentElement.outerHeight(),
+                        scrollX: 0,
+                        scrollY: 0
+                    };
+                    
+                    html2canvas(contentElement[0], options).then(function(canvas) {
+                        console.log("CBD: Screenshot captured successfully");
                         
-                        // Use entire container for screenshot to include images
-                        html2canvas(container[0], {
-                            useCORS: true,
-                            allowTaint: false,
-                            scale: 1,
-                            logging: true
-                        }).then(function(canvas) {
+                        // Restore hidden elements
+                        buttonContainer.css("display", originalButtonDisplay);
+                        numbering.css("display", originalNumberDisplay);
+                        
+                        // Restore collapsed state if it was collapsed before
+                        if (wasCollapsed) {
+                            console.log("CBD: Restoring collapsed state...");
+                            contentToCheck.hide();
+                        }
+                        
+                        // Convert to blob and download
+                        canvas.toBlob(function(blob) {
+                            var url = URL.createObjectURL(blob);
+                            var timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+                            var filename = "container-block-" + timestamp + ".png";
+                            
+                            // Create download link
                             var link = document.createElement("a");
-                            link.download = "container-block-screenshot.png";
-                            link.href = canvas.toDataURL("image/png");
+                            link.download = filename;
+                            link.href = url;
                             document.body.appendChild(link);
                             link.click();
                             document.body.removeChild(link);
                             
-                            button.find(".dashicons").removeClass("dashicons-update-alt").addClass("dashicons-yes-alt");
-                            console.log("CBD: Screenshot created");
+                            // Clean up
+                            URL.revokeObjectURL(url);
                             
-                            setTimeout(function() { 
-                                button.find(".dashicons").removeClass("dashicons-yes-alt").addClass("dashicons-camera"); 
-                            }, 2000);
+                            // Success feedback
+                            button.html("<span class=\"dashicons dashicons-yes-alt\"></span>");
+                            setTimeout(function() { button.html("<span class=\"dashicons dashicons-camera\"></span>"); }, 2000);
                             
-                            // Collapse again if it was collapsed
-                            if (wasCollapsed) {
-                                content.hide();
-                            }
-                        }).catch(function(error) {
-                            console.error("CBD: Screenshot failed:", error);
-                            button.find(".dashicons").removeClass("dashicons-update-alt").addClass("dashicons-camera");
-                        });
-                    } else {
-                        console.log("CBD: html2canvas not available");
+                            console.log("CBD: Screenshot downloaded as " + filename);
+                        }, "image/png");
+                        
+                    }).catch(function(error) {
+                        console.log("CBD: Screenshot failed:", error);
+                        
+                        // Restore hidden elements
+                        buttonContainer.css("display", originalButtonDisplay);
+                        numbering.css("display", originalNumberDisplay);
+                        
+                        // Restore collapsed state if it was collapsed before
+                        if (wasCollapsed) {
+                            console.log("CBD: Error occurred, restoring collapsed state...");
+                            contentToCheck.hide();
+                        }
+                        
+                        // Error feedback
+                        button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                        setTimeout(function() { button.html("<span class=\"dashicons dashicons-camera\"></span>"); }, 1500);
+                    });
+                });
+                
+                // Add PDF Export functionality
+                cbdAddPDFExport();
+            });
+            
+            function cbdAddPDFExport() {
+                console.log("CBD: PDF Export initializing");
+                
+                var containerBlocks = $(".cbd-container");
+                console.log("CBD: Found blocks:", containerBlocks.length);
+                
+                // Force show button for testing
+                console.log("CBD: Creating PDF button");
+                
+                var btn = document.createElement("div");
+                btn.id = "cbd-pdf-export-fab";
+                btn.innerHTML = "PDF";
+                btn.style.cssText = "position:fixed;bottom:30px;right:30px;z-index:999999;background:#0073aa;color:white;border-radius:50%;width:60px;height:60px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:14px;font-weight:bold";
+                btn.title = "PDF Export";
+                
+                btn.onclick = function() {
+                    console.log("PDF clicked!");
+                    alert("PDF Export wird implementiert...");
+                    cbdShowPDFModal();
+                };
+                
+                document.body.appendChild(btn);
+                console.log("CBD: Button added to body");
+            }
+            
+            function cbdShowPDFModal() {
+                console.log("CBD: Opening PDF modal");
+                alert("PDF Modal - Funktionalität wird implementiert...");
+            }
+        ');
+                // Create modal HTML
+                var modalHTML = "
+                    <div id="cbd-pdf-modal" style="
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0,0,0,0.7);
+                        z-index: 999999;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    ">
+                        <div style="
+                            background: white;
+                            padding: 30px;
+                            border-radius: 12px;
+                            max-width: 600px;
+                            width: 90%;
+                            max-height: 80vh;
+                            overflow-y: auto;
+                            position: relative;
+                        ">
+                            <button id="cbd-pdf-close" style="
+                                position: absolute;
+                                top: 15px;
+                                right: 15px;
+                                background: none;
+                                border: none;
+                                font-size: 24px;
+                                cursor: pointer;
+                                color: #666;
+                            ">&times;</button>
+                            
+                            <h2 style="margin-top: 0; color: #0073aa;">📄 PDF Export - Container Blöcke</h2>
+                            
+                            <div style="margin: 20px 0;">
+                                <h3>Export-Optionen:</h3>
+                                <label style="display: block; margin: 10px 0;">
+                                    <input type="radio" name="cbd-pdf-style" value="text" checked> 
+                                    📝 Nur Text (keine Styles, Schwarz-Weiß)
+                                </label>
+                                <label style="display: block; margin: 10px 0;">
+                                    <input type="radio" name="cbd-pdf-style" value="visual"> 
+                                    🎨 Visuell (mit allen Styles als Bilder)
+                                </label>
+                            </div>
+                            
+                            <div style="margin: 20px 0;">
+                                <h3>Container-Blöcke auswählen:</h3>
+                                <div id="cbd-block-selection" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; border-radius: 6px;">
+                                    <!-- Block checkboxes will be inserted here -->
+                                </div>
+                                <div style="margin-top: 10px;">
+                                    <button id="cbd-select-all" style="margin-right: 10px; padding: 5px 10px; background: #0073aa; color: white; border: none; border-radius: 4px; cursor: pointer;">Alle auswählen</button>
+                                    <button id="cbd-select-none" style="padding: 5px 10px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">Alle abwählen</button>
+                                </div>
+                            </div>
+                            
+                            <div style="text-align: right; margin-top: 25px;">
+                                <button id="cbd-pdf-cancel" style="margin-right: 10px; padding: 10px 20px; background: #f1f1f1; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">Abbrechen</button>
+                                <button id="cbd-pdf-generate" style="padding: 10px 20px; background: #0073aa; color: white; border: none; border-radius: 4px; cursor: pointer;">📄 PDF erstellen</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                $("body").append(modalHTML);
+                populateBlockSelection();
+                bindModalEvents();
+            }
+            
+            function populateBlockSelection() {
+                var blockContainer = $("#cbd-block-selection");
+                var containers = $(".cbd-container");
+                
+                containers.each(function(index) {
+                    var container = $(this);
+                    var blockTitle = container.find(".cbd-block-title").text() || "Container Block " + (index + 1);
+                    var blockContent = container.find(".cbd-container-content").text().substring(0, 100) + "...";
+                    var blockId = container.attr("data-block-id") || "block-" + index;
+                    
+                    var checkboxHTML = `
+                        <label style="display: block; margin: 10px 0; padding: 10px; border: 1px solid #eee; border-radius: 4px; cursor: pointer;" class="cbd-block-checkbox">
+                            <input type="checkbox" value="${index}" checked style="margin-right: 10px;">
+                            <strong>${blockTitle}</strong><br>
+                            <small style="color: #666;">${blockContent}</small>
+                        </label>
+                    `;
+                    
+                    blockContainer.append(checkboxHTML);
+                });
+            }
+            
+            function bindModalEvents() {
+                // Close modal events
+                $("#cbd-pdf-close, #cbd-pdf-cancel").on("click", function() {
+                    $("#cbd-pdf-modal").remove();
+                });
+                
+                // Click outside modal to close
+                $("#cbd-pdf-modal").on("click", function(e) {
+                    if (e.target.id === "cbd-pdf-modal") {
+                        $(this).remove();
                     }
                 });
                 
-                console.log("CBD: Enhanced functionality loaded");
-            });
+                // Select all/none
+                $("#cbd-select-all").on("click", function() {
+                    $("#cbd-block-selection input[type=checkbox]").prop("checked", true);
+                });
+                
+                $("#cbd-select-none").on("click", function() {
+                    $("#cbd-block-selection input[type=checkbox]").prop("checked", false);
+                });
+                
+                // Generate PDF
+                $("#cbd-pdf-generate").on("click", function() {
+                    generatePDF();
+                });
+            }
+            
+            function generatePDF() {
+                var styleMode = $("input[name=cbd-pdf-style]:checked").val();
+                var selectedBlocks = [];
+                
+                $("#cbd-block-selection input[type=checkbox]:checked").each(function() {
+                    var blockIndex = parseInt($(this).val());
+                    selectedBlocks.push(blockIndex);
+                });
+                
+                if (selectedBlocks.length === 0) {
+                    alert("Bitte wählen Sie mindestens einen Block aus!");
+                    return;
+                }
+                
+                // Show loading state
+                $("#cbd-pdf-generate").html("📄 Erstelle PDF...").prop("disabled", true);
+                
+                // Check if jsPDF is available
+                if (typeof window.jsPDF === "undefined") {
+                    alert("PDF-Library nicht geladen. Bitte Seite neu laden.");
+                    return;
+                }
+                
+                console.log("CBD: Starting PDF generation...");
+                console.log("CBD: Style mode:", styleMode);
+                console.log("CBD: Selected blocks:", selectedBlocks);
+                
+                createPDFFromBlocks(selectedBlocks, styleMode);
+            }
+            
+            async function createPDFFromBlocks(selectedBlocks, styleMode) {
+                try {
+                    const { jsPDF } = window.jsPDF;
+                    const pdf = new jsPDF({
+                        orientation: "portrait",
+                        unit: "mm",
+                        format: "a4"
+                    });
+                    
+                    var containers = $(".cbd-container");
+                    var pageHeight = pdf.internal.pageSize.height;
+                    var currentY = 20;
+                    var pageMargin = 20;
+                    var maxWidth = pdf.internal.pageSize.width - (pageMargin * 2);
+                    
+                    // Add title
+                    pdf.setFontSize(20);
+                    pdf.text("Container Blöcke Export", pageMargin, currentY);
+                    currentY += 15;
+                    
+                    pdf.setFontSize(10);
+                    var exportType = styleMode === "visual" ? "(Visuell)" : "(Nur Text)";
+                    pdf.text("Exportiert am: " + new Date().toLocaleDateString("de-DE") + " " + exportType, pageMargin, currentY);
+                    currentY += 20;
+                    
+                    for (let i = 0; i < selectedBlocks.length; i++) {
+                        const blockIndex = selectedBlocks[i];
+                        const container = $(containers[blockIndex]);
+                        
+                        // Check if we need a new page
+                        if (currentY > pageHeight - 40) {
+                            pdf.addPage();
+                            currentY = 20;
+                        }
+                        
+                        if (styleMode === "visual") {
+                            currentY = await addBlockToPDFVisual(pdf, container, currentY, pageMargin, maxWidth, blockIndex + 1);
+                        } else {
+                            currentY = await addBlockToPDFText(pdf, container, currentY, pageMargin, maxWidth, blockIndex + 1);
+                        }
+                    }
+                    
+                    // Generate filename with timestamp
+                    var timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+                    var stylePrefix = styleMode === "visual" ? "visual" : "text";
+                    var filename = `container-blocks-${stylePrefix}-${timestamp}.pdf`;
+                    
+                    // Save PDF
+                    pdf.save(filename);
+                    
+                    // Close modal
+                    $("#cbd-pdf-modal").remove();
+                    
+                    console.log("CBD: PDF generated successfully:", filename);
+                    
+                } catch (error) {
+                    console.error("CBD: PDF generation failed:", error);
+                    alert("Fehler beim Erstellen des PDFs: " + error.message);
+                } finally {
+                    $("#cbd-pdf-generate").html("📄 PDF erstellen").prop("disabled", false);
+                }
+            }
+            
+            // Text-only PDF export (no styling)
+            async function addBlockToPDFText(pdf, container, startY, pageMargin, maxWidth, blockNumber) {
+                // Block header
+                pdf.setFontSize(14);
+                pdf.text(`Block ${blockNumber}`, pageMargin, startY);
+                
+                var currentY = startY + 10;
+                
+                // Block title
+                var blockTitle = container.find(".cbd-block-title").text();
+                if (blockTitle) {
+                    pdf.setFontSize(12);
+                    pdf.text(`Titel: ${blockTitle}`, pageMargin, currentY);
+                    currentY += 8;
+                }
+                
+                // Block content - clean text only
+                var blockContent = container.find(".cbd-container-content").text().trim();
+                if (blockContent) {
+                    pdf.setFontSize(10);
+                    
+                    // Split text into lines that fit the page width
+                    var lines = pdf.splitTextToSize(blockContent, maxWidth);
+                    
+                    // Add each line
+                    for (let line of lines) {
+                        if (currentY > pdf.internal.pageSize.height - 20) {
+                            pdf.addPage();
+                            currentY = 20;
+                        }
+                        pdf.text(line, pageMargin, currentY);
+                        currentY += 6;
+                    }
+                }
+                
+                // Add separator line
+                pdf.setDrawColor(200);
+                pdf.line(pageMargin, currentY + 5, pdf.internal.pageSize.width - pageMargin, currentY + 5);
+                
+                return currentY + 15;
+            }
+            
+            // Visual PDF export (with styles as images)
+            async function addBlockToPDFVisual(pdf, container, startY, pageMargin, maxWidth, blockNumber) {
+                console.log("CBD: Processing visual block", blockNumber);
+                
+                try {
+                    // Temporarily hide buttons and numbering for clean capture
+                    var buttonContainer = container.find(".cbd-action-buttons");
+                    var numbering = container.find(".cbd-container-number");
+                    var originalButtonDisplay = buttonContainer.css("display");
+                    var originalNumberDisplay = numbering.css("display");
+                    
+                    buttonContainer.hide();
+                    numbering.hide();
+                    
+                    // Get the content block for screenshot
+                    var contentElement = container.find(".cbd-container-block")[0];
+                    
+                    if (!contentElement) {
+                        console.log("CBD: No content element found, falling back to text");
+                        return await addBlockToPDFText(pdf, container, startY, pageMargin, maxWidth, blockNumber);
+                    }
+                    
+                    // Capture the block as image
+                    const canvas = await html2canvas(contentElement, {
+                        backgroundColor: null,
+                        scale: 1,
+                        useCORS: true,
+                        allowTaint: false,
+                        logging: false,
+                        width: contentElement.offsetWidth,
+                        height: contentElement.offsetHeight
+                    });
+                    
+                    // Restore hidden elements
+                    buttonContainer.css("display", originalButtonDisplay);
+                    numbering.css("display", originalNumberDisplay);
+                    
+                    // Convert canvas to data URL
+                    var imageData = canvas.toDataURL("image/png");
+                    
+                    // Calculate image dimensions for PDF
+                    var imgWidth = maxWidth;
+                    var imgHeight = (canvas.height * maxWidth) / canvas.width;
+                    
+                    // Check if image fits on current page
+                    if (startY + imgHeight > pdf.internal.pageSize.height - 20) {
+                        pdf.addPage();
+                        startY = 20;
+                    }
+                    
+                    // Add block number
+                    pdf.setFontSize(12);
+                    pdf.text(`Block ${blockNumber}`, pageMargin, startY);
+                    startY += 10;
+                    
+                    // Add image to PDF
+                    pdf.addImage(imageData, "PNG", pageMargin, startY, imgWidth, imgHeight);
+                    
+                    return startY + imgHeight + 15;
+                    
+                } catch (error) {
+                    console.error("CBD: Visual capture failed for block", blockNumber, error);
+                    
+                    // Restore hidden elements
+                    var buttonContainer = container.find(".cbd-action-buttons");
+                    var numbering = container.find(".cbd-container-number");
+                    buttonContainer.show();
+                    numbering.show();
+                    
+                    // Fallback to text export
+                    return await addBlockToPDFText(pdf, container, startY, pageMargin, maxWidth, blockNumber);
+                }
+            }
         ');
     }
     
@@ -429,38 +915,11 @@ class CBD_Block_Registration {
             return;
         }
         
-        // jQuery, html2canvas und jsPDF einbinden
-        wp_enqueue_script('jquery');
-        
-        wp_enqueue_script(
-            'html2canvas',
-            'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
-            array(),
-            '1.4.1',
-            true
-        );
-        
-        wp_enqueue_script(
-            'jspdf',
-            'https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js',
-            array(),
-            '2.5.1',
-            true
-        );
-        
-        wp_enqueue_script(
-            'cbd-pdf-export',
-            CBD_PLUGIN_URL . 'assets/js/pdf-export.js',
-            array('jquery', 'jspdf'),
-            CBD_VERSION,
-            true
-        );
-        
         wp_enqueue_script(
             'cbd-frontend-working',
-            '',
-            array('jquery', 'html2canvas'),
-            CBD_VERSION . '-' . time(),
+            CBD_PLUGIN_URL . 'assets/js/frontend-working.js',
+            array('jquery'),
+            CBD_VERSION . '-' . time(), // Force cache bust
             true
         );
         
@@ -482,9 +941,26 @@ class CBD_Block_Registration {
      * Prüfen ob interaktive Features vorhanden sind
      */
     private function has_interactive_features() {
-        // Always return true since we now always render the action buttons
-        // The buttons are displayed for all container blocks
-        return true;
+        global $wpdb;
+        
+        // Cache prüfen
+        $cache_key = 'cbd_has_interactive_features';
+        $has_features = wp_cache_get($cache_key);
+        
+        if (false === $has_features) {
+            // Prüfe ob irgendein Block interaktive Features hat
+            $result = $wpdb->get_var(
+                "SELECT COUNT(*) FROM " . CBD_TABLE_BLOCKS . " 
+                 WHERE status = 'active' 
+                 AND (features LIKE '%copyText%' 
+                      OR features LIKE '%screenshot%')"
+            );
+            
+            $has_features = $result > 0;
+            wp_cache_set($cache_key, $has_features, '', HOUR_IN_SECONDS);
+        }
+        
+        return $has_features;
     }
     
     /**
@@ -720,16 +1196,6 @@ class CBD_Block_Registration {
         $html .= '</div>'; // Close .cbd-container-block
         $html .= '</div>'; // Close .cbd-content
         $html .= '</div>'; // Close .cbd-container
-        
-        // Add separate JavaScript file and required libraries
-        static $js_added = false;
-        if (!$js_added) {
-            // Load robust jsPDF loader with fallbacks
-            $html .= '<script src="' . CBD_PLUGIN_URL . 'assets/js/jspdf-loader.js?v=' . time() . '"></script>';
-            // Load our custom JavaScript
-            $html .= '<script src="' . CBD_PLUGIN_URL . 'assets/js/container-blocks-inline.js?v=' . time() . '"></script>';
-            $js_added = true;
-        }
         
         return $html;
     }
