@@ -227,85 +227,132 @@ if (typeof jQuery !== 'undefined') {
                     
                     console.log("CBD: Found " + containerBlocks.length + " container blocks with content");
                     
-                    // Debug: Log filtered containers
-                    containerBlocks.each(function(index) {
-                        console.log("CBD: Valid Container " + (index + 1) + " - Classes: " + this.className + ", ID: " + this.id);
-                        console.log("CBD: Valid Container " + (index + 1) + " - Title: " + $(this).find('.cbd-block-title').text());
-                    });
-                    
                     if (containerBlocks.length === 0) {
                         alert("Keine sichtbaren Container-Blöcke zum Exportieren gefunden.");
                         return;
                     }
                     
-                    // Use the global PDF export function loaded by jspdf-loader.js
-                    if (typeof window.cbdPDFExport === 'function') {
-                        console.log("CBD: Using cbdPDFExport function");
-                        var success = window.cbdPDFExport(containerBlocks);
-                        if (success) {
-                            console.log("CBD: PDF export completed successfully");
-                        }
-                    } else {
-                        console.log("CBD: cbdPDFExport not available, checking jsPDF directly...");
-                        
-                        // Fallback to direct jsPDF if the loader hasn't finished
-                        if (typeof window.jsPDF !== 'undefined' || typeof jsPDF !== 'undefined') {
-                            try {
-                                var pdf;
-                                if (window.jsPDF && window.jsPDF.jsPDF) {
-                                    pdf = new window.jsPDF.jsPDF();
-                                } else if (window.jsPDF) {
-                                    pdf = new window.jsPDF();
-                                } else {
-                                    pdf = new jsPDF();
-                                }
-                                
-                                // Generate PDF manually
-                                pdf.setFontSize(20);
-                                pdf.text("Container Blöcke Export", 20, 30);
-                                
-                                pdf.setFontSize(12);
-                                pdf.text("Exportiert am: " + new Date().toLocaleDateString("de-DE"), 20, 50);
-                                
-                                var y = 70;
-                                containerBlocks.each(function(index) {
-                                    if (y > 250) {
-                                        pdf.addPage();
-                                        y = 30;
-                                    }
-                                    
-                                    var blockTitle = $(this).find(".cbd-block-title").text() || "Block " + (index + 1);
-                                    var blockContent = $(this).find(".cbd-container-content").text().substring(0, 200);
-                                    
-                                    pdf.setFontSize(14);
-                                    pdf.text("Block " + (index + 1) + ": " + blockTitle, 20, y);
-                                    y += 10;
-                                    
-                                    pdf.setFontSize(10);
-                                    var lines = pdf.splitTextToSize(blockContent, 170);
-                                    for (var i = 0; i < lines.length && i < 5; i++) {
-                                        pdf.text(lines[i], 20, y);
-                                        y += 6;
-                                    }
-                                    
-                                    y += 15;
-                                });
-                                
-                                var filename = "container-blocks-" + new Date().toISOString().slice(0, 10) + ".pdf";
-                                pdf.save(filename);
-                                
-                                console.log("CBD: PDF saved via fallback: " + filename);
-                                
-                            } catch (error) {
-                                console.error("CBD: PDF fallback failed:", error);
-                                alert("PDF-Export fehlgeschlagen. Bitte versuchen Sie es erneut oder laden Sie die Seite neu.");
-                            }
-                        } else {
-                            console.log("CBD: No PDF export method available");
-                            alert("PDF-Export nicht verfügbar. Bitte laden Sie die Seite neu und versuchen Sie es erneut.");
-                        }
-                    }
+                    // Show PDF options modal instead of direct export
+                    showPDFOptionsModal(containerBlocks);
                 });
+                
+                // PDF Options Modal Function
+                function showPDFOptionsModal(containerBlocks) {
+                    // Remove existing modal if any
+                    $('#cbd-pdf-modal').remove();
+                    
+                    var modalHtml = '<div id="cbd-pdf-modal" style="' +
+                        'position: fixed; top: 0; left: 0; width: 100%; height: 100%; ' +
+                        'background: rgba(0,0,0,0.7); z-index: 999999; display: flex; ' +
+                        'align-items: center; justify-content: center;">' +
+                        '<div style="background: white; border-radius: 12px; padding: 30px; ' +
+                        'max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; ' +
+                        'box-shadow: 0 20px 40px rgba(0,0,0,0.3);">' +
+                        '<h2 style="margin: 0 0 20px 0; color: #333; font-size: 24px;">📄 PDF Export Optionen</h2>' +
+                        '<div style="margin-bottom: 20px;">' +
+                            '<h3 style="margin: 0 0 10px 0; color: #555; font-size: 16px;">Container auswählen:</h3>' +
+                            '<div id="cbd-block-selection" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 6px;">';
+                    
+                    // Add checkboxes for each container
+                    containerBlocks.each(function(index) {
+                        var $this = $(this);
+                        var blockTitle = $this.find('.cbd-block-title').text() || 'Block ' + (index + 1);
+                        var blockNumber = index + 1;
+                        var blockId = this.id || 'block-' + blockNumber;
+                        
+                        modalHtml += '<div style="margin-bottom: 8px;">' +
+                            '<label style="display: flex; align-items: center; cursor: pointer;">' +
+                            '<input type="checkbox" checked data-block-index="' + index + '" ' +
+                            'style="margin-right: 8px; transform: scale(1.2);">' +
+                            '<span style="font-weight: bold; margin-right: 8px;">' + blockNumber + '.</span>' +
+                            '<span>' + blockTitle + '</span>' +
+                            '</label>' +
+                            '</div>';
+                    });
+                    
+                    modalHtml += '</div></div>' +
+                        '<div style="margin-bottom: 20px;">' +
+                            '<h3 style="margin: 0 0 10px 0; color: #555; font-size: 16px;">Export Optionen:</h3>' +
+                            '<div style="margin-bottom: 10px;">' +
+                                '<label style="display: flex; align-items: center; cursor: pointer;">' +
+                                '<input type="radio" name="pdf-mode" value="visual" checked ' +
+                                'style="margin-right: 8px; transform: scale(1.2);">' +
+                                '<span>🎨 Visuell (mit Farben und Styling)</span>' +
+                                '</label>' +
+                            '</div>' +
+                            '<div style="margin-bottom: 10px;">' +
+                                '<label style="display: flex; align-items: center; cursor: pointer;">' +
+                                '<input type="radio" name="pdf-mode" value="print" ' +
+                                'style="margin-right: 8px; transform: scale(1.2);">' +
+                                '<span>🖨️ Druck-optimiert (transparenter Hintergrund)</span>' +
+                                '</label>' +
+                            '</div>' +
+                            '<div style="margin-bottom: 10px;">' +
+                                '<label style="display: flex; align-items: center; cursor: pointer;">' +
+                                '<input type="radio" name="pdf-mode" value="text" ' +
+                                'style="margin-right: 8px; transform: scale(1.2);">' +
+                                '<span>📝 Nur Text (kleiste Dateigröße)</span>' +
+                                '</label>' +
+                            '</div>' +
+                        '</div>' +
+                        '<div style="margin-bottom: 20px;">' +
+                            '<h3 style="margin: 0 0 10px 0; color: #555; font-size: 16px;">Qualität:</h3>' +
+                            '<select id="cbd-quality-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">' +
+                                '<option value="1">Niedrig (schnell, kleine Datei)</option>' +
+                                '<option value="1.5" selected>Standard</option>' +
+                                '<option value="2">Hoch (langsam, große Datei)</option>' +
+                                '<option value="2.5">Sehr hoch (sehr langsam)</option>' +
+                            '</select>' +
+                        '</div>' +
+                        '<div style="display: flex; gap: 10px; justify-content: flex-end;">' +
+                            '<button id="cbd-pdf-cancel" style="padding: 10px 20px; border: 1px solid #ddd; ' +
+                            'background: #f5f5f5; border-radius: 6px; cursor: pointer;">Abbrechen</button>' +
+                            '<button id="cbd-pdf-create" style="padding: 10px 20px; border: none; ' +
+                            'background: #0073aa; color: white; border-radius: 6px; cursor: pointer; ' +
+                            'font-weight: bold;">📄 PDF erstellen</button>' +
+                        '</div>' +
+                        '</div></div>';
+                    
+                    $('body').append(modalHtml);
+                    
+                    // Modal event handlers
+                    $('#cbd-pdf-cancel, #cbd-pdf-modal').on('click', function(e) {
+                        if (e.target === this) {
+                            $('#cbd-pdf-modal').remove();
+                        }
+                    });
+                    
+                    $('#cbd-pdf-create').on('click', function() {
+                        var selectedBlocks = [];
+                        var mode = $('input[name="pdf-mode"]:checked').val();
+                        var quality = parseFloat($('#cbd-quality-select').val());
+                        
+                        // Get selected blocks
+                        $('#cbd-block-selection input[type="checkbox"]:checked').each(function() {
+                            var index = parseInt($(this).data('block-index'));
+                            selectedBlocks.push($(containerBlocks[index]));
+                        });
+                        
+                        if (selectedBlocks.length === 0) {
+                            alert('Bitte wählen Sie mindestens einen Block aus.');
+                            return;
+                        }
+                        
+                        console.log('CBD: Creating PDF with', selectedBlocks.length, 'blocks, mode:', mode, 'quality:', quality);
+                        
+                        $('#cbd-pdf-modal').remove();
+                        
+                        // Create PDF with options
+                        if (typeof window.cbdPDFExportWithOptions === 'function') {
+                            window.cbdPDFExportWithOptions(selectedBlocks, mode, quality);
+                        } else {
+                            console.log('CBD: cbdPDFExportWithOptions not available, using fallback');
+                            if (typeof window.cbdPDFExport === 'function') {
+                                window.cbdPDFExport($(selectedBlocks));
+                            }
+                        }
+                    });
+                }
                 $("body").append(pdfButton);
                 console.log("CBD: PDF button added");
             }
