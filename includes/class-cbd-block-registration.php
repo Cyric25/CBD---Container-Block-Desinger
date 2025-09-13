@@ -867,26 +867,110 @@ class CBD_Block_Registration {
     }
     
     /**
-     * Inline-Styles generieren
+     * Inline-Styles generieren - Enhanced with all styling options
      */
     private function generate_inline_styles($styles) {
         $css = '';
         
-        // Background Color
-        if (!empty($styles['background']['color'])) {
-            $css .= 'background-color: ' . esc_attr($styles['background']['color']) . ';';
+        // Background Properties - Support admin structure
+        if (!empty($styles['background'])) {
+            $bg = $styles['background'];
+            
+            // Admin structure handles color and gradient separately
+            if (!empty($bg['type'])) {
+                if ($bg['type'] === 'color' && !empty($bg['color'])) {
+                    $css .= 'background-color: ' . esc_attr($bg['color']) . ';';
+                } elseif ($bg['type'] === 'gradient') {
+                    // Handle gradient from admin structure
+                    if (!empty($bg['gradient']['type']) && !empty($bg['gradient']['color1']) && !empty($bg['gradient']['color2'])) {
+                        $type = $bg['gradient']['type'];
+                        $color1 = $bg['gradient']['color1'];
+                        $color2 = $bg['gradient']['color2'];
+                        $angle = $bg['gradient']['angle'] ?? 45;
+                        
+                        if ($type === 'linear') {
+                            $css .= "background: linear-gradient({$angle}deg, {$color1}, {$color2});";
+                        } elseif ($type === 'radial') {
+                            $css .= "background: radial-gradient(circle, {$color1}, {$color2});";
+                        }
+                    }
+                }
+            } else {
+                // Fallback for direct background properties
+                if (!empty($bg['color'])) {
+                    $css .= 'background-color: ' . esc_attr($bg['color']) . ';';
+                }
+            }
+            
+            // Standard background properties (for future extensions)
+            if (!empty($bg['image'])) {
+                $css .= 'background-image: url(' . esc_url($bg['image']) . ');';
+            }
+            
+            if (!empty($bg['size'])) {
+                $css .= 'background-size: ' . esc_attr($bg['size']) . ';';
+            }
+            
+            if (!empty($bg['position'])) {
+                $css .= 'background-position: ' . esc_attr($bg['position']) . ';';
+            }
+            
+            if (!empty($bg['repeat'])) {
+                $css .= 'background-repeat: ' . esc_attr($bg['repeat']) . ';';
+            }
         }
         
-        // Text Color
-        if (!empty($styles['text']['color'])) {
-            $css .= 'color: ' . esc_attr($styles['text']['color']) . ';';
+        // Text Properties
+        if (!empty($styles['text'])) {
+            $text = $styles['text'];
+            
+            // Text Color
+            if (!empty($text['color'])) {
+                $css .= 'color: ' . esc_attr($text['color']) . ';';
+            }
+            
+            // Text Alignment
+            if (!empty($text['alignment'])) {
+                $css .= 'text-align: ' . esc_attr($text['alignment']) . ';';
+            }
+            
+            // Font Size
+            if (!empty($text['fontSize'])) {
+                $css .= 'font-size: ' . esc_attr($text['fontSize']) . ';';
+            }
+            
+            // Font Weight
+            if (!empty($text['fontWeight'])) {
+                $css .= 'font-weight: ' . esc_attr($text['fontWeight']) . ';';
+            }
+            
+            // Font Family
+            if (!empty($text['fontFamily'])) {
+                $css .= 'font-family: ' . esc_attr($text['fontFamily']) . ';';
+            }
+            
+            // Line Height
+            if (!empty($text['lineHeight'])) {
+                $css .= 'line-height: ' . esc_attr($text['lineHeight']) . ';';
+            }
+            
+            // Letter Spacing
+            if (!empty($text['letterSpacing'])) {
+                $css .= 'letter-spacing: ' . esc_attr($text['letterSpacing']) . ';';
+            }
+            
+            // Text Transform
+            if (!empty($text['textTransform'])) {
+                $css .= 'text-transform: ' . esc_attr($text['textTransform']) . ';';
+            }
+            
+            // Text Decoration
+            if (!empty($text['textDecoration'])) {
+                $css .= 'text-decoration: ' . esc_attr($text['textDecoration']) . ';';
+            }
         }
         
-        // Text Alignment
-        if (!empty($styles['text']['alignment'])) {
-            $css .= 'text-align: ' . esc_attr($styles['text']['alignment']) . ';';
-        }
-        
+        // Spacing Properties
         // Padding
         if (!empty($styles['padding'])) {
             if (is_array($styles['padding'])) {
@@ -900,25 +984,337 @@ class CBD_Block_Registration {
             }
         }
         
-        // Border
+        // Margin
+        if (!empty($styles['margin'])) {
+            if (is_array($styles['margin'])) {
+                $top = $styles['margin']['top'] ?? 0;
+                $right = $styles['margin']['right'] ?? 0;
+                $bottom = $styles['margin']['bottom'] ?? 0;
+                $left = $styles['margin']['left'] ?? 0;
+                $css .= "margin: {$top}px {$right}px {$bottom}px {$left}px;";
+            } else {
+                $css .= 'margin: ' . esc_attr($styles['margin']) . ';';
+            }
+        }
+        
+        // Border Properties
         if (!empty($styles['border'])) {
             $border = $styles['border'];
             
-            // Border width, style, color
+            // Border width, style, color (combined)
             if (!empty($border['width']) && !empty($border['style']) && !empty($border['color'])) {
                 $width = $border['width'] . 'px';
                 $style = esc_attr($border['style']);
                 $color = esc_attr($border['color']);
                 $css .= "border: {$width} {$style} {$color};";
+            } else {
+                // Individual border properties
+                if (!empty($border['width'])) {
+                    $css .= 'border-width: ' . esc_attr($border['width']) . 'px;';
+                }
+                if (!empty($border['style'])) {
+                    $css .= 'border-style: ' . esc_attr($border['style']) . ';';
+                }
+                if (!empty($border['color'])) {
+                    $css .= 'border-color: ' . esc_attr($border['color']) . ';';
+                }
             }
             
             // Border radius
             if (!empty($border['radius'])) {
                 $css .= 'border-radius: ' . esc_attr($border['radius']) . 'px;';
             }
+            
+            // Individual border sides
+            $sides = ['top', 'right', 'bottom', 'left'];
+            foreach ($sides as $side) {
+                if (!empty($border[$side])) {
+                    $sideProps = $border[$side];
+                    if (!empty($sideProps['width']) && !empty($sideProps['style']) && !empty($sideProps['color'])) {
+                        $css .= "border-{$side}: {$sideProps['width']}px {$sideProps['style']} {$sideProps['color']};";
+                    }
+                }
+            }
+        }
+        
+        // Box Shadow - Support both new and admin data structures
+        $shadowValues = [];
+        
+        // New structure: boxShadow array
+        if (!empty($styles['boxShadow'])) {
+            $shadows = $styles['boxShadow'];
+            if (is_array($shadows)) {
+                foreach ($shadows as $shadow) {
+                    if (is_array($shadow)) {
+                        $offsetX = $shadow['offsetX'] ?? 0;
+                        $offsetY = $shadow['offsetY'] ?? 0;
+                        $blurRadius = $shadow['blurRadius'] ?? 0;
+                        $spreadRadius = $shadow['spreadRadius'] ?? 0;
+                        $color = $shadow['color'] ?? 'rgba(0,0,0,0.1)';
+                        $inset = !empty($shadow['inset']) ? 'inset ' : '';
+                        $shadowValues[] = "{$inset}{$offsetX}px {$offsetY}px {$blurRadius}px {$spreadRadius}px {$color}";
+                    }
+                }
+            } else {
+                // Simple string shadow value
+                $shadowValues[] = esc_attr($shadows);
+            }
+        }
+        
+        // Admin structure: shadow.outer and shadow.inner
+        if (!empty($styles['shadow'])) {
+            $shadow = $styles['shadow'];
+            
+            // Outer shadow
+            if (!empty($shadow['outer']['enabled'])) {
+                $outer = $shadow['outer'];
+                $x = $outer['x'] ?? 0;
+                $y = $outer['y'] ?? 4;
+                $blur = $outer['blur'] ?? 6;
+                $spread = $outer['spread'] ?? 0;
+                $color = $outer['color'] ?? 'rgba(0,0,0,0.1)';
+                $shadowValues[] = "{$x}px {$y}px {$blur}px {$spread}px {$color}";
+            }
+            
+            // Inner shadow
+            if (!empty($shadow['inner']['enabled'])) {
+                $inner = $shadow['inner'];
+                $x = $inner['x'] ?? 0;
+                $y = $inner['y'] ?? 2;
+                $blur = $inner['blur'] ?? 4;
+                $spread = $inner['spread'] ?? 0;
+                $color = $inner['color'] ?? 'rgba(0,0,0,0.1)';
+                $shadowValues[] = "inset {$x}px {$y}px {$blur}px {$spread}px {$color}";
+            }
+        }
+        
+        if (!empty($shadowValues)) {
+            $css .= 'box-shadow: ' . implode(', ', $shadowValues) . ';';
+        }
+        
+        // Text Shadow
+        if (!empty($styles['textShadow'])) {
+            $css .= 'text-shadow: ' . esc_attr($styles['textShadow']) . ';';
+        }
+        
+        // Opacity
+        if (isset($styles['opacity']) && $styles['opacity'] !== '') {
+            $css .= 'opacity: ' . esc_attr($styles['opacity']) . ';';
+        }
+        
+        // Transform
+        if (!empty($styles['transform'])) {
+            $css .= 'transform: ' . esc_attr($styles['transform']) . ';';
+        }
+        
+        // Transition
+        if (!empty($styles['transition'])) {
+            $css .= 'transition: ' . esc_attr($styles['transition']) . ';';
+        }
+        
+        // Display
+        if (!empty($styles['display'])) {
+            $css .= 'display: ' . esc_attr($styles['display']) . ';';
+        }
+        
+        // Position
+        if (!empty($styles['position'])) {
+            $css .= 'position: ' . esc_attr($styles['position']) . ';';
+        }
+        
+        // Z-Index
+        if (!empty($styles['zIndex'])) {
+            $css .= 'z-index: ' . esc_attr($styles['zIndex']) . ';';
+        }
+        
+        // Width and Height
+        if (!empty($styles['width'])) {
+            $css .= 'width: ' . esc_attr($styles['width']) . ';';
+        }
+        
+        if (!empty($styles['height'])) {
+            $css .= 'height: ' . esc_attr($styles['height']) . ';';
+        }
+        
+        // Min/Max Width and Height
+        if (!empty($styles['minWidth'])) {
+            $css .= 'min-width: ' . esc_attr($styles['minWidth']) . ';';
+        }
+        
+        if (!empty($styles['maxWidth'])) {
+            $css .= 'max-width: ' . esc_attr($styles['maxWidth']) . ';';
+        }
+        
+        if (!empty($styles['minHeight'])) {
+            $css .= 'min-height: ' . esc_attr($styles['minHeight']) . ';';
+        }
+        
+        if (!empty($styles['maxHeight'])) {
+            $css .= 'max-height: ' . esc_attr($styles['maxHeight']) . ';';
+        }
+        
+        // Overflow
+        if (!empty($styles['overflow'])) {
+            $css .= 'overflow: ' . esc_attr($styles['overflow']) . ';';
+        }
+        
+        if (!empty($styles['overflowX'])) {
+            $css .= 'overflow-x: ' . esc_attr($styles['overflowX']) . ';';
+        }
+        
+        if (!empty($styles['overflowY'])) {
+            $css .= 'overflow-y: ' . esc_attr($styles['overflowY']) . ';';
+        }
+        
+        // Flexbox Properties
+        if (!empty($styles['flex'])) {
+            $flex = $styles['flex'];
+            
+            if (!empty($flex['direction'])) {
+                $css .= 'flex-direction: ' . esc_attr($flex['direction']) . ';';
+            }
+            
+            if (!empty($flex['wrap'])) {
+                $css .= 'flex-wrap: ' . esc_attr($flex['wrap']) . ';';
+            }
+            
+            if (!empty($flex['justifyContent'])) {
+                $css .= 'justify-content: ' . esc_attr($flex['justifyContent']) . ';';
+            }
+            
+            if (!empty($flex['alignItems'])) {
+                $css .= 'align-items: ' . esc_attr($flex['alignItems']) . ';';
+            }
+            
+            if (!empty($flex['alignContent'])) {
+                $css .= 'align-content: ' . esc_attr($flex['alignContent']) . ';';
+            }
+            
+            if (!empty($flex['gap'])) {
+                $css .= 'gap: ' . esc_attr($flex['gap']) . ';';
+            }
+        }
+        
+        // Grid Properties
+        if (!empty($styles['grid'])) {
+            $grid = $styles['grid'];
+            
+            if (!empty($grid['templateColumns'])) {
+                $css .= 'grid-template-columns: ' . esc_attr($grid['templateColumns']) . ';';
+            }
+            
+            if (!empty($grid['templateRows'])) {
+                $css .= 'grid-template-rows: ' . esc_attr($grid['templateRows']) . ';';
+            }
+            
+            if (!empty($grid['gap'])) {
+                $css .= 'grid-gap: ' . esc_attr($grid['gap']) . ';';
+            }
+        }
+        
+        // Special Effects from Admin Interface
+        if (!empty($styles['effects'])) {
+            $effects = $styles['effects'];
+            
+            // Glassmorphism effect
+            if (!empty($effects['glassmorphism']['enabled'])) {
+                $glass = $effects['glassmorphism'];
+                $opacity = $glass['opacity'] ?? 0.1;
+                $blur = $glass['blur'] ?? 10;
+                $saturate = $glass['saturate'] ?? 100;
+                $color = $glass['color'] ?? '#ffffff';
+                
+                // Convert color to rgba with opacity
+                $rgba_color = $this->hex_to_rgba($color, $opacity);
+                $css .= "background: {$rgba_color};";
+                $css .= "backdrop-filter: blur({$blur}px) saturate({$saturate}%);";
+                $css .= "-webkit-backdrop-filter: blur({$blur}px) saturate({$saturate}%);";
+            }
+            
+            // CSS Filters
+            if (!empty($effects['filters'])) {
+                $filters = $effects['filters'];
+                $filterValues = [];
+                
+                if (isset($filters['brightness']) && $filters['brightness'] != 100) {
+                    $filterValues[] = "brightness({$filters['brightness']}%)";
+                }
+                if (isset($filters['contrast']) && $filters['contrast'] != 100) {
+                    $filterValues[] = "contrast({$filters['contrast']}%)";
+                }
+                if (isset($filters['hue']) && $filters['hue'] != 0) {
+                    $filterValues[] = "hue-rotate({$filters['hue']}deg)";
+                }
+                
+                if (!empty($filterValues)) {
+                    $css .= 'filter: ' . implode(' ', $filterValues) . ';';
+                }
+            }
+            
+            // Neumorphism effect
+            if (!empty($effects['neumorphism']['enabled'])) {
+                $neuro = $effects['neumorphism'];
+                $style = $neuro['style'] ?? 'raised';
+                $intensity = $neuro['intensity'] ?? 10;
+                $background = $neuro['background'] ?? '#e0e0e0';
+                $distance = $neuro['distance'] ?? 15;
+                
+                $css .= "background: {$background};";
+                if ($style === 'raised') {
+                    $css .= "box-shadow: {$distance}px {$distance}px {$intensity}px rgba(0,0,0,0.2), -{$distance}px -{$distance}px {$intensity}px rgba(255,255,255,0.7);";
+                } else {
+                    $css .= "box-shadow: inset {$distance}px {$distance}px {$intensity}px rgba(0,0,0,0.2), inset -{$distance}px -{$distance}px {$intensity}px rgba(255,255,255,0.7);";
+                }
+            }
+            
+            // Animation effects
+            if (!empty($effects['animation'])) {
+                $animation = $effects['animation'];
+                $duration = $animation['duration'] ?? 300;
+                $easing = $animation['easing'] ?? 'ease';
+                
+                $css .= "transition: all {$duration}ms {$easing};";
+                
+                if (!empty($animation['origin'])) {
+                    $css .= "transform-origin: {$animation['origin']};";
+                }
+            }
+        }
+        
+        // Custom CSS Properties (CSS Variables)
+        if (!empty($styles['customProperties'])) {
+            foreach ($styles['customProperties'] as $property => $value) {
+                if (strpos($property, '--') === 0) {
+                    $css .= esc_attr($property) . ': ' . esc_attr($value) . ';';
+                }
+            }
+        }
+        
+        // Any additional custom CSS
+        if (!empty($styles['custom'])) {
+            $css .= esc_attr($styles['custom']) . ';';
         }
         
         return $css;
+    }
+    
+    /**
+     * Helper function to convert hex color to rgba
+     */
+    private function hex_to_rgba($hex, $alpha = 1) {
+        // Remove # if present
+        $hex = ltrim($hex, '#');
+        
+        // Convert hex to rgb
+        if (strlen($hex) === 3) {
+            $hex = str_repeat(substr($hex,0,1), 2) . str_repeat(substr($hex,1,1), 2) . str_repeat(substr($hex,2,1), 2);
+        }
+        
+        $r = hexdec(substr($hex, 0, 2));
+        $g = hexdec(substr($hex, 2, 2));
+        $b = hexdec(substr($hex, 4, 2));
+        
+        return "rgba({$r}, {$g}, {$b}, {$alpha})";
     }
     
     /**

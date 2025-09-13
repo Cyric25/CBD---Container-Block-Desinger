@@ -84,12 +84,16 @@
     transition: all 0.3s ease;
     word-wrap: break-word;
     overflow-wrap: break-word;
-    /* Default styling that can be overridden by themes */
+    /* Enhanced default styling that can be overridden by inline styles */
     background: #ffffff;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
     /* This is the ONLY visible container - everything else is transparent */
+    /* Support for advanced styling options */
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 /* Add top padding when header is inside content block */
@@ -575,14 +579,15 @@
     outline: none !important;
 }
 
-/* Final override: ensure wrapper has no visual properties whatsoever */
-.cbd-container:not(.debug-wrapper) {
-    all: initial !important;
-    position: relative !important;
-    margin: 2.5em 0 !important;
-    display: block !important;
-    width: 100% !important;
-    box-sizing: border-box !important;
+/* Content block styling remains as default - inline styles will naturally override */
+
+/* Wrapper styling - keep minimal and safe */
+.cbd-container {
+    position: relative;
+    margin: 2.5em 0;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 /* ============================================
