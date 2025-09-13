@@ -111,33 +111,99 @@
                                 
                                 console.log('CBD: Processing ' + containerBlocks.length + ' container blocks for PDF');
                                 
-                                containerBlocks.each(function(index) {
-                                    if (y > 250) {
+                                // Process containers one by one using html2canvas for images
+                                var processedBlocks = 0;
+                                
+                                function processNextBlock() {
+                                    if (processedBlocks >= containerBlocks.length) {
+                                        // All blocks processed, save PDF
+                                        var filename = 'container-blocks-' + new Date().toISOString().slice(0, 10) + '.pdf';
+                                        pdf.save(filename);
+                                        console.log('CBD: PDF saved successfully:', filename);
+                                        return true;
+                                    }
+                                    
+                                    var $currentBlock = $(containerBlocks[processedBlocks]);
+                                    var blockTitle = $currentBlock.find('.cbd-block-title').text() || 'Block ' + (processedBlocks + 1);
+                                    
+                                    console.log('CBD: Processing Block ' + (processedBlocks + 1) + ' - Title: "' + blockTitle + '"');
+                                    
+                                    if (y > 200) {
                                         pdf.addPage();
                                         y = 30;
                                     }
                                     
-                                    var $this = $(this);
-                                    var blockTitle = $this.find('.cbd-block-title').text() || 'Block ' + (index + 1);
-                                    var blockContent = $this.find('.cbd-container-content').text().substring(0, 200);
-                                    
-                                    console.log('CBD: Block ' + (index + 1) + ' - Title: "' + blockTitle + '", Content length: ' + blockContent.length);
-                                    console.log('CBD: Block element classes:', this.className);
-                                    console.log('CBD: Block element id:', this.id);
-                                    
+                                    // Add block title
                                     pdf.setFontSize(14);
-                                    pdf.text('Block ' + (index + 1) + ': ' + blockTitle, 20, y);
-                                    y += 10;
+                                    pdf.text('Block ' + (processedBlocks + 1) + ': ' + blockTitle, 20, y);
+                                    y += 15;
                                     
-                                    pdf.setFontSize(10);
-                                    var lines = pdf.splitTextToSize(blockContent, 170);
-                                    for (var i = 0; i < lines.length && i < 5; i++) {
-                                        pdf.text(lines[i], 20, y);
-                                        y += 6;
+                                    // Check if block has images
+                                    var images = $currentBlock.find('img');
+                                    if (images.length > 0) {
+                                        console.log('CBD: Block has ' + images.length + ' images, using html2canvas');
+                                        
+                                        // Load html2canvas if needed
+                                        if (typeof html2canvas === 'undefined') {
+                                            var script = document.createElement('script');
+                                            script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+                                            script.onload = function() {
+                                                renderBlockWithImages();
+                                            };
+                                            document.head.appendChild(script);
+                                        } else {
+                                            renderBlockWithImages();
+                                        }
+                                        
+                                        function renderBlockWithImages() {
+                                            html2canvas($currentBlock[0], {
+                                                useCORS: true,
+                                                allowTaint: false,
+                                                scale: 0.5,
+                                                logging: false
+                                            }).then(function(canvas) {
+                                                var imgData = canvas.toDataURL('image/jpeg', 0.7);
+                                                var imgWidth = 170;
+                                                var imgHeight = (canvas.height * imgWidth) / canvas.width;
+                                                
+                                                // Check if image fits on current page
+                                                if (y + imgHeight > 280) {
+                                                    pdf.addPage();
+                                                    y = 30;
+                                                }
+                                                
+                                                pdf.addImage(imgData, 'JPEG', 20, y, imgWidth, imgHeight);
+                                                y += imgHeight + 10;
+                                                
+                                                processedBlocks++;
+                                                processNextBlock();
+                                            }).catch(function(error) {
+                                                console.log('CBD: html2canvas failed for block, using text only:', error);
+                                                addTextOnly();
+                                            });
+                                        }
+                                    } else {
+                                        // No images, just add text
+                                        addTextOnly();
                                     }
                                     
-                                    y += 15;
-                                });
+                                    function addTextOnly() {
+                                        var blockContent = $currentBlock.find('.cbd-container-content').text().substring(0, 300);
+                                        pdf.setFontSize(10);
+                                        var lines = pdf.splitTextToSize(blockContent, 170);
+                                        for (var i = 0; i < Math.min(lines.length, 8); i++) {
+                                            pdf.text(lines[i], 20, y);
+                                            y += 6;
+                                        }
+                                        y += 10;
+                                        
+                                        processedBlocks++;
+                                        processNextBlock();
+                                    }
+                                }
+                                
+                                // Start processing
+                                processNextBlock();
                                 
                                 var filename = 'container-blocks-' + new Date().toISOString().slice(0, 10) + '.pdf';
                                 pdf.save(filename);

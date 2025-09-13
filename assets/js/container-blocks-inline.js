@@ -214,13 +214,23 @@ if (typeof jQuery !== 'undefined') {
                 pdfButton.on("click", function() {
                     console.log("CBD: PDF Export clicked");
                     
-                    var containerBlocks = $(".cbd-container:visible");
-                    console.log("CBD: Found " + containerBlocks.length + " visible container blocks");
+                    // Filter out empty Gutenberg containers and only include containers with actual content
+                    var containerBlocks = $(".cbd-container:visible").filter(function() {
+                        var $this = $(this);
+                        var hasTitle = $this.find('.cbd-block-title').text().trim().length > 0;
+                        var hasContent = $this.find('.cbd-container-content').text().trim().length > 0;
+                        var hasId = this.id && this.id.length > 0;
+                        
+                        // Include only containers that have either title, content, or a proper ID
+                        return hasTitle || hasContent || hasId;
+                    });
                     
-                    // Debug: Log all found containers
+                    console.log("CBD: Found " + containerBlocks.length + " container blocks with content");
+                    
+                    // Debug: Log filtered containers
                     containerBlocks.each(function(index) {
-                        console.log("CBD: Container " + (index + 1) + " - Classes: " + this.className + ", ID: " + this.id);
-                        console.log("CBD: Container " + (index + 1) + " - Title: " + $(this).find('.cbd-block-title').text());
+                        console.log("CBD: Valid Container " + (index + 1) + " - Classes: " + this.className + ", ID: " + this.id);
+                        console.log("CBD: Valid Container " + (index + 1) + " - Title: " + $(this).find('.cbd-block-title').text());
                     });
                     
                     if (containerBlocks.length === 0) {
