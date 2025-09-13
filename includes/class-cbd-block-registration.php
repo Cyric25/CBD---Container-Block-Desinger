@@ -281,23 +281,7 @@ class CBD_Block_Registration {
             true
         );
         
-        // Enqueue jsPDF for PDF generation
-        wp_enqueue_script(
-            'jspdf',
-            'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-            array(),
-            '2.5.1',
-            true
-        );
-        
-        // Enqueue PDF Export JavaScript
-        wp_enqueue_script(
-            'cbd-pdf-export',
-            CBD_PLUGIN_URL . 'assets/js/pdf-export.js',
-            array('jquery', 'jspdf'),
-            CBD_VERSION . '-' . time(),
-            true
-        );
+        // PDF Export is now handled by jspdf-loader.js with multiple CDN fallbacks
         
         // Fixed inline JavaScript for basic functionality
         wp_add_inline_script('cbd-frontend-working', '
@@ -440,21 +424,7 @@ class CBD_Block_Registration {
             true
         );
         
-        wp_enqueue_script(
-            'jspdf',
-            'https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js',
-            array(),
-            '2.5.1',
-            true
-        );
-        
-        wp_enqueue_script(
-            'cbd-pdf-export',
-            CBD_PLUGIN_URL . 'assets/js/pdf-export.js',
-            array('jquery', 'jspdf'),
-            CBD_VERSION,
-            true
-        );
+        // PDF functionality is handled by the new jspdf-loader.js system
         
         wp_enqueue_script(
             'cbd-frontend-working',
@@ -725,9 +695,9 @@ class CBD_Block_Registration {
         static $js_added = false;
         if (!$js_added) {
             // Load robust jsPDF loader with fallbacks
-            $html .= '<script src="' . CBD_PLUGIN_URL . 'assets/js/jspdf-loader.js?v=' . time() . '"></script>';
+            $html .= '<script src="' . CBD_PLUGIN_URL . 'assets/js/jspdf-loader.js?v=' . time() . mt_rand() . '"></script>';
             // Load our custom JavaScript
-            $html .= '<script src="' . CBD_PLUGIN_URL . 'assets/js/container-blocks-inline.js?v=' . time() . '"></script>';
+            $html .= '<script src="' . CBD_PLUGIN_URL . 'assets/js/container-blocks-inline.js?v=' . time() . mt_rand() . '"></script>';
             $js_added = true;
         }
         

@@ -29,9 +29,12 @@
             // Last resort - create a simple alert-based PDF export
             window.cbdPDFExport = function(containerBlocks) {
                 var content = 'PDF Export (Text-Only)\n\n';
+                var $ = window.jQuery || window.$;
+                
                 containerBlocks.each(function(index) {
-                    var title = $(this).find('.cbd-block-title').text() || 'Block ' + (index + 1);
-                    var text = $(this).find('.cbd-container-content').text().trim();
+                    var $this = $(this);
+                    var title = $this.find('.cbd-block-title').text() || 'Block ' + (index + 1);
+                    var text = $this.find('.cbd-container-content').text().trim();
                     content += 'Block ' + (index + 1) + ': ' + title + '\n';
                     content += text + '\n\n';
                 });
@@ -61,8 +64,14 @@
                         testPdf = new window.jsPDF.jsPDF();
                     } else if (window.jsPDF) {
                         testPdf = new window.jsPDF();
+                    } else if (window.jspdf && window.jspdf.jsPDF) {
+                        testPdf = new window.jspdf.jsPDF();
+                    } else if (window.jspdf) {
+                        testPdf = new window.jspdf();
                     } else if (typeof jsPDF !== 'undefined') {
                         testPdf = new jsPDF();
+                    } else if (typeof jspdf !== 'undefined') {
+                        testPdf = new jspdf();
                     }
                     
                     if (testPdf) {
@@ -75,8 +84,14 @@
                                     pdf = new window.jsPDF.jsPDF();
                                 } else if (window.jsPDF) {
                                     pdf = new window.jsPDF();
-                                } else {
+                                } else if (window.jspdf && window.jspdf.jsPDF) {
+                                    pdf = new window.jspdf.jsPDF();
+                                } else if (window.jspdf) {
+                                    pdf = new window.jspdf();
+                                } else if (typeof jsPDF !== 'undefined') {
                                     pdf = new jsPDF();
+                                } else {
+                                    pdf = new jspdf();
                                 }
                                 
                                 pdf.setFontSize(20);
@@ -86,14 +101,29 @@
                                 pdf.text('Exportiert am: ' + new Date().toLocaleDateString('de-DE'), 20, 50);
                                 
                                 var y = 70;
+                                
+                                // Use jQuery safely - check if it's available
+                                var $ = window.jQuery || window.$;
+                                if (!$ && containerBlocks && containerBlocks.each) {
+                                    // containerBlocks is already a jQuery object
+                                    $ = function(el) { return containerBlocks.constructor(el); };
+                                }
+                                
+                                console.log('CBD: Processing ' + containerBlocks.length + ' container blocks for PDF');
+                                
                                 containerBlocks.each(function(index) {
                                     if (y > 250) {
                                         pdf.addPage();
                                         y = 30;
                                     }
                                     
-                                    var blockTitle = $(this).find('.cbd-block-title').text() || 'Block ' + (index + 1);
-                                    var blockContent = $(this).find('.cbd-container-content').text().substring(0, 200);
+                                    var $this = $(this);
+                                    var blockTitle = $this.find('.cbd-block-title').text() || 'Block ' + (index + 1);
+                                    var blockContent = $this.find('.cbd-container-content').text().substring(0, 200);
+                                    
+                                    console.log('CBD: Block ' + (index + 1) + ' - Title: "' + blockTitle + '", Content length: ' + blockContent.length);
+                                    console.log('CBD: Block element classes:', this.className);
+                                    console.log('CBD: Block element id:', this.id);
                                     
                                     pdf.setFontSize(14);
                                     pdf.text('Block ' + (index + 1) + ': ' + blockTitle, 20, y);

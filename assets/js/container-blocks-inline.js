@@ -181,7 +181,13 @@ if (typeof jQuery !== 'undefined') {
         console.log("CBD: Container functionality loaded successfully");
         
         // Add PDF Export button if there are container blocks
-        if ($(".cbd-container").length > 0) {
+        var totalContainers = $(".cbd-container");
+        console.log("CBD: Found " + totalContainers.length + " total .cbd-container elements on page");
+        totalContainers.each(function(i) {
+            console.log("CBD: Container " + (i+1) + " - Class: " + this.className + ", ID: " + this.id + ", Visible: " + $(this).is(':visible'));
+        });
+        
+        if (totalContainers.length > 0) {
             if ($("#cbd-pdf-export-fab").length === 0) {
                 var pdfButton = $('<div id="cbd-pdf-export-fab">📄 PDF</div>');
                 pdfButton.css({
@@ -208,11 +214,17 @@ if (typeof jQuery !== 'undefined') {
                 pdfButton.on("click", function() {
                     console.log("CBD: PDF Export clicked");
                     
-                    var containerBlocks = $(".cbd-container");
-                    console.log("CBD: Found " + containerBlocks.length + " container blocks");
+                    var containerBlocks = $(".cbd-container:visible");
+                    console.log("CBD: Found " + containerBlocks.length + " visible container blocks");
+                    
+                    // Debug: Log all found containers
+                    containerBlocks.each(function(index) {
+                        console.log("CBD: Container " + (index + 1) + " - Classes: " + this.className + ", ID: " + this.id);
+                        console.log("CBD: Container " + (index + 1) + " - Title: " + $(this).find('.cbd-block-title').text());
+                    });
                     
                     if (containerBlocks.length === 0) {
-                        alert("Keine Container-Blöcke zum Exportieren gefunden.");
+                        alert("Keine sichtbaren Container-Blöcke zum Exportieren gefunden.");
                         return;
                     }
                     
