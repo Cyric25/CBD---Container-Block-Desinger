@@ -970,6 +970,68 @@
 }
 
 /* ============================================
+   ACTION BUTTONS STYLING - Professional Design
+   ============================================ */
+
+/* Button container */
+.cbd-action-buttons {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    z-index: 9999 !important;
+    display: flex !important;
+    gap: 4px !important;
+    background: rgba(0, 0, 0, 0.1) !important;
+    padding: 4px !important;
+    border-radius: 8px !important;
+    backdrop-filter: blur(5px) !important;
+}
+
+/* Individual action buttons - White background */
+.cbd-action-buttons button {
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: #333333 !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    padding: 8px !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    width: 32px !important;
+    height: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 10000 !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+    font-size: 16px !important;
+    line-height: 1 !important;
+}
+
+/* Button hover effects - White background */
+.cbd-action-buttons button:hover {
+    background: rgba(255, 255, 255, 1) !important;
+    color: #000000 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+    border-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Button active/pressed state */
+.cbd-action-buttons button:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Specific button focus states */
+.cbd-action-buttons button:focus {
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3) !important;
+}
+
+/* ============================================
    BLOCK HEADER SYSTEM (Icon + Title)
    ============================================ */
 

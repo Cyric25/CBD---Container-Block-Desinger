@@ -258,12 +258,12 @@ class CBD_Block_Registration {
      * Block-Assets einbinden (Frontend & Editor)
      */
     public function enqueue_block_assets() {
-        // Frontend CSS - Use clean version
+        // Frontend CSS - Use clean version with button styles
         wp_enqueue_style(
             'cbd-frontend-clean',
             CBD_PLUGIN_URL . 'assets/css/cbd-frontend-clean.css',
             array(),
-            CBD_VERSION . '-' . time() // Force cache bust
+            CBD_VERSION . '-buttons-' . time() // Force cache bust with button styles
         );
         
         // Dashicons for frontend icons
@@ -309,11 +309,11 @@ class CBD_Block_Registration {
                         
                         // Change button icon BEFORE animation starts
                         if (isCurrentlyVisible) {
-                            button.html("🔽"); // Will be collapsed after animation
-                            console.log("CBD: Setting icon to collapsed (🔽)");
+                            button.html("<span class=\"dashicons dashicons-arrow-down-alt2\"></span>"); // Will be collapsed after animation
+                            console.log("CBD: Setting icon to collapsed (down arrow)");
                         } else {
-                            button.html("🔼"); // Will be expanded after animation
-                            console.log("CBD: Setting icon to expanded (🔼)");
+                            button.html("<span class=\"dashicons dashicons-arrow-up-alt2\"></span>"); // Will be expanded after animation
+                            console.log("CBD: Setting icon to expanded (up arrow)");
                         }
                         
                         // Start the animation
@@ -343,8 +343,8 @@ class CBD_Block_Registration {
                     
                     if (!plainText) {
                         // Visual feedback for empty content
-                        button.html("❌");
-                        setTimeout(function() { button.html("📋"); }, 1000);
+                        button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                        setTimeout(function() { button.html("<span class=\"dashicons dashicons-clipboard\"></span>"); }, 1000);
                         console.log("CBD: No text found to copy");
                         return;
                     }
@@ -354,8 +354,8 @@ class CBD_Block_Registration {
                         navigator.clipboard.writeText(plainText).then(function() {
                             console.log("CBD: Text copied successfully via Clipboard API");
                             // Visual feedback - change icon temporarily
-                            button.html("✅");
-                            setTimeout(function() { button.html("📋"); }, 1500);
+                            button.html("<span class=\"dashicons dashicons-yes-alt\"></span>");
+                            setTimeout(function() { button.html("<span class=\"dashicons dashicons-clipboard\"></span>"); }, 1500);
                         }).catch(function(err) {
                             console.log("CBD: Clipboard API failed:", err);
                             fallbackCopy(plainText, button);
@@ -388,17 +388,17 @@ class CBD_Block_Registration {
                         
                         if (successful) {
                             console.log("CBD: Text copied successfully via execCommand");
-                            button.html("✅");
-                            setTimeout(function() { button.html("📋"); }, 1500);
+                            button.html("<span class=\"dashicons dashicons-yes-alt\"></span>");
+                            setTimeout(function() { button.html("<span class=\"dashicons dashicons-clipboard\"></span>"); }, 1500);
                         } else {
                             console.log("CBD: execCommand copy failed");
-                            button.html("❌");
-                            setTimeout(function() { button.html("📋"); }, 1000);
+                            button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                            setTimeout(function() { button.html("<span class=\"dashicons dashicons-clipboard\"></span>"); }, 1000);
                         }
                     } catch (err) {
                         console.log("CBD: Fallback copy failed:", err);
-                        button.html("❌");
-                        setTimeout(function() { button.html("📋"); }, 1000);
+                        button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                        setTimeout(function() { button.html("<span class=\"dashicons dashicons-clipboard\"></span>"); }, 1000);
                     }
                 }
                 
@@ -414,20 +414,20 @@ class CBD_Block_Registration {
                     // Check if html2canvas is available
                     if (typeof html2canvas === "undefined") {
                         console.log("CBD: html2canvas not loaded");
-                        button.html("❌");
-                        setTimeout(function() { button.html("📷"); }, 1500);
+                        button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                        setTimeout(function() { button.html("<span class=\"dashicons dashicons-camera\"></span>"); }, 1500);
                         return;
                     }
                     
                     if (contentElement.length === 0) {
                         console.log("CBD: No content found for screenshot");
-                        button.html("❌");
-                        setTimeout(function() { button.html("📷"); }, 1500);
+                        button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                        setTimeout(function() { button.html("<span class=\"dashicons dashicons-camera\"></span>"); }, 1500);
                         return;
                     }
                     
                     // Show loading state
-                    button.html("⏳");
+                    button.html("<span class=\"dashicons dashicons-update-alt\"></span>");
                     console.log("CBD: Starting screenshot capture...");
                     
                     // Check if content is collapsed and expand if needed
@@ -493,8 +493,8 @@ class CBD_Block_Registration {
                             URL.revokeObjectURL(url);
                             
                             // Success feedback
-                            button.html("✅");
-                            setTimeout(function() { button.html("📷"); }, 2000);
+                            button.html("<span class=\"dashicons dashicons-yes-alt\"></span>");
+                            setTimeout(function() { button.html("<span class=\"dashicons dashicons-camera\"></span>"); }, 2000);
                             
                             console.log("CBD: Screenshot downloaded as " + filename);
                         }, "image/png");
@@ -513,8 +513,8 @@ class CBD_Block_Registration {
                         }
                         
                         // Error feedback
-                        button.html("❌");
-                        setTimeout(function() { button.html("📷"); }, 1500);
+                        button.html("<span class=\"dashicons dashicons-dismiss\"></span>");
+                        setTimeout(function() { button.html("<span class=\"dashicons dashicons-camera\"></span>"); }, 1500);
                     });
                 });
             });
@@ -716,7 +716,7 @@ class CBD_Block_Registration {
         static $numbering_counter = 0;
         $numbering_counter++;
         
-        $html .= '<div class="cbd-container-number cbd-outside-number" data-number="' . esc_attr($numbering_counter) . '" style="position: absolute !important; top: -40px !important; left: -40px !important; background: rgba(0,0,0,0.9) !important; color: white !important; width: 34px !important; height: 34px !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 15px !important; font-weight: bold !important; z-index: 99999 !important; border: 2px solid white !important;">';
+        $html .= "<div class=\"cbd-container-number cbd-outside-number\" data-number=\"" . esc_attr($numbering_counter) . "\" style=\"position: absolute !important; top: -40px !important; left: -40px !important; background: rgba(0,0,0,0.9) !important; color: white !important; width: 34px !important; height: 34px !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 15px !important; font-weight: bold !important; z-index: 99999 !important; border: 2px solid white !important;\">";
         $html .= esc_html($numbering_counter);
         $html .= '</div>';
         
@@ -733,23 +733,23 @@ class CBD_Block_Registration {
         }
         $html .= '>';
         
-        // Professional button styling - all buttons visible and functional
-        $html .= '<!-- CBD: THREE BUTTONS - PROFESSIONAL STYLING -->';
-        $html .= '<div class="cbd-action-buttons" style="position: absolute !important; top: 10px !important; right: 10px !important; z-index: 9999 !important; display: flex !important; gap: 4px !important; background: rgba(0,0,0,0.1) !important; padding: 4px !important; border-radius: 8px !important; backdrop-filter: blur(5px) !important;">';
+        // Button styling with CSS classes + inline fallback for visibility
+        $html .= '<!-- CBD: THREE BUTTONS - CSS + INLINE FALLBACK -->';
+        $html .= '<div class="cbd-action-buttons">';
         
-        // Button 1: Collapse
-        $html .= '<button type="button" class="cbd-collapse-toggle" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,0,0,0.75) !important; color: white !important; border: none !important; padding: 8px !important; border-radius: 6px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10000 !important; transition: all 0.2s ease !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;" title="Einklappen" onmouseover="this.style.background=\'rgba(0,0,0,0.9)\'" onmouseout="this.style.background=\'rgba(0,0,0,0.75)\'">';
-        $html .= '🔼';
+        // Button 1: Collapse - with Dashicon
+        $html .= "<button type=\"button\" class=\"cbd-collapse-toggle\" data-container-id=\"" . esc_attr($container_id) . "\" style=\"display: flex !important; visibility: visible !important; opacity: 1 !important;\" title=\"Einklappen\">";
+        $html .= '<span class="dashicons dashicons-arrow-up-alt2"></span>';
         $html .= '</button>';
         
-        // Button 2: Copy Text
-        $html .= '<button type="button" class="cbd-copy-text" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,0,0,0.75) !important; color: white !important; border: none !important; padding: 8px !important; border-radius: 6px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10000 !important; transition: all 0.2s ease !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;" title="Text kopieren" onmouseover="this.style.background=\'rgba(0,0,0,0.9)\'" onmouseout="this.style.background=\'rgba(0,0,0,0.75)\'">';
-        $html .= '📋';
+        // Button 2: Copy Text - with Dashicon
+        $html .= "<button type=\"button\" class=\"cbd-copy-text\" data-container-id=\"" . esc_attr($container_id) . "\" style=\"display: flex !important; visibility: visible !important; opacity: 1 !important;\" title=\"Text kopieren\">";
+        $html .= '<span class="dashicons dashicons-clipboard"></span>';
         $html .= '</button>';
         
-        // Button 3: Screenshot
-        $html .= '<button type="button" class="cbd-screenshot" data-container-id="' . esc_attr($container_id) . '" style="background: rgba(0,0,0,0.75) !important; color: white !important; border: none !important; padding: 8px !important; border-radius: 6px !important; cursor: pointer !important; width: 32px !important; height: 32px !important; display: flex !important; align-items: center !important; justify-content: center !important; visibility: visible !important; opacity: 1 !important; position: relative !important; z-index: 10000 !important; transition: all 0.2s ease !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;" title="Screenshot" onmouseover="this.style.background=\'rgba(0,0,0,0.9)\'" onmouseout="this.style.background=\'rgba(0,0,0,0.75)\'">';
-        $html .= '📷';
+        // Button 3: Screenshot - with Dashicon
+        $html .= "<button type=\"button\" class=\"cbd-screenshot\" data-container-id=\"" . esc_attr($container_id) . "\" style=\"display: flex !important; visibility: visible !important; opacity: 1 !important;\" title=\"Screenshot\">";
+        $html .= '<span class="dashicons dashicons-camera"></span>';
         $html .= '</button>';
         
         $html .= '</div>'; // Close buttons
@@ -781,7 +781,7 @@ class CBD_Block_Registration {
                     'style="color: ' . esc_attr($features['icon']['color']) . '"' : '';
                     
                 // Add inline styles to ensure visibility
-                $icon_style = 'position: absolute; top: 12px; left: 12px; font-size: 20px; z-index: 10;' . ($icon_color ? ' ' . substr($icon_color, 7, -1) : '');
+                $icon_style = "position: absolute; top: 12px; left: 12px; font-size: 20px; z-index: 10;" . ($icon_color ? " " . substr($icon_color, 7, -1) : "");
                 
                 $html .= '<span class="cbd-header-icon" style="' . esc_attr($icon_style) . '">';
                 $html .= '<i class="dashicons ' . $icon_class . '"></i>';
