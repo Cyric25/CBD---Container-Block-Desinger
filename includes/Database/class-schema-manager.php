@@ -104,15 +104,21 @@ class CBD_Schema_Manager {
             $wpdb->query("ALTER TABLE $table_name CHANGE COLUMN `modified` `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
         }
         
-        // Add missing columns
+        // Add missing columns in correct order
         if (!in_array('title', $columns)) {
             $wpdb->query("ALTER TABLE $table_name ADD COLUMN `title` varchar(200) NOT NULL DEFAULT '' AFTER `name`");
         }
-        
+
+        // Add 'styles' column first if missing
+        if (!in_array('styles', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN `styles` longtext DEFAULT NULL AFTER `config`");
+        }
+
+        // Then add 'features' column after 'styles'
         if (!in_array('features', $columns)) {
             $wpdb->query("ALTER TABLE $table_name ADD COLUMN `features` longtext DEFAULT NULL AFTER `styles`");
         }
-        
+
         if (!in_array('status', $columns)) {
             $wpdb->query("ALTER TABLE $table_name ADD COLUMN `status` varchar(20) DEFAULT 'active' AFTER `features`");
         }
@@ -136,27 +142,36 @@ class CBD_Schema_Manager {
         // Remove blocks with empty names
         $wpdb->query("DELETE FROM $table_name WHERE name = '' OR name IS NULL");
         
-        // Fix JSON fields that might be corrupted
-        $blocks = $wpdb->get_results("SELECT id, config, styles, features FROM $table_name");
+        // Fix JSON fields that might be corrupted - with safe column checking
+        $columns = $wpdb->get_col("SHOW COLUMNS FROM $table_name");
+
+        // Build safe SELECT query based on available columns
+        $select_fields = array('id');
+        if (in_array('config', $columns)) $select_fields[] = 'config';
+        if (in_array('styles', $columns)) $select_fields[] = 'styles';
+        if (in_array('features', $columns)) $select_fields[] = 'features';
+
+        $select_query = "SELECT " . implode(', ', $select_fields) . " FROM $table_name";
+        $blocks = $wpdb->get_results($select_query);
         
         foreach ($blocks as $block) {
             $updated = false;
             $update_data = array();
             
-            // Fix config field
-            if (!empty($block->config) && !self::is_valid_json($block->config)) {
+            // Fix config field (only if column exists)
+            if (in_array('config', $columns) && property_exists($block, 'config') && !empty($block->config) && !self::is_valid_json($block->config)) {
                 $update_data['config'] = '{}';
                 $updated = true;
             }
-            
-            // Fix styles field  
-            if (!empty($block->styles) && !self::is_valid_json($block->styles)) {
+
+            // Fix styles field (only if column exists)
+            if (in_array('styles', $columns) && property_exists($block, 'styles') && !empty($block->styles) && !self::is_valid_json($block->styles)) {
                 $update_data['styles'] = '{}';
                 $updated = true;
             }
-            
-            // Fix features field
-            if (!empty($block->features) && !self::is_valid_json($block->features)) {
+
+            // Fix features field (only if column exists)
+            if (in_array('features', $columns) && property_exists($block, 'features') && !empty($block->features) && !self::is_valid_json($block->features)) {
                 $update_data['features'] = '{}';
                 $updated = true;
             }
@@ -166,10 +181,16 @@ class CBD_Schema_Manager {
             }
         }
         
-        // Set default values for NULL JSON fields
-        $wpdb->query("UPDATE $table_name SET config = '{}' WHERE config IS NULL");
-        $wpdb->query("UPDATE $table_name SET styles = '{}' WHERE styles IS NULL");
-        $wpdb->query("UPDATE $table_name SET features = '{}' WHERE features IS NULL");
+        // Set default values for NULL JSON fields (only for existing columns)
+        if (in_array('config', $columns)) {
+            $wpdb->query("UPDATE $table_name SET config = '{}' WHERE config IS NULL");
+        }
+        if (in_array('styles', $columns)) {
+            $wpdb->query("UPDATE $table_name SET styles = '{}' WHERE styles IS NULL");
+        }
+        if (in_array('features', $columns)) {
+            $wpdb->query("UPDATE $table_name SET features = '{}' WHERE features IS NULL");
+        }
     }
     
     /**

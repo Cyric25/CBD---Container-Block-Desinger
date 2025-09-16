@@ -51,7 +51,10 @@ class CBD_Block_Registration {
     public function register_blocks() {
         // Verwende WordPress Block Registry als einzige Wahrheitsquelle
         if (WP_Block_Type_Registry::get_instance()->is_registered('container-block-designer/container')) {
-            error_log('[CBD Block Registration] Blocks already registered, skipping');
+            // Reduziere Logging - nur bei Debug-Modus
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD Block Registration] Blocks already registered, skipping');
+            }
             return;
         }
         
@@ -70,7 +73,10 @@ class CBD_Block_Registration {
         // Registriere den Haupt-Container-Block
         $this->register_main_container_block();
         
-        error_log('[CBD Block Registration] Blocks registered');
+        // Reduziere Logging - nur bei Debug-Modus
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('[CBD Block Registration] Blocks registered');
+        }
     }
     
     /**
@@ -83,7 +89,10 @@ class CBD_Block_Registration {
         
         // Überprüfe ob dieser spezifische Block bereits registriert ist
         if (WP_Block_Type_Registry::get_instance()->is_registered($block_name)) {
-            error_log('[CBD Block Registration] Block ' . $block_name . ' already registered, skipping');
+            // Reduziere Logging - nur bei Debug-Modus
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD Block Registration] Block ' . $block_name . ' already registered, skipping');
+            }
             return;
         }
         

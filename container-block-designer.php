@@ -159,9 +159,20 @@ class ContainerBlockDesigner {
         // Geplante Events entfernen
         wp_clear_scheduled_hook('cbd_daily_cleanup');
         
-        // Cache leeren
-        if ($this->style_loader) {
-            $this->style_loader->clear_styles_cache();
+        // Cache leeren - über Service Container
+        try {
+            $style_loader = $this->container->get('style_loader');
+            if ($style_loader && method_exists($style_loader, 'clear_styles_cache')) {
+                $style_loader->clear_styles_cache();
+            }
+        } catch (Exception $e) {
+            // Fallback: Direkt über Singleton
+            if (class_exists('CBD_Style_Loader')) {
+                $style_loader = CBD_Style_Loader::get_instance();
+                if (method_exists($style_loader, 'clear_styles_cache')) {
+                    $style_loader->clear_styles_cache();
+                }
+            }
         }
     }
     
@@ -275,9 +286,20 @@ class ContainerBlockDesigner {
             // Version aktualisieren
             update_option('cbd_plugin_version', CBD_VERSION);
             
-            // Style-Cache leeren
-            if ($this->style_loader) {
-                $this->style_loader->clear_styles_cache();
+            // Style-Cache leeren - über Service Container
+            try {
+                $style_loader = $this->container->get('style_loader');
+                if ($style_loader && method_exists($style_loader, 'clear_styles_cache')) {
+                    $style_loader->clear_styles_cache();
+                }
+            } catch (Exception $e) {
+                // Fallback: Direkt über Singleton
+                if (class_exists('CBD_Style_Loader')) {
+                    $style_loader = CBD_Style_Loader::get_instance();
+                    if (method_exists($style_loader, 'clear_styles_cache')) {
+                        $style_loader->clear_styles_cache();
+                    }
+                }
             }
         }
     }
