@@ -12,7 +12,7 @@
     ],
     "minimum-stability": "stable",
     "require": {
-        "php": ">=7.4",
+        "php": ">=8.0",
         "ext-json": "*"
     },
     "require-dev": {
@@ -48,10 +48,12 @@
     "extra": {
         "wordpress-plugin": {
             "main-file": "container-block-designer.php",
-            "version": "2.6.0",
+            "version": "2.6.1",
             "requires-wp": "6.0",
-            "requires-php": "7.4",
-            "tested-wp": "6.4"
+            "requires-php": "8.0",
+            "tested-wp": "6.4",
+            "tested-php": "8.4",
+            "php-compatibility": "8.0-8.4"
         }
     }
 }

@@ -11,7 +11,9 @@
  * Text Domain: container-block-designer
  * Domain Path: /languages
  * Requires at least: 6.0
- * Requires PHP: 7.4
+ * Requires PHP: 8.0
+ * Tested up to: 6.4
+ * Tested PHP: 8.4
  *
  * @package ContainerBlockDesigner
  */
@@ -19,74 +21,6 @@
 // Sicherheit: Direkten Zugriff verhindern
 if (!defined('ABSPATH')) {
     exit;
-}
-
-// SOFORTIGER PHP 8.2 FIX - Alle Null-Werte abfangen
-if (version_compare(PHP_VERSION, '8.0.0', '>=')) {
-    // Aggressive Null-Werte-Bereinigung
-    function cbd_clean_superglobals() {
-        // Bereinige $_POST
-        if (isset($_POST) && is_array($_POST)) {
-            $_POST = cbd_recursive_null_clean($_POST);
-        }
-
-        // Bereinige $_GET
-        if (isset($_GET) && is_array($_GET)) {
-            $_GET = cbd_recursive_null_clean($_GET);
-        }
-
-        // Bereinige $_REQUEST
-        if (isset($_REQUEST) && is_array($_REQUEST)) {
-            $_REQUEST = cbd_recursive_null_clean($_REQUEST);
-        }
-    }
-
-    function cbd_recursive_null_clean($array) {
-        foreach ($array as $key => $value) {
-            if (is_null($value)) {
-                $array[$key] = '';
-            } elseif (is_array($value)) {
-                $array[$key] = cbd_recursive_null_clean($value);
-            }
-        }
-        return $array;
-    }
-
-    // Sofortiger Clean beim Plugin-Load
-    cbd_clean_superglobals();
-
-    // Hook für weitere Bereinigungen
-    add_action('init', 'cbd_clean_superglobals', 1);
-    add_action('admin_init', 'cbd_clean_superglobals', 1);
-
-    // Error Reporting anpassen (KOMPLETT unterdrücken für CBD)
-    error_reporting(E_ALL & ~E_DEPRECATED & ~E_USER_DEPRECATED & ~E_NOTICE);
-
-    // Output Buffering starten
-    if (!ob_get_level()) {
-        ob_start(function($output) {
-            // Entferne alle PHP Deprecation/Warning Meldungen aus der Ausgabe
-            $output = preg_replace('/Deprecated:.*?in .*?wp-includes\/functions\.php.*?\n/s', '', $output);
-            $output = preg_replace('/Warning:.*?Cannot modify header information.*?\n/s', '', $output);
-            return $output;
-        });
-    }
-
-    // Komplett aggressiver Error Handler
-    set_error_handler(function($errno, $errstr, $errfile, $errline) {
-        // Alle Deprecation Warnings im Zusammenhang mit wp-includes unterdrücken
-        if (strpos($errfile, 'wp-includes') !== false &&
-            ($errno === E_DEPRECATED || $errno === E_USER_DEPRECATED || $errno === E_NOTICE)) {
-            return true; // Komplett unterdrücken
-        }
-
-        // Spezifische Null-Parameter Warnings unterdrücken
-        if (strpos($errstr, 'Passing null to parameter') !== false) {
-            return true;
-        }
-
-        return false;
-    }, E_ALL);
 }
 
 // Plugin-Konstanten definieren
@@ -99,11 +33,6 @@ define('CBD_PLUGIN_BASENAME', plugin_basename(__FILE__));
 // Datenbank-Tabellennamen
 global $wpdb;
 define('CBD_TABLE_BLOCKS', $wpdb->prefix . 'cbd_blocks');
-
-// PHP 8.2 Compatibility Layer laden
-require_once CBD_PLUGIN_DIR . 'php82-compatibility-fix.php';
-require_once CBD_PLUGIN_DIR . 'php82-headers-fix.php';
-require_once CBD_PLUGIN_DIR . 'activation-check.php';
 
 // Autoloading - Try Composer first, fallback to custom autoloader
 if (file_exists(CBD_PLUGIN_DIR . 'vendor/autoload.php')) {

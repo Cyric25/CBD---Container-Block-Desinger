@@ -4,7 +4,9 @@
       "Bash(dir:*)",
       "Read(//l/Huber/**)",
       "Bash(php:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Read(//c/Users/mtnhu/**)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

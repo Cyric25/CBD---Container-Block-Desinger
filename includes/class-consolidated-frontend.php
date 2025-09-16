@@ -811,15 +811,16 @@ class CBD_Consolidated_Frontend {
                 intval($padding['left'] ?? 0)
             );
         }
-            if (!empty($spacing['margin'])) {
-                $margin = $spacing['margin'];
-                $css_rules[] = sprintf('margin: %dpx %dpx %dpx %dpx',
-                    intval($margin['top'] ?? 0),
-                    intval($margin['right'] ?? 0),
-                    intval($margin['bottom'] ?? 0),
-                    intval($margin['left'] ?? 0)
-                );
-            }
+
+        // Direct margin from styles (handle margin separately)
+        if (!empty($styles['margin'])) {
+            $margin = $styles['margin'];
+            $css_rules[] = sprintf('margin: %dpx %dpx %dpx %dpx',
+                intval($margin['top'] ?? 0),
+                intval($margin['right'] ?? 0),
+                intval($margin['bottom'] ?? 0),
+                intval($margin['left'] ?? 0)
+            );
         }
         
         // Box shadow
