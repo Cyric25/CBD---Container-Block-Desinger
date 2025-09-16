@@ -135,15 +135,20 @@ class ContainerBlockDesigner {
      * Plugin-Aktivierung
      */
     public function activate() {
-        // Datenbank-Tabellen erstellen
-        CBD_Database::create_tables();
-        
+        // Datenbank-Tabellen erstellen mit neuem Schema Manager
+        if (class_exists('CBD_Schema_Manager')) {
+            CBD_Schema_Manager::create_tables();
+        } else {
+            // Fallback auf alte Methode
+            CBD_Database::create_tables();
+        }
+
         // Standarddaten einfügen
         $this->create_default_blocks();
-        
+
         // Upload-Verzeichnis erstellen
         $this->create_upload_directory();
-        
+
         // Rewrite-Regeln aktualisieren
         flush_rewrite_rules();
         
@@ -313,13 +318,23 @@ class ContainerBlockDesigner {
     private function run_updates($from_version) {
         // Updates für Version 2.5.0
         if (version_compare($from_version, '2.5.0', '<')) {
-            // Datenbank-Schema aktualisieren
-            // Prüfen ob die Methode existiert
-            if (class_exists('CBD_Database') && method_exists('CBD_Database', 'update_schema')) {
+            // Datenbank-Schema aktualisieren mit neuem Schema Manager
+            if (class_exists('CBD_Schema_Manager')) {
+                CBD_Schema_Manager::create_tables();
+            } elseif (class_exists('CBD_Database') && method_exists('CBD_Database', 'update_schema')) {
                 CBD_Database::update_schema();
             } else {
-                // Alternative: Tabellen neu erstellen falls nötig
-                CBD_Database::create_tables();
+                // Fallback: Alte Methode
+                if (class_exists('CBD_Database')) {
+                    CBD_Database::create_tables();
+                }
+            }
+        }
+
+        // Updates für Version 2.6.0 - Neue Schema Manager Migration
+        if (version_compare($from_version, '2.6.0', '<')) {
+            if (class_exists('CBD_Schema_Manager')) {
+                CBD_Schema_Manager::create_tables();
             }
         }
         
