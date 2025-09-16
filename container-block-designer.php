@@ -34,6 +34,9 @@ define('CBD_PLUGIN_BASENAME', plugin_basename(__FILE__));
 global $wpdb;
 define('CBD_TABLE_BLOCKS', $wpdb->prefix . 'cbd_blocks');
 
+// Load WordPress PHP 8.x compatibility layer early
+require_once CBD_PLUGIN_DIR . 'includes/php8-wordpress-compatibility.php';
+
 // Autoloading - Try Composer first, fallback to custom autoloader
 if (file_exists(CBD_PLUGIN_DIR . 'vendor/autoload.php')) {
     require_once CBD_PLUGIN_DIR . 'vendor/autoload.php';
