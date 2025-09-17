@@ -125,6 +125,16 @@ class CBD_Admin {
             'cbd-import-export',
             array($this, 'render_import_export_page')
         );
+
+        // Untermenü: Datenbank reparieren - nur Admins
+        add_submenu_page(
+            'container-block-designer',
+            __('Datenbank reparieren', 'container-block-designer'),
+            __('Datenbank reparieren', 'container-block-designer'),
+            'manage_options',
+            'cbd-database-repair',
+            array($this, 'render_database_repair_page')
+        );
     }
     
     /**
@@ -700,13 +710,229 @@ class CBD_Admin {
      */
     public function render_import_export_page() {
         $file_path = CBD_PLUGIN_DIR . 'admin/import-export.php';
-        
+
         if (file_exists($file_path)) {
             include $file_path;
         } else {
             echo '<div class="wrap"><h1>' . __('Import/Export', 'container-block-designer') . '</h1>';
             echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/import-export.php', 'container-block-designer') . '</p></div>';
             echo '</div>';
+        }
+    }
+
+    /**
+     * Datenbank-Reparatur-Seite rendern
+     */
+    public function render_database_repair_page() {
+        // Verarbeite POST-Anfragen
+        if (isset($_POST['repair_database']) && wp_verify_nonce($_POST['cbd_repair_nonce'], 'cbd_repair_database')) {
+            $this->handle_database_repair();
+        }
+
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cbd_blocks';
+
+        // Prüfe aktuellen Zustand
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
+        $columns = $table_exists ? $wpdb->get_col("SHOW COLUMNS FROM $table_name") : array();
+        $block_count = $table_exists ? $wpdb->get_var("SELECT COUNT(*) FROM $table_name") : 0;
+
+        ?>
+        <div class="wrap">
+            <h1><?php _e('Datenbank reparieren', 'container-block-designer'); ?></h1>
+
+            <div class="card">
+                <h2><?php _e('Aktueller Datenbank-Status', 'container-block-designer'); ?></h2>
+
+                <table class="widefat">
+                    <tr>
+                        <td><strong><?php _e('Tabelle existiert:', 'container-block-designer'); ?></strong></td>
+                        <td><?php echo $table_exists ? '✅ Ja' : '❌ Nein'; ?></td>
+                    </tr>
+                    <?php if ($table_exists): ?>
+                    <tr>
+                        <td><strong><?php _e('Aktuelle Spalten:', 'container-block-designer'); ?></strong></td>
+                        <td><?php echo implode(', ', $columns); ?></td>
+                    </tr>
+                    <tr>
+                        <td><strong><?php _e('Anzahl Blocks:', 'container-block-designer'); ?></strong></td>
+                        <td><?php echo $block_count; ?></td>
+                    </tr>
+                    <?php endif; ?>
+                </table>
+
+                <?php
+                // Prüfe auf fehlende Spalten
+                $required_columns = array('title', 'slug', 'styles', 'features', 'status');
+                $missing_columns = array_diff($required_columns, $columns);
+
+                if (!empty($missing_columns) || !$table_exists): ?>
+                <div class="notice notice-warning">
+                    <p><strong><?php _e('Probleme erkannt:', 'container-block-designer'); ?></strong></p>
+                    <?php if (!$table_exists): ?>
+                        <p>❌ <?php _e('Datenbank-Tabelle existiert nicht', 'container-block-designer'); ?></p>
+                    <?php endif; ?>
+                    <?php if (!empty($missing_columns)): ?>
+                        <p>❌ <?php printf(__('Fehlende Spalten: %s', 'container-block-designer'), implode(', ', $missing_columns)); ?></p>
+                    <?php endif; ?>
+                </div>
+                <?php else: ?>
+                <div class="notice notice-success">
+                    <p>✅ <?php _e('Datenbank-Struktur ist korrekt!', 'container-block-designer'); ?></p>
+                </div>
+                <?php endif; ?>
+
+                <h3><?php _e('Datenbank reparieren', 'container-block-designer'); ?></h3>
+                <p><?php _e('Diese Aktion wird die Datenbank-Struktur reparieren und fehlende Spalten hinzufügen.', 'container-block-designer'); ?></p>
+
+                <form method="post" action="">
+                    <?php wp_nonce_field('cbd_repair_database', 'cbd_repair_nonce'); ?>
+                    <button type="submit" name="repair_database" class="button button-primary button-large">
+                        <?php _e('🔧 Datenbank jetzt reparieren', 'container-block-designer'); ?>
+                    </button>
+                </form>
+
+                <h3><?php _e('Manuelle Reparatur', 'container-block-designer'); ?></h3>
+                <p><?php _e('Falls die automatische Reparatur nicht funktioniert, können Sie diese Scripts direkt aufrufen:', 'container-block-designer'); ?></p>
+                <ul>
+                    <li><a href="<?php echo CBD_PLUGIN_URL; ?>force-migration.php" target="_blank">force-migration.php</a></li>
+                    <li><a href="<?php echo CBD_PLUGIN_URL; ?>URGENT-DATABASE-FIX.php" target="_blank">URGENT-DATABASE-FIX.php</a></li>
+                </ul>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Datenbank-Reparatur durchführen
+     */
+    private function handle_database_repair() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cbd_blocks';
+
+        $messages = array();
+        $errors = array();
+
+        try {
+            // Prüfe ob Tabelle existiert
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
+
+            if (!$table_exists) {
+                // Erstelle komplette Tabelle
+                $charset_collate = $wpdb->get_charset_collate();
+                $sql = "CREATE TABLE $table_name (
+                    id int(11) NOT NULL AUTO_INCREMENT,
+                    name varchar(100) NOT NULL,
+                    title varchar(200) NOT NULL DEFAULT '',
+                    slug varchar(100) NOT NULL DEFAULT '',
+                    description text DEFAULT NULL,
+                    config longtext DEFAULT NULL,
+                    styles longtext DEFAULT NULL,
+                    features longtext DEFAULT NULL,
+                    status varchar(20) DEFAULT 'active',
+                    created_at datetime DEFAULT CURRENT_TIMESTAMP,
+                    updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY name (name),
+                    KEY status (status),
+                    KEY slug (slug)
+                ) $charset_collate;";
+
+                require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+                dbDelta($sql);
+                $messages[] = __('Datenbank-Tabelle wurde erstellt.', 'container-block-designer');
+            } else {
+                // Prüfe und füge fehlende Spalten hinzu
+                $columns = $wpdb->get_col("SHOW COLUMNS FROM $table_name");
+
+                $required_columns = array(
+                    'title' => "ALTER TABLE $table_name ADD COLUMN `title` varchar(200) NOT NULL DEFAULT '' AFTER `name`",
+                    'slug' => "ALTER TABLE $table_name ADD COLUMN `slug` varchar(100) NOT NULL DEFAULT '' AFTER `title`",
+                    'styles' => "ALTER TABLE $table_name ADD COLUMN `styles` longtext DEFAULT NULL AFTER `config`",
+                    'features' => "ALTER TABLE $table_name ADD COLUMN `features` longtext DEFAULT NULL AFTER `styles`",
+                    'status' => "ALTER TABLE $table_name ADD COLUMN `status` varchar(20) DEFAULT 'active' AFTER `features`"
+                );
+
+                foreach ($required_columns as $column => $sql) {
+                    if (!in_array($column, $columns)) {
+                        $result = $wpdb->query($sql);
+                        if ($result !== false) {
+                            $messages[] = sprintf(__('Spalte "%s" wurde hinzugefügt.', 'container-block-designer'), $column);
+                        } else {
+                            $errors[] = sprintf(__('Fehler beim Hinzufügen der Spalte "%s": %s', 'container-block-designer'), $column, $wpdb->last_error);
+                        }
+                    }
+                }
+            }
+
+            // Setze Standard-Werte
+            $wpdb->query("UPDATE $table_name SET config = '{}' WHERE config IS NULL OR config = ''");
+            $wpdb->query("UPDATE $table_name SET styles = '{}' WHERE styles IS NULL OR styles = ''");
+            $wpdb->query("UPDATE $table_name SET features = '{}' WHERE features IS NULL OR features = ''");
+            $wpdb->query("UPDATE $table_name SET slug = name WHERE slug = '' OR slug IS NULL");
+            $messages[] = __('Standard-Werte wurden gesetzt.', 'container-block-designer');
+
+            // Erstelle Standard-Blocks falls keine vorhanden
+            $block_count = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
+            if ($block_count == 0) {
+                $this->create_default_blocks();
+                $messages[] = __('Standard-Blocks wurden erstellt.', 'container-block-designer');
+            }
+
+        } catch (Exception $e) {
+            $errors[] = sprintf(__('Fehler bei der Reparatur: %s', 'container-block-designer'), $e->getMessage());
+        }
+
+        // Zeige Nachrichten an
+        if (!empty($messages)) {
+            foreach ($messages as $message) {
+                echo '<div class="notice notice-success"><p>✅ ' . esc_html($message) . '</p></div>';
+            }
+        }
+
+        if (!empty($errors)) {
+            foreach ($errors as $error) {
+                echo '<div class="notice notice-error"><p>❌ ' . esc_html($error) . '</p></div>';
+            }
+        }
+    }
+
+    /**
+     * Standard-Blocks erstellen
+     */
+    private function create_default_blocks() {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cbd_blocks';
+
+        $default_blocks = array(
+            array(
+                'name' => 'basic-container',
+                'title' => __('Einfacher Container', 'container-block-designer'),
+                'slug' => 'basic-container',
+                'description' => __('Ein einfacher Container mit Rahmen und Padding', 'container-block-designer'),
+                'config' => '{"allowInnerBlocks":true,"maxWidth":"100%","minHeight":"100px"}',
+                'styles' => '{"padding":{"top":20,"right":20,"bottom":20,"left":20},"background":{"color":"#ffffff"},"border":{"width":1,"style":"solid","color":"#e0e0e0","radius":4}}',
+                'features' => '{}',
+                'status' => 'active',
+                'created_at' => current_time('mysql'),
+                'updated_at' => current_time('mysql')
+            ),
+            array(
+                'name' => 'card-container',
+                'title' => __('Info-Box', 'container-block-designer'),
+                'slug' => 'card-container',
+                'description' => __('Eine Info-Box mit Icon und blauem Hintergrund', 'container-block-designer'),
+                'config' => '{"allowInnerBlocks":true,"maxWidth":"100%","minHeight":"80px"}',
+                'styles' => '{"padding":{"top":15,"right":20,"bottom":15,"left":50},"background":{"color":"#e3f2fd"},"border":{"width":0,"radius":4},"typography":{"color":"#1565c0"}}',
+                'features' => '{"icon":{"enabled":true,"value":"dashicons-info","position":"left","color":"#1565c0"}}',
+                'status' => 'active',
+                'created_at' => current_time('mysql'),
+                'updated_at' => current_time('mysql')
+            )
+        );
+
+        foreach ($default_blocks as $block) {
+            $wpdb->insert($table_name, $block);
         }
     }
     
