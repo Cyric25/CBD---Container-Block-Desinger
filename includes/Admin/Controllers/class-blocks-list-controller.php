@@ -353,7 +353,13 @@ class BlocksListController {
                 <?php echo esc_html($block['title']); ?>
             </td>
             <td class="column-description">
-                <?php echo esc_html(wp_trim_words($block['description'], 10)); ?>
+                <?php
+                $description = $block['description'] ?? '';
+                if (is_array($description)) {
+                    $description = implode(' ', $description);
+                }
+                echo esc_html(wp_trim_words($description, 10));
+                ?>
             </td>
             <td class="column-status">
                 <span class="status-badge status-<?php echo esc_attr($block['status']); ?>">
