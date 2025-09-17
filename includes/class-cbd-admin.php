@@ -1017,8 +1017,9 @@ class CBD_Admin {
             </div>
 
             <div class="cbd-preview-actions">
-                <span class="cbd-block-status <?php echo $block['is_active'] ? 'cbd-status-active' : 'cbd-status-inactive'; ?>">
-                    <?php echo $block['is_active'] ? __('Aktiv', 'container-block-designer') : __('Inaktiv', 'container-block-designer'); ?>
+                <?php $is_active = isset($block['is_active']) ? $block['is_active'] : 1; ?>
+                <span class="cbd-block-status <?php echo $is_active ? 'cbd-status-active' : 'cbd-status-inactive'; ?>">
+                    <?php echo $is_active ? __('Aktiv', 'container-block-designer') : __('Inaktiv', 'container-block-designer'); ?>
                 </span>
 
                 <?php if (!$is_block_redakteur && current_user_can('manage_options')): ?>
@@ -1051,6 +1052,11 @@ class CBD_Admin {
         $content = $block_data['content'] ?? '';
         $title = $block_data['title'] ?? '';
 
+        // Stelle sicher, dass Content ein String ist
+        if (is_array($content)) {
+            $content = implode(' ', $content);
+        }
+
         // Erweiterte Style-Generierung
         $css_styles = $this->generate_css_from_styles($styles);
 
@@ -1062,7 +1068,11 @@ class CBD_Admin {
 
         if (!empty($content)) {
             $preview_content = wp_trim_words($content, 15, '...');
-            $preview_html .= '<div style="font-size: 13px; line-height: 1.4; color: #555;">' . wp_kses_post($preview_content) . '</div>';
+            // Stelle sicher, dass $preview_content ein String ist
+            if (is_array($preview_content)) {
+                $preview_content = implode(' ', $preview_content);
+            }
+            $preview_html .= '<div style="font-size: 13px; line-height: 1.4; color: #555;">' . esc_html($preview_content) . '</div>';
         }
 
         // Zeige aktivierte Features
