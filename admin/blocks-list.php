@@ -59,7 +59,13 @@ $blocks = CBD_Database::get_blocks();
                             </strong>
                         </td>
                         <td><?php echo esc_html($block['title']); ?></td>
-                        <td><?php echo esc_html($block['description']); ?></td>
+                        <td><?php
+                            $description = $block['description'] ?? '';
+                            if (is_array($description)) {
+                                $description = implode(' ', $description);
+                            }
+                            echo esc_html($description);
+                        ?></td>
                         <td>
                             <?php if ($block['status'] === 'active'): ?>
                                 <span class="cbd-status-badge cbd-status-active">

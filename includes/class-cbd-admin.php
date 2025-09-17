@@ -860,6 +860,9 @@ class CBD_Admin {
             wp_die(__('Du hast nicht die erforderlichen Berechtigungen für diese Seite.', 'container-block-designer'));
         }
 
+        // Temporärer Filter für Array-zu-String Konvertierung
+        add_filter('cbd_safe_content', array($this, 'safe_array_to_string'));
+
         global $wpdb;
         $table_name = $wpdb->prefix . 'cbd_blocks';
 
@@ -870,6 +873,11 @@ class CBD_Admin {
         $blocks = array();
         if ($table_exists) {
             $blocks = $wpdb->get_results("SELECT * FROM $table_name ORDER BY created_at DESC", ARRAY_A);
+
+            // Bereinige alle Block-Daten um Array-Probleme zu vermeiden
+            foreach ($blocks as $key => $block) {
+                $blocks[$key] = $this->sanitize_block_data($block);
+            }
         }
 
         // Prüfe ob User Block-Redakteur ist
@@ -997,6 +1005,7 @@ class CBD_Admin {
 
         // Zusätzliche Sicherheitsprüfung: Stelle sicher, dass content ein String ist
         if (isset($block_data['content']) && is_array($block_data['content'])) {
+            error_log('CBD Debug: Found array content in block_data, converting to string');
             $block_data['content'] = implode(' ', $block_data['content']);
         }
 
@@ -1172,6 +1181,35 @@ class CBD_Admin {
         }
 
         return $css;
+    }
+
+    /**
+     * Bereinigt Block-Daten um Array-zu-String Probleme zu vermeiden
+     */
+    private function sanitize_block_data($block) {
+        // Block-Basis-Daten bereinigen
+        foreach (['name', 'description', 'title'] as $field) {
+            if (isset($block[$field]) && is_array($block[$field])) {
+                $block[$field] = implode(' ', $block[$field]);
+            }
+        }
+
+        // JSON-Felder dekodieren und bereinigen
+        if (!empty($block['block_data'])) {
+            $block_data = json_decode($block['block_data'], true);
+            if (is_array($block_data)) {
+                // Content bereinigen
+                if (isset($block_data['content']) && is_array($block_data['content'])) {
+                    $block_data['content'] = $this->safe_array_to_string($block_data['content']);
+                }
+                if (isset($block_data['title']) && is_array($block_data['title'])) {
+                    $block_data['title'] = $this->safe_array_to_string($block_data['title']);
+                }
+                $block['block_data'] = json_encode($block_data);
+            }
+        }
+
+        return $block;
     }
 
     /**

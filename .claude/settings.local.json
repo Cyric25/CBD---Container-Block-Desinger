@@ -7,7 +7,8 @@
       "Bash(find:*)",
       "Read(//c/Users/mtnhu/**)",
       "Bash(git add:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
