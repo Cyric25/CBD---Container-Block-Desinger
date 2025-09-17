@@ -860,7 +860,17 @@ class CBD_Admin {
             wp_die(__('Du hast nicht die erforderlichen Berechtigungen für diese Seite.', 'container-block-designer'));
         }
 
-        // Keine WordPress-Funktionen die Arrays nicht handhaben können
+        // Debug: Hook für wp_trim_words Aufrufe
+        if (!function_exists('cbd_debug_wp_trim_words')) {
+            function cbd_debug_wp_trim_words($text, $num_words = 55, $more = null) {
+                if (is_array($text)) {
+                    error_log('CBD DEBUG: wp_trim_words received array: ' . print_r($text, true));
+                    error_log('CBD DEBUG: Call stack: ' . wp_debug_backtrace_summary());
+                    $text = implode(' ', $text);
+                }
+                return wp_trim_words($text, $num_words, $more);
+            }
+        }
 
         global $wpdb;
         $table_name = $wpdb->prefix . 'cbd_blocks';
@@ -1002,12 +1012,21 @@ class CBD_Admin {
         ?>
         <div class="cbd-preview-card">
             <div class="cbd-preview-header">
-                <h3 class="cbd-preview-title"><?php echo esc_html($block['name']); ?></h3>
+                <h3 class="cbd-preview-title"><?php
+                    $block_name = is_array($block['name']) ? implode(' ', $block['name']) : (string)$block['name'];
+                    echo esc_html($block_name);
+                ?></h3>
                 <p class="cbd-preview-meta">
-                    ID: <?php echo esc_html($block['id']); ?> |
-                    <?php printf(__('Erstellt: %s', 'container-block-designer'), date_i18n(get_option('date_format'), strtotime($block['created_at']))); ?>
-                    <?php if ($block['updated_at'] && $block['updated_at'] !== $block['created_at']): ?>
-                        | <?php printf(__('Aktualisiert: %s', 'container-block-designer'), date_i18n(get_option('date_format'), strtotime($block['updated_at']))); ?>
+                    <?php
+                    // Sichere Datums-Behandlung
+                    $block_id = is_array($block['id']) ? implode('', $block['id']) : (string)$block['id'];
+                    $created_at = is_array($block['created_at']) ? implode('', $block['created_at']) : (string)$block['created_at'];
+                    $updated_at = is_array($block['updated_at']) ? implode('', $block['updated_at']) : (string)$block['updated_at'];
+                    ?>
+                    ID: <?php echo esc_html($block_id); ?> |
+                    <?php printf(__('Erstellt: %s', 'container-block-designer'), date_i18n(get_option('date_format'), strtotime($created_at))); ?>
+                    <?php if ($updated_at && $updated_at !== $created_at): ?>
+                        | <?php printf(__('Aktualisiert: %s', 'container-block-designer'), date_i18n(get_option('date_format'), strtotime($updated_at))); ?>
                     <?php endif; ?>
                 </p>
             </div>
