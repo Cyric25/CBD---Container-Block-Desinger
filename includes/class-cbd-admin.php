@@ -1057,10 +1057,8 @@ class CBD_Admin {
         $content = $block_data['content'] ?? '';
         $title = $block_data['title'] ?? '';
 
-        // Stelle sicher, dass Content ein String ist
-        if (is_array($content)) {
-            $content = implode(' ', $content);
-        }
+        // Stelle sicher, dass Content ein String ist - robuste Konvertierung
+        $content = $this->safe_array_to_string($content);
 
         // Erweiterte Style-Generierung
         $css_styles = $this->generate_css_from_styles($styles);
@@ -1072,8 +1070,8 @@ class CBD_Admin {
         }
 
         if (!empty($content)) {
-            // Nochmalige Prüfung, um sicherzugehen, dass $content ein String ist
-            $content_string = is_array($content) ? implode(' ', $content) : (string)$content;
+            // Robuste String-Konvertierung vor wp_trim_words
+            $content_string = $this->safe_array_to_string($content);
             $preview_content = wp_trim_words($content_string, 15, '...');
             $preview_html .= '<div style="font-size: 13px; line-height: 1.4; color: #555;">' . esc_html($preview_content) . '</div>';
         }
@@ -1174,6 +1172,48 @@ class CBD_Admin {
         }
 
         return $css;
+    }
+
+    /**
+     * Robuste Array-zu-String Konvertierung für alle Datentypen
+     */
+    private function safe_array_to_string($input) {
+        // Bereits ein String
+        if (is_string($input)) {
+            return $input;
+        }
+
+        // Null oder leer
+        if (empty($input)) {
+            return '';
+        }
+
+        // Array - rekursiv behandeln
+        if (is_array($input)) {
+            $string_parts = array();
+            foreach ($input as $value) {
+                if (is_array($value)) {
+                    // Verschachtelte Arrays rekursiv behandeln
+                    $string_parts[] = $this->safe_array_to_string($value);
+                } else {
+                    // Primitive Werte zu String konvertieren
+                    $string_parts[] = (string)$value;
+                }
+            }
+            return implode(' ', array_filter($string_parts));
+        }
+
+        // Object oder andere Typen
+        if (is_object($input)) {
+            if (method_exists($input, '__toString')) {
+                return (string)$input;
+            } else {
+                return get_class($input) . ' Object';
+            }
+        }
+
+        // Fallback: alles andere zu String
+        return (string)$input;
     }
 
     public function render_database_repair_page() {
