@@ -22,6 +22,9 @@ if (isset($_POST['cbd_save_block']) && isset($_POST['cbd_nonce']) && wp_verify_n
     
     // Block ID holen
     $block_id = isset($_GET['block_id']) ? intval($_GET['block_id']) : 0;
+
+    // Prüfe ob Benutzer Styles bearbeiten kann
+    $can_edit_styles = current_user_can('manage_options');
     
     // Daten sammeln
     $name = sanitize_text_field($_POST['name']);
@@ -313,7 +316,7 @@ if ($block_id > 0) {
                     </div>
                 </div>
                 
-                <div class="postbox">
+                <div class="postbox cbd-style-section">
                     <h2 class="hndle"><?php _e('Styling', 'container-block-designer'); ?></h2>
                     <div class="inside">
                         <table class="form-table">
@@ -684,7 +687,12 @@ if ($block_id > 0) {
                     </div>
                 </div>
             </div>
-            
+
+            <!-- Sticky Toggle Button -->
+            <button type="button" class="cbd-sticky-toggle" title="Live-Preview anheften">
+                <span class="dashicons dashicons-sticky"></span>
+            </button>
+
             <div class="cbd-sidebar">
                 <!-- Live Preview -->
                 <div class="postbox">
@@ -1091,6 +1099,94 @@ if ($block_id > 0) {
     width: 14px;
     height: 14px;
 }
+
+/* Sticky Live Preview */
+.cbd-sidebar.sticky {
+    position: fixed;
+    top: 32px; /* WordPress admin bar height */
+    right: 20px;
+    width: 300px;
+    max-height: calc(100vh - 60px);
+    overflow-y: auto;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+.cbd-sidebar.sticky .postbox {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    border: 1px solid #ddd;
+}
+
+/* Sticky toggle button */
+.cbd-sticky-toggle {
+    position: fixed;
+    top: 100px;
+    right: 20px;
+    background: #0073aa;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    z-index: 1001;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.cbd-sticky-toggle:hover {
+    background: #005a87;
+    transform: scale(1.1);
+}
+
+.cbd-sticky-toggle .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+/* Placeholder für sticky sidebar */
+.cbd-sidebar-placeholder {
+    width: 300px;
+    visibility: hidden;
+}
+
+/* Mobile Responsiveness für sticky */
+@media (max-width: 1200px) {
+    .cbd-sidebar.sticky {
+        position: relative !important;
+        top: auto !important;
+        right: auto !important;
+        width: auto !important;
+        max-height: none !important;
+    }
+
+    .cbd-sticky-toggle {
+        display: none !important;
+    }
+}
+
+<?php if (!$can_edit_styles): ?>
+/* Hide style editing for non-admin users */
+.cbd-style-section {
+    display: none !important;
+}
+
+.cbd-main-settings::before {
+    content: "ℹ️ Hinweis: Style-Bearbeitung ist nur für Administratoren verfügbar. Sie können die Inhalte bearbeiten und das Preview betrachten.";
+    display: block;
+    background: #e7f3ff;
+    border: 1px solid #72aee6;
+    padding: 12px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+    color: #0073aa;
+    font-weight: 500;
+}
+<?php endif; ?>
 
 /* Shadow Controls Styles */
 .cbd-shadow-controls fieldset {
@@ -2164,7 +2260,81 @@ jQuery(document).ready(function($) {
     $('input[name^="styles"], select[name^="styles"], input[name="title"], textarea[name="description"], input[name^="features"]').on('input change', function() {
         updateLivePreview();
     });
-    
+
+    // Sticky Live Preview Functionality
+    var $sidebar = $('.cbd-sidebar');
+    var $stickyToggle = $('.cbd-sticky-toggle');
+    var $sidebarPlaceholder = null;
+    var isSticky = false;
+
+    // Create placeholder element
+    function createPlaceholder() {
+        if (!$sidebarPlaceholder) {
+            $sidebarPlaceholder = $('<div class="cbd-sidebar-placeholder"></div>');
+            $sidebar.before($sidebarPlaceholder);
+        }
+    }
+
+    // Toggle sticky mode
+    function toggleSticky() {
+        isSticky = !isSticky;
+
+        if (isSticky) {
+            createPlaceholder();
+            $sidebarPlaceholder.css({
+                'width': $sidebar.outerWidth() + 'px',
+                'height': $sidebar.outerHeight() + 'px',
+                'visibility': 'visible'
+            });
+            $sidebar.addClass('sticky');
+            $stickyToggle.find('.dashicons')
+                .removeClass('dashicons-sticky')
+                .addClass('dashicons-unlock')
+                .parent().attr('title', 'Live-Preview lösen');
+        } else {
+            $sidebar.removeClass('sticky');
+            if ($sidebarPlaceholder) {
+                $sidebarPlaceholder.css('visibility', 'hidden');
+            }
+            $stickyToggle.find('.dashicons')
+                .removeClass('dashicons-unlock')
+                .addClass('dashicons-sticky')
+                .parent().attr('title', 'Live-Preview anheften');
+        }
+
+        // Save preference
+        localStorage.setItem('cbd_sticky_preview', isSticky);
+    }
+
+    // Auto-hide/show toggle button based on scroll
+    function updateToggleVisibility() {
+        var scrollTop = $(window).scrollTop();
+        var sidebarTop = $sidebar.offset().top - scrollTop;
+
+        if (scrollTop > 100 && sidebarTop < 100 && !isSticky) {
+            $stickyToggle.fadeIn(300);
+        } else if (isSticky) {
+            $stickyToggle.fadeIn(300);
+        } else {
+            $stickyToggle.fadeOut(300);
+        }
+    }
+
+    // Events
+    $stickyToggle.on('click', toggleSticky);
+    $(window).on('scroll resize', updateToggleVisibility);
+
+    // Initialize based on saved preference (nur auf Desktop)
+    if ($(window).width() > 1200) {
+        var savedPreference = localStorage.getItem('cbd_sticky_preview');
+        if (savedPreference === 'true') {
+            toggleSticky();
+        }
+    }
+
+    // Initial visibility check
+    updateToggleVisibility();
+
     <?php if (isset($js_redirect) && $js_redirect && isset($redirect_url)): ?>
     // Automatic redirect after successful save
     setTimeout(function() {

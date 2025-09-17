@@ -265,22 +265,23 @@
                             }
                         }
                         
-                        // Check for dropdown changes AND apply styles immediately
+                        // DEAKTIVIERT: Template-Styles überschreiben Live-Preview
+                        // Check for dropdown changes (aber keine Styles anwenden)
                         if (lastSelectedBlock && lastSelectedBlock.clientId === block.clientId) {
                             const oldSlug = lastSelectedBlock.attributes && lastSelectedBlock.attributes.selectedBlock;
                             const newSlug = block.attributes && block.attributes.selectedBlock;
-                            
+
                             if (oldSlug !== newSlug) {
-                                console.log('CBD DEBUG: Dropdown changed from', oldSlug, 'to', newSlug);
-                                applyRealStyles(newSlug, block.clientId);
+                                console.log('CBD DEBUG: Dropdown changed from', oldSlug, 'to', newSlug, '(Template-Styles deaktiviert für Live-Preview)');
+                                // applyRealStyles(newSlug, block.clientId); // DEAKTIVIERT
                             }
                         }
-                        
-                        // ALSO apply styles when block is first selected
+
+                        // DEAKTIVIERT: Template-Styles beim Block-Select
                         const currentSlug = block.attributes && block.attributes.selectedBlock;
                         if (currentSlug) {
-                            console.log('CBD DEBUG: Applying styles for currently selected block slug:', currentSlug);
-                            applyRealStyles(currentSlug, block.clientId);
+                            console.log('CBD DEBUG: Block selected with slug:', currentSlug, '(Template-Styles deaktiviert für Live-Preview)');
+                            // applyRealStyles(currentSlug, block.clientId); // DEAKTIVIERT
                         }
                         
                         lastSelectedBlock = block;
@@ -350,74 +351,13 @@
             }
         }
         
-        // Apply fallback styles
+        // Apply fallback styles - DEAKTIVIERT für Live-Preview
         function applyFallbackStyles(element, slug) {
-            console.log('CBD DEBUG: Applying fallback styles for:', slug);
-            
-            const fallbackStyles = {
-                'infotext_k1': {
-                    background: { color: 'rgb(221, 153, 51)' },
-                    border: { width: 1, style: 'solid', color: 'rgb(224, 224, 224)', radius: 4 },
-                    padding: '20px',
-                    color: 'rgb(51, 51, 51)',
-                    minHeight: '100px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                    fontSize: '14px',
-                    lineHeight: '1.5'
-                },
-                'infotext_k2': {
-                    background: { color: 'rgb(128, 128, 128)' },
-                    border: { width: 8, style: 'solid', color: 'rgb(64, 64, 64)', radius: 4 },
-                    padding: '20px',
-                    color: 'rgb(255, 255, 255)',
-                    minHeight: '100px',
-                    boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
-                    fontSize: '14px',
-                    lineHeight: '1.5',
-                    fontWeight: 'normal'
-                }
-            };
-            
-            const styles = fallbackStyles[slug];
-            if (styles) {
-                console.log('CBD DEBUG: Applying styles:', styles);
-                
-                // Apply all style properties
-                if (styles.background && styles.background.color) {
-                    element.style.setProperty('background-color', styles.background.color, 'important');
-                    element.style.setProperty('background', styles.background.color, 'important');
-                }
-                if (styles.border) {
-                    const border = `${styles.border.width}px ${styles.border.style} ${styles.border.color}`;
-                    element.style.setProperty('border', border, 'important');
-                    if (styles.border.radius) {
-                        element.style.setProperty('border-radius', styles.border.radius + 'px', 'important');
-                    }
-                }
-                if (styles.padding) {
-                    element.style.setProperty('padding', styles.padding, 'important');
-                }
-                if (styles.color) {
-                    element.style.setProperty('color', styles.color, 'important');
-                }
-                if (styles.minHeight) {
-                    element.style.setProperty('min-height', styles.minHeight, 'important');
-                }
-                if (styles.boxShadow) {
-                    element.style.setProperty('box-shadow', styles.boxShadow, 'important');
-                }
-                if (styles.fontSize) {
-                    element.style.setProperty('font-size', styles.fontSize, 'important');
-                }
-                if (styles.lineHeight) {
-                    element.style.setProperty('line-height', styles.lineHeight, 'important');
-                }
-                if (styles.fontWeight) {
-                    element.style.setProperty('font-weight', styles.fontWeight, 'important');
-                }
-                
-                console.log('CBD DEBUG: Styles applied successfully to element');
-            }
+            console.log('CBD DEBUG: Fallback styles deaktiviert für Live-Preview. Slug:', slug);
+
+            // ENTFERNT: Hardcoded orange/gray styles um Live-Preview zu ermöglichen
+            // Keine fallback styles mehr - Live-Preview hat Priorität
+            return;
         }
         
         // Apply database styles
@@ -531,7 +471,8 @@
                         
                         // Apply styles immediately
                         setTimeout(() => {
-                            applyRealStyles(selectValue);
+                            // applyRealStyles(selectValue); // DEAKTIVIERT für Live-Preview
+                            console.log('CBD DEBUG: Select change detected but template styles deaktiviert:', selectValue);
                         }, 100);
                     }
                 }

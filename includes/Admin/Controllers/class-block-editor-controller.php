@@ -33,8 +33,8 @@ class BlockEditorController {
      * Render the block editor page
      */
     public function render() {
-        // Check permissions
-        if (!current_user_can('manage_options')) {
+        // Check permissions - Mitarbeiter können Blocks bearbeiten
+        if (!current_user_can('edit_posts')) {
             wp_die(__('Sie haben keine Berechtigung, diese Seite zu besuchen.', 'container-block-designer'));
         }
         
@@ -358,7 +358,9 @@ class BlockEditorController {
             <h3 class="hndle"><?php _e('Vorschau', 'container-block-designer'); ?></h3>
             <div class="inside">
                 <div id="cbd-block-preview">
-                    <p><?php _e('Vorschau wird geladen...', 'container-block-designer'); ?></p>
+                    <div id="cbd-block-preview-content" style="padding: 20px; background-color: #ffffff; border: 1px solid #dddddd; border-radius: 4px; color: #333333;">
+                        <p><?php _e('Hier wird die Vorschau Ihres Blocks angezeigt', 'container-block-designer'); ?></p>
+                    </div>
                 </div>
                 <button type="button" class="button" id="cbd-update-preview">
                     <?php _e('Vorschau aktualisieren', 'container-block-designer'); ?>

@@ -141,6 +141,7 @@ class CBD_Database {
         $save_data = array(
             'name' => sanitize_text_field($data['name'] ?? ''),
             'title' => sanitize_text_field($data['title'] ?? ''),
+            'slug' => sanitize_text_field($data['slug'] ?? $data['name'] ?? ''), // Wichtig: slug hinzufügen
             'description' => sanitize_textarea_field($data['description'] ?? ''),
             'config' => wp_json_encode($data['config'] ?? array()),
             'styles' => wp_json_encode($data['styles'] ?? array()),
@@ -155,7 +156,7 @@ class CBD_Database {
                 CBD_TABLE_BLOCKS,
                 $save_data,
                 array('id' => $block_id),
-                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s'),
+                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s'), // Einen %s für slug hinzugefügt
                 array('%d')
             );
         } else {
@@ -164,7 +165,7 @@ class CBD_Database {
             $result = $wpdb->insert(
                 CBD_TABLE_BLOCKS,
                 $save_data,
-                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
+                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s') // Einen %s für slug hinzugefügt
             );
             
             if ($result) {
@@ -229,16 +230,34 @@ class CBD_Database {
      */
     public static function block_name_exists($name, $exclude_id = 0) {
         global $wpdb;
-        
+
         $sql = $wpdb->prepare(
             "SELECT COUNT(*) FROM " . CBD_TABLE_BLOCKS . " WHERE name = %s",
             $name
         );
-        
+
         if ($exclude_id > 0) {
             $sql .= $wpdb->prepare(" AND id != %d", $exclude_id);
         }
-        
+
+        return $wpdb->get_var($sql) > 0;
+    }
+
+    /**
+     * Check if block slug exists
+     */
+    public static function block_slug_exists($slug, $exclude_id = 0) {
+        global $wpdb;
+
+        $sql = $wpdb->prepare(
+            "SELECT COUNT(*) FROM " . CBD_TABLE_BLOCKS . " WHERE slug = %s",
+            $slug
+        );
+
+        if ($exclude_id > 0) {
+            $sql .= $wpdb->prepare(" AND id != %d", $exclude_id);
+        }
+
         return $wpdb->get_var($sql) > 0;
     }
     
@@ -247,33 +266,53 @@ class CBD_Database {
      */
     public static function duplicate_block($block_id) {
         global $wpdb;
-        
+
+        error_log('[CBD Database] duplicate_block called with ID: ' . $block_id);
+
         $original = self::get_block($block_id);
-        
+
         if (!$original) {
+            error_log('[CBD Database] Original block not found for ID: ' . $block_id);
             return false;
         }
+
+        error_log('[CBD Database] Original block loaded: ' . print_r($original, true));
         
-        // Generate unique name
+        // Generate unique name and slug
         $counter = 1;
         $new_name = $original['name'] . '_copy';
-        while (self::block_name_exists($new_name)) {
+        $new_slug = (isset($original['slug']) ? $original['slug'] : $original['name']) . '_copy';
+
+        // Prüfe sowohl name als auch slug auf Eindeutigkeit
+        while (self::block_name_exists($new_name) || self::block_slug_exists($new_slug)) {
             $counter++;
             $new_name = $original['name'] . '_copy_' . $counter;
+            $new_slug = (isset($original['slug']) ? $original['slug'] : $original['name']) . '_copy_' . $counter;
         }
-        
+
         // Prepare duplicate
         $duplicate_data = array(
             'name' => $new_name,
             'title' => $original['title'] . ' (Kopie)',
+            'slug' => $new_slug, // Eindeutigen slug setzen
             'description' => $original['description'],
             'config' => $original['config'],
             'styles' => $original['styles'],
             'features' => $original['features'],
-            'status' => 'inactive' // Set duplicate to inactive by default
+            'status' => 'active' // Set duplicate to active so it's immediately usable
         );
         
-        return self::save_block($duplicate_data);
+        error_log('[CBD Database] Duplicate data prepared: ' . print_r($duplicate_data, true));
+
+        $result = self::save_block($duplicate_data);
+
+        if ($result) {
+            error_log('[CBD Database] Duplicate saved successfully with ID: ' . $result);
+        } else {
+            error_log('[CBD Database] Duplicate save failed. Last error: ' . $wpdb->last_error);
+        }
+
+        return $result;
     }
     
     /**

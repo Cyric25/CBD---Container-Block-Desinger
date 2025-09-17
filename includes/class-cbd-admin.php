@@ -184,6 +184,24 @@ class CBD_Admin {
                     CBD_VERSION,
                     true
                 );
+
+                // Admin.js für Style-Preview
+                wp_enqueue_script(
+                    'cbd-admin',
+                    CBD_PLUGIN_URL . 'assets/js/admin.js',
+                    array('jquery', 'wp-color-picker'),
+                    CBD_VERSION,
+                    true
+                );
+
+                // Live-Preview-Fix Script
+                wp_enqueue_script(
+                    'cbd-live-preview-fix',
+                    CBD_PLUGIN_URL . 'assets/js/admin-live-preview-fix.js',
+                    array('jquery'),
+                    CBD_VERSION,
+                    true
+                );
                 
                 wp_localize_script('cbd-block-editor', 'cbdBlockEditor', array(
                     'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -286,8 +304,41 @@ class CBD_Admin {
         if (!isset($_GET['page']) || strpos($_GET['page'], 'container-block-designer') === false) {
             return;
         }
-        
+
         global $wpdb;
+
+        // Block-Duplizierung verarbeiten
+        if (isset($_GET['action']) && $_GET['action'] === 'duplicate' && isset($_GET['block_id'])) {
+            error_log('[CBD Admin] Duplicate action detected: block_id=' . $_GET['block_id']);
+
+            $block_id = intval($_GET['block_id']);
+            $nonce_action = 'cbd_duplicate_block_' . $block_id;
+
+            // Debug Nonce
+            error_log('[CBD Admin] Nonce check: action=' . $nonce_action . ', received=' . ($_GET['_wpnonce'] ?? 'none'));
+
+            if (!wp_verify_nonce($_GET['_wpnonce'], $nonce_action)) {
+                error_log('[CBD Admin] Nonce verification failed');
+                wp_die('Sicherheitsprüfung fehlgeschlagen');
+            }
+
+            // Lade CBD_Database Klasse falls nötig
+            if (!class_exists('CBD_Database')) {
+                require_once CBD_PLUGIN_DIR . 'includes/class-cbd-database.php';
+            }
+
+            error_log('[CBD Admin] Attempting to duplicate block ID: ' . $block_id);
+            $duplicate_id = CBD_Database::duplicate_block($block_id);
+            error_log('[CBD Admin] Duplicate result: ' . ($duplicate_id ? 'Success (ID: ' . $duplicate_id . ')' : 'Failed'));
+
+            if ($duplicate_id) {
+                wp_redirect(admin_url('admin.php?page=cbd-blocks&duplicated=1&block_id=' . $duplicate_id));
+                exit;
+            } else {
+                wp_redirect(admin_url('admin.php?page=cbd-blocks&error=duplicate_failed'));
+                exit;
+            }
+        }
         
         // Block-Speichern verarbeiten (für edit-block.php)
         if (isset($_POST['save_block']) && isset($_POST['block_id']) && isset($_POST['cbd_nonce'])) {
@@ -362,12 +413,16 @@ class CBD_Admin {
                 'templateLock' => isset($_POST['template_lock']) ? false : true
             );
             
-            // Daten aktualisieren
+            // Slug generieren aus Name für Form-Edit
+            $slug = sanitize_title($name);
+
+            // Daten aktualisieren - WICHTIG: slug hinzufügen!
             $result = $wpdb->update(
                 CBD_TABLE_BLOCKS,
                 array(
                     'name' => $name,
                     'title' => $title,
+                    'slug' => $slug, // KRITISCH: slug hinzufügen für Frontend-Rendering
                     'description' => $description,
                     'config' => wp_json_encode($config),
                     'styles' => wp_json_encode($styles),
@@ -376,11 +431,16 @@ class CBD_Admin {
                     'updated_at' => current_time('mysql')
                 ),
                 array('id' => $block_id),
-                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s'),
+                array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s'), // Einen %s für slug hinzugefügt
                 array('%d')
             );
             
             if ($result !== false) {
+                // Cache leeren für sofortige Verfügbarkeit
+                wp_cache_delete('cbd_all_blocks_styles');
+                wp_cache_delete('cbd_active_features');
+                delete_transient('cbd_compiled_styles');
+
                 set_transient('cbd_admin_notice_' . get_current_user_id(), array(
                     'type' => 'success',
                     'message' => __('Block erfolgreich aktualisiert.', 'container-block-designer')
@@ -575,8 +635,22 @@ class CBD_Admin {
      * Block-Liste-Seite rendern
      */
     public function render_blocks_list_page() {
+        // Admin Notices für Duplizierung
+        if (isset($_GET['duplicated']) && $_GET['duplicated'] == '1') {
+            $block_id = isset($_GET['block_id']) ? intval($_GET['block_id']) : 0;
+            echo '<div class="notice notice-success is-dismissible">';
+            echo '<p>' . sprintf(__('Block erfolgreich dupliziert! Neue Block-ID: %d', 'container-block-designer'), $block_id) . '</p>';
+            echo '</div>';
+        }
+
+        if (isset($_GET['error']) && $_GET['error'] == 'duplicate_failed') {
+            echo '<div class="notice notice-error is-dismissible">';
+            echo '<p>' . __('Fehler beim Duplizieren des Blocks', 'container-block-designer') . '</p>';
+            echo '</div>';
+        }
+
         $file_path = CBD_PLUGIN_DIR . 'admin/blocks-list.php';
-        
+
         if (file_exists($file_path)) {
             include $file_path;
         } else {
@@ -1345,12 +1419,18 @@ class CBD_Admin {
             'templateLock' => isset($_POST['template_lock']) ? false : true
         );
         
-        // Daten aktualisieren
+        // Slug generieren basierend auf name (falls nicht explizit gesetzt)
+        $slug = sanitize_title($name);
+
+        error_log('[CBD Edit Save] Generated slug: "' . $slug . '" from name: "' . $name . '"');
+
+        // Daten aktualisieren - WICHTIG: slug hinzufügen!
         $result = $wpdb->update(
             CBD_TABLE_BLOCKS,
             array(
                 'name' => $name,
                 'title' => $title,
+                'slug' => $slug, // KRITISCH: slug hinzufügen für Frontend-Rendering
                 'description' => $description,
                 'config' => wp_json_encode($config),
                 'styles' => wp_json_encode($styles),
@@ -1359,13 +1439,18 @@ class CBD_Admin {
                 'updated_at' => current_time('mysql')
             ),
             array('id' => $block_id),
-            array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s'),
+            array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s'), // Einen %s für slug hinzugefügt
             array('%d')
         );
         
         error_log('[CBD Edit Save] Update result: ' . ($result !== false ? 'success' : 'failed'));
         
         if ($result !== false) {
+            // Cache leeren für sofortige Verfügbarkeit
+            wp_cache_delete('cbd_all_blocks_styles');
+            wp_cache_delete('cbd_active_features');
+            delete_transient('cbd_compiled_styles');
+
             wp_send_json_success(array(
                 'message' => 'Block erfolgreich gespeichert',
                 'block_id' => $block_id

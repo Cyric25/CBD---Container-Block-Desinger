@@ -379,23 +379,41 @@ class CBD_Style_Loader {
         if (!is_array($styles)) {
             return false;
         }
-        
-        // Check for actual CSS properties
-        $css_properties = array('background', 'border', 'padding', 'margin', 'color', 'font', 'text');
-        
+
+        // Check for actual CSS properties (erweiterte Liste)
+        $css_properties = array('background', 'border', 'padding', 'margin', 'color', 'font', 'text', 'typography', 'width', 'height', 'display', 'position');
+
         foreach ($css_properties as $property) {
             if (!empty($styles[$property])) {
                 return true;
             }
         }
-        
-        // Check for nested style properties
-        if (!empty($styles['background']['color']) || 
-            !empty($styles['border']['color']) || 
-            !empty($styles['border']['width'])) {
+
+        // Check for nested style properties (erweiterte Prüfung)
+        if (!empty($styles['background']['color']) ||
+            !empty($styles['border']['color']) ||
+            !empty($styles['border']['width']) ||
+            !empty($styles['padding']['top']) ||
+            !empty($styles['padding']['left']) ||
+            !empty($styles['typography']['color']) ||
+            !empty($styles['text']['color'])) {
             return true;
         }
-        
+
+        // Fallback: Wenn es ein Array mit mindestens einer Eigenschaft ist,
+        // betrachte es als gültig (bessere Kompatibilität mit duplizierten Blocks)
+        if (is_array($styles) && count($styles) > 0) {
+            if ($this->debug_mode) {
+                error_log('[CBD Style Loader] Found non-empty styles array, treating as valid: ' . print_r($styles, true));
+            }
+            return true;
+        }
+
+        // Debug: Logge was in den Styles ist, wenn sie als ungültig eingestuft werden
+        if ($this->debug_mode) {
+            error_log('[CBD Style Loader] No valid styles found: ' . print_r($styles, true));
+        }
+
         return false;
     }
     
@@ -669,10 +687,11 @@ class CBD_Style_Loader {
         $blocks = $this->get_all_blocks();
         if (!empty($blocks)) {
             foreach ($blocks as $block) {
-                $styles = json_decode($block->styles, true);
+                // Fix: Use array notation since get_all_blocks() returns ARRAY_A
+                $styles = json_decode($block['styles'], true);
                 if (!empty($styles)) {
-                    $block_class = '.wp-block-container-block-designer-' . sanitize_html_class($block->slug);
-                    $css_content .= $this->generate_block_editor_css($styles, $block_class, $block->slug);
+                    $block_class = '.wp-block-container-block-designer-' . sanitize_html_class($block['slug']);
+                    $css_content .= $this->generate_block_editor_css($styles, $block_class, $block['slug']);
                 }
             }
         }
@@ -887,7 +906,15 @@ class CBD_Style_Loader {
                         echo '    background-color: ' . esc_attr($styles['background']['color']) . ' !important;' . "\n";
                     }
                     if (!empty($styles['background']['gradient'])) {
-                        echo '    background: ' . esc_attr($styles['background']['gradient']) . ' !important;' . "\n";
+                        // Handle gradient as string or array
+                        if (is_array($styles['background']['gradient'])) {
+                            $gradient_css = $this->convert_gradient_array_to_css($styles['background']['gradient']);
+                            if (!empty($gradient_css)) {
+                                echo '    background: ' . esc_attr($gradient_css) . ' !important;' . "\n";
+                            }
+                        } else {
+                            echo '    background: ' . esc_attr($styles['background']['gradient']) . ' !important;' . "\n";
+                        }
                     }
                     
                     // Text styles - OVERRIDE WARNING COLOR
@@ -1485,7 +1512,17 @@ class CBD_Style_Loader {
             }
             
             if (!empty($bg['gradient'])) {
-                $css_properties[] = '  background: ' . $bg['gradient'] . ';';
+                // Handle gradient as string or array
+                if (is_array($bg['gradient'])) {
+                    // If gradient is stored as array, convert to CSS string
+                    $gradient_css = $this->convert_gradient_array_to_css($bg['gradient']);
+                    if (!empty($gradient_css)) {
+                        $css_properties[] = '  background: ' . $gradient_css . ';';
+                    }
+                } else {
+                    // If gradient is already a string
+                    $css_properties[] = '  background: ' . $bg['gradient'] . ';';
+                }
             }
         }
         
@@ -1959,9 +1996,10 @@ class CBD_Style_Loader {
      */
     public function ajax_refresh_styles() {
         check_ajax_referer('cbd-admin-nonce', 'nonce');
-        
-        if (!current_user_can('manage_options')) {
-            wp_die(__('Keine Berechtigung', 'container-block-designer'));
+
+        // Nur Style-Verwaltung ist auf Administratoren beschränkt
+        if (!$this->can_manage_styles()) {
+            wp_die(__('Keine Berechtigung für Style-Verwaltung', 'container-block-designer'));
         }
         
         // Cache leeren
@@ -2012,6 +2050,70 @@ class CBD_Style_Loader {
         update_option('cbd_styles_version', time());
     }
     
+    /**
+     * Convert gradient array to CSS string
+     */
+    private function convert_gradient_array_to_css($gradient) {
+        if (!is_array($gradient)) {
+            return '';
+        }
+
+        // Handle common gradient array structures
+        if (isset($gradient['type']) && isset($gradient['value'])) {
+            // WordPress block editor gradient format
+            return $gradient['value'];
+        } elseif (isset($gradient['gradient'])) {
+            // Nested gradient format
+            return $gradient['gradient'];
+        } elseif (isset($gradient['css'])) {
+            // CSS property format
+            return $gradient['css'];
+        } elseif (isset($gradient['colors']) && is_array($gradient['colors'])) {
+            // Build linear gradient from colors array
+            $type = $gradient['type'] ?? 'linear';
+            $direction = $gradient['direction'] ?? 'to bottom';
+            $colors = [];
+
+            foreach ($gradient['colors'] as $color) {
+                if (is_array($color) && isset($color['color'])) {
+                    $position = isset($color['position']) ? ' ' . $color['position'] : '';
+                    $colors[] = $color['color'] . $position;
+                } elseif (is_string($color)) {
+                    $colors[] = $color;
+                }
+            }
+
+            if (!empty($colors)) {
+                return $type . '-gradient(' . $direction . ', ' . implode(', ', $colors) . ')';
+            }
+        }
+
+        // If it's just a simple array, try to implode it
+        if (count($gradient) === 1 && is_string(reset($gradient))) {
+            return reset($gradient);
+        }
+
+        // Fallback: log the structure for debugging
+        $this->debug_log('Unknown gradient array structure: ' . print_r($gradient, true));
+        return '';
+    }
+
+    /**
+     * Prüfe Berechtigungen für Container-Block Nutzung
+     */
+    private function can_use_container_blocks() {
+        // Mitarbeiter und höher können Container-Blocks verwenden
+        return current_user_can('edit_posts');
+    }
+
+    /**
+     * Prüfe Berechtigungen für Style-Verwaltung
+     */
+    private function can_manage_styles() {
+        // Nur Administratoren können Styles verwalten
+        return current_user_can('manage_options');
+    }
+
     /**
      * Debug-Ausgabe
      */

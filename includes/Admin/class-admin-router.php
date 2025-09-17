@@ -36,62 +36,65 @@ class AdminRouter {
      * Register admin menu pages
      */
     public function register_admin_pages() {
-        $capability = 'manage_options';
+        // Unterschiedliche Berechtigungen für verschiedene Bereiche
+        $block_capability = 'edit_posts';     // Mitarbeiter können Blocks verwalten
+        $admin_capability = 'manage_options'; // Nur Admins für Settings/Import/Export
         
-        // Main menu page
+        // Main menu page - für Mitarbeiter zugänglich
         add_menu_page(
             __('Container Block Designer', 'container-block-designer'),
             __('Container Blocks', 'container-block-designer'),
-            $capability,
+            $block_capability,
             'cbd-blocks',
             array($this, 'route_request'),
             'dashicons-layout',
             30
         );
-        
-        // Submenu pages
+
+        // Block-Verwaltung - für Mitarbeiter zugänglich
         add_submenu_page(
             'cbd-blocks',
             __('Alle Blöcke', 'container-block-designer'),
             __('Alle Blöcke', 'container-block-designer'),
-            $capability,
+            $block_capability,
             'cbd-blocks',
             array($this, 'route_request')
         );
-        
+
         add_submenu_page(
             'cbd-blocks',
             __('Block hinzufügen', 'container-block-designer'),
             __('Block hinzufügen', 'container-block-designer'),
-            $capability,
+            $block_capability,
             'cbd-new-block',
             array($this, 'route_request')
         );
-        
-        // Hidden page - use empty string instead of null to avoid PHP deprecation warnings
+
+        // Hidden page für Block-Bearbeitung - für Mitarbeiter zugänglich
         add_submenu_page(
             '', // Empty string instead of null for hidden pages
             __('Block bearbeiten', 'container-block-designer'),
             __('Block bearbeiten', 'container-block-designer'),
-            $capability,
+            $block_capability,
             'cbd-edit-block',
             array($this, 'route_request')
         );
-        
+
+        // Admin-only Bereiche
         add_submenu_page(
             'cbd-blocks',
             __('Import/Export', 'container-block-designer'),
             __('Import/Export', 'container-block-designer'),
-            $capability,
+            $admin_capability,
             'cbd-import-export',
             array($this, 'route_request')
         );
-        
+
         add_submenu_page(
             'cbd-blocks',
             __('Einstellungen', 'container-block-designer'),
             __('Einstellungen', 'container-block-designer'),
-            $capability,
+            $admin_capability,
             'cbd-settings',
             array($this, 'route_request')
         );

@@ -21,8 +21,8 @@ function cbd_ajax_save_block() {
         wp_send_json_error('Sicherheitsprüfung fehlgeschlagen');
     }
     
-    // Berechtigung prüfen
-    if (!current_user_can('manage_options')) {
+    // Berechtigung prüfen - Mitarbeiter können Blocks verwalten
+    if (!current_user_can('edit_posts')) {
         wp_send_json_error('Keine Berechtigung');
     }
     
@@ -114,8 +114,8 @@ function cbd_ajax_duplicate_block() {
         wp_send_json_error('Sicherheitsprüfung fehlgeschlagen');
     }
     
-    // Berechtigung prüfen
-    if (!current_user_can('manage_options')) {
+    // Berechtigung prüfen - Mitarbeiter können Blocks verwalten
+    if (!current_user_can('edit_posts')) {
         wp_send_json_error('Keine Berechtigung');
     }
     
@@ -168,8 +168,8 @@ function cbd_ajax_delete_block() {
         wp_send_json_error('Sicherheitsprüfung fehlgeschlagen');
     }
     
-    // Berechtigung prüfen
-    if (!current_user_can('manage_options')) {
+    // Berechtigung prüfen - Mitarbeiter können Blocks verwalten
+    if (!current_user_can('edit_posts')) {
         wp_send_json_error('Keine Berechtigung');
     }
     
@@ -207,8 +207,8 @@ function cbd_ajax_toggle_status() {
         wp_send_json_error('Sicherheitsprüfung fehlgeschlagen');
     }
     
-    // Berechtigung prüfen
-    if (!current_user_can('manage_options')) {
+    // Berechtigung prüfen - Mitarbeiter können Blocks verwalten
+    if (!current_user_can('edit_posts')) {
         wp_send_json_error('Keine Berechtigung');
     }
     
@@ -265,8 +265,8 @@ function cbd_ajax_save_features() {
         wp_send_json_error('Sicherheitsprüfung fehlgeschlagen');
     }
     
-    // Berechtigung prüfen
-    if (!current_user_can('manage_options')) {
+    // Berechtigung prüfen - Mitarbeiter können Blocks verwalten
+    if (!current_user_can('edit_posts')) {
         wp_send_json_error('Keine Berechtigung');
     }
     

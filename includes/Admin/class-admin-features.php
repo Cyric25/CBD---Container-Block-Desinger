@@ -349,7 +349,7 @@ class CBD_Admin_Features {
     public function ajax_save_features() {
         check_ajax_referer('cbd_admin', 'nonce');
         
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('edit_posts')) {
             wp_die(__('Insufficient permissions', 'container-block-designer'));
         }
         
@@ -389,7 +389,7 @@ class CBD_Admin_Features {
     public function ajax_toggle_feature() {
         check_ajax_referer('cbd_admin', 'nonce');
         
-        if (!current_user_can('manage_options')) {
+        if (!current_user_can('edit_posts')) {
             wp_die(__('Insufficient permissions', 'container-block-designer'));
         }
         
