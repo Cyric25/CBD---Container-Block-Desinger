@@ -995,6 +995,11 @@ class CBD_Admin {
             );
         }
 
+        // Zusätzliche Sicherheitsprüfung: Stelle sicher, dass content ein String ist
+        if (isset($block_data['content']) && is_array($block_data['content'])) {
+            $block_data['content'] = implode(' ', $block_data['content']);
+        }
+
         // Erstelle eine Vorschau des Blocks
         $preview_html = $this->generate_block_preview_html($block_data, $styles, $features);
 
@@ -1067,11 +1072,9 @@ class CBD_Admin {
         }
 
         if (!empty($content)) {
-            $preview_content = wp_trim_words($content, 15, '...');
-            // Stelle sicher, dass $preview_content ein String ist
-            if (is_array($preview_content)) {
-                $preview_content = implode(' ', $preview_content);
-            }
+            // Nochmalige Prüfung, um sicherzugehen, dass $content ein String ist
+            $content_string = is_array($content) ? implode(' ', $content) : (string)$content;
+            $preview_content = wp_trim_words($content_string, 15, '...');
             $preview_html .= '<div style="font-size: 13px; line-height: 1.4; color: #555;">' . esc_html($preview_content) . '</div>';
         }
 
