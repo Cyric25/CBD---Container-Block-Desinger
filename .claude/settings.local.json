@@ -6,7 +6,8 @@
       "Bash(php:*)",
       "Bash(find:*)",
       "Read(//c/Users/mtnhu/**)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

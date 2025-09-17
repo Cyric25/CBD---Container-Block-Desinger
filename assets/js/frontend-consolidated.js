@@ -152,12 +152,18 @@
                 $content = $container.find('.cbd-content');
             }
 
-            // Set initial state
-            if (collapseData.defaultState === 'collapsed') {
+            // Set initial state - only if not already set by backend
+            if (collapseData.defaultState === 'collapsed' && !$container.hasClass('cbd-collapsed')) {
                 $container.addClass('cbd-collapsed');
                 // Simply hide the content wrapper
                 var $contentWrapper = $container.find('.cbd-container-content');
                 if ($contentWrapper.length) {
+                    $contentWrapper.hide();
+                }
+            } else if ($container.hasClass('cbd-collapsed')) {
+                // If already collapsed by backend, ensure content is hidden
+                var $contentWrapper = $container.find('.cbd-container-content');
+                if ($contentWrapper.length && $contentWrapper.is(':visible')) {
                     $contentWrapper.hide();
                 }
             }
@@ -423,7 +429,7 @@
             var $button = $(this);
             var containerId = $button.data('container-id');
             var $container = $('#' + containerId);
-            
+
             // Screenshot the inner content block, not the entire wrapper
             var contentBlock = $container.find('.cbd-content .cbd-container-block')[0];
 
@@ -442,27 +448,149 @@
                 backgroundColor: null,
                 logging: false
             }).then(function(canvas) {
-                canvas.toBlob(function(blob) {
-                    var url = URL.createObjectURL(blob);
-                    var a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'container-block-' + Date.now() + '.png';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                    
-                    CBDFrontend.showToast('Screenshot wurde erstellt', 'success');
+                // Try to copy to clipboard first, fallback to download
+                CBDFrontend.copyImageToClipboard(canvas, function(success) {
+                    if (success) {
+                        CBDFrontend.showToast('Screenshot in Zwischenablage kopiert', 'success');
+                    } else {
+                        // Fallback: Download the image
+                        canvas.toBlob(function(blob) {
+                            var url = URL.createObjectURL(blob);
+                            var a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'container-block-' + Date.now() + '.png';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+
+                            CBDFrontend.showToast('Screenshot heruntergeladen (Zwischenablage nicht verfügbar)', 'info');
+                        });
+                    }
+
+                    $button.prop('disabled', false);
+                    $button.removeClass('cbd-loading');
                 });
-                
-                $button.prop('disabled', false);
-                $button.removeClass('cbd-loading');
             }).catch(function(error) {
                 console.error('CBD: Screenshot failed', error);
                 CBDFrontend.showToast('Fehler beim Screenshot', 'error');
                 $button.prop('disabled', false);
                 $button.removeClass('cbd-loading');
             });
+        },
+
+        /**
+         * Copy image to clipboard with fallbacks for different browsers/platforms
+         */
+        copyImageToClipboard: function(canvas, callback) {
+            // Check basic clipboard support
+            if (!navigator.clipboard) {
+                console.log('CBD: Clipboard API not available');
+                callback(false);
+                return;
+            }
+
+            // Check ClipboardItem support
+            if (typeof ClipboardItem === 'undefined' && typeof window.ClipboardItem === 'undefined') {
+                console.log('CBD: ClipboardItem not supported');
+                callback(false);
+                return;
+            }
+
+            // Use window.ClipboardItem if ClipboardItem is undefined
+            var ClipboardItemConstructor = ClipboardItem || window.ClipboardItem;
+
+            try {
+                // Convert canvas to blob
+                canvas.toBlob(function(blob) {
+                    if (!blob) {
+                        console.log('CBD: Failed to create blob from canvas');
+                        callback(false);
+                        return;
+                    }
+
+                    console.log('CBD: Attempting to copy image to clipboard...');
+
+                    // Check if we can support this MIME type
+                    if (ClipboardItemConstructor.supports && !ClipboardItemConstructor.supports('image/png')) {
+                        console.log('CBD: Browser does not support image/png in clipboard');
+                        callback(false);
+                        return;
+                    }
+
+                    try {
+                        // Create clipboard item
+                        var clipboardItem = new ClipboardItemConstructor({
+                            'image/png': blob
+                        });
+
+                        // Write to clipboard
+                        navigator.clipboard.write([clipboardItem]).then(function() {
+                            console.log('CBD: Successfully copied image to clipboard');
+                            callback(true);
+                        }).catch(function(error) {
+                            console.error('CBD: Clipboard write failed:', error);
+
+                            // Try alternative approach for Safari
+                            if (error.name === 'NotAllowedError') {
+                                console.log('CBD: Trying Safari-compatible approach...');
+                                CBDFrontend.copyImageToClipboardSafari(blob, ClipboardItemConstructor, callback);
+                            } else {
+                                callback(false);
+                            }
+                        });
+                    } catch (clipboardError) {
+                        console.error('CBD: ClipboardItem creation failed:', clipboardError);
+                        callback(false);
+                    }
+                }, 'image/png');
+            } catch (error) {
+                console.error('CBD: Canvas blob conversion failed:', error);
+                callback(false);
+            }
+        },
+
+        /**
+         * Safari-specific clipboard approach
+         */
+        copyImageToClipboardSafari: function(blob, ClipboardItemConstructor, callback) {
+            try {
+                // Create ClipboardItem with Promise for Safari compatibility
+                var clipboardItem = new ClipboardItemConstructor({
+                    'image/png': Promise.resolve(blob)
+                });
+
+                navigator.clipboard.write([clipboardItem]).then(function() {
+                    console.log('CBD: Safari clipboard copy successful');
+                    callback(true);
+                }).catch(function(error) {
+                    console.error('CBD: Safari clipboard copy failed:', error);
+                    callback(false);
+                });
+            } catch (error) {
+                console.error('CBD: Safari clipboard setup failed:', error);
+                callback(false);
+            }
+        },
+
+        /**
+         * Test clipboard functionality (for debugging)
+         */
+        testClipboard: function() {
+            console.log('=== CBD Clipboard Test ===');
+            console.log('navigator.clipboard:', !!navigator.clipboard);
+            console.log('navigator.clipboard.write:', !!(navigator.clipboard && navigator.clipboard.write));
+            console.log('ClipboardItem:', typeof ClipboardItem);
+            console.log('window.ClipboardItem:', typeof window.ClipboardItem);
+
+            if (ClipboardItem && ClipboardItem.supports) {
+                console.log('ClipboardItem.supports("image/png"):', ClipboardItem.supports('image/png'));
+            } else if (window.ClipboardItem && window.ClipboardItem.supports) {
+                console.log('window.ClipboardItem.supports("image/png"):', window.ClipboardItem.supports('image/png'));
+            }
+
+            console.log('User Agent:', navigator.userAgent);
+            console.log('=== End Test ===');
         },
 
         /**
