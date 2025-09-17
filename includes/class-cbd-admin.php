@@ -981,9 +981,19 @@ class CBD_Admin {
      * Rendert eine einzelne Block-Vorschau-Karte
      */
     private function render_preview_block_card($block, $is_block_redakteur = false) {
-        $block_data = json_decode($block['block_data'], true);
-        $styles = json_decode($block['styles'], true);
-        $features = json_decode($block['features'], true);
+        // Sichere JSON-Dekodierung mit Fallback
+        $block_data = !empty($block['block_data']) ? json_decode($block['block_data'], true) : array();
+        $styles = !empty($block['styles']) ? json_decode($block['styles'], true) : array();
+        $features = !empty($block['features']) ? json_decode($block['features'], true) : array();
+
+        // Fallback für leere block_data
+        if (empty($block_data)) {
+            $block_data = array(
+                'id' => $block['id'] ?? 'unknown',
+                'title' => $block['name'] ?? 'Unbenannt',
+                'content' => 'Keine Inhaltsdaten verfügbar'
+            );
+        }
 
         // Erstelle eine Vorschau des Blocks
         $preview_html = $this->generate_block_preview_html($block_data, $styles, $features);
@@ -1027,69 +1037,10 @@ class CBD_Admin {
     }
 
     /**
-     * Generiert HTML-Vorschau für einen Block mit echtem Rendering
+     * Generiert HTML-Vorschau für einen Block
      */
     private function generate_block_preview_html($block_data, $styles, $features) {
-        // Verwende das CBD Style Loader System für korrekte CSS-Generierung
-        if (class_exists('CBD_Style_Loader')) {
-            try {
-                $style_loader = new CBD_Style_Loader();
-
-                // Generiere echte CSS für den Block
-                $block_id = 'preview-' . uniqid();
-                $css_output = $style_loader->generate_block_css($block_id, $styles);
-
-                // Erstelle Block-HTML mit echtem CSS
-                $content = wp_trim_words($block_data['content'] ?? '', 20, '...');
-                $title = $block_data['title'] ?? '';
-
-                $preview_html = '<style>' . $css_output . '</style>';
-                $preview_html .= '<div id="' . $block_id . '" class="cbd-container cbd-preview-container">';
-
-                // Header mit Titel falls vorhanden
-                if (!empty($title)) {
-                    $preview_html .= '<div class="cbd-container-header">';
-                    $preview_html .= '<h3 class="cbd-block-title">' . esc_html($title) . '</h3>';
-                    $preview_html .= '</div>';
-                }
-
-                // Container Content
-                $preview_html .= '<div class="cbd-container-content">';
-                $preview_html .= '<div class="cbd-container-block">';
-
-                if (!empty($content)) {
-                    $preview_html .= '<div class="cbd-block-content">' . wp_kses_post($content) . '</div>';
-                }
-
-                $preview_html .= '</div></div>';
-
-                // Features Info
-                if (!empty($features)) {
-                    $active_features = array();
-                    foreach ($features as $feature_name => $feature_data) {
-                        if (!empty($feature_data['enabled'])) {
-                            $active_features[] = ucfirst($feature_name);
-                        }
-                    }
-
-                    if (!empty($active_features)) {
-                        $preview_html .= '<div class="cbd-features-info" style="font-size: 11px; color: #666; margin-top: 8px; padding: 5px; background: rgba(0,0,0,0.05); border-radius: 3px;">';
-                        $preview_html .= '<strong>' . __('Features:', 'container-block-designer') . '</strong> ' . implode(', ', $active_features);
-                        $preview_html .= '</div>';
-                    }
-                }
-
-                $preview_html .= '</div>';
-
-                return $preview_html;
-
-            } catch (Exception $e) {
-                error_log('CBD Preview Error: ' . $e->getMessage());
-                return $this->generate_fallback_preview_html($block_data, $styles, $features);
-            }
-        }
-
-        // Fallback wenn Style Loader nicht verfügbar
+        // Verwende immer das erweiterte Fallback-System für stabilere Vorschau
         return $this->generate_fallback_preview_html($block_data, $styles, $features);
     }
 
