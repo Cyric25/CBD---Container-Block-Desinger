@@ -860,8 +860,7 @@ class CBD_Admin {
             wp_die(__('Du hast nicht die erforderlichen Berechtigungen für diese Seite.', 'container-block-designer'));
         }
 
-        // Temporärer Filter für Array-zu-String Konvertierung
-        add_filter('cbd_safe_content', array($this, 'safe_array_to_string'));
+        // Keine WordPress-Funktionen die Arrays nicht handhaben können
 
         global $wpdb;
         $table_name = $wpdb->prefix . 'cbd_blocks';
@@ -873,11 +872,6 @@ class CBD_Admin {
         $blocks = array();
         if ($table_exists) {
             $blocks = $wpdb->get_results("SELECT * FROM $table_name ORDER BY created_at DESC", ARRAY_A);
-
-            // Bereinige alle Block-Daten um Array-Probleme zu vermeiden
-            foreach ($blocks as $key => $block) {
-                $blocks[$key] = $this->sanitize_block_data($block);
-            }
         }
 
         // Prüfe ob User Block-Redakteur ist
@@ -986,7 +980,7 @@ class CBD_Admin {
     }
 
     /**
-     * Rendert eine einzelne Block-Vorschau-Karte
+     * Rendert eine einzelne Block-Vorschau-Karte - VEREINFACHT
      */
     private function render_preview_block_card($block, $is_block_redakteur = false) {
         // Sichere JSON-Dekodierung mit Fallback
@@ -994,19 +988,12 @@ class CBD_Admin {
         $styles = !empty($block['styles']) ? json_decode($block['styles'], true) : array();
         $features = !empty($block['features']) ? json_decode($block['features'], true) : array();
 
-        // Fallback für leere block_data
+        // Einfacher Fallback für leere block_data
         if (empty($block_data)) {
             $block_data = array(
-                'id' => $block['id'] ?? 'unknown',
                 'title' => $block['name'] ?? 'Unbenannt',
                 'content' => 'Keine Inhaltsdaten verfügbar'
             );
-        }
-
-        // Zusätzliche Sicherheitsprüfung: Stelle sicher, dass content ein String ist
-        if (isset($block_data['content']) && is_array($block_data['content'])) {
-            error_log('CBD Debug: Found array content in block_data, converting to string');
-            $block_data['content'] = implode(' ', $block_data['content']);
         }
 
         // Erstelle eine Vorschau des Blocks
@@ -1052,57 +1039,99 @@ class CBD_Admin {
     }
 
     /**
-     * Generiert HTML-Vorschau für einen Block
+     * Generiert HTML-Vorschau für einen Block - OHNE wp_trim_words
      */
     private function generate_block_preview_html($block_data, $styles, $features) {
-        // Verwende immer das erweiterte Fallback-System für stabilere Vorschau
-        return $this->generate_fallback_preview_html($block_data, $styles, $features);
-    }
-
-    /**
-     * Fallback-Vorschau wenn echtes Rendering nicht möglich
-     */
-    private function generate_fallback_preview_html($block_data, $styles, $features) {
-        $content = $block_data['content'] ?? '';
-        $title = $block_data['title'] ?? '';
-
-        // Stelle sicher, dass Content ein String ist - robuste Konvertierung
-        $content = $this->safe_array_to_string($content);
+        $content = $this->safe_string_extract($block_data, 'content');
+        $title = $this->safe_string_extract($block_data, 'title');
 
         // Erweiterte Style-Generierung
         $css_styles = $this->generate_css_from_styles($styles);
 
         $preview_html = '<div class="cbd-container-preview" style="' . $css_styles . '">';
 
+        // Titel
         if (!empty($title)) {
-            $preview_html .= '<h3 style="margin: 0 0 10px 0; font-size: 14px; color: #333;">' . esc_html($title) . '</h3>';
+            $preview_html .= '<h3 style="margin: 0 0 10px 0; font-size: 14px; color: #333; font-weight: 600;">' . esc_html($title) . '</h3>';
         }
 
+        // Content mit manueller Kürzung (OHNE wp_trim_words)
         if (!empty($content)) {
-            // Robuste String-Konvertierung vor wp_trim_words
-            $content_string = $this->safe_array_to_string($content);
-            $preview_content = wp_trim_words($content_string, 15, '...');
-            $preview_html .= '<div style="font-size: 13px; line-height: 1.4; color: #555;">' . esc_html($preview_content) . '</div>';
+            $preview_content = $this->manual_trim_content($content, 60); // 60 Zeichen statt Wörter
+            $preview_html .= '<div style="font-size: 13px; line-height: 1.4; color: #555; overflow: hidden;">' . esc_html($preview_content) . '</div>';
         }
 
         // Zeige aktivierte Features
-        if (!empty($features)) {
-            $active_features = array();
-            foreach ($features as $feature_name => $feature_data) {
-                if (!empty($feature_data['enabled'])) {
-                    $active_features[] = ucfirst($feature_name);
-                }
-            }
-
-            if (!empty($active_features)) {
-                $preview_html .= '<div style="margin-top: 10px; font-size: 11px; color: #666;">';
-                $preview_html .= '<strong>' . __('Features:', 'container-block-designer') . '</strong> ' . implode(', ', $active_features);
-                $preview_html .= '</div>';
-            }
+        $active_features = $this->get_active_features($features);
+        if (!empty($active_features)) {
+            $preview_html .= '<div style="margin-top: 10px; padding: 5px 8px; background: #f0f8ff; border-radius: 3px; font-size: 11px; color: #0066cc;">';
+            $preview_html .= '<strong>' . __('Features:', 'container-block-designer') . '</strong> ' . implode(', ', $active_features);
+            $preview_html .= '</div>';
         }
 
         $preview_html .= '</div>';
         return $preview_html;
+    }
+
+    /**
+     * Sichere String-Extraktion ohne wp_trim_words
+     */
+    private function safe_string_extract($data, $key) {
+        $value = $data[$key] ?? '';
+
+        if (empty($value)) {
+            return '';
+        }
+
+        // Array zu String ohne WordPress-Funktionen
+        if (is_array($value)) {
+            return implode(' ', array_filter(array_map('strval', $value)));
+        }
+
+        return (string)$value;
+    }
+
+    /**
+     * Manuelle Content-Kürzung ohne wp_trim_words
+     */
+    private function manual_trim_content($content, $max_chars = 60) {
+        $content = (string)$content;
+        $content = strip_tags($content); // HTML entfernen
+        $content = preg_replace('/\s+/', ' ', $content); // Mehrfache Leerzeichen reduzieren
+        $content = trim($content);
+
+        if (strlen($content) <= $max_chars) {
+            return $content;
+        }
+
+        // Bei Wortgrenze schneiden
+        $trimmed = substr($content, 0, $max_chars);
+        $last_space = strrpos($trimmed, ' ');
+
+        if ($last_space !== false && $last_space > $max_chars * 0.7) {
+            $trimmed = substr($trimmed, 0, $last_space);
+        }
+
+        return $trimmed . '...';
+    }
+
+    /**
+     * Aktive Features extrahieren
+     */
+    private function get_active_features($features) {
+        $active_features = array();
+
+        if (empty($features) || !is_array($features)) {
+            return $active_features;
+        }
+
+        foreach ($features as $feature_name => $feature_data) {
+            if (!empty($feature_data['enabled'])) {
+                $active_features[] = ucfirst((string)$feature_name);
+            }
+        }
+
+        return $active_features;
     }
 
     /**
