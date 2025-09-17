@@ -75,33 +75,33 @@ class CBD_Admin {
      * Admin-Menü hinzufügen
      */
     public function add_admin_menu() {
-        // Hauptmenüpunkt - weniger restriktive Capability für Editoren
+        // Hauptmenüpunkt - für alle mit CBD-Berechtigung
         add_menu_page(
             __('Container Block Designer', 'container-block-designer'),
             __('Container Designer', 'container-block-designer'),
-            'edit_posts',
+            'cbd_edit_blocks', // Custom capability für Block-Redakteure
             'container-block-designer',
             array($this, 'render_main_page'),
             'dashicons-layout',
             30
         );
         
-        // Untermenü: Neuer Block - Editoren können Blocks erstellen
+        // Untermenü: Neuer Block - nur für Editoren und Admins (nicht für Block-Redakteure)
         add_submenu_page(
             'container-block-designer',
             __('Neuer Block', 'container-block-designer'),
             __('Neuer Block', 'container-block-designer'),
-            'edit_posts',
+            'cbd_admin_blocks', // Nur Admin-Rechte können neue Blöcke erstellen
             'cbd-new-block',
             array($this, 'render_new_block_page')
         );
-        
-        // Untermenü: Alle Blöcke - Editoren können Blocks verwalten
+
+        // Untermenü: Alle Blöcke - nur für Editoren und Admins (nicht für Block-Redakteure)
         add_submenu_page(
             'container-block-designer',
             __('Alle Blöcke', 'container-block-designer'),
             __('Alle Blöcke', 'container-block-designer'),
-            'edit_posts',
+            'cbd_admin_blocks', // Nur Admin-Rechte können Blöcke verwalten
             'cbd-blocks',
             array($this, 'render_blocks_list_page')
         );
@@ -116,6 +116,16 @@ class CBD_Admin {
             array($this, 'render_edit_block_page')
         );
         
+        // Untermenü: Block Vorschau - für Block-Redakteure (Read-Only)
+        add_submenu_page(
+            'container-block-designer',
+            __('Block Vorschau', 'container-block-designer'),
+            __('Block Vorschau', 'container-block-designer'),
+            'cbd_edit_blocks', // Spezielle Capability für Block-Redakteure
+            'cbd-block-preview',
+            array($this, 'render_block_preview_page')
+        );
+
         // Untermenü: Import/Export - nur Admins für kritische Funktionen
         add_submenu_page(
             'container-block-designer',
@@ -230,6 +240,38 @@ class CBD_Admin {
                 );
                 break;
                 
+            case 'cbd-block-preview':
+                // CSS für die Vorschau-Seite - lade Frontend-Styles für korrekte Darstellung
+                wp_enqueue_style(
+                    'cbd-frontend-preview',
+                    CBD_PLUGIN_URL . 'assets/css/cbd-frontend-clean.css',
+                    array(),
+                    CBD_VERSION
+                );
+                wp_enqueue_style(
+                    'cbd-block-preview',
+                    CBD_PLUGIN_URL . 'assets/css/admin-features.css',
+                    array(),
+                    CBD_VERSION
+                );
+                // Inline-CSS für die Vorschau-Anpassungen
+                $preview_css = '
+                    .cbd-preview-wrapper .cbd-container {
+                        margin: 0 !important;
+                        max-width: 100% !important;
+                    }
+                    .cbd-preview-content {
+                        background: white;
+                        border-radius: 4px;
+                        overflow: hidden;
+                    }
+                    .cbd-container-preview {
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    }
+                ';
+                wp_add_inline_style('cbd-block-preview', $preview_css);
+                break;
+
             case 'cbd-import-export':
                 wp_enqueue_script(
                     'cbd-import-export',
@@ -279,8 +321,20 @@ class CBD_Admin {
      * Hauptseite rendern
      */
     public function render_main_page() {
+        // Prüfe ob User Block-Redakteur ist
+        $current_user = wp_get_current_user();
+        $is_block_redakteur = $current_user && in_array('block_redakteur', $current_user->roles);
+
+        // Block-Redakteure werden zur Vorschau-Seite weitergeleitet
+        if ($is_block_redakteur) {
+            // Direkter Aufruf der Vorschau-Seite für Block-Redakteure
+            $this->render_block_preview_page();
+            return;
+        }
+
+        // Normale Hauptseite für Admins und Editoren
         $file_path = CBD_PLUGIN_DIR . 'admin/container-block-designer.php';
-        
+
         if (file_exists($file_path)) {
             include $file_path;
         } else {
@@ -797,6 +851,367 @@ class CBD_Admin {
     /**
      * Datenbank-Reparatur-Seite rendern
      */
+    /**
+     * Block-Vorschau-Seite für Block-Redakteure (Read-Only)
+     */
+    public function render_block_preview_page() {
+        // Prüfe Berechtigungen - spezifisch für Block-Redakteure
+        if (!current_user_can('cbd_edit_blocks')) {
+            wp_die(__('Du hast nicht die erforderlichen Berechtigungen für diese Seite.', 'container-block-designer'));
+        }
+
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'cbd_blocks';
+
+        // Prüfe ob Tabelle existiert
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
+
+        // Hole alle Blöcke aus der Datenbank (falls Tabelle existiert)
+        $blocks = array();
+        if ($table_exists) {
+            $blocks = $wpdb->get_results("SELECT * FROM $table_name ORDER BY created_at DESC", ARRAY_A);
+        }
+
+        // Prüfe ob User Block-Redakteur ist
+        $current_user = wp_get_current_user();
+        $is_block_redakteur = $current_user && in_array('block_redakteur', $current_user->roles);
+
+        ?>
+        <div class="wrap">
+            <h1>
+                <?php _e('Block Vorschau', 'container-block-designer'); ?>
+                <?php if ($is_block_redakteur): ?>
+                    <span style="background: #28a745; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-left: 10px;">
+                        <?php _e('Block-Redakteur', 'container-block-designer'); ?>
+                    </span>
+                <?php endif; ?>
+            </h1>
+
+            <p class="description">
+                <?php _e('Hier können Sie alle verfügbaren Container-Blöcke und deren Styles einsehen.', 'container-block-designer'); ?>
+                <?php if ($is_block_redakteur): ?>
+                    <?php _e('Als Block-Redakteur haben Sie Lesezugriff auf alle Blöcke.', 'container-block-designer'); ?>
+                <?php endif; ?>
+            </p>
+
+            <?php if (!$table_exists): ?>
+                <div class="notice notice-warning">
+                    <p><?php _e('Die Container-Block-Datenbank-Tabelle existiert noch nicht. Bitte erstellen Sie zuerst einen Block.', 'container-block-designer'); ?></p>
+                </div>
+            <?php elseif (empty($blocks)): ?>
+                <div class="notice notice-info">
+                    <p><?php _e('Keine Container-Blöcke gefunden.', 'container-block-designer'); ?></p>
+                </div>
+            <?php else: ?>
+                <div class="cbd-preview-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-top: 20px;">
+                    <?php foreach ($blocks as $block): ?>
+                        <?php $this->render_preview_block_card($block, $is_block_redakteur); ?>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+
+            <style>
+                .cbd-preview-card {
+                    border: 1px solid #ddd;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    background: white;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    transition: transform 0.2s, box-shadow 0.2s;
+                }
+                .cbd-preview-card:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+                }
+                .cbd-preview-header {
+                    padding: 15px;
+                    background: #f8f9fa;
+                    border-bottom: 1px solid #e9ecef;
+                }
+                .cbd-preview-title {
+                    margin: 0 0 5px 0;
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #333;
+                }
+                .cbd-preview-meta {
+                    font-size: 12px;
+                    color: #666;
+                    margin: 0;
+                }
+                .cbd-preview-content {
+                    padding: 0;
+                    min-height: 200px;
+                    max-height: 300px;
+                    overflow: hidden;
+                    position: relative;
+                }
+                .cbd-preview-fade {
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    height: 30px;
+                    background: linear-gradient(transparent, white);
+                    pointer-events: none;
+                }
+                .cbd-preview-actions {
+                    padding: 10px 15px;
+                    background: #f8f9fa;
+                    border-top: 1px solid #e9ecef;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .cbd-block-status {
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                    font-size: 11px;
+                    font-weight: 500;
+                    text-transform: uppercase;
+                }
+                .cbd-status-active { background: #d4edda; color: #155724; }
+                .cbd-status-inactive { background: #f8d7da; color: #721c24; }
+            </style>
+        </div>
+        <?php
+    }
+
+    /**
+     * Rendert eine einzelne Block-Vorschau-Karte
+     */
+    private function render_preview_block_card($block, $is_block_redakteur = false) {
+        $block_data = json_decode($block['block_data'], true);
+        $styles = json_decode($block['styles'], true);
+        $features = json_decode($block['features'], true);
+
+        // Erstelle eine Vorschau des Blocks
+        $preview_html = $this->generate_block_preview_html($block_data, $styles, $features);
+
+        ?>
+        <div class="cbd-preview-card">
+            <div class="cbd-preview-header">
+                <h3 class="cbd-preview-title"><?php echo esc_html($block['name']); ?></h3>
+                <p class="cbd-preview-meta">
+                    ID: <?php echo esc_html($block['id']); ?> |
+                    <?php printf(__('Erstellt: %s', 'container-block-designer'), date_i18n(get_option('date_format'), strtotime($block['created_at']))); ?>
+                    <?php if ($block['updated_at'] && $block['updated_at'] !== $block['created_at']): ?>
+                        | <?php printf(__('Aktualisiert: %s', 'container-block-designer'), date_i18n(get_option('date_format'), strtotime($block['updated_at']))); ?>
+                    <?php endif; ?>
+                </p>
+            </div>
+
+            <div class="cbd-preview-content">
+                <?php echo $preview_html; ?>
+                <div class="cbd-preview-fade"></div>
+            </div>
+
+            <div class="cbd-preview-actions">
+                <span class="cbd-block-status <?php echo $block['is_active'] ? 'cbd-status-active' : 'cbd-status-inactive'; ?>">
+                    <?php echo $block['is_active'] ? __('Aktiv', 'container-block-designer') : __('Inaktiv', 'container-block-designer'); ?>
+                </span>
+
+                <?php if (!$is_block_redakteur && current_user_can('manage_options')): ?>
+                    <a href="<?php echo admin_url('admin.php?page=cbd-edit-block&id=' . $block['id']); ?>"
+                       class="button button-small">
+                        <?php _e('Bearbeiten', 'container-block-designer'); ?>
+                    </a>
+                <?php else: ?>
+                    <span style="font-size: 12px; color: #666;">
+                        <?php _e('Nur ansehen', 'container-block-designer'); ?>
+                    </span>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Generiert HTML-Vorschau für einen Block mit echtem Rendering
+     */
+    private function generate_block_preview_html($block_data, $styles, $features) {
+        // Verwende das CBD Style Loader System für korrekte CSS-Generierung
+        if (class_exists('CBD_Style_Loader')) {
+            try {
+                $style_loader = new CBD_Style_Loader();
+
+                // Generiere echte CSS für den Block
+                $block_id = 'preview-' . uniqid();
+                $css_output = $style_loader->generate_block_css($block_id, $styles);
+
+                // Erstelle Block-HTML mit echtem CSS
+                $content = wp_trim_words($block_data['content'] ?? '', 20, '...');
+                $title = $block_data['title'] ?? '';
+
+                $preview_html = '<style>' . $css_output . '</style>';
+                $preview_html .= '<div id="' . $block_id . '" class="cbd-container cbd-preview-container">';
+
+                // Header mit Titel falls vorhanden
+                if (!empty($title)) {
+                    $preview_html .= '<div class="cbd-container-header">';
+                    $preview_html .= '<h3 class="cbd-block-title">' . esc_html($title) . '</h3>';
+                    $preview_html .= '</div>';
+                }
+
+                // Container Content
+                $preview_html .= '<div class="cbd-container-content">';
+                $preview_html .= '<div class="cbd-container-block">';
+
+                if (!empty($content)) {
+                    $preview_html .= '<div class="cbd-block-content">' . wp_kses_post($content) . '</div>';
+                }
+
+                $preview_html .= '</div></div>';
+
+                // Features Info
+                if (!empty($features)) {
+                    $active_features = array();
+                    foreach ($features as $feature_name => $feature_data) {
+                        if (!empty($feature_data['enabled'])) {
+                            $active_features[] = ucfirst($feature_name);
+                        }
+                    }
+
+                    if (!empty($active_features)) {
+                        $preview_html .= '<div class="cbd-features-info" style="font-size: 11px; color: #666; margin-top: 8px; padding: 5px; background: rgba(0,0,0,0.05); border-radius: 3px;">';
+                        $preview_html .= '<strong>' . __('Features:', 'container-block-designer') . '</strong> ' . implode(', ', $active_features);
+                        $preview_html .= '</div>';
+                    }
+                }
+
+                $preview_html .= '</div>';
+
+                return $preview_html;
+
+            } catch (Exception $e) {
+                error_log('CBD Preview Error: ' . $e->getMessage());
+                return $this->generate_fallback_preview_html($block_data, $styles, $features);
+            }
+        }
+
+        // Fallback wenn Style Loader nicht verfügbar
+        return $this->generate_fallback_preview_html($block_data, $styles, $features);
+    }
+
+    /**
+     * Fallback-Vorschau wenn echtes Rendering nicht möglich
+     */
+    private function generate_fallback_preview_html($block_data, $styles, $features) {
+        $content = $block_data['content'] ?? '';
+        $title = $block_data['title'] ?? '';
+
+        // Erweiterte Style-Generierung
+        $css_styles = $this->generate_css_from_styles($styles);
+
+        $preview_html = '<div class="cbd-container-preview" style="' . $css_styles . '">';
+
+        if (!empty($title)) {
+            $preview_html .= '<h3 style="margin: 0 0 10px 0; font-size: 14px; color: #333;">' . esc_html($title) . '</h3>';
+        }
+
+        if (!empty($content)) {
+            $preview_content = wp_trim_words($content, 15, '...');
+            $preview_html .= '<div style="font-size: 13px; line-height: 1.4; color: #555;">' . wp_kses_post($preview_content) . '</div>';
+        }
+
+        // Zeige aktivierte Features
+        if (!empty($features)) {
+            $active_features = array();
+            foreach ($features as $feature_name => $feature_data) {
+                if (!empty($feature_data['enabled'])) {
+                    $active_features[] = ucfirst($feature_name);
+                }
+            }
+
+            if (!empty($active_features)) {
+                $preview_html .= '<div style="margin-top: 10px; font-size: 11px; color: #666;">';
+                $preview_html .= '<strong>' . __('Features:', 'container-block-designer') . '</strong> ' . implode(', ', $active_features);
+                $preview_html .= '</div>';
+            }
+        }
+
+        $preview_html .= '</div>';
+        return $preview_html;
+    }
+
+    /**
+     * Generiert CSS aus den Style-Daten
+     */
+    private function generate_css_from_styles($styles) {
+        $css = 'margin: 15px; min-height: 100px; max-width: 100%; overflow: hidden;';
+
+        if (!empty($styles)) {
+            // Background
+            if (!empty($styles['background']['color'])) {
+                $css .= 'background-color: ' . esc_attr($styles['background']['color']) . ';';
+            }
+            if (!empty($styles['background']['image'])) {
+                $css .= 'background-image: url(' . esc_attr($styles['background']['image']) . ');';
+                $css .= 'background-size: cover; background-position: center;';
+            }
+
+            // Padding & Margin
+            if (!empty($styles['padding'])) {
+                $css .= 'padding: ' . esc_attr($styles['padding']) . 'px;';
+            }
+            if (!empty($styles['margin'])) {
+                $css .= 'margin: ' . esc_attr($styles['margin']) . 'px;';
+            }
+
+            // Border
+            if (!empty($styles['border'])) {
+                if (!empty($styles['border']['width']) && !empty($styles['border']['color'])) {
+                    $border_style = $styles['border']['style'] ?? 'solid';
+                    $css .= 'border: ' . esc_attr($styles['border']['width']) . 'px ' . esc_attr($border_style) . ' ' . esc_attr($styles['border']['color']) . ';';
+                }
+                if (!empty($styles['border']['radius'])) {
+                    $css .= 'border-radius: ' . esc_attr($styles['border']['radius']) . 'px;';
+                }
+            }
+
+            // Typography
+            if (!empty($styles['font'])) {
+                if (!empty($styles['font']['size'])) {
+                    $css .= 'font-size: ' . esc_attr($styles['font']['size']) . 'px;';
+                }
+                if (!empty($styles['font']['family'])) {
+                    $css .= 'font-family: ' . esc_attr($styles['font']['family']) . ';';
+                }
+                if (!empty($styles['font']['weight'])) {
+                    $css .= 'font-weight: ' . esc_attr($styles['font']['weight']) . ';';
+                }
+            }
+
+            // Colors
+            if (!empty($styles['color'])) {
+                $css .= 'color: ' . esc_attr($styles['color']) . ';';
+            }
+
+            // Box Shadow
+            if (!empty($styles['shadow'])) {
+                if (!empty($styles['shadow']['outer']['enabled'])) {
+                    $shadow = $styles['shadow']['outer'];
+                    $css .= 'box-shadow: ' .
+                        ($shadow['x'] ?? 0) . 'px ' .
+                        ($shadow['y'] ?? 4) . 'px ' .
+                        ($shadow['blur'] ?? 6) . 'px ' .
+                        ($shadow['spread'] ?? 0) . 'px ' .
+                        ($shadow['color'] ?? 'rgba(0,0,0,0.1)') . ';';
+                }
+            }
+
+            // Width & Height
+            if (!empty($styles['width'])) {
+                $css .= 'width: ' . esc_attr($styles['width']) . ';';
+            }
+            if (!empty($styles['height'])) {
+                $css .= 'height: ' . esc_attr($styles['height']) . ';';
+            }
+        }
+
+        return $css;
+    }
+
     public function render_database_repair_page() {
         // Verarbeite POST-Anfragen
         if (isset($_POST['repair_database']) && wp_verify_nonce($_POST['cbd_repair_nonce'], 'cbd_repair_database')) {
