@@ -29,7 +29,7 @@ if (!$block) {
 }
 
 // Prüfe ob Benutzer Styles bearbeiten kann
-$can_edit_styles = current_user_can('manage_options');
+$can_edit_styles = cbd_user_can_edit_styles();
 
 // Standardwerte setzen
 $styles = $block['styles'] ?: array(

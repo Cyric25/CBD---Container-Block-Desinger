@@ -36,9 +36,27 @@ class AdminRouter {
      * Register admin menu pages
      */
     public function register_admin_pages() {
-        // Unterschiedliche Berechtigungen für verschiedene Bereiche
-        $block_capability = 'edit_posts';     // Mitarbeiter können Blocks verwalten
-        $admin_capability = 'manage_options'; // Nur Admins für Settings/Import/Export
+        // Berechtigungen für verschiedene Benutzertypen
+        $user = wp_get_current_user();
+        $is_block_redakteur = $user && in_array('block_redakteur', $user->roles);
+
+        if ($is_block_redakteur) {
+            // Block-Redakteure: Read-Only Zugriff
+            $block_capability = 'cbd_edit_blocks';  // Können Blocks sehen
+            $admin_capability = 'manage_options';   // Können KEINE Admin-Funktionen
+        } else {
+            // Alle anderen: Vollzugriff
+            $block_capability = 'cbd_edit_blocks';  // Container-Blocks verwenden
+            $admin_capability = 'cbd_admin_blocks'; // Container-Block Admin-Funktionen
+
+            // Fallback für Kompatibilität
+            if (!current_user_can($admin_capability)) {
+                $admin_capability = 'manage_options';
+            }
+            if (!current_user_can($block_capability)) {
+                $block_capability = 'edit_posts';
+            }
+        }
         
         // Main menu page - für Mitarbeiter zugänglich
         add_menu_page(
@@ -61,43 +79,48 @@ class AdminRouter {
             array($this, 'route_request')
         );
 
-        add_submenu_page(
-            'cbd-blocks',
-            __('Block hinzufügen', 'container-block-designer'),
-            __('Block hinzufügen', 'container-block-designer'),
-            $block_capability,
-            'cbd-new-block',
-            array($this, 'route_request')
-        );
+        // Block hinzufügen - NUR für Nicht-Block-Redakteure
+        if (!$is_block_redakteur) {
+            add_submenu_page(
+                'cbd-blocks',
+                __('Block hinzufügen', 'container-block-designer'),
+                __('Block hinzufügen', 'container-block-designer'),
+                $admin_capability,
+                'cbd-new-block',
+                array($this, 'route_request')
+            );
 
-        // Hidden page für Block-Bearbeitung - für Mitarbeiter zugänglich
-        add_submenu_page(
-            '', // Empty string instead of null for hidden pages
-            __('Block bearbeiten', 'container-block-designer'),
-            __('Block bearbeiten', 'container-block-designer'),
-            $block_capability,
-            'cbd-edit-block',
-            array($this, 'route_request')
-        );
+            // Hidden page für Block-Bearbeitung - NUR für Nicht-Block-Redakteure
+            add_submenu_page(
+                '', // Empty string instead of null for hidden pages
+                __('Block bearbeiten', 'container-block-designer'),
+                __('Block bearbeiten', 'container-block-designer'),
+                $admin_capability,
+                'cbd-edit-block',
+                array($this, 'route_request')
+            );
+        }
 
-        // Admin-only Bereiche
-        add_submenu_page(
-            'cbd-blocks',
-            __('Import/Export', 'container-block-designer'),
-            __('Import/Export', 'container-block-designer'),
-            $admin_capability,
-            'cbd-import-export',
-            array($this, 'route_request')
-        );
+        // Admin-only Bereiche - NUR für Nicht-Block-Redakteure
+        if (!$is_block_redakteur) {
+            add_submenu_page(
+                'cbd-blocks',
+                __('Import/Export', 'container-block-designer'),
+                __('Import/Export', 'container-block-designer'),
+                $admin_capability,
+                'cbd-import-export',
+                array($this, 'route_request')
+            );
 
-        add_submenu_page(
-            'cbd-blocks',
-            __('Einstellungen', 'container-block-designer'),
-            __('Einstellungen', 'container-block-designer'),
-            $admin_capability,
-            'cbd-settings',
-            array($this, 'route_request')
-        );
+            add_submenu_page(
+                'cbd-blocks',
+                __('Einstellungen', 'container-block-designer'),
+                __('Einstellungen', 'container-block-designer'),
+                $admin_capability,
+                'cbd-settings',
+                array($this, 'route_request')
+            );
+        }
     }
     
     /**

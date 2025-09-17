@@ -190,20 +190,24 @@ if (!has_action('wp_ajax_cbd_duplicate_block')) {
         
         // Create new block with modified name and slug
         $counter = 1;
-        $new_name = $original['name'] . ' (Kopie)';
-        $new_slug = $original['slug'] . '-copy';
-        
-        // Check if slug already exists
+        $base_name = $original['name'];
+        $base_slug = $original['slug'] ?? $original['name'];
+
+        $new_name = $base_name . ' (Kopie)';
+        $new_slug = $base_slug . '-copy';
+
+        // Check if both name and slug already exist
         while ($wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM " . CBD_TABLE_BLOCKS . " WHERE slug = %s",
+            "SELECT COUNT(*) FROM " . CBD_TABLE_BLOCKS . " WHERE name = %s OR slug = %s",
+            $new_name . ($counter > 1 ? ' ' . $counter : ''),
             $new_slug . ($counter > 1 ? '-' . $counter : '')
         )) > 0) {
             $counter++;
         }
-        
+
         if ($counter > 1) {
-            $new_name = $original['name'] . ' (Kopie ' . $counter . ')';
-            $new_slug = $new_slug . '-' . $counter;
+            $new_name = $base_name . ' (Kopie ' . $counter . ')';
+            $new_slug = $base_slug . '-copy-' . $counter;
         }
         
         // Insert duplicate
@@ -211,15 +215,17 @@ if (!has_action('wp_ajax_cbd_duplicate_block')) {
             CBD_TABLE_BLOCKS,
             array(
                 'name' => $new_name,
+                'title' => $new_name, // Titel setzen
                 'slug' => $new_slug,
                 'description' => $original['description'],
                 'config' => $original['config'],
+                'styles' => $original['styles'], // Wichtig: styles kopieren
                 'features' => $original['features'],
                 'status' => 'inactive', // Start as inactive
-                'created' => current_time('mysql'),
-                'modified' => current_time('mysql')
+                'created_at' => current_time('mysql'), // Korrekte Spalte
+                'updated_at' => current_time('mysql')  // Korrekte Spalte
             ),
-            array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
+            array('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s')
         );
         
         if ($result === false) {

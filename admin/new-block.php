@@ -24,7 +24,7 @@ if (isset($_POST['cbd_save_block']) && isset($_POST['cbd_nonce']) && wp_verify_n
     $block_id = isset($_GET['block_id']) ? intval($_GET['block_id']) : 0;
 
     // Prüfe ob Benutzer Styles bearbeiten kann
-    $can_edit_styles = current_user_can('manage_options');
+    $can_edit_styles = cbd_user_can_edit_styles();
     
     // Daten sammeln
     $name = sanitize_text_field($_POST['name']);

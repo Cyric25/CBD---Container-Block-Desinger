@@ -94,6 +94,9 @@ class ContainerBlockDesigner {
      * Abhängigkeiten laden
      */
     private function load_dependencies() {
+        // Helper-Funktionen
+        require_once CBD_PLUGIN_DIR . 'includes/user-capabilities.php';
+
         // Kern-Klassen
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-database.php';
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-style-loader.php';
@@ -129,6 +132,15 @@ class ContainerBlockDesigner {
         
         // Admin Notices
         add_action('admin_notices', array($this, 'admin_notices'));
+
+        // Rolle prüfen und erstellen falls nötig (auch bei bereits aktivierten Plugins)
+        add_action('init', array($this, 'ensure_block_editor_role'));
+
+        // Admin-Menüs für Block-Redakteure anpassen
+        add_action('admin_menu', array($this, 'customize_admin_menu_for_block_editors'), 999);
+
+        // Admin-Bar für Block-Redakteure anpassen
+        add_action('wp_before_admin_bar_render', array($this, 'customize_admin_bar_for_block_editors'));
     }
     
     /**
@@ -149,9 +161,12 @@ class ContainerBlockDesigner {
         // Upload-Verzeichnis erstellen
         $this->create_upload_directory();
 
+        // Custom User Role erstellen
+        $this->create_block_editor_role();
+
         // Rewrite-Regeln aktualisieren
         flush_rewrite_rules();
-        
+
         // Aktivierungs-Flag setzen
         update_option('cbd_plugin_activated', true);
         update_option('cbd_plugin_version', CBD_VERSION);
@@ -161,6 +176,9 @@ class ContainerBlockDesigner {
      * Plugin-Deaktivierung
      */
     public function deactivate() {
+        // Block-Redakteur Rolle entfernen
+        $this->remove_block_editor_role();
+
         // Rewrite-Regeln löschen
         flush_rewrite_rules();
         
@@ -559,7 +577,204 @@ class ContainerBlockDesigner {
             }
         }
     }
-    
+
+    /**
+     * Admin-Menüs für Block-Redakteure anpassen
+     */
+    public function customize_admin_menu_for_block_editors() {
+        // Nur für Block-Redakteure
+        $user = wp_get_current_user();
+        if (!$user || !in_array('block_redakteur', $user->roles)) {
+            return;
+        }
+
+        // ALLE WordPress Standard-Menüs entfernen außer den gewünschten
+        global $menu, $submenu;
+
+        // Posts-Menü komplett entfernen (Beiträge)
+        remove_menu_page('edit.php');
+        remove_menu_page('post-new.php');
+
+        // Weitere WordPress-Menüs ausblenden die Block-Redakteure nicht brauchen
+        remove_menu_page('tools.php');            // Werkzeuge
+        remove_menu_page('options-general.php');  // Einstellungen
+        remove_menu_page('edit-comments.php');    // Kommentare
+        remove_menu_page('themes.php');           // Design/Themes
+        remove_menu_page('plugins.php');          // Plugins
+        remove_menu_page('users.php');            // Benutzer
+        remove_menu_page('profile.php');          // Profil (wird automatisch wieder hinzugefügt)
+
+        // Alle Post-Types außer Pages entfernen
+        $post_types = get_post_types(array('public' => true, 'show_ui' => true), 'objects');
+        foreach ($post_types as $post_type) {
+            if ($post_type->name !== 'page') {
+                remove_menu_page('edit.php?post_type=' . $post_type->name);
+            }
+        }
+
+        // Container-Block Admin-Untermenüs für Block-Redakteure entfernen
+        remove_submenu_page('cbd-blocks', 'cbd-new-block');      // Kein "Block hinzufügen"
+        remove_submenu_page('cbd-blocks', 'cbd-edit-block');     // Kein "Block bearbeiten"
+        remove_submenu_page('cbd-blocks', 'cbd-settings');       // Keine "Einstellungen"
+        remove_submenu_page('cbd-blocks', 'cbd-import-export');  // Kein "Import/Export"
+
+        // CSS und JS hinzufügen um sicherzustellen dass Posts-Menü ausgeblendet ist
+        add_action('admin_head', function() {
+            echo '<style>
+                /* Posts-Menü für Block-Redakteure ausblenden */
+                body.wp-admin #menu-posts,
+                body.wp-admin #adminmenu #menu-posts,
+                body.wp-admin #adminmenu li#menu-posts {
+                    display: none !important;
+                }
+                /* Neue Post Links ausblenden */
+                body.wp-admin .page-title-action[href*="post-new.php"],
+                body.wp-admin .wp-admin #wp-admin-bar-new-post {
+                    display: none !important;
+                }
+                /* Dashboard "Auf einen Blick" Posts ausblenden */
+                body.wp-admin #dashboard_right_now .post-count {
+                    display: none !important;
+                }
+            </style>';
+
+            echo '<script>
+                jQuery(document).ready(function($) {
+                    // Posts-Menü mit JavaScript entfernen (Fallback)
+                    $("#menu-posts").remove();
+                    $("#adminmenu li#menu-posts").remove();
+
+                    // "Neuer Beitrag" aus Admin-Bar entfernen
+                    $("#wp-admin-bar-new-post").remove();
+
+                    // Posts aus Dashboard "Auf einen Blick" entfernen
+                    $("#dashboard_right_now .post-count").remove();
+                });
+            </script>';
+        });
+    }
+
+    /**
+     * Admin-Bar für Block-Redakteure anpassen
+     */
+    public function customize_admin_bar_for_block_editors() {
+        // Nur für Block-Redakteure
+        $user = wp_get_current_user();
+        if (!$user || !in_array('block_redakteur', $user->roles)) {
+            return;
+        }
+
+        global $wp_admin_bar;
+
+        // "Neuer Beitrag" aus Admin-Bar entfernen
+        $wp_admin_bar->remove_node('new-post');
+
+        // Alle Post-Type "Neu" Links außer Seiten entfernen
+        $post_types = get_post_types(array('public' => true, 'show_ui' => true), 'objects');
+        foreach ($post_types as $post_type) {
+            if ($post_type->name !== 'page') {
+                $wp_admin_bar->remove_node('new-' . $post_type->name);
+            }
+        }
+    }
+
+    /**
+     * Block-Redakteur Rolle sicherstellen (public für init hook)
+     */
+    public function ensure_block_editor_role() {
+        // Nur einmal pro Request ausführen
+        static $checked = false;
+        if ($checked) return;
+        $checked = true;
+
+        $this->create_block_editor_role();
+    }
+
+    /**
+     * Block-Redakteur Rolle erstellen
+     */
+    private function create_block_editor_role() {
+        // Prüfe ob Rolle bereits existiert
+        if (get_role('block_redakteur')) {
+            return; // Rolle existiert bereits
+        }
+
+        // Basis-Capabilities nur für Seiten
+        $capabilities = array(
+            'read' => true,                    // Grundrecht zum Lesen
+            'edit_pages' => true,              // Seiten bearbeiten
+            'edit_others_pages' => true,       // Fremde Seiten bearbeiten
+            'edit_published_pages' => true,    // Veröffentlichte Seiten bearbeiten
+            'publish_pages' => true,           // Seiten veröffentlichen
+            'delete_pages' => false,           // NICHT löschen
+            'delete_others_pages' => false,    // Keine fremden Seiten löschen
+            'delete_published_pages' => false, // Keine veröffentlichten Seiten löschen
+
+            // WordPress Editor verwenden (minimal für Block Editor)
+            'edit_posts' => true,              // NÖTIG für Block-Editor
+            'edit_others_posts' => false,      // Keine fremden Posts
+            'edit_published_posts' => false,   // Keine veröffentlichten Posts
+            'publish_posts' => false,          // Keine Posts veröffentlichen
+            'delete_posts' => false,           // Keine Posts löschen
+
+            // Custom Container Block Designer Capabilities
+            'cbd_edit_blocks' => true,         // Container-Blocks im Editor verwenden
+            'cbd_edit_styles' => false,        // KEINE Style-Bearbeitung (nur vordefinierte nutzen)
+            'cbd_admin_blocks' => false,       // KEINE Admin-Funktionen (Settings/Import/Erstellen)
+
+            // Standard Admin-Rechte
+            'manage_options' => false,         // KEINE WordPress Admin-Rechte
+
+            // Upload-Rechte für Medien in Blocks
+            'upload_files' => true,
+
+            // WordPress Editor verwenden
+            'edit_theme_options' => false,     // Keine Theme-Bearbeitung
+        );
+
+        // Rolle hinzufügen
+        add_role(
+            'block_redakteur',
+            __('Block-Redakteur', 'container-block-designer'),
+            $capabilities
+        );
+
+        // Administrator Rolle um Container-Block Capabilities erweitern
+        $admin_role = get_role('administrator');
+        if ($admin_role) {
+            $admin_role->add_cap('cbd_edit_blocks');
+            $admin_role->add_cap('cbd_edit_styles');
+            $admin_role->add_cap('cbd_admin_blocks');
+        }
+
+        // Editor Rolle um Container-Block Capabilities erweitern (optional)
+        $editor_role = get_role('editor');
+        if ($editor_role) {
+            $editor_role->add_cap('cbd_edit_blocks');
+            $editor_role->add_cap('cbd_edit_styles');
+            // Editoren bekommen KEINE Admin-Rechte (cbd_admin_blocks = false)
+        }
+    }
+
+    /**
+     * Block-Redakteur Rolle entfernen
+     */
+    private function remove_block_editor_role() {
+        // Prüfe ob Rolle existiert
+        if (get_role('block_redakteur')) {
+            // Alle Benutzer mit dieser Rolle zu Editor machen (als Fallback)
+            $users = get_users(array('role' => 'block_redakteur'));
+            foreach ($users as $user) {
+                $user_obj = new WP_User($user->ID);
+                $user_obj->remove_role('block_redakteur');
+                $user_obj->add_role('editor'); // Fallback auf Editor-Rolle
+            }
+
+            // Rolle löschen
+            remove_role('block_redakteur');
+        }
+    }
+
     /**
      * Alte CSS-Dateien aufräumen
      */

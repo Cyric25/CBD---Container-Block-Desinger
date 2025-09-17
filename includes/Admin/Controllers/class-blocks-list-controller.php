@@ -23,13 +23,15 @@ class BlocksListController {
      * Render the blocks list page
      */
     public function render() {
-        // Check permissions
-        if (!current_user_can('manage_options')) {
+        // Check permissions - Block-Redakteure können Blocks ansehen
+        if (!cbd_user_can_use_blocks()) {
             wp_die(__('Sie haben keine Berechtigung, diese Seite zu besuchen.', 'container-block-designer'));
         }
         
-        // Handle bulk actions
-        $this->handle_bulk_actions();
+        // Handle bulk actions - nur für Admins
+        if (cbd_user_can_admin_blocks()) {
+            $this->handle_bulk_actions();
+        }
         
         // Get blocks
         $blocks = $this->get_blocks();
@@ -133,11 +135,19 @@ class BlocksListController {
         <div class="wrap">
             <h1 class="wp-heading-inline">
                 <?php _e('Container Blocks', 'container-block-designer'); ?>
+                <?php
+                $user = wp_get_current_user();
+                if ($user && in_array('block_redakteur', $user->roles)) {
+                    echo ' <small style="color: #666;">' . __('(Nur-Lese-Modus)', 'container-block-designer') . '</small>';
+                }
+                ?>
             </h1>
-            
-            <a href="<?php echo admin_url('admin.php?page=cbd-new-block'); ?>" class="page-title-action">
-                <?php _e('Neuer Block', 'container-block-designer'); ?>
-            </a>
+
+            <?php if (cbd_user_can_admin_blocks()): ?>
+                <a href="<?php echo admin_url('admin.php?page=cbd-new-block'); ?>" class="page-title-action">
+                    <?php _e('Neuer Block', 'container-block-designer'); ?>
+                </a>
+            <?php endif; ?>
             
             <hr class="wp-header-end">
             
@@ -192,20 +202,26 @@ class BlocksListController {
         ?>
         <form method="post">
             <?php wp_nonce_field('bulk-blocks'); ?>
-            
-            <div class="tablenav top">
-                <div class="alignleft actions">
-                    <select name="bulk_action">
-                        <option value=""><?php _e('Bulk-Aktion wählen', 'container-block-designer'); ?></option>
-                        <option value="activate"><?php _e('Aktivieren', 'container-block-designer'); ?></option>
-                        <option value="deactivate"><?php _e('Deaktivieren', 'container-block-designer'); ?></option>
-                        <option value="delete"><?php _e('Löschen', 'container-block-designer'); ?></option>
-                    </select>
-                    <input type="submit" class="button action" value="<?php _e('Anwenden', 'container-block-designer'); ?>">
+
+            <?php if (cbd_user_can_admin_blocks()): ?>
+                <div class="tablenav top">
+                    <div class="alignleft actions">
+                        <select name="bulk_action">
+                            <option value=""><?php _e('Bulk-Aktion wählen', 'container-block-designer'); ?></option>
+                            <option value="activate"><?php _e('Aktivieren', 'container-block-designer'); ?></option>
+                            <option value="deactivate"><?php _e('Deaktivieren', 'container-block-designer'); ?></option>
+                            <option value="delete"><?php _e('Löschen', 'container-block-designer'); ?></option>
+                        </select>
+                        <input type="submit" class="button action" value="<?php _e('Anwenden', 'container-block-designer'); ?>">
+                    </div>
+
+                    <?php $this->render_status_filter(); ?>
                 </div>
-                
-                <?php $this->render_status_filter(); ?>
-            </div>
+            <?php else: ?>
+                <div class="tablenav top">
+                    <?php $this->render_status_filter(); ?>
+                </div>
+            <?php endif; ?>
             
             <table class="wp-list-table widefat fixed striped">
                 <?php $this->render_table_header(); ?>
@@ -251,9 +267,11 @@ class BlocksListController {
         ?>
         <thead>
             <tr>
-                <td class="manage-column column-cb check-column">
-                    <input type="checkbox" id="cb-select-all">
-                </td>
+                <?php if (cbd_user_can_admin_blocks()): ?>
+                    <td class="manage-column column-cb check-column">
+                        <input type="checkbox" id="cb-select-all">
+                    </td>
+                <?php endif; ?>
                 <th scope="col" class="manage-column column-name sortable">
                     <a href="<?php echo $this->get_sort_link('name'); ?>">
                         <?php _e('Name', 'container-block-designer'); ?>
@@ -293,29 +311,43 @@ class BlocksListController {
         
         ?>
         <tr>
-            <th scope="row" class="check-column">
-                <input type="checkbox" name="block_ids[]" value="<?php echo esc_attr($block['id']); ?>">
-            </th>
+            <?php if (cbd_user_can_admin_blocks()): ?>
+                <th scope="row" class="check-column">
+                    <input type="checkbox" name="block_ids[]" value="<?php echo esc_attr($block['id']); ?>">
+                </th>
+            <?php endif; ?>
             <td class="column-name">
                 <strong>
-                    <a href="<?php echo esc_url($edit_url); ?>">
-                        <?php echo esc_html($block['name']); ?>
-                    </a>
-                </strong>
-                <div class="row-actions">
-                    <span class="edit">
+                    <?php if (cbd_user_can_admin_blocks()): ?>
                         <a href="<?php echo esc_url($edit_url); ?>">
-                            <?php _e('Bearbeiten', 'container-block-designer'); ?>
+                            <?php echo esc_html($block['name']); ?>
                         </a>
-                    </span>
-                    |
-                    <span class="delete">
-                        <a href="<?php echo esc_url($delete_url); ?>" 
-                           onclick="return confirm('<?php _e('Sind Sie sicher?', 'container-block-designer'); ?>')">
-                            <?php _e('Löschen', 'container-block-designer'); ?>
-                        </a>
-                    </span>
-                </div>
+                    <?php else: ?>
+                        <?php echo esc_html($block['name']); ?>
+                    <?php endif; ?>
+                </strong>
+                <?php if (cbd_user_can_admin_blocks()): ?>
+                    <div class="row-actions">
+                        <span class="edit">
+                            <a href="<?php echo esc_url($edit_url); ?>">
+                                <?php _e('Bearbeiten', 'container-block-designer'); ?>
+                            </a>
+                        </span>
+                        |
+                        <span class="delete">
+                            <a href="<?php echo esc_url($delete_url); ?>"
+                               onclick="return confirm('<?php _e('Sind Sie sicher?', 'container-block-designer'); ?>')">
+                                <?php _e('Löschen', 'container-block-designer'); ?>
+                            </a>
+                        </span>
+                    </div>
+                <?php else: ?>
+                    <div class="row-actions">
+                        <span style="color: #666; font-style: italic;">
+                            <?php _e('Vorschau-Modus', 'container-block-designer'); ?>
+                        </span>
+                    </div>
+                <?php endif; ?>
             </td>
             <td class="column-title">
                 <?php echo esc_html($block['title']); ?>

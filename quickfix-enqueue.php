@@ -137,21 +137,28 @@ add_action('admin_footer', function() {
 
 // AJAX Fallback sicherstellen
 add_action('wp_ajax_cbd_get_blocks', 'cbd_ajax_get_blocks_quickfix', 5);
-add_action('wp_ajax_nopriv_cbd_get_blocks', 'cbd_ajax_get_blocks_quickfix', 5);
+// Entfernt - nicht benötigt da nur eingeloggte Benutzer Blocks verwenden können
+// add_action('wp_ajax_nopriv_cbd_get_blocks', 'cbd_ajax_get_blocks_quickfix', 5);
 
 function cbd_ajax_get_blocks_quickfix() {
-    // Prüfe ob bereits eine Handler existiert
-    if (has_action('wp_ajax_cbd_get_blocks', 'cbd_ajax_get_blocks')) {
+    // Prüfe ob bereits ein anderer Handler existiert (nicht dieser)
+    if (has_action('wp_ajax_cbd_get_blocks') && !has_action('wp_ajax_cbd_get_blocks', 'cbd_ajax_get_blocks_quickfix')) {
         return;
     }
-    
+
+    // Berechtigung prüfen - Container-Block Berechtigung verwenden
+    if (!cbd_user_can_use_blocks()) {
+        wp_send_json_error(array('message' => 'Keine Berechtigung für Container-Blocks'));
+        return;
+    }
+
     global $wpdb;
-    
+
     $blocks = $wpdb->get_results(
         "SELECT id, name, slug, description FROM " . $wpdb->prefix . "cbd_blocks WHERE status = 'active' ORDER BY name",
         ARRAY_A
     );
-    
+
     wp_send_json_success($blocks ?: []);
 }
 

@@ -178,42 +178,63 @@
         // Initial Preview
         updatePreview();
         
-        // Live Preview bei Änderungen
-        $('.cbd-live-preview').on('change keyup', function() {
+        // Live Preview bei Änderungen - verwende korrekte Selektoren
+        $('input[name^="styles["], select[name^="styles["]').on('change keyup input', function() {
             updatePreview();
         });
+
+        // Preview Update Button (falls vorhanden)
+        $('#cbd-update-preview').on('click', function() {
+            updatePreview();
+        });
+
+        // Debugging: Logge welche Elements gefunden wurden
+        console.log('CBD: Preview-Container gefunden:',
+            $('#cbd-block-preview-content').length,
+            $('#cbd-preview-block .cbd-preview-content').length,
+            $('.cbd-preview-content').length
+        );
+        console.log('CBD: Style-Input-Felder gefunden:', $('input[name^="styles["]').length);
     }
     
     /**
      * Preview aktualisieren
      */
     function updatePreview() {
-        const $preview = $('#cbd-block-preview-content');
-        
+        // Suche nach beiden möglichen Preview-Containern
+        let $preview = $('#cbd-block-preview-content');
         if (!$preview.length) {
+            $preview = $('#cbd-preview-block .cbd-preview-content');
+        }
+        if (!$preview.length) {
+            $preview = $('.cbd-preview-content');
+        }
+
+        if (!$preview.length) {
+            console.log('CBD: Kein Preview-Container gefunden');
             return;
         }
         
-        // Styles sammeln
+        // Styles sammeln - verwende die korrekten Name-Attribute
         const styles = {
             padding: {
-                top: $('#padding-top').val() || 20,
-                right: $('#padding-right').val() || 20,
-                bottom: $('#padding-bottom').val() || 20,
-                left: $('#padding-left').val() || 20
+                top: $('input[name="styles[padding][top]"]').val() || 20,
+                right: $('input[name="styles[padding][right]"]').val() || 20,
+                bottom: $('input[name="styles[padding][bottom]"]').val() || 20,
+                left: $('input[name="styles[padding][left]"]').val() || 20
             },
             background: {
-                color: $('#background-color').val() || '#ffffff'
+                color: $('input[name="styles[background][color]"]').val() || '#ffffff'
             },
             border: {
-                width: $('#border-width').val() || 0,
-                style: $('#border-style').val() || 'solid',
-                color: $('#border-color').val() || '#dddddd',
-                radius: $('#border-radius').val() || 0
+                width: $('input[name="styles[border][width]"]').val() || 0,
+                style: $('select[name="styles[border][style]"]').val() || 'solid',
+                color: $('input[name="styles[border][color]"]').val() || '#dddddd',
+                radius: $('input[name="styles[border][radius]"]').val() || 0
             },
             typography: {
-                color: $('#text-color').val() || '#333333',
-                fontSize: $('#font-size').val() || '16px'
+                color: $('input[name="styles[text][color]"]').val() || '#333333',
+                fontSize: $('input[name="styles[text][fontSize]"]').val() || '16px'
             }
         };
         

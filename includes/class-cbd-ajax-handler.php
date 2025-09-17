@@ -51,16 +51,17 @@ class CBD_Ajax_Handler {
         
         // Prüfe verschiedene mögliche Nonce-Namen
         if (isset($_POST['nonce'])) {
-            if (wp_verify_nonce($_POST['nonce'], 'cbd-nonce') || 
+            if (wp_verify_nonce($_POST['nonce'], 'cbd-nonce') ||
                 wp_verify_nonce($_POST['nonce'], 'cbd-admin-nonce') ||
+                wp_verify_nonce($_POST['nonce'], 'cbd_block_editor') ||
                 wp_verify_nonce($_POST['nonce'], 'wp_rest')) {
                 $nonce_valid = true;
             }
         }
         
         // Falls kein gültiger Nonce, prüfe ob Benutzer berechtigt ist
-        if (!$nonce_valid && !current_user_can('edit_posts')) {
-            error_log('CBD: Nonce-Prüfung fehlgeschlagen');
+        if (!$nonce_valid && !cbd_user_can_use_blocks()) {
+            error_log('CBD: Nonce-Prüfung fehlgeschlagen oder keine Berechtigung für Container-Blocks');
             wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
             return;
         }
@@ -265,6 +266,3 @@ class CBD_Ajax_Handler {
         wp_send_json_success(array('message' => 'Block dupliziert', 'id' => $wpdb->insert_id));
     }
 }
-
-// Initialisierung
-new CBD_Ajax_Handler();
