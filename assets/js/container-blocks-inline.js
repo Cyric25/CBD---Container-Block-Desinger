@@ -9,7 +9,10 @@ if (typeof jQuery !== 'undefined') {
         
         // Remove old event handlers to prevent duplicates
         $(document).off("click", ".cbd-collapse-toggle, .cbd-copy-text, .cbd-screenshot");
-        
+
+        // Initialize collapsed state on page load
+        initializeCollapsedState();
+
         // Toggle functionality
         $(document).on("click", ".cbd-collapse-toggle", function(e) {
             e.preventDefault();
@@ -411,11 +414,6 @@ if (typeof jQuery !== 'undefined') {
                         'max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; ' +
                         'box-shadow: 0 20px 40px rgba(0,0,0,0.3);">' +
                         '<h2 style="margin: 0 0 20px 0; color: #333; font-size: 24px;">📄 PDF Export Optionen</h2>' +
-                        '<div style="background: #e8f4fd; border: 1px solid #0073aa; border-radius: 6px; padding: 12px; margin-bottom: 20px;">' +
-                            '<p style="margin: 0 0 8px 0; font-size: 14px; color: #0073aa;"><strong>✨ Neu:</strong> Sehr lange Container-Blöcke werden automatisch auf mehrere PDF-Seiten aufgeteilt!</p>' +
-                            '<p style="margin: 0 0 8px 0; font-size: 13px; color: #0073aa;"><strong>🔧 Verbessert:</strong> Interaktive HTML-Elemente (Formulare, Buttons, etc.) werden korrekt dargestellt!</p>' +
-                            '<p style="margin: 0; font-size: 13px; color: #0073aa;"><strong>🧠 Intelligent:</strong> Inhalte werden an natürlichen Bruchpunkten geteilt - kein zerteilter Text oder Bilder!</p>' +
-                        '</div>' +
                         '<div style="margin-bottom: 20px;">' +
                             '<h3 style="margin: 0 0 10px 0; color: #555; font-size: 16px;">Container auswählen:</h3>' +
                             '<div id="cbd-block-selection" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 6px;">';
@@ -524,5 +522,26 @@ if (typeof jQuery !== 'undefined') {
                 console.log("CBD: PDF button added");
             }
         }
+
+        // Function to initialize collapsed state based on CSS classes
+        function initializeCollapsedState() {
+            $('.cbd-container.cbd-collapsed').each(function() {
+                var container = $(this);
+                var content = container.find('.cbd-container-content');
+                var toggleButton = container.find('.cbd-collapse-toggle');
+                var icon = toggleButton.find('.dashicons');
+
+                if (content.length > 0) {
+                    // Set initial collapsed state
+                    content.hide(); // Use hide() instead of slideUp() for initial state
+
+                    // Set correct icon
+                    icon.removeClass('dashicons-arrow-up-alt2').addClass('dashicons-arrow-down-alt2');
+
+                    console.log('CBD: Initialized collapsed state for container');
+                }
+            });
+        }
+
     });
 }
