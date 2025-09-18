@@ -20,7 +20,8 @@ function cbd_install() {
     cbd_create_tables();
     cbd_create_default_blocks();
     cbd_set_default_options();
-    
+    cbd_create_user_roles(); // Neue Funktion für Benutzerrollen
+
     // Log installation
     if (function_exists('cbd_log')) {
         cbd_log('Plugin installed', array('version' => CBD_VERSION));
@@ -204,10 +205,11 @@ function cbd_set_default_options() {
  */
 function cbd_upgrade_database() {
     $current_version = get_option('cbd_version', '0.0.0');
-    
+
     if (version_compare($current_version, CBD_VERSION, '<')) {
         // Run upgrade routines
         cbd_create_tables(); // Ensure tables are up to date
+        cbd_create_user_roles(); // Ensure user roles are up to date
         
         // Version specific upgrades
         if (version_compare($current_version, '2.0.0', '<')) {
@@ -338,6 +340,76 @@ function cbd_uninstall() {
     // Clean up any transients
     $wpdb->query("DELETE FROM $wpdb->options WHERE option_name LIKE '_transient_cbd_%'");
     $wpdb->query("DELETE FROM $wpdb->options WHERE option_name LIKE '_transient_timeout_cbd_%'");
+}
+
+/**
+ * Create user roles and capabilities
+ */
+function cbd_create_user_roles() {
+    // Prüfen ob bereits existiert
+    if (get_role('block_redakteur')) {
+        // Rolle bereits vorhanden, aktualisiere Capabilities
+        $role = get_role('block_redakteur');
+        $role->add_cap('cbd_edit_blocks');
+        return;
+    }
+
+    // Block-Redakteur Rolle erstellen
+    $capabilities = array(
+        'read' => true,                    // Grundrecht zum Lesen
+        'edit_pages' => true,              // Seiten bearbeiten
+        'edit_others_pages' => true,       // Fremde Seiten bearbeiten
+        'edit_published_pages' => true,    // Veröffentlichte Seiten bearbeiten
+        'publish_pages' => true,           // Seiten veröffentlichen
+        'delete_pages' => false,           // NICHT löschen
+        'delete_others_pages' => false,    // Keine fremden Seiten löschen
+        'delete_published_pages' => false, // Keine veröffentlichten Seiten löschen
+
+        // WordPress Editor verwenden (minimal für Block Editor)
+        'edit_posts' => true,              // NÖTIG für Block-Editor
+        'edit_others_posts' => false,      // Keine fremden Posts
+        'edit_published_posts' => false,   // Keine veröffentlichten Posts
+        'publish_posts' => false,          // Keine Posts veröffentlichen
+        'delete_posts' => false,           // Keine Posts löschen
+
+        // Custom Container Block Designer Capabilities
+        'cbd_edit_blocks' => true,         // Container-Blocks im Editor verwenden
+        'cbd_edit_styles' => false,        // KEINE Style-Bearbeitung
+        'cbd_admin_blocks' => false,       // KEINE Admin-Funktionen
+
+        // Standard Admin-Rechte
+        'manage_options' => false,         // KEINE WordPress Admin-Rechte
+
+        // Upload-Rechte für Medien in Blocks
+        'upload_files' => true,
+
+        // WordPress Editor verwenden
+        'edit_theme_options' => false,     // Keine Theme-Bearbeitung
+    );
+
+    // Rolle hinzufügen
+    $result = add_role(
+        'block_redakteur',
+        'Block-Redakteur',
+        $capabilities
+    );
+
+    // Administrator und Editor Rollen um Custom Capabilities erweitern
+    $admin_role = get_role('administrator');
+    if ($admin_role) {
+        $admin_role->add_cap('cbd_edit_blocks');
+        $admin_role->add_cap('cbd_edit_styles');
+        $admin_role->add_cap('cbd_admin_blocks');
+    }
+
+    $editor_role = get_role('editor');
+    if ($editor_role) {
+        $editor_role->add_cap('cbd_edit_blocks');
+        $editor_role->add_cap('cbd_edit_styles');
+        // Editor bekommt KEINE Admin-Rechte
+    }
+
+    return $result;
 }
 
 // Hook into activation

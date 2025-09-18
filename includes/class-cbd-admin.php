@@ -54,6 +54,7 @@ class CBD_Admin {
         // }
         
         // Admin hooks
+        add_action('admin_init', array($this, 'ensure_roles_exist')); // Prüfe Rollen bei jedem Admin-Aufruf
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
         add_action('wp_ajax_cbd_delete_block', array($this, 'ajax_delete_block'));
         add_action('wp_ajax_cbd_toggle_status', array($this, 'ajax_toggle_status'));
@@ -70,80 +71,176 @@ class CBD_Admin {
         // Verarbeite Admin-Aktionen früh (vor Ausgabe)
         add_action('admin_init', array($this, 'process_admin_actions'));
     }
-    
+
+    /**
+     * Stellt sicher, dass alle benötigten Rollen existieren
+     */
+    public function ensure_roles_exist() {
+        // Prüfe nur einmal pro Session
+        if (get_transient('cbd_roles_checked')) {
+            return;
+        }
+
+        // Prüfe ob Block-Redakteur Rolle existiert
+        $block_redakteur_role = get_role('block_redakteur');
+        if (!$block_redakteur_role) {
+            // Rolle erstellen
+            $this->create_block_redakteur_role();
+        } else {
+            // Prüfe ob Capability vorhanden ist
+            if (!$block_redakteur_role->has_cap('cbd_edit_blocks')) {
+                $block_redakteur_role->add_cap('cbd_edit_blocks');
+            }
+        }
+
+        // Prüfe Admin-Rollen
+        $admin_role = get_role('administrator');
+        if ($admin_role && !$admin_role->has_cap('cbd_edit_blocks')) {
+            $admin_role->add_cap('cbd_edit_blocks');
+            $admin_role->add_cap('cbd_edit_styles');
+            $admin_role->add_cap('cbd_admin_blocks');
+        }
+
+        // Setze Transient für 1 Stunde
+        set_transient('cbd_roles_checked', true, HOUR_IN_SECONDS);
+    }
+
+    /**
+     * Erstelle Block-Redakteur Rolle
+     */
+    private function create_block_redakteur_role() {
+        $capabilities = array(
+            'read' => true,
+            'edit_pages' => true,
+            'edit_others_pages' => true,
+            'edit_published_pages' => true,
+            'publish_pages' => true,
+            'edit_posts' => true,
+            'upload_files' => true,
+            'cbd_edit_blocks' => true,
+            'cbd_edit_styles' => false,
+            'cbd_admin_blocks' => false,
+            'manage_options' => false,
+        );
+
+        return add_role('block_redakteur', 'Block-Redakteur', $capabilities);
+    }
+
     /**
      * Admin-Menü hinzufügen
      */
     public function add_admin_menu() {
-        // Hauptmenüpunkt - für alle mit CBD-Berechtigung
-        add_menu_page(
-            __('Container Block Designer', 'container-block-designer'),
-            __('Container Designer', 'container-block-designer'),
-            'cbd_edit_blocks', // Custom capability für Block-Redakteure
-            'container-block-designer',
-            array($this, 'render_main_page'),
-            'dashicons-layout',
-            30
-        );
-        
-        // Untermenü: Neuer Block - nur für Editoren und Admins (nicht für Block-Redakteure)
-        add_submenu_page(
-            'container-block-designer',
-            __('Neuer Block', 'container-block-designer'),
-            __('Neuer Block', 'container-block-designer'),
-            'cbd_admin_blocks', // Nur Admin-Rechte können neue Blöcke erstellen
-            'cbd-new-block',
-            array($this, 'render_new_block_page')
-        );
+        // Debug: Prüfe Benutzerrolle und Capabilities
+        $current_user = wp_get_current_user();
+        $is_block_redakteur = $current_user && in_array('block_redakteur', $current_user->roles);
 
-        // Untermenü: Alle Blöcke - nur für Editoren und Admins (nicht für Block-Redakteure)
-        add_submenu_page(
-            'container-block-designer',
-            __('Alle Blöcke', 'container-block-designer'),
-            __('Alle Blöcke', 'container-block-designer'),
-            'cbd_admin_blocks', // Nur Admin-Rechte können Blöcke verwalten
-            'cbd-blocks',
-            array($this, 'render_blocks_list_page')
-        );
-        
+        // Debug Information
+        error_log('[CBD Menu Debug] User ID: ' . $current_user->ID);
+        error_log('[CBD Menu Debug] User Roles: ' . implode(', ', $current_user->roles));
+        error_log('[CBD Menu Debug] Is Block-Redakteur: ' . ($is_block_redakteur ? 'YES' : 'NO'));
+        error_log('[CBD Menu Debug] Has cbd_edit_blocks: ' . (current_user_can('cbd_edit_blocks') ? 'YES' : 'NO'));
+        error_log('[CBD Menu Debug] Has cbd_admin_blocks: ' . (current_user_can('cbd_admin_blocks') ? 'YES' : 'NO'));
+
+        // Temporäres Debug-Notice
+        if (current_user_can('manage_options')) {
+            $debug_message = sprintf(
+                'CBD Debug - User: %s, Rollen: %s, Block-Redakteur: %s, cbd_edit_blocks: %s',
+                $current_user->user_login,
+                implode(', ', $current_user->roles),
+                $is_block_redakteur ? 'JA' : 'NEIN',
+                current_user_can('cbd_edit_blocks') ? 'JA' : 'NEIN'
+            );
+            add_action('admin_notices', function() use ($debug_message) {
+                echo '<div class="notice notice-info is-dismissible"><p>' . esc_html($debug_message) . '</p></div>';
+            });
+        }
+
+        if ($is_block_redakteur) {
+            // Für Block-Redakteure: Nur Block-Vorschau als Hauptmenü
+            // Verwende read als minimale Capability falls cbd_edit_blocks fehlt
+            $capability = current_user_can('cbd_edit_blocks') ? 'cbd_edit_blocks' : 'read';
+            error_log('[CBD Menu Debug] Using capability for block_redakteur: ' . $capability);
+
+            add_menu_page(
+                __('Container Block Vorschau', 'container-block-designer'),
+                __('Container Designer', 'container-block-designer'),
+                $capability,
+                'cbd-block-preview',
+                array($this, 'render_block_preview_page'),
+                'dashicons-layout',
+                30
+            );
+        } else {
+            // Für Admins/Editoren: Vollständiges Menü
+            add_menu_page(
+                __('Container Block Designer', 'container-block-designer'),
+                __('Container Designer', 'container-block-designer'),
+                'cbd_admin_blocks', // Nur Admin-Rechte für Hauptseite
+                'container-block-designer',
+                array($this, 'render_main_page'),
+                'dashicons-layout',
+                30
+            );
+
+            // Untermenü: Neuer Block - nur für Editoren und Admins
+            add_submenu_page(
+                'container-block-designer',
+                __('Neuer Block', 'container-block-designer'),
+                __('Neuer Block', 'container-block-designer'),
+                'cbd_admin_blocks',
+                'cbd-new-block',
+                array($this, 'render_new_block_page')
+            );
+
+            // Untermenü: Alle Blöcke - nur für Editoren und Admins
+            add_submenu_page(
+                'container-block-designer',
+                __('Alle Blöcke', 'container-block-designer'),
+                __('Alle Blöcke', 'container-block-designer'),
+                'cbd_admin_blocks',
+                'cbd-blocks',
+                array($this, 'render_blocks_list_page')
+            );
+
+            // Untermenü: Import/Export - nur Admins für kritische Funktionen
+            add_submenu_page(
+                'container-block-designer',
+                __('Import/Export', 'container-block-designer'),
+                __('Import/Export', 'container-block-designer'),
+                'manage_options',
+                'cbd-import-export',
+                array($this, 'render_import_export_page')
+            );
+
+            // Untermenü: Datenbank reparieren - nur Admins
+            add_submenu_page(
+                'container-block-designer',
+                __('Datenbank reparieren', 'container-block-designer'),
+                __('Datenbank reparieren', 'container-block-designer'),
+                'manage_options',
+                'cbd-database-repair',
+                array($this, 'render_database_repair_page')
+            );
+
+            // Untermenü: Rollen reparieren - nur Admins
+            add_submenu_page(
+                'container-block-designer',
+                __('Rollen reparieren', 'container-block-designer'),
+                __('Rollen reparieren', 'container-block-designer'),
+                'manage_options',
+                'cbd-roles-repair',
+                array($this, 'render_roles_repair_page')
+            );
+        }
+
         // Versteckte Seite: Block bearbeiten - nicht im Menü sichtbar
         add_submenu_page(
             null, // parent_slug = null macht es zu einer versteckten Seite
             __('Block bearbeiten', 'container-block-designer'),
             __('Block bearbeiten', 'container-block-designer'),
-            'edit_posts',
+            'cbd_admin_blocks', // Nur Admins können bearbeiten
             'cbd-edit-block',
             array($this, 'render_edit_block_page')
-        );
-        
-        // Untermenü: Block Vorschau - für Block-Redakteure (Read-Only)
-        add_submenu_page(
-            'container-block-designer',
-            __('Block Vorschau', 'container-block-designer'),
-            __('Block Vorschau', 'container-block-designer'),
-            'cbd_edit_blocks', // Spezielle Capability für Block-Redakteure
-            'cbd-block-preview',
-            array($this, 'render_block_preview_page')
-        );
-
-        // Untermenü: Import/Export - nur Admins für kritische Funktionen
-        add_submenu_page(
-            'container-block-designer',
-            __('Import/Export', 'container-block-designer'),
-            __('Import/Export', 'container-block-designer'),
-            'manage_options',
-            'cbd-import-export',
-            array($this, 'render_import_export_page')
-        );
-
-        // Untermenü: Datenbank reparieren - nur Admins
-        add_submenu_page(
-            'container-block-designer',
-            __('Datenbank reparieren', 'container-block-designer'),
-            __('Datenbank reparieren', 'container-block-designer'),
-            'manage_options',
-            'cbd-database-repair',
-            array($this, 'render_database_repair_page')
         );
     }
     
@@ -321,18 +418,8 @@ class CBD_Admin {
      * Hauptseite rendern
      */
     public function render_main_page() {
-        // Prüfe ob User Block-Redakteur ist
-        $current_user = wp_get_current_user();
-        $is_block_redakteur = $current_user && in_array('block_redakteur', $current_user->roles);
-
-        // Block-Redakteure werden zur Vorschau-Seite weitergeleitet
-        if ($is_block_redakteur) {
-            // Direkter Aufruf der Vorschau-Seite für Block-Redakteure
-            $this->render_block_preview_page();
-            return;
-        }
-
-        // Normale Hauptseite für Admins und Editoren
+        // Diese Funktion sollte nur für Admins/Editoren aufgerufen werden
+        // Block-Redakteure haben jetzt ihr eigenes Menü
         $file_path = CBD_PLUGIN_DIR . 'admin/container-block-designer.php';
 
         if (file_exists($file_path)) {
@@ -852,142 +939,326 @@ class CBD_Admin {
      * Datenbank-Reparatur-Seite rendern
      */
     /**
-     * Block-Vorschau-Seite für Block-Redakteure (Read-Only)
+     * Block-Vorschau-Seite für Block-Redakteure (Read-Only) - Basiert auf funktionierender Hauptseite
      */
     public function render_block_preview_page() {
-        // Prüfe Berechtigungen - spezifisch für Block-Redakteure
         if (!current_user_can('cbd_edit_blocks')) {
             wp_die(__('Du hast nicht die erforderlichen Berechtigungen für diese Seite.', 'container-block-designer'));
         }
 
-        // Debug: Hook für wp_trim_words Aufrufe
-        if (!function_exists('cbd_debug_wp_trim_words')) {
-            function cbd_debug_wp_trim_words($text, $num_words = 55, $more = null) {
-                if (is_array($text)) {
-                    error_log('CBD DEBUG: wp_trim_words received array: ' . print_r($text, true));
-                    error_log('CBD DEBUG: Call stack: ' . wp_debug_backtrace_summary());
-                    $text = implode(' ', $text);
-                }
-                return wp_trim_words($text, $num_words, $more);
-            }
-        }
-
         global $wpdb;
-        $table_name = $wpdb->prefix . 'cbd_blocks';
 
-        // Prüfe ob Tabelle existiert
-        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
+        // Blocks aus der Datenbank laden (gleich wie Hauptseite)
+        $blocks = $wpdb->get_results("SELECT * FROM " . CBD_TABLE_BLOCKS . " ORDER BY created_at DESC");
 
-        // Hole alle Blöcke aus der Datenbank (falls Tabelle existiert)
-        $blocks = array();
-        if ($table_exists) {
-            $blocks = $wpdb->get_results("SELECT * FROM $table_name ORDER BY created_at DESC", ARRAY_A);
+        // Available features (gleich wie Hauptseite)
+        $available_features = array(
+            'icon' => array(
+                'label' => __('Icon', 'container-block-designer'),
+                'description' => __('Icon am Anfang des Blocks anzeigen', 'container-block-designer'),
+                'dashicon' => 'dashicons-star-filled'
+            ),
+            'collapse' => array(
+                'label' => __('Klappbar', 'container-block-designer'),
+                'description' => __('Block kann ein- und ausgeklappt werden', 'container-block-designer'),
+                'dashicon' => 'dashicons-arrow-up-alt2'
+            ),
+            'numbering' => array(
+                'label' => __('Nummerierung', 'container-block-designer'),
+                'description' => __('Automatische Nummerierung der Blocks', 'container-block-designer'),
+                'dashicon' => 'dashicons-editor-ol'
+            ),
+            'copyText' => array(
+                'label' => __('Text kopieren', 'container-block-designer'),
+                'description' => __('Button zum Kopieren des Textes', 'container-block-designer'),
+                'dashicon' => 'dashicons-clipboard'
+            ),
+            'screenshot' => array(
+                'label' => __('Screenshot', 'container-block-designer'),
+                'description' => __('Screenshot-Funktion für den Block', 'container-block-designer'),
+                'dashicon' => 'dashicons-camera'
+            )
+        );
+
+        // Hilfsfunktion um Farben aufzuhellen
+        function cbd_lighten_color($hex, $percent) {
+            $hex = ltrim($hex, '#');
+            $r = hexdec(substr($hex, 0, 2));
+            $g = hexdec(substr($hex, 2, 2));
+            $b = hexdec(substr($hex, 4, 2));
+            $r = min(255, $r + ($r * $percent));
+            $g = min(255, $g + ($g * $percent));
+            $b = min(255, $b + ($b * $percent));
+            return '#' . sprintf('%02x%02x%02x', $r, $g, $b);
         }
-
-        // Prüfe ob User Block-Redakteur ist
-        $current_user = wp_get_current_user();
-        $is_block_redakteur = $current_user && in_array('block_redakteur', $current_user->roles);
 
         ?>
-        <div class="wrap">
-            <h1>
-                <?php _e('Block Vorschau', 'container-block-designer'); ?>
-                <?php if ($is_block_redakteur): ?>
-                    <span style="background: #28a745; color: white; padding: 3px 8px; border-radius: 4px; font-size: 12px; margin-left: 10px;">
-                        <?php _e('Block-Redakteur', 'container-block-designer'); ?>
-                    </span>
-                <?php endif; ?>
+        <div class="wrap cbd-admin-wrap">
+            <h1 class="wp-heading-inline">
+                <?php _e('Container Block Vorschau', 'container-block-designer'); ?>
+                <small style="color: #666; font-weight: normal; margin-left: 10px;">
+                    <?php _e('(Nur-Lese-Modus)', 'container-block-designer'); ?>
+                </small>
             </h1>
 
-            <p class="description">
-                <?php _e('Hier können Sie alle verfügbaren Container-Blöcke und deren Styles einsehen.', 'container-block-designer'); ?>
-                <?php if ($is_block_redakteur): ?>
-                    <?php _e('Als Block-Redakteur haben Sie Lesezugriff auf alle Blöcke.', 'container-block-designer'); ?>
-                <?php endif; ?>
-            </p>
+            <hr class="wp-header-end">
 
-            <?php if (!$table_exists): ?>
-                <div class="notice notice-warning">
-                    <p><?php _e('Die Container-Block-Datenbank-Tabelle existiert noch nicht. Bitte erstellen Sie zuerst einen Block.', 'container-block-designer'); ?></p>
+            <?php if (empty($blocks)) : ?>
+                <div class="cbd-empty-state">
+                    <div class="cbd-empty-state-icon">
+                        <span class="dashicons dashicons-layout"></span>
+                    </div>
+                    <h2><?php _e('Keine Container-Blöcke vorhanden', 'container-block-designer'); ?></h2>
+                    <p><?php _e('Es sind noch keine Container-Blöcke erstellt.', 'container-block-designer'); ?></p>
                 </div>
-            <?php elseif (empty($blocks)): ?>
-                <div class="notice notice-info">
-                    <p><?php _e('Keine Container-Blöcke gefunden.', 'container-block-designer'); ?></p>
-                </div>
-            <?php else: ?>
-                <div class="cbd-preview-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-top: 20px;">
-                    <?php foreach ($blocks as $block): ?>
-                        <?php $this->render_preview_block_card($block, $is_block_redakteur); ?>
+            <?php else : ?>
+                <div class="cbd-blocks-grid">
+                    <?php foreach ($blocks as $block) :
+                        $features = !empty($block->features) ? json_decode($block->features, true) : array();
+                        $styles = !empty($block->styles) ? json_decode($block->styles, true) : array();
+                        $config = !empty($block->config) ? json_decode($block->config, true) : array();
+
+                        // Verwende 'title' für Anzeige, 'name' für interne Referenz
+                        $display_name = !empty($block->title) ? $block->title : $block->name;
+
+                        // Dynamische Styles basierend auf Block-Konfiguration
+                        $card_styles = '';
+                        if (!empty($styles)) {
+                            $bg_color = $styles['background']['color'] ?? '#ffffff';
+                            $text_color = $styles['text']['color'] ?? '#333333';
+                            $border_width = $styles['border']['width'] ?? 1;
+                            $border_color = $styles['border']['color'] ?? '#e0e0e0';
+                            $border_style = $styles['border']['style'] ?? 'solid';
+                            $border_radius = $styles['border']['radius'] ?? 4;
+
+                            $card_styles = sprintf(
+                                'background: linear-gradient(135deg, %s 0%%, %s 100%%); color: %s; border: %dpx %s %s; border-radius: %dpx;',
+                                $bg_color,
+                                cbd_lighten_color($bg_color, 0.05),
+                                $text_color,
+                                $border_width,
+                                $border_style,
+                                $border_color,
+                                $border_radius
+                            );
+                        }
+                    ?>
+                        <div class="cbd-block-card <?php echo $block->status !== 'active' ? 'cbd-inactive' : ''; ?>"
+                             style="<?php echo esc_attr($card_styles); ?>"
+                             data-block-name="<?php echo esc_attr($block->name); ?>">
+                            <div class="cbd-block-header">
+                                <h3><?php echo esc_html($display_name); ?></h3>
+                                <div class="cbd-block-actions">
+                                    <span class="cbd-status-badge cbd-status-<?php echo esc_attr($block->status); ?>">
+                                        <?php echo $block->status === 'active' ? __('Aktiv', 'container-block-designer') : __('Inaktiv', 'container-block-designer'); ?>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <?php if (!empty($block->slug)) : ?>
+                                <p class="cbd-block-slug">
+                                    <code><?php echo esc_html($block->slug); ?></code>
+                                </p>
+                            <?php endif; ?>
+
+                            <?php if ($block->description) : ?>
+                                <p class="cbd-block-description"><?php echo esc_html($block->description); ?></p>
+                            <?php endif; ?>
+
+                            <!-- Features-Bereich (Nur-Lese) -->
+                            <div class="cbd-block-features">
+                                <h4><?php _e('Features', 'container-block-designer'); ?></h4>
+                                <div class="cbd-features-grid">
+                                    <?php foreach ($available_features as $key => $feature_info) :
+                                        $is_enabled = isset($features[$key]['enabled']) && $features[$key]['enabled'];
+                                    ?>
+                                        <div class="cbd-feature-item <?php echo $is_enabled ? 'cbd-feature-active' : 'cbd-feature-inactive'; ?>">
+                                            <div class="cbd-feature-display" title="<?php echo esc_attr($feature_info['description']); ?>">
+                                                <span class="dashicons <?php echo esc_attr($feature_info['dashicon']); ?>"></span>
+                                                <span class="cbd-feature-label"><?php echo esc_html($feature_info['label']); ?></span>
+                                                <?php if ($is_enabled) : ?>
+                                                    <span class="cbd-feature-status-enabled">✓</span>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                        </div>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
-
-            <style>
-                .cbd-preview-card {
-                    border: 1px solid #ddd;
-                    border-radius: 8px;
-                    overflow: hidden;
-                    background: white;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                    transition: transform 0.2s, box-shadow 0.2s;
-                }
-                .cbd-preview-card:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-                }
-                .cbd-preview-header {
-                    padding: 15px;
-                    background: #f8f9fa;
-                    border-bottom: 1px solid #e9ecef;
-                }
-                .cbd-preview-title {
-                    margin: 0 0 5px 0;
-                    font-size: 16px;
-                    font-weight: 600;
-                    color: #333;
-                }
-                .cbd-preview-meta {
-                    font-size: 12px;
-                    color: #666;
-                    margin: 0;
-                }
-                .cbd-preview-content {
-                    padding: 0;
-                    min-height: 200px;
-                    max-height: 300px;
-                    overflow: hidden;
-                    position: relative;
-                }
-                .cbd-preview-fade {
-                    position: absolute;
-                    bottom: 0;
-                    left: 0;
-                    right: 0;
-                    height: 30px;
-                    background: linear-gradient(transparent, white);
-                    pointer-events: none;
-                }
-                .cbd-preview-actions {
-                    padding: 10px 15px;
-                    background: #f8f9fa;
-                    border-top: 1px solid #e9ecef;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                }
-                .cbd-block-status {
-                    padding: 2px 8px;
-                    border-radius: 12px;
-                    font-size: 11px;
-                    font-weight: 500;
-                    text-transform: uppercase;
-                }
-                .cbd-status-active { background: #d4edda; color: #155724; }
-                .cbd-status-inactive { background: #f8d7da; color: #721c24; }
-            </style>
         </div>
+
+        <style>
+        .cbd-admin-wrap {
+            margin: 20px 20px 0 2px;
+        }
+
+        .cbd-empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background: #fff;
+            border: 1px solid #ccd0d4;
+            margin-top: 20px;
+        }
+
+        .cbd-empty-state-icon {
+            font-size: 60px;
+            color: #dcdcde;
+            margin-bottom: 20px;
+        }
+
+        .cbd-empty-state h2 {
+            color: #23282d;
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .cbd-blocks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .cbd-block-card {
+            background: #fff;
+            border: 1px solid #ccd0d4;
+            padding: 20px;
+            position: relative;
+        }
+
+        .cbd-block-card.cbd-inactive {
+            opacity: 0.7;
+            background: #f9f9f9;
+        }
+
+        .cbd-block-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .cbd-block-header h3 {
+            margin: 0;
+            font-size: 18px;
+            color: #23282d;
+        }
+
+        .cbd-block-slug {
+            margin: 5px 0;
+            font-size: 12px;
+        }
+
+        .cbd-block-slug code {
+            background: #f0f0f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .cbd-block-description {
+            color: #666;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+
+        .cbd-status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .cbd-status-active {
+            background: #d4f4dd;
+            color: #00a32a;
+        }
+
+        .cbd-status-inactive {
+            background: #fef1f1;
+            color: #d63638;
+        }
+
+        .cbd-block-features {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .cbd-block-features h4 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #50575e;
+        }
+
+        .cbd-features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+        }
+
+        .cbd-feature-item {
+            text-align: center;
+        }
+
+        .cbd-feature-display {
+            background: #fff;
+            border: 2px solid #dcdcde;
+            padding: 10px;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        .cbd-feature-active .cbd-feature-display {
+            background: #e8f4fd;
+            border-color: #007cba;
+            color: #007cba;
+        }
+
+        .cbd-feature-display .dashicons {
+            font-size: 24px;
+            width: 24px;
+            height: 24px;
+            margin-bottom: 5px;
+        }
+
+        .cbd-feature-label {
+            font-size: 11px;
+            display: block;
+        }
+
+        .cbd-feature-status-enabled {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #00a32a;
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        </style>
         <?php
     }
+
+    /**
+     * Rendert Read-Only Blocks Seite basierend auf funktionierender Hauptseite
+     */
 
     /**
      * Rendert eine einzelne Block-Vorschau-Karte - VEREINFACHT
@@ -1380,6 +1651,305 @@ class CBD_Admin {
             </div>
         </div>
         <?php
+    }
+
+    /**
+     * Rollen-Reparatur-Seite rendern
+     */
+    public function render_roles_repair_page() {
+        // Verarbeite POST-Anfragen
+        if (isset($_POST['repair_roles']) && wp_verify_nonce($_POST['cbd_roles_repair_nonce'], 'cbd_repair_roles')) {
+            $this->handle_roles_repair();
+        }
+
+        if (isset($_POST['add_user_to_role']) && wp_verify_nonce($_POST['cbd_add_user_nonce'], 'cbd_add_user_to_role')) {
+            $this->handle_add_user_to_role();
+        }
+
+        // Aktueller Status
+        $current_user = wp_get_current_user();
+        $block_redakteur_role = get_role('block_redakteur');
+
+        ?>
+        <div class="wrap">
+            <h1><?php _e('Rollen reparieren', 'container-block-designer'); ?></h1>
+
+            <div class="card">
+                <h2><?php _e('Aktueller Status', 'container-block-designer'); ?></h2>
+
+                <table class="widefat">
+                    <tr>
+                        <td><strong><?php _e('Block-Redakteur Rolle existiert:', 'container-block-designer'); ?></strong></td>
+                        <td><?php echo $block_redakteur_role ? '✅ Ja' : '❌ Nein'; ?></td>
+                    </tr>
+                    <?php if ($block_redakteur_role): ?>
+                    <tr>
+                        <td><strong><?php _e('cbd_edit_blocks Capability:', 'container-block-designer'); ?></strong></td>
+                        <td><?php echo $block_redakteur_role->has_cap('cbd_edit_blocks') ? '✅ Ja' : '❌ Nein'; ?></td>
+                    </tr>
+                    <?php endif; ?>
+                    <tr>
+                        <td><strong><?php _e('Aktueller Benutzer:', 'container-block-designer'); ?></strong></td>
+                        <td><?php echo esc_html($current_user->user_login); ?> (<?php echo implode(', ', $current_user->roles); ?>)</td>
+                    </tr>
+                    <tr>
+                        <td><strong><?php _e('cbd_edit_blocks Capability:', 'container-block-designer'); ?></strong></td>
+                        <td><?php echo current_user_can('cbd_edit_blocks') ? '✅ Ja' : '❌ Nein'; ?></td>
+                    </tr>
+                </table>
+
+                <?php
+                // Prüfe auf Probleme
+                $has_problems = false;
+                $problems = array();
+
+                if (!$block_redakteur_role) {
+                    $has_problems = true;
+                    $problems[] = __('Block-Redakteur Rolle existiert nicht', 'container-block-designer');
+                } elseif (!$block_redakteur_role->has_cap('cbd_edit_blocks')) {
+                    $has_problems = true;
+                    $problems[] = __('Block-Redakteur Rolle hat keine cbd_edit_blocks Capability', 'container-block-designer');
+                }
+
+                $admin_role = get_role('administrator');
+                if ($admin_role && !$admin_role->has_cap('cbd_edit_blocks')) {
+                    $has_problems = true;
+                    $problems[] = __('Administrator Rolle hat keine Container Block Capabilities', 'container-block-designer');
+                }
+
+                if ($has_problems): ?>
+                <div class="notice notice-warning">
+                    <p><strong><?php _e('Probleme erkannt:', 'container-block-designer'); ?></strong></p>
+                    <ul>
+                        <?php foreach ($problems as $problem): ?>
+                            <li>❌ <?php echo esc_html($problem); ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+                <?php else: ?>
+                <div class="notice notice-success">
+                    <p>✅ <?php _e('Alle Rollen sind korrekt konfiguriert!', 'container-block-designer'); ?></p>
+                </div>
+                <?php endif; ?>
+
+                <h3><?php _e('Rollen reparieren', 'container-block-designer'); ?></h3>
+                <p><?php _e('Diese Aktion wird alle Container Block Designer Rollen und Capabilities erstellen oder reparieren.', 'container-block-designer'); ?></p>
+
+                <form method="post" action="">
+                    <?php wp_nonce_field('cbd_repair_roles', 'cbd_roles_repair_nonce'); ?>
+                    <button type="submit" name="repair_roles" class="button button-primary button-large">
+                        <?php _e('🔧 Rollen jetzt reparieren', 'container-block-designer'); ?>
+                    </button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2><?php _e('Benutzer zur Block-Redakteur Rolle hinzufügen', 'container-block-designer'); ?></h2>
+
+                <form method="post" action="">
+                    <?php wp_nonce_field('cbd_add_user_to_role', 'cbd_add_user_nonce'); ?>
+
+                    <table class="form-table">
+                        <tr>
+                            <th scope="row"><?php _e('Benutzer auswählen', 'container-block-designer'); ?></th>
+                            <td>
+                                <select name="user_id" required>
+                                    <option value=""><?php _e('Benutzer wählen...', 'container-block-designer'); ?></option>
+                                    <?php
+                                    $users = get_users(array('orderby' => 'display_name'));
+                                    foreach ($users as $user) {
+                                        $is_block_redakteur = in_array('block_redakteur', $user->roles);
+                                        echo '<option value="' . esc_attr($user->ID) . '">';
+                                        echo esc_html($user->display_name) . ' (' . esc_html($user->user_login) . ')';
+                                        if ($is_block_redakteur) {
+                                            echo ' - ' . __('Bereits Block-Redakteur', 'container-block-designer');
+                                        }
+                                        echo '</option>';
+                                    }
+                                    ?>
+                                </select>
+                                <p class="description"><?php _e('Wählen Sie einen Benutzer aus, der zur Block-Redakteur Rolle hinzugefügt werden soll.', 'container-block-designer'); ?></p>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <p class="submit">
+                        <button type="submit" name="add_user_to_role" class="button button-secondary">
+                            <?php _e('👤 Benutzer zu Block-Redakteur machen', 'container-block-designer'); ?>
+                        </button>
+                    </p>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2><?php _e('Alle Rollen und Capabilities', 'container-block-designer'); ?></h2>
+
+                <?php
+                global $wp_roles;
+                foreach ($wp_roles->roles as $role_name => $role_info) {
+                    echo '<h4>' . esc_html($role_name) . ': ' . esc_html($role_info['name']) . '</h4>';
+
+                    $cbd_caps = array_filter($role_info['capabilities'], function($key) {
+                        return strpos($key, 'cbd_') === 0;
+                    }, ARRAY_FILTER_USE_KEY);
+
+                    if (!empty($cbd_caps)) {
+                        echo '<ul>';
+                        foreach ($cbd_caps as $cap => $has_cap) {
+                            echo '<li>' . esc_html($cap) . ': ' . ($has_cap ? '✅ Ja' : '❌ Nein') . '</li>';
+                        }
+                        echo '</ul>';
+                    } else {
+                        echo '<p><em>' . __('Keine Container Block Capabilities', 'container-block-designer') . '</em></p>';
+                    }
+                }
+                ?>
+            </div>
+        </div>
+        <?php
+    }
+
+    /**
+     * Rollen-Reparatur durchführen
+     */
+    private function handle_roles_repair() {
+        $messages = array();
+        $errors = array();
+
+        try {
+            // Block-Redakteur Rolle erstellen/reparieren
+            $block_redakteur_role = get_role('block_redakteur');
+
+            if (!$block_redakteur_role) {
+                // Rolle erstellen
+                $capabilities = array(
+                    'read' => true,
+                    'edit_pages' => true,
+                    'edit_others_pages' => true,
+                    'edit_published_pages' => true,
+                    'publish_pages' => true,
+                    'edit_posts' => true,
+                    'upload_files' => true,
+                    'cbd_edit_blocks' => true,
+                    'cbd_edit_styles' => false,
+                    'cbd_admin_blocks' => false,
+                    'manage_options' => false,
+                );
+
+                $result = add_role('block_redakteur', 'Block-Redakteur', $capabilities);
+
+                if ($result) {
+                    $messages[] = __('Block-Redakteur Rolle wurde erstellt.', 'container-block-designer');
+                } else {
+                    $errors[] = __('Fehler beim Erstellen der Block-Redakteur Rolle.', 'container-block-designer');
+                }
+            } else {
+                // Prüfe und repariere Capabilities
+                if (!$block_redakteur_role->has_cap('cbd_edit_blocks')) {
+                    $block_redakteur_role->add_cap('cbd_edit_blocks');
+                    $messages[] = __('cbd_edit_blocks Capability zu Block-Redakteur hinzugefügt.', 'container-block-designer');
+                }
+            }
+
+            // Administrator Rolle erweitern
+            $admin_role = get_role('administrator');
+            if ($admin_role) {
+                $added_caps = array();
+
+                if (!$admin_role->has_cap('cbd_edit_blocks')) {
+                    $admin_role->add_cap('cbd_edit_blocks');
+                    $added_caps[] = 'cbd_edit_blocks';
+                }
+                if (!$admin_role->has_cap('cbd_edit_styles')) {
+                    $admin_role->add_cap('cbd_edit_styles');
+                    $added_caps[] = 'cbd_edit_styles';
+                }
+                if (!$admin_role->has_cap('cbd_admin_blocks')) {
+                    $admin_role->add_cap('cbd_admin_blocks');
+                    $added_caps[] = 'cbd_admin_blocks';
+                }
+
+                if (!empty($added_caps)) {
+                    $messages[] = sprintf(__('Administrator Rolle um %s erweitert.', 'container-block-designer'), implode(', ', $added_caps));
+                }
+            }
+
+            // Editor Rolle erweitern
+            $editor_role = get_role('editor');
+            if ($editor_role) {
+                $added_caps = array();
+
+                if (!$editor_role->has_cap('cbd_edit_blocks')) {
+                    $editor_role->add_cap('cbd_edit_blocks');
+                    $added_caps[] = 'cbd_edit_blocks';
+                }
+                if (!$editor_role->has_cap('cbd_edit_styles')) {
+                    $editor_role->add_cap('cbd_edit_styles');
+                    $added_caps[] = 'cbd_edit_styles';
+                }
+
+                if (!empty($added_caps)) {
+                    $messages[] = sprintf(__('Editor Rolle um %s erweitert.', 'container-block-designer'), implode(', ', $added_caps));
+                }
+            }
+
+            // Cache leeren
+            delete_transient('cbd_roles_checked');
+
+        } catch (Exception $e) {
+            $errors[] = sprintf(__('Fehler bei der Reparatur: %s', 'container-block-designer'), $e->getMessage());
+        }
+
+        // Zeige Nachrichten an
+        if (!empty($messages)) {
+            foreach ($messages as $message) {
+                echo '<div class="notice notice-success"><p>✅ ' . esc_html($message) . '</p></div>';
+            }
+        }
+
+        if (!empty($errors)) {
+            foreach ($errors as $error) {
+                echo '<div class="notice notice-error"><p>❌ ' . esc_html($error) . '</p></div>';
+            }
+        }
+
+        if (empty($errors)) {
+            echo '<div class="notice notice-success"><p>✅ ' . __('Rollen-Reparatur erfolgreich abgeschlossen!', 'container-block-designer') . '</p></div>';
+        }
+    }
+
+    /**
+     * Benutzer zur Rolle hinzufügen
+     */
+    private function handle_add_user_to_role() {
+        if (!isset($_POST['user_id']) || empty($_POST['user_id'])) {
+            echo '<div class="notice notice-error"><p>❌ ' . __('Kein Benutzer ausgewählt.', 'container-block-designer') . '</p></div>';
+            return;
+        }
+
+        $user_id = intval($_POST['user_id']);
+        $user = get_user_by('id', $user_id);
+
+        if (!$user) {
+            echo '<div class="notice notice-error"><p>❌ ' . __('Benutzer nicht gefunden.', 'container-block-designer') . '</p></div>';
+            return;
+        }
+
+        if (in_array('block_redakteur', $user->roles)) {
+            echo '<div class="notice notice-warning"><p>⚠️ ' . sprintf(__('Benutzer %s ist bereits ein Block-Redakteur.', 'container-block-designer'), esc_html($user->display_name)) . '</p></div>';
+            return;
+        }
+
+        // Stelle sicher, dass die Rolle existiert
+        if (!get_role('block_redakteur')) {
+            $this->handle_roles_repair();
+        }
+
+        // Füge Rolle hinzu
+        $user->add_role('block_redakteur');
+
+        echo '<div class="notice notice-success"><p>✅ ' . sprintf(__('Benutzer %s wurde erfolgreich zur Block-Redakteur Rolle hinzugefügt!', 'container-block-designer'), esc_html($user->display_name)) . '</p></div>';
+        echo '<div class="notice notice-info"><p>ℹ️ ' . __('Der Benutzer muss sich ab- und wieder anmelden, damit die Änderungen wirksam werden.', 'container-block-designer') . '</p></div>';
     }
 
     /**
