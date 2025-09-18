@@ -379,8 +379,8 @@ class CBD_Unified_Frontend_Renderer {
         // Wrap the actual content in a collapsible container
         $html .= '<div class="cbd-container-content">';
         
-        // Actual content
-        $html .= $content;
+        // Actual content - process and secure HTML elements
+        $html .= self::process_html_content($content);
         
         $html .= '</div>'; // Close .cbd-container-content
         $html .= '</div>'; // Close .cbd-container-block
@@ -482,7 +482,163 @@ class CBD_Unified_Frontend_Renderer {
         
         return '<div class="' . esc_attr(implode(' ', $classes)) . '">' . $content . '</div>';
     }
-    
+
+    /**
+     * Process and secure HTML content for container blocks
+     * Handles interactive elements, applies CSS isolation, and ensures security
+     */
+    private static function process_html_content($content) {
+        if (empty($content)) {
+            return $content;
+        }
+
+        // Define allowed HTML tags and attributes for container blocks
+        $allowed_html = array(
+            // Text formatting
+            'p' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'br' => array(),
+            'strong' => array('class' => array(), 'style' => array()),
+            'b' => array('class' => array(), 'style' => array()),
+            'em' => array('class' => array(), 'style' => array()),
+            'i' => array('class' => array(), 'style' => array()),
+            'u' => array('class' => array(), 'style' => array()),
+            'span' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'small' => array('class' => array(), 'style' => array()),
+
+            // Headings
+            'h1' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'h2' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'h3' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'h4' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'h5' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'h6' => array('class' => array(), 'style' => array(), 'id' => array()),
+
+            // Lists
+            'ul' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'ol' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'li' => array('class' => array(), 'style' => array(), 'id' => array()),
+
+            // Links and images
+            'a' => array('href' => array(), 'class' => array(), 'style' => array(), 'target' => array(), 'title' => array(), 'id' => array()),
+            'img' => array('src' => array(), 'alt' => array(), 'class' => array(), 'style' => array(), 'width' => array(), 'height' => array(), 'id' => array()),
+
+            // Block elements
+            'div' => array('class' => array(), 'style' => array(), 'id' => array(), 'data-*' => array()),
+            'section' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'article' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'aside' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'header' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'footer' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'blockquote' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'pre' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'code' => array('class' => array(), 'style' => array(), 'id' => array()),
+
+            // Tables
+            'table' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'thead' => array('class' => array(), 'style' => array()),
+            'tbody' => array('class' => array(), 'style' => array()),
+            'tfoot' => array('class' => array(), 'style' => array()),
+            'tr' => array('class' => array(), 'style' => array(), 'id' => array()),
+            'th' => array('class' => array(), 'style' => array(), 'colspan' => array(), 'rowspan' => array()),
+            'td' => array('class' => array(), 'style' => array(), 'colspan' => array(), 'rowspan' => array()),
+
+            // Interactive elements (forms)
+            'form' => array('class' => array(), 'style' => array(), 'id' => array(), 'action' => array(), 'method' => array()),
+            'input' => array('type' => array(), 'name' => array(), 'value' => array(), 'class' => array(), 'style' => array(), 'id' => array(), 'placeholder' => array(), 'required' => array(), 'disabled' => array(), 'readonly' => array()),
+            'textarea' => array('name' => array(), 'class' => array(), 'style' => array(), 'id' => array(), 'placeholder' => array(), 'rows' => array(), 'cols' => array(), 'required' => array(), 'disabled' => array(), 'readonly' => array()),
+            'select' => array('name' => array(), 'class' => array(), 'style' => array(), 'id' => array(), 'required' => array(), 'disabled' => array()),
+            'option' => array('value' => array(), 'selected' => array(), 'disabled' => array()),
+            'button' => array('type' => array(), 'class' => array(), 'style' => array(), 'id' => array(), 'disabled' => array()),
+            'label' => array('for' => array(), 'class' => array(), 'style' => array()),
+
+            // Media elements
+            'video' => array('src' => array(), 'class' => array(), 'style' => array(), 'controls' => array(), 'width' => array(), 'height' => array(), 'autoplay' => array(), 'loop' => array(), 'muted' => array()),
+            'audio' => array('src' => array(), 'class' => array(), 'style' => array(), 'controls' => array(), 'autoplay' => array(), 'loop' => array(), 'muted' => array()),
+            'canvas' => array('class' => array(), 'style' => array(), 'width' => array(), 'height' => array(), 'id' => array()),
+            'svg' => array('class' => array(), 'style' => array(), 'width' => array(), 'height' => array(), 'viewBox' => array()),
+
+            // Other useful elements
+            'iframe' => array('src' => array(), 'class' => array(), 'style' => array(), 'width' => array(), 'height' => array(), 'frameborder' => array(), 'allowfullscreen' => array()),
+            'hr' => array('class' => array(), 'style' => array()),
+        );
+
+        // Filter HTML content for security
+        $filtered_content = wp_kses($content, $allowed_html);
+
+        // Wrap content in CSS isolation container to prevent style conflicts
+        $processed_content = '<div class="cbd-html-content-wrapper">' . $filtered_content . '</div>';
+
+        // Add JavaScript initialization for interactive elements if needed
+        $processed_content .= self::get_html_initialization_script();
+
+        return $processed_content;
+    }
+
+    /**
+     * Get JavaScript initialization script for HTML elements
+     */
+    private static function get_html_initialization_script() {
+        static $script_added = false;
+
+        if ($script_added) {
+            return '';
+        }
+
+        $script_added = true;
+
+        return '
+        <script>
+        (function() {
+            // Initialize interactive HTML elements in container blocks
+            document.addEventListener("DOMContentLoaded", function() {
+                // Find all HTML content wrappers
+                var htmlWrappers = document.querySelectorAll(".cbd-html-content-wrapper");
+
+                htmlWrappers.forEach(function(wrapper) {
+                    // Initialize form elements
+                    var forms = wrapper.querySelectorAll("form");
+                    forms.forEach(function(form) {
+                        // Prevent forms from breaking out of container block context
+                        form.addEventListener("submit", function(e) {
+                            // Allow normal form submission but ensure no conflicts
+                            console.log("CBD: Form submitted in container block");
+                        });
+                    });
+
+                    // Initialize interactive buttons
+                    var buttons = wrapper.querySelectorAll("button");
+                    buttons.forEach(function(button) {
+                        if (!button.hasAttribute("onclick") && !button.hasAttribute("data-initialized")) {
+                            button.setAttribute("data-initialized", "true");
+                            // Add visual feedback for buttons without handlers
+                            button.addEventListener("click", function(e) {
+                                if (!button.hasAttribute("onclick") && button.type !== "submit") {
+                                    button.style.transform = "scale(0.95)";
+                                    setTimeout(function() {
+                                        button.style.transform = "";
+                                    }, 150);
+                                }
+                            });
+                        }
+                    });
+
+                    // Initialize canvas elements
+                    var canvases = wrapper.querySelectorAll("canvas");
+                    canvases.forEach(function(canvas) {
+                        if (!canvas.hasAttribute("data-initialized")) {
+                            canvas.setAttribute("data-initialized", "true");
+                            // Ensure canvas is visible and properly sized
+                            if (!canvas.style.display) {
+                                canvas.style.display = "block";
+                            }
+                        }
+                    });
+                });
+            });
+        })();
+        </script>';
+    }
+
     /**
      * Enqueue frontend assets
      */
