@@ -212,7 +212,12 @@
 
                 console.log('CBD: Processing Block ' + (processedBlocks + 1) + ' - Title: "' + blockTitle + '"');
 
-                if (y > 200) {
+                // Check if we need a new page for the block title and some content
+                var titleHeight = 15;
+                var minContentSpace = 50; // Minimum space needed for content after title
+
+                if (y + titleHeight + minContentSpace > 280) {
+                    console.log('CBD: Moving to new page to keep title and content together');
                     pdf.addPage();
                     y = 30;
                 }
@@ -220,7 +225,7 @@
                 // Add block title
                 pdf.setFontSize(14);
                 pdf.text('Block ' + (processedBlocks + 1) + ': ' + blockTitle, 20, y);
-                y += 15;
+                y += titleHeight;
 
                 // Process based on mode
                 if (mode === 'text') {
@@ -302,17 +307,127 @@
                                     var imgWidth = 170;
                                     var imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-                                    // Check if image fits on current page
-                                    if (y + imgHeight > 250) {
+                                    console.log('CBD: Image dimensions - Width:', imgWidth, 'Height:', imgHeight, 'Current Y:', y);
+
+                                    // Intelligent page splitting for large blocks
+                                    var pageHeight = 280; // A4 page height minus margins
+                                    var availableHeight = pageHeight - y;
+                                    var maxSinglePageHeight = pageHeight - 50; // Leave space for headers
+
+                                    if (imgHeight > maxSinglePageHeight) {
+                                        // Block is too large for a single page - split it intelligently
+                                        console.log('CBD: Block too large (' + imgHeight + 'px), splitting into multiple pages');
+                                        splitLargeBlockAcrossPages(canvas, imgData, imgWidth, imgHeight, imageFormat, imageQuality);
+                                    } else if (imgHeight > availableHeight) {
+                                        // Block doesn't fit on current page but fits on a new page
+                                        console.log('CBD: Block doesn\'t fit on current page, moving to new page');
                                         pdf.addPage();
                                         y = 30;
+                                        pdf.addImage(imgData, imageFormat, 20, y, imgWidth, imgHeight);
+                                        y += imgHeight + 10;
+                                    } else {
+                                        // Block fits on current page
+                                        console.log('CBD: Block fits on current page');
+                                        pdf.addImage(imgData, imageFormat, 20, y, imgWidth, imgHeight);
+                                        y += imgHeight + 10;
                                     }
-
-                                    pdf.addImage(imgData, imageFormat, 20, y, imgWidth, imgHeight);
-                                    y += imgHeight + 10;
 
                                     processedBlocks++;
                                     processNextBlock();
+
+                                    function splitLargeBlockAcrossPages(canvas, imgData, imgWidth, imgHeight, imageFormat, imageQuality) {
+                                        console.log('CBD: Starting intelligent block splitting');
+
+                                        var pageHeight = 280;
+                                        var headerSpace = 30;
+                                        var usablePageHeight = pageHeight - headerSpace;
+                                        var minSegmentHeight = 50; // Minimum height for a segment to avoid tiny pieces
+
+                                        // Calculate optimal page distribution to avoid tiny segments
+                                        var totalPages = Math.ceil(imgHeight / usablePageHeight);
+                                        var adjustedSegmentHeight = imgHeight / totalPages;
+
+                                        // If the last segment would be too small, redistribute
+                                        if (totalPages > 1 && (imgHeight % usablePageHeight) < minSegmentHeight) {
+                                            adjustedSegmentHeight = imgHeight / (totalPages - 1);
+                                            if (adjustedSegmentHeight <= usablePageHeight * 1.1) {
+                                                totalPages = totalPages - 1;
+                                                usablePageHeight = adjustedSegmentHeight;
+                                                console.log('CBD: Redistributed to avoid tiny segments - new segment height:', usablePageHeight);
+                                            }
+                                        }
+
+                                        console.log('CBD: Will split block across', totalPages, 'pages with segment height:', usablePageHeight);
+
+                                        // Start on a new page for large blocks
+                                        if (y > headerSpace) {
+                                            pdf.addPage();
+                                            y = headerSpace;
+                                        }
+
+                                        // Split the image into segments
+                                        for (var pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+                                            var segmentStartY = pageIndex * usablePageHeight;
+                                            var segmentHeight = Math.min(usablePageHeight, imgHeight - segmentStartY);
+
+                                            console.log('CBD: Processing page', pageIndex + 1, '- segment height:', segmentHeight);
+
+                                            // Create a new canvas for this segment
+                                            var segmentCanvas = document.createElement('canvas');
+                                            segmentCanvas.width = canvas.width;
+                                            segmentCanvas.height = (segmentHeight * canvas.width) / imgWidth;
+
+                                            var segmentCtx = segmentCanvas.getContext('2d');
+
+                                            // Draw the segment from the original canvas
+                                            var sourceY = (segmentStartY * canvas.width) / imgWidth;
+                                            var sourceHeight = segmentCanvas.height;
+
+                                            segmentCtx.drawImage(
+                                                canvas,
+                                                0, sourceY, canvas.width, sourceHeight,
+                                                0, 0, segmentCanvas.width, segmentCanvas.height
+                                            );
+
+                                            // Convert segment to image data
+                                            var segmentImgData = segmentCanvas.toDataURL('image/jpeg', imageQuality);
+
+                                            // Add segment to PDF
+                                            if (pageIndex > 0) {
+                                                pdf.addPage();
+                                                y = headerSpace;
+
+                                                // Add block title on new page for continuation
+                                                pdf.setFontSize(14);
+                                                pdf.text('Block ' + (processedBlocks + 1) + ': ' + blockTitle + ' (Teil ' + (pageIndex + 1) + ')', 20, y);
+                                                y += 15;
+                                            }
+
+                                            pdf.addImage(segmentImgData, imageFormat, 20, y, imgWidth, segmentHeight);
+
+                                            // Add continuation indicator for split blocks
+                                            if (pageIndex > 0) {
+                                                pdf.setFontSize(8);
+                                                pdf.setTextColor(128, 128, 128); // Gray text
+                                                pdf.text('(Fortsetzung von vorheriger Seite)', 20, y - 5);
+                                                pdf.setTextColor(0, 0, 0); // Reset to black
+                                            }
+
+                                            if (pageIndex < totalPages - 1) {
+                                                pdf.setFontSize(8);
+                                                pdf.setTextColor(128, 128, 128);
+                                                pdf.text('(Fortsetzung auf nächster Seite)', 20, y + segmentHeight + 5);
+                                                pdf.setTextColor(0, 0, 0);
+                                            }
+
+                                            y += segmentHeight + 10;
+
+                                            console.log('CBD: Added segment', pageIndex + 1, 'at Y position:', y - segmentHeight - 10);
+                                        }
+
+                                        console.log('CBD: Block splitting completed across', totalPages, 'pages');
+                                    }
+
                                 }).catch(function(error) {
                                     console.error('CBD: html2canvas failed for block ' + (processedBlocks + 1) + ':', error);
                                     console.log('CBD: Falling back to text-only for this block');
@@ -331,15 +446,47 @@
 
                 function addTextOnly() {
                     console.log('CBD: addTextOnly called for block', processedBlocks + 1);
-                    var blockContent = $currentBlock.find('.cbd-container-content').text().substring(0, 300);
+                    var blockContent = $currentBlock.find('.cbd-container-content').text();
                     console.log('CBD: Block content length:', blockContent.length);
+
                     pdf.setFontSize(10);
                     var lines = pdf.splitTextToSize(blockContent, 170);
-                    for (var i = 0; i < Math.min(lines.length, 8); i++) {
+                    console.log('CBD: Text will be split into', lines.length, 'lines');
+
+                    var pageHeight = 280;
+                    var lineHeight = 6;
+                    var maxLinesPerPage = Math.floor((pageHeight - 50) / lineHeight); // Leave space for headers
+
+                    var pageIndex = 0;
+                    for (var i = 0; i < lines.length; i++) {
+                        // Check if we need a new page
+                        if (y + lineHeight > pageHeight || (i > 0 && i % maxLinesPerPage === 0)) {
+                            pageIndex++;
+                            console.log('CBD: Starting new page for text continuation at line', i + 1);
+                            pdf.addPage();
+                            y = 30;
+
+                            // Add block title on new page for continuation
+                            if (i > 0) {
+                                pdf.setFontSize(14);
+                                pdf.text('Block ' + (processedBlocks + 1) + ': ' + blockTitle + ' (Teil ' + (pageIndex + 1) + ')', 20, y);
+                                y += 15;
+
+                                // Add continuation indicator
+                                pdf.setFontSize(8);
+                                pdf.setTextColor(128, 128, 128);
+                                pdf.text('(Fortsetzung von vorheriger Seite)', 20, y);
+                                pdf.setTextColor(0, 0, 0);
+                                pdf.setFontSize(10);
+                                y += 10;
+                            }
+                        }
+
                         pdf.text(lines[i], 20, y);
-                        y += 6;
+                        y += lineHeight;
                     }
-                    y += 10;
+
+                    y += 10; // Extra spacing after block
 
                     processedBlocks++;
                     processNextBlock();
