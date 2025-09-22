@@ -507,15 +507,67 @@ if (typeof jQuery !== 'undefined') {
                         
                         $('#cbd-pdf-modal').remove();
                         
-                        // Create PDF with options
-                        if (typeof window.cbdPDFExportWithOptions === 'function') {
-                            window.cbdPDFExportWithOptions(selectedBlocks, mode, quality);
-                        } else {
-                            console.log('CBD: cbdPDFExportWithOptions not available, using fallback');
-                            if (typeof window.cbdPDFExport === 'function') {
+                        // Create PDF with options - wait for PDF functions to be available
+                        function tryCreatePDF(attempts) {
+                            attempts = attempts || 0;
+
+                            console.log('CBD: tryCreatePDF called, attempt:', attempts);
+                            console.log('CBD: window.cbdPDFStatus exists:', !!window.cbdPDFStatus);
+                            console.log('CBD: window.cbdPDFExport exists:', typeof window.cbdPDFExport);
+                            console.log('CBD: window.cbdPDFExportWithOptions exists:', typeof window.cbdPDFExportWithOptions);
+
+                            // If no cbdPDFStatus at all and first attempt, wait a bit for jspdf-loader to initialize
+                            if (!window.cbdPDFStatus && attempts === 0) {
+                                console.log('CBD: No cbdPDFStatus found, waiting 500ms for jspdf-loader initialization...');
+                                setTimeout(function() {
+                                    tryCreatePDF(1);
+                                }, 500);
+                                return;
+                            }
+
+                            // Check detailed status
+                            if (window.cbdPDFStatus) {
+                                console.log('CBD: PDF Status - Loading:', window.cbdPDFStatus.loading, 'Loaded:', window.cbdPDFStatus.loaded, 'Error:', window.cbdPDFStatus.error);
+                                console.log('CBD: PDF Attempts:', window.cbdPDFStatus.attempts);
+                            }
+
+                            if (typeof window.cbdPDFExportWithOptions === 'function') {
+                                console.log('CBD: PDF function available, creating PDF...');
+                                window.cbdPDFExportWithOptions(selectedBlocks, mode, quality);
+                            } else if (typeof window.cbdPDFExport === 'function') {
+                                console.log('CBD: Using fallback PDF function...');
                                 window.cbdPDFExport($(selectedBlocks));
+                            } else if (window.cbdPDFStatus && window.cbdPDFStatus.error) {
+                                console.error('CBD: PDF loading failed:', window.cbdPDFStatus.error);
+                                alert('PDF-Erstellung fehlgeschlagen: ' + window.cbdPDFStatus.error);
+                            } else if (window.cbdPDFStatus && window.cbdPDFStatus.loading) {
+                                // Still loading, wait more
+                                if (attempts < 50) {
+                                    console.log('CBD: PDF library still loading, waiting... (attempt ' + (attempts + 1) + '/50)');
+                                    setTimeout(function() {
+                                        tryCreatePDF(attempts + 1);
+                                    }, 300);
+                                } else {
+                                    console.error('CBD: PDF library failed to load after 15 seconds');
+                                    alert('PDF-Erstellung fehlgeschlagen: PDF-Bibliothek konnte nach 15 Sekunden nicht geladen werden.');
+                                }
+                            } else if (attempts < 50) {
+                                console.log('CBD: PDF functions not ready, waiting... (attempt ' + (attempts + 1) + '/50)');
+                                setTimeout(function() {
+                                    tryCreatePDF(attempts + 1);
+                                }, 300);
+                            } else {
+                                console.error('CBD: PDF functions never became available after 15 seconds');
+                                var errorMsg = 'PDF-Erstellung fehlgeschlagen: PDF-Bibliothek konnte nicht geladen werden nach 15 Sekunden.';
+                                if (window.cbdPDFStatus && window.cbdPDFStatus.attempts && window.cbdPDFStatus.attempts.length > 0) {
+                                    errorMsg += ' Versuche: ' + window.cbdPDFStatus.attempts.join(', ');
+                                } else if (!window.cbdPDFStatus) {
+                                    errorMsg += ' jspdf-loader.js wurde möglicherweise nicht geladen.';
+                                }
+                                alert(errorMsg);
                             }
                         }
+                        tryCreatePDF();
                     });
                 }
                 $("body").append(pdfButton);
