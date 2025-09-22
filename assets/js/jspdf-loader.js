@@ -334,7 +334,13 @@
                                 allowTaint: false,
                                 scale: quality,
                                 logging: false,
-                                backgroundColor: 'white'
+                                backgroundColor: 'white',
+                                height: null, // Let html2canvas determine optimal height
+                                width: null,  // Let html2canvas determine optimal width
+                                scrollX: 0,
+                                scrollY: 0,
+                                windowWidth: $currentBlock[0].scrollWidth,
+                                windowHeight: $currentBlock[0].scrollHeight
                             };
 
                             // Print mode - modify styles for print
@@ -443,12 +449,71 @@
                                     expandedCount++;
                                 }
 
+                                // ENHANCED: Optimize text rendering for lists and headers
+                                optimizeTextRendering(doc);
+
                                 console.log('CBD: Expanded', expandedCount, 'collapsed elements');
 
                                 // Small delay to allow DOM to update
                                 return new Promise(function(resolve) {
                                     setTimeout(resolve, 100);
                                 });
+                            }
+
+                            // Function to optimize text rendering for better PDF output
+                            function optimizeTextRendering(doc) {
+                                console.log('CBD: Optimizing text rendering for lists and headers');
+
+                                // Ensure all text elements are fully visible
+                                var textElements = doc.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, span, div');
+
+                                for (var i = 0; i < textElements.length; i++) {
+                                    var element = textElements[i];
+
+                                    // Force text to be visible and not clipped
+                                    element.style.setProperty('overflow', 'visible', 'important');
+                                    element.style.setProperty('text-overflow', 'clip', 'important');
+                                    element.style.setProperty('white-space', 'normal', 'important');
+                                    element.style.setProperty('word-wrap', 'break-word', 'important');
+                                    element.style.setProperty('height', 'auto', 'important');
+                                    element.style.setProperty('max-height', 'none', 'important');
+                                    element.style.setProperty('line-height', 'normal', 'important');
+                                }
+
+                                // Special handling for lists
+                                var lists = doc.querySelectorAll('ul, ol');
+                                for (var j = 0; j < lists.length; j++) {
+                                    var list = lists[j];
+                                    list.style.setProperty('display', 'block', 'important');
+                                    list.style.setProperty('visibility', 'visible', 'important');
+                                    list.style.setProperty('height', 'auto', 'important');
+                                    list.style.setProperty('overflow', 'visible', 'important');
+
+                                    // Ensure list items are visible
+                                    var listItems = list.querySelectorAll('li');
+                                    for (var k = 0; k < listItems.length; k++) {
+                                        var item = listItems[k];
+                                        item.style.setProperty('display', 'list-item', 'important');
+                                        item.style.setProperty('visibility', 'visible', 'important');
+                                        item.style.setProperty('height', 'auto', 'important');
+                                        item.style.setProperty('overflow', 'visible', 'important');
+                                        item.style.setProperty('word-wrap', 'break-word', 'important');
+                                    }
+                                }
+
+                                // Special handling for headers
+                                var headers = doc.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                                for (var l = 0; l < headers.length; l++) {
+                                    var header = headers[l];
+                                    header.style.setProperty('display', 'block', 'important');
+                                    header.style.setProperty('visibility', 'visible', 'important');
+                                    header.style.setProperty('height', 'auto', 'important');
+                                    header.style.setProperty('overflow', 'visible', 'important');
+                                    header.style.setProperty('word-wrap', 'break-word', 'important');
+                                    header.style.setProperty('text-overflow', 'clip', 'important');
+                                }
+
+                                console.log('CBD: Text rendering optimization completed');
                             }
 
                             console.log('CBD: Starting html2canvas...');
@@ -613,28 +678,23 @@
 
                 function addTextOnly() {
                     console.log('CBD: addTextOnly called for block', processedBlocks + 1);
-                    var blockContent = $currentBlock.find('.cbd-container-content').text();
-                    console.log('CBD: Block content length:', blockContent.length);
 
-                    pdf.setFontSize(10);
-                    var lines = pdf.splitTextToSize(blockContent, 170);
-                    console.log('CBD: Text will be split into', lines.length, 'lines');
+                    // Enhanced text extraction that preserves structure
+                    var structuredContent = extractStructuredContent($currentBlock.find('.cbd-container-content'));
+                    console.log('CBD: Extracted', structuredContent.length, 'content elements');
 
                     var pageHeight = 280;
-                    var lineHeight = 6;
-                    var maxLinesPerPage = Math.floor((pageHeight - 50) / lineHeight); // Leave space for headers
-
                     var pageIndex = 0;
-                    for (var i = 0; i < lines.length; i++) {
-                        // Check if we need a new page
-                        if (y + lineHeight > pageHeight || (i > 0 && i % maxLinesPerPage === 0)) {
+
+                    function checkNewPage(requiredHeight) {
+                        if (y + requiredHeight > pageHeight) {
                             pageIndex++;
-                            console.log('CBD: Starting new page for text continuation at line', i + 1);
+                            console.log('CBD: Starting new page for structured content at page', pageIndex + 1);
                             pdf.addPage();
                             y = 30;
 
                             // Add block title on new page for continuation
-                            if (i > 0) {
+                            if (pageIndex > 0) {
                                 pdf.setFontSize(14);
                                 pdf.text('Block ' + (processedBlocks + 1) + ': ' + blockTitle + ' (Teil ' + (pageIndex + 1) + ')', 20, y);
                                 y += 15;
@@ -644,13 +704,131 @@
                                 pdf.setTextColor(128, 128, 128);
                                 pdf.text('(Fortsetzung von vorheriger Seite)', 20, y);
                                 pdf.setTextColor(0, 0, 0);
-                                pdf.setFontSize(10);
                                 y += 10;
                             }
                         }
+                    }
 
-                        pdf.text(lines[i], 20, y);
-                        y += lineHeight;
+                    // Process each structured element
+                    for (var i = 0; i < structuredContent.length; i++) {
+                        var element = structuredContent[i];
+
+                        switch (element.type) {
+                            case 'header':
+                                checkNewPage(element.fontSize + 5); // Extra space for headers
+                                pdf.setFontSize(element.fontSize);
+                                pdf.setFont(undefined, 'bold');
+                                pdf.text(element.text, 20, y);
+                                y += element.fontSize + 3;
+                                pdf.setFont(undefined, 'normal');
+                                break;
+
+                            case 'list':
+                                checkNewPage(15); // Minimum space for list start
+                                addListToPDF(element);
+                                break;
+
+                            case 'paragraph':
+                                addParagraphToPDF(element);
+                                break;
+
+                            default:
+                                addParagraphToPDF(element);
+                                break;
+                        }
+                    }
+
+                    function extractStructuredContent($content) {
+                        var elements = [];
+
+                        // Process child elements to maintain structure
+                        $content.children().each(function() {
+                            var $this = $(this);
+                            var tagName = this.tagName.toLowerCase();
+
+                            if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tagName)) {
+                                // Header elements
+                                var level = parseInt(tagName.charAt(1));
+                                var fontSize = Math.max(16 - level * 2, 10);
+                                elements.push({
+                                    type: 'header',
+                                    text: $this.text().trim(),
+                                    fontSize: fontSize,
+                                    level: level
+                                });
+                            } else if (['ul', 'ol'].includes(tagName)) {
+                                // List elements
+                                var listItems = [];
+                                $this.find('li').each(function() {
+                                    listItems.push($(this).text().trim());
+                                });
+                                elements.push({
+                                    type: 'list',
+                                    ordered: tagName === 'ol',
+                                    items: listItems
+                                });
+                            } else {
+                                // Regular content
+                                var text = $this.text().trim();
+                                if (text.length > 0) {
+                                    elements.push({
+                                        type: 'paragraph',
+                                        text: text
+                                    });
+                                }
+                            }
+                        });
+
+                        // If no structured elements found, use the entire text as one paragraph
+                        if (elements.length === 0) {
+                            var fullText = $content.text().trim();
+                            if (fullText.length > 0) {
+                                elements.push({
+                                    type: 'paragraph',
+                                    text: fullText
+                                });
+                            }
+                        }
+
+                        return elements;
+                    }
+
+                    function addListToPDF(listElement) {
+                        console.log('CBD: Adding list with', listElement.items.length, 'items');
+                        pdf.setFontSize(10);
+
+                        for (var i = 0; i < listElement.items.length; i++) {
+                            var item = listElement.items[i];
+                            var prefix = listElement.ordered ? (i + 1) + '. ' : '• ';
+                            var fullItem = prefix + item;
+
+                            // Split long list items
+                            var lines = pdf.splitTextToSize(fullItem, 160); // Slightly less width for indentation
+
+                            for (var j = 0; j < lines.length; j++) {
+                                checkNewPage(8);
+                                var xPos = j === 0 ? 25 : 35; // Indent continuation lines more
+                                pdf.text(lines[j], xPos, y);
+                                y += 6;
+                            }
+                            y += 2; // Small gap between list items
+                        }
+                        y += 5; // Gap after list
+                    }
+
+                    function addParagraphToPDF(paragraphElement) {
+                        if (!paragraphElement.text || paragraphElement.text.length === 0) return;
+
+                        console.log('CBD: Adding paragraph, length:', paragraphElement.text.length);
+                        pdf.setFontSize(10);
+                        var lines = pdf.splitTextToSize(paragraphElement.text, 170);
+
+                        for (var i = 0; i < lines.length; i++) {
+                            checkNewPage(8);
+                            pdf.text(lines[i], 20, y);
+                            y += 6;
+                        }
+                        y += 8; // Gap after paragraph
                     }
 
                     y += 10; // Extra spacing after block
