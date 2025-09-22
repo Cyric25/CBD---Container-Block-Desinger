@@ -456,7 +456,7 @@ if (typeof jQuery !== 'undefined') {
                                 '<label style="display: flex; align-items: center; cursor: pointer;">' +
                                 '<input type="radio" name="pdf-mode" value="text" ' +
                                 'style="margin-right: 8px; transform: scale(1.2);">' +
-                                '<span>📝 Nur Text (kleiste Dateigröße)</span>' +
+                                '<span>📝 Nur Text (kleinste Dateigröße)</span>' +
                                 '</label>' +
                             '</div>' +
                         '</div>' +
