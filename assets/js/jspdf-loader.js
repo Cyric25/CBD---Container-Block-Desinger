@@ -352,6 +352,9 @@
                                     // FIRST: Expand all collapsed content before any other modifications
                                     expandAllCollapsedContent(clonedDoc);
 
+                                    // SECOND: Apply grayscale and print optimizations
+                                    applyPrintModeStyles(clonedDoc);
+
                                     // Remove action buttons
                                     var actionButtons = clonedDoc.querySelectorAll('.cbd-action-buttons, .cbd-action-btn, .cbd-collapse-toggle, .cbd-copy-text, .cbd-screenshot, button, .dashicons');
                                     for (var k = actionButtons.length - 1; k >= 0; k--) {
@@ -549,6 +552,183 @@
                                 }
 
                                 console.log('CBD: Text rendering optimization completed');
+                            }
+
+                            // Function to apply print mode optimizations (grayscale, white backgrounds)
+                            function applyPrintModeStyles(doc) {
+                                console.log('CBD: Applying print mode grayscale and white background optimizations');
+
+                                // Get all elements in the document
+                                var allElements = doc.querySelectorAll('*');
+                                var convertedElements = 0;
+
+                                for (var i = 0; i < allElements.length; i++) {
+                                    var element = allElements[i];
+
+                                    // Force white backgrounds on all elements
+                                    element.style.setProperty('background-color', 'white', 'important');
+                                    element.style.setProperty('background', 'white', 'important');
+                                    element.style.setProperty('background-image', 'none', 'important');
+                                    element.style.setProperty('background-attachment', 'initial', 'important');
+                                    element.style.setProperty('background-position', 'initial', 'important');
+                                    element.style.setProperty('background-repeat', 'initial', 'important');
+                                    element.style.setProperty('background-size', 'initial', 'important');
+
+                                    // Remove all shadows and effects
+                                    element.style.setProperty('box-shadow', 'none', 'important');
+                                    element.style.setProperty('text-shadow', 'none', 'important');
+                                    element.style.setProperty('filter', 'none', 'important');
+                                    element.style.setProperty('backdrop-filter', 'none', 'important');
+                                    element.style.setProperty('-webkit-filter', 'none', 'important');
+                                    element.style.setProperty('-webkit-backdrop-filter', 'none', 'important');
+
+                                    // Convert text colors to grayscale
+                                    var computedStyle = doc.defaultView.getComputedStyle(element);
+                                    var textColor = computedStyle.color;
+
+                                    if (textColor && textColor !== 'rgba(0, 0, 0, 0)' && textColor !== 'transparent') {
+                                        var grayscaleColor = convertToGrayscale(textColor);
+                                        if (grayscaleColor) {
+                                            element.style.setProperty('color', grayscaleColor, 'important');
+                                            convertedElements++;
+                                        }
+                                    }
+
+                                    // Convert border colors to grayscale
+                                    var borderColor = computedStyle.borderColor;
+                                    if (borderColor && borderColor !== 'rgba(0, 0, 0, 0)' && borderColor !== 'transparent') {
+                                        var grayscaleBorder = convertToGrayscale(borderColor);
+                                        if (grayscaleBorder) {
+                                            element.style.setProperty('border-color', grayscaleBorder, 'important');
+                                        }
+                                    }
+
+                                    // Special handling for specific border properties
+                                    ['border-top-color', 'border-right-color', 'border-bottom-color', 'border-left-color'].forEach(function(prop) {
+                                        var color = computedStyle.getPropertyValue(prop);
+                                        if (color && color !== 'rgba(0, 0, 0, 0)' && color !== 'transparent') {
+                                            var grayscaleColor = convertToGrayscale(color);
+                                            if (grayscaleColor) {
+                                                element.style.setProperty(prop, grayscaleColor, 'important');
+                                            }
+                                        }
+                                    });
+
+                                    // Remove all outline colors and force them to grayscale if present
+                                    element.style.setProperty('outline', 'none', 'important');
+                                    element.style.setProperty('outline-width', '0', 'important');
+                                    element.style.setProperty('outline-style', 'none', 'important');
+                                    element.style.setProperty('outline-color', 'transparent', 'important');
+                                }
+
+                                // Special handling for images - apply grayscale filter
+                                var images = doc.querySelectorAll('img');
+                                for (var j = 0; j < images.length; j++) {
+                                    var img = images[j];
+                                    img.style.setProperty('filter', 'grayscale(100%)', 'important');
+                                    img.style.setProperty('-webkit-filter', 'grayscale(100%)', 'important');
+                                }
+
+                                // Special handling for tables in print mode
+                                var tables = doc.querySelectorAll('table');
+                                for (var k = 0; k < tables.length; k++) {
+                                    var table = tables[k];
+                                    table.style.setProperty('background-color', 'white', 'important');
+                                    table.style.setProperty('border-collapse', 'collapse', 'important');
+
+                                    // Make table cells print-friendly
+                                    var cells = table.querySelectorAll('td, th');
+                                    for (var l = 0; l < cells.length; l++) {
+                                        var cell = cells[l];
+                                        cell.style.setProperty('background-color', 'white', 'important');
+                                        cell.style.setProperty('border', '1px solid #666', 'important');
+                                        cell.style.setProperty('color', '#000000', 'important');
+                                    }
+                                }
+
+                                // Apply global grayscale filter to the entire document
+                                var body = doc.body || doc.documentElement;
+                                if (body) {
+                                    body.style.setProperty('filter', 'grayscale(100%) contrast(120%)', 'important');
+                                    body.style.setProperty('-webkit-filter', 'grayscale(100%) contrast(120%)', 'important');
+                                    body.style.setProperty('background-color', 'white', 'important');
+                                }
+
+                                console.log('CBD: Print mode applied - converted', convertedElements, 'text colors to grayscale');
+                            }
+
+                            // Function to convert color values to grayscale
+                            function convertToGrayscale(colorString) {
+                                if (!colorString || colorString === 'transparent' || colorString === 'inherit') {
+                                    return null;
+                                }
+
+                                // Handle rgba/rgb colors
+                                var rgbaMatch = colorString.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+                                if (rgbaMatch) {
+                                    var r = parseInt(rgbaMatch[1]);
+                                    var g = parseInt(rgbaMatch[2]);
+                                    var b = parseInt(rgbaMatch[3]);
+                                    var a = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1;
+
+                                    // Convert to grayscale using luminance formula
+                                    var gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+
+                                    // Ensure good contrast for text readability
+                                    if (gray > 128) {
+                                        gray = Math.min(gray, 200); // Lighter grays
+                                    } else {
+                                        gray = Math.max(gray, 60);  // Darker grays
+                                    }
+
+                                    return a < 1 ? 'rgba(' + gray + ',' + gray + ',' + gray + ',' + a + ')' : 'rgb(' + gray + ',' + gray + ',' + gray + ')';
+                                }
+
+                                // Handle hex colors
+                                var hexMatch = colorString.match(/^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i);
+                                if (hexMatch) {
+                                    var r = parseInt(hexMatch[1], 16);
+                                    var g = parseInt(hexMatch[2], 16);
+                                    var b = parseInt(hexMatch[3], 16);
+
+                                    var gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+
+                                    // Ensure good contrast
+                                    if (gray > 128) {
+                                        gray = Math.min(gray, 200);
+                                    } else {
+                                        gray = Math.max(gray, 60);
+                                    }
+
+                                    var grayHex = gray.toString(16).padStart(2, '0');
+                                    return '#' + grayHex + grayHex + grayHex;
+                                }
+
+                                // Handle named colors by converting them to black/gray for print
+                                var namedColors = {
+                                    'red': '#666666',
+                                    'blue': '#555555',
+                                    'green': '#777777',
+                                    'yellow': '#cccccc',
+                                    'orange': '#999999',
+                                    'purple': '#444444',
+                                    'pink': '#aaaaaa',
+                                    'cyan': '#888888',
+                                    'magenta': '#666666',
+                                    'brown': '#333333',
+                                    'black': '#000000',
+                                    'white': '#ffffff',
+                                    'gray': '#808080',
+                                    'grey': '#808080'
+                                };
+
+                                var lowerColor = colorString.toLowerCase();
+                                if (namedColors[lowerColor]) {
+                                    return namedColors[lowerColor];
+                                }
+
+                                // Default fallback
+                                return '#000000';
                             }
 
                             console.log('CBD: Starting html2canvas...');
