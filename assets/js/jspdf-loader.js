@@ -258,6 +258,77 @@
                         function renderBlockWithImages() {
                             console.log('CBD: renderBlockWithImages called with mode:', mode, 'quality:', quality);
 
+                            // Store original collapsed state and expand content before rendering
+                            var collapsedStates = [];
+                            expandContentBeforeRendering();
+
+                            function expandContentBeforeRendering() {
+                                console.log('CBD: Expanding collapsed content in original DOM before rendering');
+
+                                // Find collapsed content in the current block
+                                var blockContent = $currentBlock.find('.cbd-container-content');
+                                if (blockContent.length > 0 && !blockContent.is(':visible')) {
+                                    console.log('CBD: Found collapsed main content, expanding temporarily');
+                                    collapsedStates.push({
+                                        element: blockContent[0],
+                                        wasHidden: true,
+                                        originalDisplay: blockContent[0].style.display,
+                                        originalVisibility: blockContent[0].style.visibility
+                                    });
+                                    blockContent.show();
+                                }
+
+                                // Find any other collapsed elements within the block
+                                var hiddenElements = $currentBlock.find('[style*="display: none"], [style*="visibility: hidden"]');
+                                hiddenElements.each(function() {
+                                    // Skip action buttons and controls
+                                    if (!$(this).hasClass('cbd-action-buttons') &&
+                                        !$(this).hasClass('cbd-action-btn') &&
+                                        !$(this).hasClass('dashicons')) {
+
+                                        collapsedStates.push({
+                                            element: this,
+                                            wasHidden: true,
+                                            originalDisplay: this.style.display,
+                                            originalVisibility: this.style.visibility
+                                        });
+
+                                        $(this).show().css('visibility', 'visible');
+                                        console.log('CBD: Temporarily expanded hidden element:', this.className);
+                                    }
+                                });
+
+                                // Handle details elements
+                                var detailsElements = $currentBlock.find('details');
+                                detailsElements.each(function() {
+                                    if (!this.open) {
+                                        collapsedStates.push({
+                                            element: this,
+                                            wasDetails: true,
+                                            originalOpen: false
+                                        });
+                                        this.open = true;
+                                        console.log('CBD: Temporarily opened details element');
+                                    }
+                                });
+
+                                console.log('CBD: Temporarily expanded', collapsedStates.length, 'elements');
+                            }
+
+                            function restoreOriginalStates() {
+                                console.log('CBD: Restoring original collapsed states');
+                                for (var i = 0; i < collapsedStates.length; i++) {
+                                    var state = collapsedStates[i];
+                                    if (state.wasDetails) {
+                                        state.element.open = state.originalOpen;
+                                    } else if (state.wasHidden) {
+                                        state.element.style.display = state.originalDisplay;
+                                        state.element.style.visibility = state.originalVisibility;
+                                    }
+                                }
+                                console.log('CBD: Restored', collapsedStates.length, 'elements to original state');
+                            }
+
                             var canvasOptions = {
                                 useCORS: true,
                                 allowTaint: false,
@@ -270,7 +341,10 @@
                             if (mode === 'print') {
                                 console.log('CBD: Applying PRINT mode styling');
                                 canvasOptions.onclone = function(clonedDoc) {
-                                    console.log('CBD: Applying print-friendly styles');
+                                    console.log('CBD: Applying print-friendly styles and expanding content');
+
+                                    // FIRST: Expand all collapsed content before any other modifications
+                                    expandAllCollapsedContent(clonedDoc);
 
                                     // Remove action buttons
                                     var actionButtons = clonedDoc.querySelectorAll('.cbd-action-buttons, .cbd-action-btn, .cbd-collapse-toggle, .cbd-copy-text, .cbd-screenshot, button, .dashicons');
@@ -284,6 +358,11 @@
                             } else {
                                 console.log('CBD: Applying VISUAL mode styling');
                                 canvasOptions.onclone = function(clonedDoc) {
+                                    console.log('CBD: Expanding content and removing action buttons');
+
+                                    // FIRST: Expand all collapsed content before any other modifications
+                                    expandAllCollapsedContent(clonedDoc);
+
                                     // Remove action buttons in visual mode too
                                     var actionButtons = clonedDoc.querySelectorAll('.cbd-action-buttons, .cbd-action-btn, .cbd-collapse-toggle, .cbd-copy-text, .cbd-screenshot, button, .dashicons');
                                     for (var j = actionButtons.length - 1; j >= 0; j--) {
@@ -295,11 +374,91 @@
                                 };
                             }
 
+                            // Function to expand all collapsed content
+                            function expandAllCollapsedContent(doc) {
+                                console.log('CBD: Starting to expand all collapsed content');
+
+                                // Find all container content that might be collapsed
+                                var containerContents = doc.querySelectorAll('.cbd-container-content');
+                                var expandedCount = 0;
+
+                                for (var i = 0; i < containerContents.length; i++) {
+                                    var content = containerContents[i];
+
+                                    // Check if content is hidden/collapsed
+                                    var isHidden = content.style.display === 'none' ||
+                                                  content.style.visibility === 'hidden' ||
+                                                  content.offsetHeight === 0 ||
+                                                  doc.defaultView.getComputedStyle(content).display === 'none';
+
+                                    if (isHidden) {
+                                        console.log('CBD: Expanding collapsed content block', i + 1);
+
+                                        // Force show the content
+                                        content.style.setProperty('display', 'block', 'important');
+                                        content.style.setProperty('visibility', 'visible', 'important');
+                                        content.style.setProperty('opacity', '1', 'important');
+                                        content.style.setProperty('height', 'auto', 'important');
+                                        content.style.setProperty('max-height', 'none', 'important');
+                                        content.style.setProperty('overflow', 'visible', 'important');
+
+                                        expandedCount++;
+                                    }
+
+                                    // Also check for any nested collapsed elements
+                                    var nestedHidden = content.querySelectorAll('[style*="display: none"], [style*="visibility: hidden"]');
+                                    for (var j = 0; j < nestedHidden.length; j++) {
+                                        var hiddenElement = nestedHidden[j];
+                                        // Don't expand action buttons or controls
+                                        if (!hiddenElement.classList.contains('cbd-action-buttons') &&
+                                            !hiddenElement.classList.contains('cbd-action-btn') &&
+                                            !hiddenElement.classList.contains('dashicons')) {
+
+                                            hiddenElement.style.setProperty('display', 'block', 'important');
+                                            hiddenElement.style.setProperty('visibility', 'visible', 'important');
+                                            hiddenElement.style.setProperty('opacity', '1', 'important');
+                                            expandedCount++;
+                                        }
+                                    }
+                                }
+
+                                // Find and expand any details/summary elements
+                                var detailsElements = doc.querySelectorAll('details');
+                                for (var k = 0; k < detailsElements.length; k++) {
+                                    if (!detailsElements[k].open) {
+                                        console.log('CBD: Opening details element', k + 1);
+                                        detailsElements[k].open = true;
+                                        expandedCount++;
+                                    }
+                                }
+
+                                // Find any elements with collapse/expand functionality
+                                var collapsibleElements = doc.querySelectorAll('.collapsed, .cbd-collapsed, [data-collapsed="true"]');
+                                for (var l = 0; l < collapsibleElements.length; l++) {
+                                    var element = collapsibleElements[l];
+                                    element.classList.remove('collapsed', 'cbd-collapsed');
+                                    element.removeAttribute('data-collapsed');
+                                    element.style.setProperty('display', 'block', 'important');
+                                    element.style.setProperty('visibility', 'visible', 'important');
+                                    expandedCount++;
+                                }
+
+                                console.log('CBD: Expanded', expandedCount, 'collapsed elements');
+
+                                // Small delay to allow DOM to update
+                                return new Promise(function(resolve) {
+                                    setTimeout(resolve, 100);
+                                });
+                            }
+
                             console.log('CBD: Starting html2canvas...');
 
                             try {
                                 html2canvas($currentBlock[0], canvasOptions).then(function(canvas) {
                                     console.log('CBD: html2canvas successful - Canvas size:', canvas.width + 'x' + canvas.height);
+
+                                    // Restore original collapsed states after rendering
+                                    restoreOriginalStates();
 
                                     var imageFormat = 'JPEG';
                                     var imageQuality = mode === 'print' ? 0.9 : 0.8;
@@ -430,11 +589,19 @@
 
                                 }).catch(function(error) {
                                     console.error('CBD: html2canvas failed for block ' + (processedBlocks + 1) + ':', error);
+
+                                    // Restore original states even on error
+                                    restoreOriginalStates();
+
                                     console.log('CBD: Falling back to text-only for this block');
                                     addTextOnly();
                                 });
                             } catch (syncError) {
                                 console.error('CBD: html2canvas synchronous error:', syncError);
+
+                                // Restore original states even on error
+                                restoreOriginalStates();
+
                                 console.log('CBD: Falling back to text-only due to sync error');
                                 addTextOnly();
                             }
