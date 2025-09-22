@@ -513,6 +513,41 @@
                                     header.style.setProperty('text-overflow', 'clip', 'important');
                                 }
 
+                                // Special handling for tables
+                                var tables = doc.querySelectorAll('table');
+                                for (var m = 0; m < tables.length; m++) {
+                                    var table = tables[m];
+                                    table.style.setProperty('display', 'table', 'important');
+                                    table.style.setProperty('visibility', 'visible', 'important');
+                                    table.style.setProperty('width', 'auto', 'important');
+                                    table.style.setProperty('table-layout', 'fixed', 'important');
+                                    table.style.setProperty('border-collapse', 'collapse', 'important');
+                                    table.style.setProperty('overflow', 'visible', 'important');
+
+                                    // Ensure table cells are visible
+                                    var cells = table.querySelectorAll('td, th');
+                                    for (var n = 0; n < cells.length; n++) {
+                                        var cell = cells[n];
+                                        cell.style.setProperty('display', 'table-cell', 'important');
+                                        cell.style.setProperty('visibility', 'visible', 'important');
+                                        cell.style.setProperty('padding', '4px', 'important');
+                                        cell.style.setProperty('border', '1px solid #ddd', 'important');
+                                        cell.style.setProperty('word-wrap', 'break-word', 'important');
+                                        cell.style.setProperty('overflow', 'visible', 'important');
+                                        cell.style.setProperty('height', 'auto', 'important');
+                                        cell.style.setProperty('max-height', 'none', 'important');
+                                    }
+
+                                    // Ensure table rows are visible
+                                    var rows = table.querySelectorAll('tr');
+                                    for (var o = 0; o < rows.length; o++) {
+                                        var row = rows[o];
+                                        row.style.setProperty('display', 'table-row', 'important');
+                                        row.style.setProperty('visibility', 'visible', 'important');
+                                        row.style.setProperty('height', 'auto', 'important');
+                                    }
+                                }
+
                                 console.log('CBD: Text rendering optimization completed');
                             }
 
@@ -728,6 +763,10 @@
                                 addListToPDF(element);
                                 break;
 
+                            case 'table':
+                                addTableToPDF(element);
+                                break;
+
                             case 'paragraph':
                                 addParagraphToPDF(element);
                                 break;
@@ -767,6 +806,17 @@
                                     ordered: tagName === 'ol',
                                     items: listItems
                                 });
+                            } else if (tagName === 'table') {
+                                // Table elements
+                                var tableData = extractTableData($this);
+                                if (tableData.rows.length > 0) {
+                                    elements.push({
+                                        type: 'table',
+                                        headers: tableData.headers,
+                                        rows: tableData.rows,
+                                        hasHeaders: tableData.hasHeaders
+                                    });
+                                }
                             } else {
                                 // Regular content
                                 var text = $this.text().trim();
@@ -791,6 +841,221 @@
                         }
 
                         return elements;
+                    }
+
+                    function extractTableData($table) {
+                        var tableData = {
+                            headers: [],
+                            rows: [],
+                            hasHeaders: false
+                        };
+
+                        // Check for table headers
+                        var $headers = $table.find('thead tr th, tr:first-child th');
+                        if ($headers.length > 0) {
+                            tableData.hasHeaders = true;
+                            $headers.each(function() {
+                                tableData.headers.push($(this).text().trim());
+                            });
+                        }
+
+                        // Extract table rows
+                        var $rows = tableData.hasHeaders ?
+                            $table.find('tbody tr, tr:not(:first-child)') :
+                            $table.find('tr');
+
+                        $rows.each(function() {
+                            var row = [];
+                            $(this).find('td, th').each(function() {
+                                row.push($(this).text().trim());
+                            });
+                            if (row.length > 0) {
+                                tableData.rows.push(row);
+                            }
+                        });
+
+                        return tableData;
+                    }
+
+                    function addTableToPDF(tableElement) {
+                        console.log('CBD: Adding table with', tableElement.rows.length, 'rows');
+
+                        var colCount = Math.max(
+                            tableElement.headers.length,
+                            tableElement.rows.length > 0 ? tableElement.rows[0].length : 0
+                        );
+
+                        if (colCount === 0) return;
+
+                        var tableWidth = 170;
+                        var colWidth = tableWidth / colCount;
+                        var rowHeight = 12;
+                        var headerHeight = 15;
+
+                        // Calculate total table height
+                        var totalTableHeight = (tableElement.hasHeaders ? headerHeight : 0) +
+                                             (tableElement.rows.length * rowHeight) +
+                                             10; // Extra spacing
+
+                        // Check if entire table fits on current page
+                        if (y + totalTableHeight > pageHeight) {
+                            // Table doesn't fit, check if it fits on a new page
+                            if (totalTableHeight < pageHeight - 50) {
+                                // Start new page for entire table
+                                pageIndex++;
+                                console.log('CBD: Moving entire table to new page');
+                                pdf.addPage();
+                                y = 30;
+
+                                if (pageIndex > 0) {
+                                    pdf.setFontSize(14);
+                                    pdf.text('Block ' + (processedBlocks + 1) + ': ' + blockTitle + ' (Teil ' + (pageIndex + 1) + ')', 20, y);
+                                    y += 15;
+                                    pdf.setFontSize(8);
+                                    pdf.setTextColor(128, 128, 128);
+                                    pdf.text('(Fortsetzung von vorheriger Seite)', 20, y);
+                                    pdf.setTextColor(0, 0, 0);
+                                    y += 10;
+                                }
+                            } else {
+                                // Table is too large, needs to be split intelligently
+                                addLargeTableToPDF(tableElement, colWidth, rowHeight, headerHeight);
+                                return;
+                            }
+                        }
+
+                        // Add table headers if present
+                        if (tableElement.hasHeaders) {
+                            pdf.setFontSize(9);
+                            pdf.setFont(undefined, 'bold');
+
+                            for (var i = 0; i < tableElement.headers.length; i++) {
+                                var cellX = 20 + (i * colWidth);
+                                var cellText = tableElement.headers[i];
+                                var lines = pdf.splitTextToSize(cellText, colWidth - 2);
+
+                                // Draw header cell border
+                                pdf.rect(cellX, y, colWidth, headerHeight);
+
+                                // Add header text
+                                for (var lineIndex = 0; lineIndex < Math.min(lines.length, 2); lineIndex++) {
+                                    pdf.text(lines[lineIndex], cellX + 1, y + 7 + (lineIndex * 5));
+                                }
+                            }
+                            y += headerHeight;
+                            pdf.setFont(undefined, 'normal');
+                        }
+
+                        // Add table rows
+                        pdf.setFontSize(8);
+                        for (var rowIndex = 0; rowIndex < tableElement.rows.length; rowIndex++) {
+                            var row = tableElement.rows[rowIndex];
+
+                            for (var colIndex = 0; colIndex < Math.min(row.length, colCount); colIndex++) {
+                                var cellX = 20 + (colIndex * colWidth);
+                                var cellText = row[colIndex] || '';
+                                var lines = pdf.splitTextToSize(cellText, colWidth - 2);
+
+                                // Draw cell border
+                                pdf.rect(cellX, y, colWidth, rowHeight);
+
+                                // Add cell text
+                                for (var lineIndex = 0; lineIndex < Math.min(lines.length, 2); lineIndex++) {
+                                    pdf.text(lines[lineIndex], cellX + 1, y + 6 + (lineIndex * 4));
+                                }
+                            }
+                            y += rowHeight;
+                        }
+
+                        y += 10; // Extra spacing after table
+                    }
+
+                    function addLargeTableToPDF(tableElement, colWidth, rowHeight, headerHeight) {
+                        console.log('CBD: Splitting large table across multiple pages');
+
+                        var colCount = Math.max(tableElement.headers.length,
+                                              tableElement.rows.length > 0 ? tableElement.rows[0].length : 0);
+                        var pageRowCapacity = Math.floor((pageHeight - 80) / rowHeight); // Reserve space for headers
+
+                        // Start on new page for large tables
+                        if (y > 50) {
+                            pageIndex++;
+                            pdf.addPage();
+                            y = 30;
+
+                            if (pageIndex > 0) {
+                                pdf.setFontSize(14);
+                                pdf.text('Block ' + (processedBlocks + 1) + ': ' + blockTitle + ' (Teil ' + (pageIndex + 1) + ')', 20, y);
+                                y += 15;
+                            }
+                        }
+
+                        var rowsProcessed = 0;
+                        while (rowsProcessed < tableElement.rows.length) {
+                            // Add headers on each page
+                            if (tableElement.hasHeaders) {
+                                pdf.setFontSize(9);
+                                pdf.setFont(undefined, 'bold');
+
+                                for (var i = 0; i < tableElement.headers.length; i++) {
+                                    var cellX = 20 + (i * colWidth);
+                                    var cellText = tableElement.headers[i];
+                                    var lines = pdf.splitTextToSize(cellText, colWidth - 2);
+
+                                    pdf.rect(cellX, y, colWidth, headerHeight);
+                                    for (var lineIndex = 0; lineIndex < Math.min(lines.length, 2); lineIndex++) {
+                                        pdf.text(lines[lineIndex], cellX + 1, y + 7 + (lineIndex * 5));
+                                    }
+                                }
+                                y += headerHeight;
+                                pdf.setFont(undefined, 'normal');
+                            }
+
+                            // Calculate how many rows fit on this page
+                            var remainingSpace = pageHeight - y - 20;
+                            var rowsThisPage = Math.min(
+                                Math.floor(remainingSpace / rowHeight),
+                                tableElement.rows.length - rowsProcessed
+                            );
+
+                            // Add rows for this page
+                            pdf.setFontSize(8);
+                            for (var i = 0; i < rowsThisPage; i++) {
+                                var row = tableElement.rows[rowsProcessed + i];
+
+                                for (var colIndex = 0; colIndex < Math.min(row.length, colCount); colIndex++) {
+                                    var cellX = 20 + (colIndex * colWidth);
+                                    var cellText = row[colIndex] || '';
+                                    var lines = pdf.splitTextToSize(cellText, colWidth - 2);
+
+                                    pdf.rect(cellX, y, colWidth, rowHeight);
+                                    for (var lineIndex = 0; lineIndex < Math.min(lines.length, 2); lineIndex++) {
+                                        pdf.text(lines[lineIndex], cellX + 1, y + 6 + (lineIndex * 4));
+                                    }
+                                }
+                                y += rowHeight;
+                            }
+
+                            rowsProcessed += rowsThisPage;
+
+                            // Start new page if more rows remaining
+                            if (rowsProcessed < tableElement.rows.length) {
+                                pageIndex++;
+                                pdf.addPage();
+                                y = 30;
+
+                                pdf.setFontSize(14);
+                                pdf.text('Block ' + (processedBlocks + 1) + ': ' + blockTitle + ' (Tabelle Teil ' + (pageIndex + 1) + ')', 20, y);
+                                y += 15;
+                                pdf.setFontSize(8);
+                                pdf.setTextColor(128, 128, 128);
+                                pdf.text('(Tabellenfortsetzung)', 20, y);
+                                pdf.setTextColor(0, 0, 0);
+                                y += 10;
+                            }
+                        }
+
+                        y += 10; // Extra spacing after table
                     }
 
                     function addListToPDF(listElement) {
