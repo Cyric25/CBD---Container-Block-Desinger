@@ -743,15 +743,45 @@
                                     var imageFormat = 'JPEG';
                                     var imageQuality = mode === 'print' ? 0.9 : 0.8;
                                     var imgData = canvas.toDataURL('image/jpeg', imageQuality);
-                                    var imgWidth = 170;
-                                    var imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-                                    console.log('CBD: Image dimensions - Width:', imgWidth, 'Height:', imgHeight, 'Current Y:', y);
+                                    // PDF page dimensions (A4 with margins)
+                                    var pageHeight = 280; // A4 page height minus margins
+                                    var maxPageWidth = 170; // Maximum width for images
+                                    var maxSinglePageHeight = pageHeight - 50; // Leave space for headers
+
+                                    // Calculate optimal image dimensions with proper scaling
+                                    var originalWidth = canvas.width;
+                                    var originalHeight = canvas.height;
+                                    var aspectRatio = originalWidth / originalHeight;
+
+                                    // Calculate scale factors for both width and height constraints
+                                    var widthScale = maxPageWidth / originalWidth;
+                                    var heightScale = maxSinglePageHeight / originalHeight;
+
+                                    // Use the smaller scale factor to ensure image fits within both constraints
+                                    var scale = Math.min(widthScale, heightScale, 1.0); // Never scale up
+
+                                    var imgWidth = originalWidth * scale;
+                                    var imgHeight = originalHeight * scale;
+
+                                    // Ensure minimum readable size while maintaining aspect ratio
+                                    var minWidth = 100;
+                                    var minHeight = 50;
+
+                                    if (imgWidth < minWidth || imgHeight < minHeight) {
+                                        var minScale = Math.max(minWidth / originalWidth, minHeight / originalHeight);
+                                        if (minScale < scale || scale < 0.1) {
+                                            imgWidth = originalWidth * minScale;
+                                            imgHeight = originalHeight * minScale;
+                                            console.log('CBD: Applied minimum size scaling - factor:', minScale);
+                                        }
+                                    }
+
+                                    console.log('CBD: Original canvas:', originalWidth + 'x' + originalHeight);
+                                    console.log('CBD: Scaled image dimensions - Width:', imgWidth, 'Height:', imgHeight, 'Current Y:', y);
 
                                     // Intelligent page splitting for large blocks
-                                    var pageHeight = 280; // A4 page height minus margins
                                     var availableHeight = pageHeight - y;
-                                    var maxSinglePageHeight = pageHeight - 50; // Leave space for headers
 
                                     if (imgHeight > maxSinglePageHeight) {
                                         // Block is too large for a single page - split it intelligently
