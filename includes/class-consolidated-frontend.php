@@ -75,21 +75,29 @@ class CBD_Consolidated_Frontend {
             array(),
             CBD_VERSION . '-' . time() // Force cache bust
         );
-        
+
+        // Unified Frontend CSS (fixes HTML element issues)
+        wp_enqueue_style(
+            'cbd-unified-frontend',
+            CBD_PLUGIN_URL . 'assets/css/unified-frontend.css',
+            array('cbd-frontend-clean'),
+            CBD_VERSION . '-unified'
+        );
+
         // Position-specific CSS
         wp_enqueue_style(
             'cbd-position-frontend',
             CBD_PLUGIN_URL . 'assets/css/frontend-positioning.css',
-            array('cbd-frontend-clean'),
+            array('cbd-unified-frontend'),
             CBD_VERSION
         );
         
-        // Frontend JavaScript - Working simple version
+        // Frontend JavaScript - Unified version (fixes HTML element issues)
         wp_enqueue_script(
-            'cbd-frontend-working',
-            CBD_PLUGIN_URL . 'assets/js/frontend-working.js',
+            'cbd-frontend-unified',
+            CBD_PLUGIN_URL . 'assets/js/unified-frontend.js',
             array('jquery'),
-            CBD_VERSION . '-working-' . time(), // Force cache bust
+            CBD_VERSION . '-unified-' . time(), // Force cache bust
             true
         );
         
@@ -107,22 +115,22 @@ class CBD_Consolidated_Frontend {
             // Update dependencies to include html2canvas
             $script_dependencies[] = 'html2canvas';
         }
-        
-        // Re-enqueue working frontend with updated dependencies
-        wp_deregister_script('cbd-frontend-working');
+
+        // Re-enqueue unified frontend with updated dependencies
+        wp_deregister_script('cbd-frontend-unified');
         wp_enqueue_script(
-            'cbd-frontend-working',
-            CBD_PLUGIN_URL . 'assets/js/frontend-working.js',
+            'cbd-frontend-unified',
+            CBD_PLUGIN_URL . 'assets/js/unified-frontend.js',
             $script_dependencies,
-            CBD_VERSION . '-working-' . time(), // Force cache bust
+            CBD_VERSION . '-unified-' . time(), // Force cache bust
             true
         );
         
         // Dashicons for frontend icons
         wp_enqueue_style('dashicons');
         
-        // Localize script with all frontend strings (for working version)
-        wp_localize_script('cbd-frontend-working', 'cbdFrontend', array(
+        // Localize script with all frontend strings (for unified version)
+        wp_localize_script('cbd-frontend-unified', 'cbdFrontend', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('cbd-frontend'),
             'strings' => $this->get_frontend_strings(),

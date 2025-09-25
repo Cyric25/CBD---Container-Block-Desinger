@@ -1,0 +1,248 @@
+/**
+ * Container Block Designer - Unified Frontend CSS
+ * Version: 2.6.2-FIXED
+ * Einheitliche Styles für die verbesserte HTML-Element-Funktionalität
+ */
+
+/* Toast Notifications */
+.cbd-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 16px;
+    border-radius: 6px;
+    color: white;
+    font-weight: 500;
+    z-index: 10000;
+    transform: translateX(400px);
+    transition: transform 0.3s ease;
+    max-width: 300px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.cbd-toast.cbd-toast-show {
+    transform: translateX(0);
+}
+
+/* Toast Varianten */
+.cbd-toast.cbd-toast-success {
+    background-color: #28a745;
+}
+
+.cbd-toast.cbd-toast-error {
+    background-color: #dc3545;
+}
+
+.cbd-toast.cbd-toast-info {
+    background-color: #17a2b8;
+}
+
+.cbd-toast.cbd-toast-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+/* Container Basis-Styles */
+.cbd-container {
+    position: relative;
+    margin-bottom: 1em;
+}
+
+/* Collapse-Funktionalität */
+.cbd-container.cbd-collapsed .cbd-container-content {
+    display: none;
+}
+
+.cbd-collapse-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.cbd-collapse-toggle:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.cbd-collapse-toggle .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* Selection Menu */
+.cbd-selection-menu {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 100;
+}
+
+.cbd-menu-toggle {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    padding: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+    backdrop-filter: blur(4px);
+}
+
+.cbd-menu-toggle:hover {
+    background: rgba(255, 255, 255, 1);
+    border-color: rgba(0, 0, 0, 0.2);
+}
+
+.cbd-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    min-width: 160px;
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    display: none;
+    z-index: 1000;
+}
+
+.cbd-dropdown-menu button {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.cbd-dropdown-menu button:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.cbd-dropdown-menu button .dashicons {
+    margin-right: 6px;
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    vertical-align: text-top;
+}
+
+/* Button States */
+.cbd-copy-text.cbd-copied,
+.cbd-screenshot.cbd-loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Block Header */
+.cbd-block-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.cbd-header-icon .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.cbd-block-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* Container Number */
+.cbd-container-number {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    background: #0073aa;
+    color: white;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    z-index: 10;
+}
+
+.cbd-container-number.cbd-outside-number {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+}
+
+.cbd-container-number.cbd-rectangular {
+    border-radius: 4px;
+    padding: 4px 6px;
+    width: auto;
+    height: auto;
+    min-width: 24px;
+}
+
+/* Responsive Anpassungen */
+@media (max-width: 768px) {
+    .cbd-toast {
+        right: 10px;
+        left: 10px;
+        max-width: none;
+        transform: translateY(-100px);
+    }
+
+    .cbd-toast.cbd-toast-show {
+        transform: translateY(0);
+    }
+
+    .cbd-selection-menu {
+        top: 4px;
+        right: 4px;
+    }
+
+    .cbd-dropdown-menu {
+        min-width: 140px;
+    }
+}
+
+/* Accessibility */
+.cbd-collapse-toggle:focus,
+.cbd-menu-toggle:focus,
+.cbd-dropdown-menu button:focus {
+    outline: 2px solid #005cbe;
+    outline-offset: 1px;
+}
+
+/* Smooth Animations */
+.cbd-container-content {
+    transition: all 0.3s ease;
+}
+
+.cbd-dropdown-menu button {
+    transition: background-color 0.15s ease;
+}
+
+/* Screen Reader Text */
+.screen-reader-text {
+    clip: rect(1px, 1px, 1px, 1px);
+    position: absolute !important;
+    height: 1px;
+    width: 1px;
+    overflow: hidden;
+}

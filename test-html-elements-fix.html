@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Container Block Designer - HTML Element Fix Test</title>
+
+    <!-- WordPress Dashicons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dashicons/0.9.0/dashicons.min.css">
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- Our unified CSS -->
+    <link rel="stylesheet" href="assets/css/unified-frontend.css">
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f1f1f1;
+        }
+
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .test-section {
+            margin-bottom: 30px;
+            padding: 15px;
+            border: 1px dashed #ccc;
+            border-radius: 4px;
+        }
+
+        h1, h2 {
+            color: #333;
+        }
+
+        .cbd-container {
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .cbd-container-block {
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+        }
+
+        .cbd-container-content {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Container Block Designer - HTML Element Fix Test</h1>
+        <p>Diese Seite testet die verbesserten HTML-Element-Funktionen in den Container-Blöcken.</p>
+
+        <div class="test-section">
+            <h2>Test 1: Container mit Collapse-Funktionalität</h2>
+
+            <div class="cbd-container" id="cbd-container-test1">
+                <!-- Selection Menu (immer vorhanden) -->
+                <div class="cbd-selection-menu">
+                    <button class="cbd-menu-toggle" type="button" aria-expanded="false">
+                        <i class="dashicons dashicons-admin-generic"></i>
+                    </button>
+
+                    <div class="cbd-dropdown-menu">
+                        <button class="cbd-dropdown-item cbd-collapse-toggle" type="button" aria-expanded="true" aria-controls="cbd-container-test1-content">
+                            <i class="dashicons dashicons-arrow-up-alt2"></i>
+                            <span>Einklappen</span>
+                        </button>
+
+                        <button class="cbd-dropdown-item cbd-copy-text" data-container-id="cbd-container-test1">
+                            <i class="dashicons dashicons-clipboard"></i>
+                            <span>Text kopieren</span>
+                        </button>
+
+                        <button class="cbd-dropdown-item cbd-screenshot" data-container-id="cbd-container-test1">
+                            <i class="dashicons dashicons-camera"></i>
+                            <span>Screenshot</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Numbering (außerhalb) -->
+                <div class="cbd-container-number cbd-outside-number" data-number="1">1</div>
+
+                <!-- Content Wrapper -->
+                <div class="cbd-content" id="cbd-container-test1-content">
+                    <!-- Container Block (styled content) -->
+                    <div class="cbd-container-block cbd-block-basic-container">
+                        <!-- Block Header mit Icon und Titel -->
+                        <div class="cbd-block-header">
+                            <span class="cbd-header-icon" style="color: #1565c0">
+                                <i class="dashicons dashicons-info"></i>
+                            </span>
+                            <h3 class="cbd-block-title">Test Container mit allen Features</h3>
+                        </div>
+
+                        <!-- Container Content (actual user content) -->
+                        <div class="cbd-container-content">
+                            <p>Dies ist der Inhalt des Container-Blocks. Dieser Text sollte kopiert werden können und in Screenshots sichtbar sein.</p>
+                            <ul>
+                                <li>HTML-Liste Element 1</li>
+                                <li>HTML-Liste Element 2</li>
+                                <li>HTML-Liste Element 3</li>
+                            </ul>
+                            <p><strong>Fetter Text</strong> und <em>kursiver Text</em> sollten ebenfalls funktionieren.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 2: Einfacher Container ohne Collapse</h2>
+
+            <div class="cbd-container" id="cbd-container-test2">
+                <!-- Selection Menu (immer vorhanden) -->
+                <div class="cbd-selection-menu">
+                    <button class="cbd-menu-toggle" type="button" aria-expanded="false">
+                        <i class="dashicons dashicons-admin-generic"></i>
+                    </button>
+
+                    <div class="cbd-dropdown-menu">
+                        <button class="cbd-dropdown-item cbd-copy-text" data-container-id="cbd-container-test2">
+                            <i class="dashicons dashicons-clipboard"></i>
+                            <span>Text kopieren</span>
+                        </button>
+
+                        <button class="cbd-dropdown-item cbd-screenshot" data-container-id="cbd-container-test2">
+                            <i class="dashicons dashicons-camera"></i>
+                            <span>Screenshot</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Numbering (außerhalb) -->
+                <div class="cbd-container-number cbd-outside-number" data-number="2">2</div>
+
+                <!-- Content Wrapper -->
+                <div class="cbd-content" id="cbd-container-test2-content">
+                    <!-- Container Block (styled content) -->
+                    <div class="cbd-container-block cbd-block-card-container">
+                        <!-- Container Content -->
+                        <div class="cbd-container-content">
+                            <h4>Einfacher Container</h4>
+                            <p>Dieser Container hat keine Collapse-Funktionalität, aber Copy- und Screenshot-Features.</p>
+                            <div>
+                                <button type="button" onclick="alert('Button in Container funktioniert!')">Test Button</button>
+                                <input type="text" value="Test Input Field" placeholder="Eingabefeld">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test 3: Container mit komplexen HTML-Elementen</h2>
+
+            <div class="cbd-container" id="cbd-container-test3">
+                <!-- Selection Menu -->
+                <div class="cbd-selection-menu">
+                    <button class="cbd-menu-toggle" type="button" aria-expanded="false">
+                        <i class="dashicons dashicons-admin-generic"></i>
+                    </button>
+
+                    <div class="cbd-dropdown-menu">
+                        <button class="cbd-dropdown-item cbd-collapse-toggle" type="button" aria-expanded="true" aria-controls="cbd-container-test3-content">
+                            <i class="dashicons dashicons-arrow-up-alt2"></i>
+                            <span>Einklappen</span>
+                        </button>
+
+                        <button class="cbd-dropdown-item cbd-copy-text" data-container-id="cbd-container-test3">
+                            <i class="dashicons dashicons-clipboard"></i>
+                            <span>Text kopieren</span>
+                        </button>
+
+                        <button class="cbd-dropdown-item cbd-screenshot" data-container-id="cbd-container-test3">
+                            <i class="dashicons dashicons-camera"></i>
+                            <span>Screenshot</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Numbering -->
+                <div class="cbd-container-number cbd-outside-number" data-number="3">3</div>
+
+                <!-- Content Wrapper -->
+                <div class="cbd-content" id="cbd-container-test3-content">
+                    <!-- Container Block -->
+                    <div class="cbd-container-block cbd-block-hero-section">
+                        <!-- Block Header -->
+                        <div class="cbd-block-header">
+                            <h3 class="cbd-block-title">Komplexer HTML-Inhalt</h3>
+                        </div>
+
+                        <!-- Container Content -->
+                        <div class="cbd-container-content">
+                            <table border="1" style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr>
+                                        <th>Spalte 1</th>
+                                        <th>Spalte 2</th>
+                                        <th>Spalte 3</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Zelle 1,1</td>
+                                        <td>Zelle 1,2</td>
+                                        <td>Zelle 1,3</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Zelle 2,1</td>
+                                        <td>Zelle 2,2</td>
+                                        <td>Zelle 2,3</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <br>
+
+                            <form style="margin-top: 15px;">
+                                <label>Name: <input type="text" name="name" placeholder="Ihr Name"></label><br><br>
+                                <label>E-Mail: <input type="email" name="email" placeholder="ihre@email.de"></label><br><br>
+                                <label>Nachricht: <textarea name="message" rows="3" cols="50" placeholder="Ihre Nachricht"></textarea></label><br><br>
+                                <button type="button" onclick="alert('Formular funktioniert!')">Absenden</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Test-Anweisungen</h2>
+            <ol>
+                <li><strong>Dropdown-Menü:</strong> Klicken Sie auf das Zahnrad-Symbol in der oberen rechten Ecke jedes Containers</li>
+                <li><strong>Collapse:</strong> Klicken Sie auf "Einklappen/Ausklappen" im Dropdown-Menü</li>
+                <li><strong>Text kopieren:</strong> Klicken Sie auf "Text kopieren" - es sollte eine Erfolgsmeldung erscheinen</li>
+                <li><strong>Screenshot:</strong> Klicken Sie auf "Screenshot" - es sollte ein Download gestartet werden</li>
+                <li><strong>HTML-Elemente:</strong> Alle Buttons, Eingabefelder und andere HTML-Elemente sollten funktionieren</li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Load our unified frontend script -->
+    <script src="assets/js/unified-frontend.js"></script>
+
+    <!-- Load html2canvas for screenshot functionality -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</body>
+</html>
