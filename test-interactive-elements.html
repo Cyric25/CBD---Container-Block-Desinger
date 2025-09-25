@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test - Interaktive Elemente in Container-Blöcken</title>
+
+    <!-- WordPress Dashicons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dashicons/0.9.0/dashicons.min.css">
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+
+    <!-- D3.js -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+
+    <!-- Our unified CSS -->
+    <link rel="stylesheet" href="assets/css/unified-frontend.css">
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f1f1f1;
+        }
+
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .cbd-container {
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .cbd-container-block {
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            background: #fafafa;
+        }
+
+        .cbd-container-content {
+            background: white;
+            padding: 20px;
+            border-radius: 4px;
+            border: 1px solid #eee;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 20px 0;
+        }
+
+        .interactive-controls {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .interactive-controls input {
+            margin: 5px 10px;
+        }
+
+        .d3-chart {
+            margin: 20px 0;
+        }
+
+        .test-instructions {
+            background: #e7f3ff;
+            border: 1px solid #0073aa;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-ok { background: #28a745; }
+        .status-error { background: #dc3545; }
+        .status-warning { background: #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Test: Interaktive Elemente in Container-Blöcken</h1>
+
+        <div class="test-instructions">
+            <h3>📋 Test-Anweisungen:</h3>
+            <ol>
+                <li><strong>Öffnen Sie die Browser-Konsole</strong> um Debug-Meldungen zu sehen</li>
+                <li><strong>Testen Sie die interaktiven Elemente:</strong> Schieberegler, Buttons, Charts</li>
+                <li><strong>Klappen Sie Container ein und wieder aus</strong> - Elemente sollten funktional bleiben</li>
+                <li><strong>Prüfen Sie die Status-Indikatoren</strong> unten auf der Seite</li>
+            </ol>
+        </div>
+
+        <!-- CONTAINER 1: Chart.js Diagramm -->
+        <div class="cbd-container" id="container-chartjs">
+            <div class="cbd-selection-menu">
+                <button class="cbd-menu-toggle" type="button">
+                    <i class="dashicons dashicons-admin-generic"></i>
+                </button>
+                <div class="cbd-dropdown-menu">
+                    <button class="cbd-dropdown-item cbd-collapse-toggle" type="button">
+                        <i class="dashicons dashicons-arrow-up-alt2"></i>
+                        <span>Einklappen</span>
+                    </button>
+                    <button class="cbd-dropdown-item cbd-copy-text" data-container-id="container-chartjs">
+                        <i class="dashicons dashicons-clipboard"></i>
+                        <span>Text kopieren</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="cbd-container-number cbd-outside-number" data-number="1">1</div>
+
+            <div class="cbd-content" id="container-chartjs-content">
+                <div class="cbd-container-block">
+                    <h3>📊 Chart.js Diagramm</h3>
+                    <div class="cbd-container-content">
+                        <p>Dieses Chart.js Diagramm sollte sichtbar sein und auf Container-Änderungen reagieren.</p>
+
+                        <div class="interactive-controls">
+                            <label>Chart-Typ:</label>
+                            <select id="chartType" onchange="updateChart()">
+                                <option value="line">Linien-Chart</option>
+                                <option value="bar">Balken-Chart</option>
+                                <option value="pie">Kreis-Chart</option>
+                            </select>
+                            <button onclick="updateChart()">Chart aktualisieren</button>
+                        </div>
+
+                        <div class="chart-container">
+                            <canvas id="myChart"></canvas>
+                        </div>
+
+                        <p>Status: <span id="chartjs-status"><span class="status-indicator status-warning"></span>Wird geladen...</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONTAINER 2: D3.js Visualisierung -->
+        <div class="cbd-container" id="container-d3">
+            <div class="cbd-selection-menu">
+                <button class="cbd-menu-toggle" type="button">
+                    <i class="dashicons dashicons-admin-generic"></i>
+                </button>
+                <div class="cbd-dropdown-menu">
+                    <button class="cbd-dropdown-item cbd-collapse-toggle" type="button">
+                        <i class="dashicons dashicons-arrow-up-alt2"></i>
+                        <span>Einklappen</span>
+                    </button>
+                    <button class="cbd-dropdown-item cbd-copy-text" data-container-id="container-d3">
+                        <i class="dashicons dashicons-clipboard"></i>
+                        <span>Text kopieren</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="cbd-container-number cbd-outside-number" data-number="2">2</div>
+
+            <div class="cbd-content" id="container-d3-content">
+                <div class="cbd-container-block">
+                    <h3>🌐 D3.js Visualisierung</h3>
+                    <div class="cbd-container-content">
+                        <p>Diese D3.js Visualisierung sollte responsive funktionieren.</p>
+
+                        <div class="interactive-controls">
+                            <label>Anzahl Datenpunkte:</label>
+                            <input type="range" id="dataPoints" min="5" max="50" value="20" oninput="updateD3()">
+                            <span id="dataPointsValue">20</span>
+                            <button onclick="updateD3()">D3 aktualisieren</button>
+                        </div>
+
+                        <div id="d3-chart" class="d3-chart"></div>
+
+                        <p>Status: <span id="d3-status"><span class="status-indicator status-warning"></span>Wird geladen...</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONTAINER 3: HTML5 Canvas Interaktiv -->
+        <div class="cbd-container" id="container-canvas">
+            <div class="cbd-selection-menu">
+                <button class="cbd-menu-toggle" type="button">
+                    <i class="dashicons dashicons-admin-generic"></i>
+                </button>
+                <div class="cbd-dropdown-menu">
+                    <button class="cbd-dropdown-item cbd-collapse-toggle" type="button">
+                        <i class="dashicons dashicons-arrow-up-alt2"></i>
+                        <span>Einklappen</span>
+                    </button>
+                    <button class="cbd-dropdown-item cbd-copy-text" data-container-id="container-canvas">
+                        <i class="dashicons dashicons-clipboard"></i>
+                        <span>Text kopieren</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="cbd-container-number cbd-outside-number" data-number="3">3</div>
+
+            <div class="cbd-content" id="container-canvas-content">
+                <div class="cbd-container-block">
+                    <h3>🎨 HTML5 Canvas Interaktiv</h3>
+                    <div class="cbd-container-content">
+                        <p>Klicken Sie auf das Canvas um Kreise zu zeichnen.</p>
+
+                        <div class="interactive-controls">
+                            <label>Kreis-Farbe:</label>
+                            <input type="color" id="circleColor" value="#007cba" onchange="updateCanvasColor()">
+                            <button onclick="clearCanvas()">Canvas leeren</button>
+                        </div>
+
+                        <canvas id="interactiveCanvas" width="600" height="200" style="border: 1px solid #ccc; background: white; max-width: 100%;"></canvas>
+
+                        <p>Status: <span id="canvas-status"><span class="status-indicator status-warning"></span>Wird geladen...</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Summary -->
+        <div class="test-instructions">
+            <h3>📊 Test-Ergebnisse:</h3>
+            <ul id="test-results">
+                <li>Initialisierung läuft...</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Interaktive Element Scripts -->
+    <script>
+        // Global variables
+        let myChart = null;
+        let canvasContext = null;
+        let circleColor = '#007cba';
+
+        // Chart.js Setup
+        function initChart() {
+            try {
+                const ctx = document.getElementById('myChart').getContext('2d');
+                myChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun'],
+                        datasets: [{
+                            label: 'Sample Data',
+                            data: [12, 19, 3, 5, 2, 3],
+                            borderColor: '#007cba',
+                            backgroundColor: 'rgba(0, 124, 186, 0.1)',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+
+                document.getElementById('chartjs-status').innerHTML = '<span class="status-indicator status-ok"></span>Chart.js funktioniert';
+                updateTestResults('Chart.js', 'OK');
+            } catch (e) {
+                console.error('Chart.js init failed:', e);
+                document.getElementById('chartjs-status').innerHTML = '<span class="status-indicator status-error"></span>Chart.js Fehler: ' + e.message;
+                updateTestResults('Chart.js', 'ERROR: ' + e.message);
+            }
+        }
+
+        function updateChart() {
+            if (!myChart) return;
+
+            const type = document.getElementById('chartType').value;
+            myChart.destroy();
+            initChart();
+            myChart.config.type = type;
+            myChart.update();
+        }
+
+        // D3.js Setup
+        function initD3() {
+            try {
+                const container = d3.select("#d3-chart");
+                container.selectAll("*").remove(); // Clear existing
+
+                const data = Array.from({length: 20}, () => Math.random() * 100);
+
+                const svg = container.append("svg")
+                    .attr("width", 600)
+                    .attr("height", 200)
+                    .style("max-width", "100%");
+
+                const xScale = d3.scaleLinear()
+                    .domain([0, data.length - 1])
+                    .range([10, 590]);
+
+                const yScale = d3.scaleLinear()
+                    .domain([0, 100])
+                    .range([190, 10]);
+
+                const line = d3.line()
+                    .x((d, i) => xScale(i))
+                    .y(d => yScale(d));
+
+                svg.append("path")
+                    .datum(data)
+                    .attr("fill", "none")
+                    .attr("stroke", "#28a745")
+                    .attr("stroke-width", 2)
+                    .attr("d", line);
+
+                svg.selectAll(".dot")
+                    .data(data)
+                    .enter().append("circle")
+                    .attr("class", "dot")
+                    .attr("cx", (d, i) => xScale(i))
+                    .attr("cy", d => yScale(d))
+                    .attr("r", 4)
+                    .attr("fill", "#28a745");
+
+                document.getElementById('d3-status').innerHTML = '<span class="status-indicator status-ok"></span>D3.js funktioniert';
+                updateTestResults('D3.js', 'OK');
+            } catch (e) {
+                console.error('D3.js init failed:', e);
+                document.getElementById('d3-status').innerHTML = '<span class="status-indicator status-error"></span>D3.js Fehler: ' + e.message;
+                updateTestResults('D3.js', 'ERROR: ' + e.message);
+            }
+        }
+
+        function updateD3() {
+            const count = document.getElementById('dataPoints').value;
+            document.getElementById('dataPointsValue').textContent = count;
+            initD3();
+        }
+
+        // Canvas Setup
+        function initCanvas() {
+            try {
+                const canvas = document.getElementById('interactiveCanvas');
+                canvasContext = canvas.getContext('2d');
+
+                canvas.addEventListener('click', function(e) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+
+                    canvasContext.beginPath();
+                    canvasContext.arc(x, y, 20, 0, 2 * Math.PI);
+                    canvasContext.fillStyle = circleColor;
+                    canvasContext.fill();
+                });
+
+                document.getElementById('canvas-status').innerHTML = '<span class="status-indicator status-ok"></span>Canvas funktioniert';
+                updateTestResults('HTML5 Canvas', 'OK');
+            } catch (e) {
+                console.error('Canvas init failed:', e);
+                document.getElementById('canvas-status').innerHTML = '<span class="status-indicator status-error"></span>Canvas Fehler: ' + e.message;
+                updateTestResults('HTML5 Canvas', 'ERROR: ' + e.message);
+            }
+        }
+
+        function updateCanvasColor() {
+            circleColor = document.getElementById('circleColor').value;
+        }
+
+        function clearCanvas() {
+            if (canvasContext) {
+                canvasContext.clearRect(0, 0, canvasContext.canvas.width, canvasContext.canvas.height);
+            }
+        }
+
+        // Test Results Tracking
+        let testResults = {};
+
+        function updateTestResults(component, status) {
+            testResults[component] = status;
+
+            const resultsList = document.getElementById('test-results');
+            resultsList.innerHTML = '';
+
+            Object.keys(testResults).forEach(component => {
+                const li = document.createElement('li');
+                const isOk = testResults[component] === 'OK';
+                li.innerHTML = `<span class="status-indicator ${isOk ? 'status-ok' : 'status-error'}"></span>${component}: ${testResults[component]}`;
+                resultsList.appendChild(li);
+            });
+        }
+
+        // Initialize everything
+        $(document).ready(function() {
+            console.log('🧪 Initialisiere interaktive Elemente...');
+
+            // Small delay to ensure DOM is ready
+            setTimeout(function() {
+                initChart();
+                initD3();
+                initCanvas();
+
+                console.log('🎯 Interaktive Elemente initialized');
+            }, 500);
+
+            // Listen for our custom reinitialization event
+            $('.cbd-container').on('cbd:reinitialize-interactive', function(e, containerId) {
+                console.log('🔄 Reinitialisierung für Container:', containerId);
+
+                if (containerId === 'container-chartjs') {
+                    setTimeout(initChart, 100);
+                } else if (containerId === 'container-d3') {
+                    setTimeout(initD3, 100);
+                } else if (containerId === 'container-canvas') {
+                    setTimeout(initCanvas, 100);
+                }
+            });
+        });
+    </script>
+
+    <!-- Load our unified frontend script -->
+    <script src="assets/js/unified-frontend.js"></script>
+</body>
+</html>
