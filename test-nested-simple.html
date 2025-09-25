@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einfacher Test - Verschachtelte Container</title>
+
+    <!-- WordPress Dashicons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/dashicons/0.9.0/dashicons.min.css">
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- Our unified CSS -->
+    <link rel="stylesheet" href="assets/css/unified-frontend.css">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+
+        .test-area {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        /* Container Styling */
+        .cbd-container-block {
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            margin: 10px 0;
+        }
+
+        .cbd-container-content {
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .outer {
+            border-color: #007cba;
+            background: #e7f3ff;
+        }
+
+        .inner {
+            border-color: #28a745;
+            background: #e8f5e8;
+        }
+
+        .status {
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-area">
+        <h1>🧪 Einfacher Test: Verschachtelte Container</h1>
+
+        <div class="status">
+            <strong>Test-Ziel:</strong> Der äußere Container (blau) soll ein-/ausklappbar sein, ohne den inneren Container (grün) zu beeinflussen.
+        </div>
+
+        <!-- ÄUSSERER CONTAINER -->
+        <div class="cbd-container outer" id="container-outer">
+            <div class="cbd-selection-menu">
+                <button class="cbd-menu-toggle" type="button">
+                    <i class="dashicons dashicons-admin-generic"></i>
+                </button>
+                <div class="cbd-dropdown-menu">
+                    <button class="cbd-dropdown-item cbd-collapse-toggle" type="button">
+                        <i class="dashicons dashicons-arrow-up-alt2"></i>
+                        <span>Einklappen</span>
+                    </button>
+                    <button class="cbd-dropdown-item cbd-copy-text" data-container-id="container-outer">
+                        <i class="dashicons dashicons-clipboard"></i>
+                        <span>Text kopieren</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Numbering (nur für äußeren Container) -->
+            <div class="cbd-container-number cbd-outside-number" data-number="1">1</div>
+
+            <div class="cbd-content" id="container-outer-content">
+                <div class="cbd-container-block">
+                    <h3>🔵 ÄUSSERER CONTAINER (sollte Nummer haben)</h3>
+                    <div class="cbd-container-content">
+                        <p>Dies ist der äußere Container-Inhalt.</p>
+                        <p><strong>Wichtig:</strong> Wenn dieser Container eingeklappt wird, sollte der innere grüne Container NICHT verschwinden!</p>
+
+                        <!-- INNERER CONTAINER -->
+                        <div class="cbd-container inner" id="container-inner">
+                            <div class="cbd-selection-menu">
+                                <button class="cbd-menu-toggle" type="button">
+                                    <i class="dashicons dashicons-admin-generic"></i>
+                                </button>
+                                <div class="cbd-dropdown-menu">
+                                    <button class="cbd-dropdown-item cbd-collapse-toggle" type="button">
+                                        <i class="dashicons dashicons-arrow-up-alt2"></i>
+                                        <span>Einklappen</span>
+                                    </button>
+                                    <button class="cbd-dropdown-item cbd-copy-text" data-container-id="container-inner">
+                                        <i class="dashicons dashicons-clipboard"></i>
+                                        <span>Text kopieren</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- KEINE Numbering für inneren Container -->
+
+                            <div class="cbd-content" id="container-inner-content">
+                                <div class="cbd-container-block">
+                                    <h4>🟢 INNERER CONTAINER (sollte KEINE Nummer haben)</h4>
+                                    <div class="cbd-container-content">
+                                        <p>Dies ist der innere Container-Inhalt.</p>
+                                        <p>Dieser Container sollte unabhängig vom äußeren funktionieren.</p>
+                                        <ul>
+                                            <li>✅ Eigene Collapse-Funktion</li>
+                                            <li>✅ Eigene Copy-Funktion</li>
+                                            <li>✅ Keine Interferenz mit äußerem Container</li>
+                                            <li>✅ <strong>KEINE Nummerierung</strong> (nur äußere Container werden nummeriert)</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Ende innerer Container -->
+
+                        <p>Zurück im äußeren Container: Dieser Text sollte bei einem Collapse des inneren Containers sichtbar bleiben.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Ende äußerer Container -->
+
+        <div class="status">
+            <h3>📋 Test-Schritte:</h3>
+            <ol>
+                <li><strong>Schritt 1:</strong> Klicken Sie auf das Zahnrad des BLAUEN Containers → "Einklappen"</li>
+                <li><strong>Erwartung:</strong> Nur der blaue Container klappt ein, der grüne bleibt wie er ist</li>
+                <li><strong>Schritt 2:</strong> Klappen Sie den blauen Container wieder aus</li>
+                <li><strong>Schritt 3:</strong> Klicken Sie auf das Zahnrad des GRÜNEN Containers → "Einklappen"</li>
+                <li><strong>Erwartung:</strong> Nur der grüne Container klappt ein, der blaue bleibt unverändert</li>
+                <li><strong>Schritt 4:</strong> Testen Sie "Text kopieren" für beide Container separat</li>
+                <li><strong>Schritt 5:</strong> Überprüfen Sie die Nummerierung: Nur der äußere Container sollte eine Nummer (1) haben!</li>
+            </ol>
+        </div>
+
+        <div id="test-results" style="margin-top: 20px; padding: 10px; border-radius: 4px; display: none;">
+            <h3>🎯 Test-Resultate:</h3>
+            <ul id="results-list"></ul>
+        </div>
+    </div>
+
+    <!-- JavaScript für automatische Tests -->
+    <script>
+        // Automatische Test-Funktionen
+        window.testResults = [];
+
+        function addTestResult(test, passed, details) {
+            window.testResults.push({
+                test: test,
+                passed: passed,
+                details: details
+            });
+
+            updateTestDisplay();
+        }
+
+        function updateTestDisplay() {
+            var resultsDiv = document.getElementById('test-results');
+            var resultsList = document.getElementById('results-list');
+
+            resultsList.innerHTML = '';
+
+            window.testResults.forEach(function(result) {
+                var li = document.createElement('li');
+                li.innerHTML = (result.passed ? '✅' : '❌') + ' ' + result.test +
+                               (result.details ? ' (' + result.details + ')' : '');
+                li.style.color = result.passed ? 'green' : 'red';
+                resultsList.appendChild(li);
+            });
+
+            resultsDiv.style.display = 'block';
+        }
+
+        // Test-Observer für Collapse-Events
+        $(document).ready(function() {
+            console.log('🧪 Test-Framework bereit');
+
+            // Observer für Collapse-Events
+            $(document).on('DOMSubtreeModified', '.cbd-container-content', function() {
+                // Test wenn sich Sichtbarkeit ändert
+                setTimeout(function() {
+                    runIndependenceTests();
+                }, 100);
+            });
+        });
+
+        function runIndependenceTests() {
+            var outerVisible = $('#container-outer .cbd-container-content').first().is(':visible');
+            var innerVisible = $('#container-inner .cbd-container-content').first().is(':visible');
+
+            console.log('Independence Test - Outer visible:', outerVisible, 'Inner visible:', innerVisible);
+        }
+    </script>
+
+    <!-- Load our unified frontend script -->
+    <script src="assets/js/unified-frontend.js"></script>
+</body>
+</html>

@@ -178,8 +178,11 @@
                 return;
             }
 
-            var $contentToToggle = $container.find('.cbd-container-content');
-            var $toggle = $container.find('.cbd-collapse-toggle');
+            // KRITISCHER FIX: Nur direkter Content, NICHT verschachtelte Container
+            // Suche nur innerhalb der direkten .cbd-content Ebene, nicht rekursiv
+            var $directContent = $container.children('.cbd-content');
+            var $contentToToggle = $directContent.find('.cbd-container-content').first();
+            var $toggle = $container.find('.cbd-collapse-toggle').first();
 
             if ($contentToToggle.length === 0) {
                 console.log('CBD: Kein Content zum Togglen gefunden');
@@ -356,7 +359,7 @@
             // Entferne UI-Elemente
             $clone.find('.cbd-selection-menu, .cbd-block-header, .cbd-container-number').remove();
 
-            // Hole Text-Inhalt
+            // Hole Text-Inhalt - so wie es war, funktioniert bereits korrekt
             var text = $clone.find('.cbd-container-content').text() || $clone.text();
 
             return text.trim();
