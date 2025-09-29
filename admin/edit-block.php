@@ -412,6 +412,7 @@ $config = $block['config'] ?: array(
                                                         <button type="button" class="cbd-icon-category" data-category="admin"><?php _e('Admin', 'container-block-designer'); ?></button>
                                                         <button type="button" class="cbd-icon-category" data-category="post"><?php _e('Posts', 'container-block-designer'); ?></button>
                                                         <button type="button" class="cbd-icon-category" data-category="media"><?php _e('Medien', 'container-block-designer'); ?></button>
+                                                        <button type="button" class="cbd-icon-category" data-category="science"><?php _e('Naturwissenschaften', 'container-block-designer'); ?></button>
                                                         <button type="button" class="cbd-icon-category" data-category="misc"><?php _e('Verschiedenes', 'container-block-designer'); ?></button>
                                                         <button type="button" class="cbd-icon-category" data-category="social"><?php _e('Social', 'container-block-designer'); ?></button>
                                                     </div>
@@ -1416,6 +1417,17 @@ jQuery(document).ready(function($) {
             'dashicons-external', 'dashicons-insert', 'dashicons-table-col-after', 'dashicons-table-col-before',
             'dashicons-table-col-delete', 'dashicons-table-row-after', 'dashicons-table-row-before',
             'dashicons-table-row-delete', 'dashicons-saved', 'dashicons-smartphone', 'dashicons-tablet'
+        ],
+        'science': [
+            'dashicons-chart-pie', 'dashicons-chart-bar', 'dashicons-chart-line', 'dashicons-chart-area',
+            'dashicons-analytics', 'dashicons-database', 'dashicons-search', 'dashicons-filter',
+            'dashicons-lightbulb', 'dashicons-calculator', 'dashicons-desktop', 'dashicons-backup',
+            'dashicons-marker', 'dashicons-location', 'dashicons-location-alt', 'dashicons-universal-access',
+            'dashicons-performance', 'dashicons-feedback', 'dashicons-hammer', 'dashicons-art',
+            'dashicons-portfolio', 'dashicons-awards', 'dashicons-forms', 'dashicons-building',
+            'dashicons-carrot', 'dashicons-palmtree', 'dashicons-products', 'dashicons-pressthis',
+            'dashicons-superhero', 'dashicons-superhero-alt', 'dashicons-businessman',
+            'dashicons-id', 'dashicons-id-alt', 'dashicons-food'
         ],
         'social': [
             'dashicons-email', 'dashicons-email-alt', 'dashicons-facebook', 'dashicons-facebook-alt',

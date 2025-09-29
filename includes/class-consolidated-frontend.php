@@ -742,8 +742,17 @@ class CBD_Consolidated_Frontend {
         // Wrap the actual content in a collapsible container
         $html .= '<div class="cbd-container-content">';
         
-        // Actual content
-        $html .= $content;
+        // Actual content - Fixed HTML processing
+        if (!empty($content)) {
+            // DEBUG: Add debug comment for content analysis
+            $html .= '<!-- CBD DEBUG: Content length = ' . strlen($content) . ', has HTML = ' . (strpos($content, '<') !== false ? 'YES' : 'NO') . ' -->';
+
+            // Process content properly for HTML/CSS/JS
+            $processed_content = $this->process_block_content($content);
+            $html .= $processed_content;
+        } else {
+            $html .= '<p>Kein Inhalt gefunden.</p>';
+        }
         
         $html .= '</div>'; // Close .cbd-container-content
         
@@ -755,6 +764,70 @@ class CBD_Consolidated_Frontend {
         return $html;
     }
     
+    /**
+     * Process block content - handle HTML/CSS/JS properly
+     */
+    private function process_block_content($content) {
+        // Multiple strategies for different content types
+
+        // Strategy 1: Direct HTML content (already proper HTML)
+        if (strpos($content, '<') !== false && strpos($content, '>') !== false) {
+            return $content; // Already HTML, use as-is
+        }
+
+        // Strategy 2: HTML entity escaped content
+        if (strpos($content, '&lt;') !== false || strpos($content, '&gt;') !== false) {
+            return html_entity_decode($content, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+
+        // Strategy 3: WordPress double-escaped content
+        if (strpos($content, '&amp;lt;') !== false) {
+            return html_entity_decode(html_entity_decode($content, ENT_QUOTES | ENT_HTML5, 'UTF-8'), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        }
+
+        // Strategy 4: Detect and wrap CSS/JS content
+        $has_css = preg_match('/\/\*.*?\*\/|\.[\w-]+\s*{/', $content);
+        $has_js = preg_match('/function\s+\w+\s*\(|document\.|const\s+|let\s+|var\s+/', $content);
+        $has_html_tags = preg_match('/<[^>]+>/', $content);
+
+        if ($has_css || $has_js) {
+            if ($has_html_tags) {
+                // Mixed content - assume complete HTML structure
+                return $content;
+            } else {
+                // Pure CSS/JS - wrap appropriately
+                $output = '';
+
+                if ($has_css) {
+                    // Extract CSS and wrap
+                    if (preg_match_all('/\/\*.*?\*\/|[^{]+{[^}]*}/s', $content, $css_matches)) {
+                        $output .= '<style>' . implode("\n", $css_matches[0]) . '</style>';
+                        // Remove CSS from content
+                        $content = preg_replace('/\/\*.*?\*\/|[^{]+{[^}]*}/s', '', $content);
+                    }
+                }
+
+                // Add remaining HTML content
+                $remaining_content = trim($content);
+                if (!empty($remaining_content)) {
+                    $output .= $remaining_content;
+                }
+
+                if ($has_js) {
+                    // Extract and wrap JavaScript
+                    if (preg_match_all('/(?:function\s+\w+[^{]*{[^}]*}|document\.[^;]+;|(?:const|let|var)\s+[^;]+;)/s', $content, $js_matches)) {
+                        $output .= '<script>' . implode("\n", $js_matches[0]) . '</script>';
+                    }
+                }
+
+                return $output;
+            }
+        }
+
+        // Strategy 5: Fallback - return as-is (might be plain text or unknown format)
+        return $content;
+    }
+
     /**
      * Generate action buttons - DISABLED: All buttons now in dropdown menu only
      */

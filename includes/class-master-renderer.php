@@ -100,13 +100,34 @@ class CBD_Master_Renderer {
             'container-block-designer/container',
             'cbd/container-block'
         );
-        
+
         if (!in_array($block['blockName'], $container_blocks)) {
             return $block_content;
         }
-        
+
         $attributes = $block['attrs'] ?? array();
-        return $this->render_block($attributes, $block_content);
+
+        // CRITICAL FIX: Get inner blocks content properly
+        $inner_content = '';
+
+        // Process inner blocks if they exist
+        if (!empty($block['innerBlocks'])) {
+            foreach ($block['innerBlocks'] as $inner_block) {
+                $inner_content .= render_block($inner_block);
+            }
+        }
+
+        // If no inner blocks, try to use the provided content
+        if (empty($inner_content) && !empty($block_content)) {
+            $inner_content = $block_content;
+        }
+
+        // If still no content, check innerHTML from block parsing
+        if (empty($inner_content) && !empty($block['innerHTML'])) {
+            $inner_content = $block['innerHTML'];
+        }
+
+        return $this->render_block($attributes, $inner_content);
     }
     
     /**
@@ -118,6 +139,11 @@ class CBD_Master_Renderer {
         $html .= '<!-- CBD MASTER RENDERER IS NOW ACTIVE!!! -->';
         $html .= '<!-- TIME: ' . date('Y-m-d H:i:s') . ' -->';
         $html .= '<!-- ATTRIBUTES: ' . json_encode($attributes) . ' -->';
+        $html .= '<!-- CONTENT LENGTH: ' . strlen($content) . ' -->';
+        $html .= '<!-- CONTENT PREVIEW: ' . esc_html(substr($content, 0, 300)) . ' -->';
+        $html .= '<!-- CONTENT RAW (first 500 chars): ' . esc_html(substr($content, 0, 500)) . ' -->';
+        $html .= '<!-- CONTENT HAS HTML TAGS: ' . (strpos($content, '<') !== false ? 'YES' : 'NO') . ' -->';
+        $html .= '<!-- CONTENT HAS ENTITIES: ' . (strpos($content, '&lt;') !== false ? 'YES' : 'NO') . ' -->';
         $html .= '<!-- ############################################### -->';
         
         $selected_block = sanitize_text_field($attributes['selectedBlock'] ?? '');
@@ -198,9 +224,77 @@ class CBD_Master_Renderer {
             $html .= '</div>';
         }
         
-        // Actual content
+        // Actual content - ensure HTML is properly rendered
         $html .= '<div class="cbd-container-content">';
-        $html .= $content;
+
+        // Process content properly - handle different content formats
+        if (!empty($content)) {
+            $html .= '<!-- CONTENT PROCESSING DEBUG START -->';
+
+            // Multiple decoding strategies for different scenarios
+            $strategy_used = '';
+
+            // Strategy 1: Direct HTML content (ideal case)
+            if (strpos($content, '<') !== false && strpos($content, '>') !== false) {
+                // Already HTML, use as-is
+                $processed_content = $content;
+                $strategy_used = 'Strategy 1: Direct HTML';
+            }
+            // Strategy 2: HTML entity escaped content
+            elseif (strpos($content, '&lt;') !== false || strpos($content, '&gt;') !== false) {
+                $processed_content = html_entity_decode($content, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $strategy_used = 'Strategy 2: HTML Entity Decoded';
+            }
+            // Strategy 3: WordPress escaped content (double escaping)
+            elseif (strpos($content, '&amp;lt;') !== false) {
+                $processed_content = html_entity_decode(html_entity_decode($content, ENT_QUOTES | ENT_HTML5, 'UTF-8'), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $strategy_used = 'Strategy 3: Double Decoded';
+            }
+            // Strategy 4: Plain text that might be CSS/JS (based on your example)
+            elseif (preg_match('/\/\*.*?\*\/|\.[\w-]+\s*{|function\s+\w+\s*\(|document\./', $content)) {
+                // Check what type of content we have
+                $has_css = preg_match('/\/\*.*?\*\/|\.[\w-]+\s*{/', $content);
+                $has_js = preg_match('/function\s+\w+\s*\(|document\.|const\s+|let\s+|var\s+/', $content);
+                $has_html = preg_match('/<[^>]+>/', $content);
+
+                if ($has_html) {
+                    // Mixed content - assume it\'s complete HTML
+                    $processed_content = $content;
+                    $strategy_used = 'Strategy 4a: Mixed HTML content';
+                } else {
+                    // Pure CSS or JS - need to wrap appropriately
+                    if ($has_css && $has_js) {
+                        // Both CSS and JS - create proper HTML structure
+                        $processed_content = '<style>' . preg_replace('/\/\*.*?\*\/(.*?)(?=function|const|let|var|$)/s', '$1</style><script>', $content) . '</script>';
+                        $strategy_used = 'Strategy 4b: CSS + JS wrapped';
+                    } elseif ($has_css) {
+                        $processed_content = '<style>' . $content . '</style>';
+                        $strategy_used = 'Strategy 4c: CSS wrapped';
+                    } elseif ($has_js) {
+                        $processed_content = '<script>' . $content . '</script>';
+                        $strategy_used = 'Strategy 4d: JS wrapped';
+                    } else {
+                        $processed_content = $content;
+                        $strategy_used = 'Strategy 4e: Unknown code type';
+                    }
+                }
+            }
+            // Strategy 5: Fallback - treat as HTML
+            else {
+                $processed_content = $content;
+                $strategy_used = 'Strategy 5: Fallback HTML';
+            }
+
+            $html .= '<!-- STRATEGY USED: ' . $strategy_used . ' -->';
+            $html .= '<!-- PROCESSED CONTENT LENGTH: ' . strlen($processed_content) . ' -->';
+            $html .= '<!-- PROCESSED PREVIEW: ' . esc_html(substr($processed_content, 0, 200)) . ' -->';
+            $html .= '<!-- CONTENT PROCESSING DEBUG END -->';
+
+            $html .= $processed_content;
+        } else {
+            $html .= '<p>Kein Inhalt gefunden. Bitte fügen Sie Inhalt zum Block hinzu.</p>';
+        }
+
         $html .= '</div>';
         
         $html .= '</div>'; // Close .cbd-container-block
@@ -291,91 +385,221 @@ class CBD_Master_Renderer {
             true
         );
         
-        // Add simple inline script for dropdown functionality
+        // Enhanced frontend script with proper HTML element support
         wp_add_inline_script('cbd-master-frontend', '
             jQuery(document).ready(function($) {
-                console.log("CBD Master Renderer JS loaded at " + new Date());
-                
-                // Make dropdowns visible by default for debugging
-                $(".cbd-dropdown-menu").show();
-                
-                // Toggle dropdown menu
+                console.log("CBD Master Renderer with HTML Element Support loaded at " + new Date());
+
+                // Initialize container functionality
+                function initializeContainer($container) {
+                    console.log("Initializing container:", $container.attr("id"));
+
+                    // Re-enable all interactive elements within the container
+                    var $content = $container.find(".cbd-container-content");
+
+                    // Re-bind click events for buttons, links, etc.
+                    $content.find("button, a, input[type=\"button\"], input[type=\"submit\"]").each(function() {
+                        var $element = $(this);
+
+                        // Remove any existing disabled states
+                        $element.prop("disabled", false);
+                        $element.removeClass("disabled");
+
+                        // Ensure element is visible and interactive
+                        $element.css({
+                            "pointer-events": "auto",
+                            "opacity": "1"
+                        });
+
+                        console.log("Re-enabled interactive element:", $element.get(0).tagName, $element.attr("class"));
+                    });
+
+                    // Re-initialize form elements
+                    $content.find("form").each(function() {
+                        var $form = $(this);
+
+                        // Re-bind form submission if needed
+                        $form.off("submit.cbd").on("submit.cbd", function(e) {
+                            console.log("Form submission detected in CBD container");
+                            // Allow form to submit normally
+                        });
+                    });
+
+                    // Re-initialize any custom scripts within the content
+                    $content.find("script").each(function() {
+                        var script = this;
+                        if (script.src) {
+                            // External script - reload if needed
+                            console.log("External script found:", script.src);
+                        } else {
+                            // Inline script - re-execute
+                            try {
+                                var scriptContent = $(script).html();
+                                if (scriptContent.trim()) {
+                                    console.log("Re-executing inline script");
+                                    eval(scriptContent);
+                                }
+                            } catch (e) {
+                                console.warn("Error re-executing script:", e);
+                            }
+                        }
+                    });
+
+                    // Trigger custom reinitialization event
+                    $container.trigger("cbd:reinitialized");
+                }
+
+                // Initialize all containers on page load
+                $(".cbd-container").each(function() {
+                    initializeContainer($(this));
+                });
+
+                // Toggle dropdown menu - now properly hidden by default
                 $(document).on("click", ".cbd-menu-toggle", function(e) {
                     e.preventDefault();
                     e.stopPropagation();
                     console.log("Menu toggle clicked");
-                    
+
                     var dropdown = $(this).siblings(".cbd-dropdown-menu");
                     var isVisible = dropdown.is(":visible");
-                    
+
                     // Hide all other dropdowns first
                     $(".cbd-dropdown-menu").hide();
-                    
+
                     // Toggle this dropdown
                     if (!isVisible) {
                         dropdown.show();
                     }
-                    
+
                     console.log("Dropdown toggled, now visible:", dropdown.is(":visible"));
                 });
-                
+
                 // Hide dropdown when clicking outside
                 $(document).on("click", function(e) {
                     if (!$(e.target).closest(".cbd-selection-menu").length) {
                         $(".cbd-dropdown-menu").hide();
                     }
                 });
-                
-                // Basic collapse functionality
+
+                // Enhanced collapse functionality with HTML element preservation
                 $(document).on("click", ".cbd-collapse-toggle", function(e) {
                     e.preventDefault();
                     e.stopPropagation();
                     console.log("Collapse toggle clicked");
-                    
-                    var container = $(this).closest(".cbd-container");
-                    var content = container.find(".cbd-content");
-                    
-                    console.log("Container found:", container.length);
-                    console.log("Content found:", content.length);
-                    
-                    if (content.length > 0) {
-                        content.slideToggle(300, function() {
-                            console.log("Slide animation complete, content visible:", content.is(":visible"));
-                        });
+
+                    var $toggle = $(this);
+                    var $container = $toggle.closest(".cbd-container");
+                    var $content = $container.find(".cbd-content");
+                    var isCollapsed = $content.is(":hidden");
+
+                    console.log("Container:", $container.attr("id"));
+                    console.log("Content found:", $content.length);
+                    console.log("Currently collapsed:", isCollapsed);
+
+                    if ($content.length > 0) {
+                        if (isCollapsed) {
+                            // Expanding
+                            $content.slideDown(300, function() {
+                                console.log("Slide down complete");
+
+                                // CRITICAL: Re-initialize all interactive elements after expand
+                                setTimeout(function() {
+                                    initializeContainer($container);
+                                    console.log("Container re-initialized after expand");
+                                }, 50);
+                            });
+                            $toggle.text("📁 Einklappen");
+                        } else {
+                            // Collapsing
+                            $content.slideUp(300, function() {
+                                console.log("Slide up complete");
+                            });
+                            $toggle.text("📂 Ausklappen");
+                        }
                     }
-                    
-                    $(this).closest(".cbd-dropdown-menu").hide();
+
+                    $toggle.closest(".cbd-dropdown-menu").hide();
                 });
-                
+
                 // Copy text functionality
                 $(document).on("click", ".cbd-copy-text", function(e) {
                     e.preventDefault();
                     e.stopPropagation();
                     console.log("Copy text clicked");
-                    
+
                     var container = $(this).closest(".cbd-container");
-                    var text = container.find(".cbd-container-content").text();
-                    
-                    if (navigator.clipboard) {
+                    var text = container.find(".cbd-container-content").text().trim();
+
+                    if (navigator.clipboard && text) {
                         navigator.clipboard.writeText(text).then(function() {
-                            alert("Text kopiert!");
+                            alert("Text kopiert! (" + text.length + " Zeichen)");
+                        }).catch(function(err) {
+                            console.error("Copy failed:", err);
+                            alert("Text kopieren fehlgeschlagen");
                         });
                     } else {
-                        alert("Text kopieren nicht unterstützt");
+                        alert("Kein Text zum Kopieren gefunden oder Clipboard nicht unterstützt");
                     }
-                    
+
                     $(this).closest(".cbd-dropdown-menu").hide();
                 });
-                
+
                 // Screenshot functionality
                 $(document).on("click", ".cbd-screenshot", function(e) {
                     e.preventDefault();
                     e.stopPropagation();
                     console.log("Screenshot clicked");
-                    
-                    alert("Screenshot-Funktion wird implementiert");
+
+                    var $container = $(this).closest(".cbd-container");
+                    var containerId = $container.attr("id");
+
+                    // Check if html2canvas is available
+                    if (typeof html2canvas !== "undefined") {
+                        var element = $container.find(".cbd-container-block")[0];
+                        if (element) {
+                            html2canvas(element, {
+                                backgroundColor: null,
+                                scale: 2,
+                                useCORS: true
+                            }).then(function(canvas) {
+                                // Create download
+                                canvas.toBlob(function(blob) {
+                                    var url = URL.createObjectURL(blob);
+                                    var a = document.createElement("a");
+                                    a.href = url;
+                                    a.download = "container-" + containerId + ".png";
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    URL.revokeObjectURL(url);
+                                    alert("Screenshot heruntergeladen!");
+                                });
+                            }).catch(function(error) {
+                                console.error("Screenshot error:", error);
+                                alert("Screenshot fehlgeschlagen");
+                            });
+                        }
+                    } else {
+                        alert("Screenshot-Bibliothek nicht verfügbar. html2canvas wird geladen...");
+                        // Load html2canvas dynamically
+                        var script = document.createElement("script");
+                        script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+                        script.onload = function() {
+                            alert("html2canvas geladen. Bitte erneut versuchen.");
+                        };
+                        document.head.appendChild(script);
+                    }
+
                     $(this).closest(".cbd-dropdown-menu").hide();
                 });
+
+                // Global event to handle dynamic content
+                $(document).on("cbd:content-changed", ".cbd-container", function() {
+                    console.log("Content changed event detected, re-initializing container");
+                    initializeContainer($(this));
+                });
+
+                console.log("CBD Frontend with HTML element support fully initialized");
             });
         ');
     }
