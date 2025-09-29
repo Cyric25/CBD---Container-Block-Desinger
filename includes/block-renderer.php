@@ -24,24 +24,15 @@ class CBD_Block_Renderer {
      * Container counter for numbering - Legacy compatibility
      */
     private static $container_counter = array();
-
-    /**
-     * Nesting depth counter to detect nested containers
-     */
-    private static $nesting_depth = 0;
     
     /**
      * Render container block - Updated with new structure
      */
     public static function render_container_block($attributes, $content) {
-        // Increment nesting depth at start
-        self::$nesting_depth++;
-
         // DEBUG: Add HTML comment to verify this renderer is active
         $html = '<!-- ======================================== -->';
         $html .= '<!-- CBD DEBUG: BLOCK RENDERER IS ACTIVE!!! -->';
         $html .= '<!-- TIME: ' . date('Y-m-d H:i:s') . ' -->';
-        $html .= '<!-- NESTING DEPTH: ' . self::$nesting_depth . ' -->';
         $html .= '<!-- ======================================== -->';
         
         // Get block data
@@ -114,15 +105,12 @@ class CBD_Block_Renderer {
         }
         $html .= '>';
         
-        // Add numbering ONLY for outermost containers (not nested)
-        $show_numbering = (self::$nesting_depth === 1); // Only show for top-level containers
-
-        if ($show_numbering) {
-            $numbering_counter = 1; // Simple counter for now
-            $html .= '<div class="cbd-container-number cbd-outside-number" data-number="' . esc_attr($numbering_counter) . '">';
-            $html .= esc_html($numbering_counter);
-            $html .= '</div>';
-        }
+        // Add numbering OUTSIDE everything (in the main container)
+        // ALWAYS show numbering for now until we fix the feature detection
+        $numbering_counter = 1; // Simple counter for now
+        $html .= '<div class="cbd-container-number cbd-outside-number" data-number="' . esc_attr($numbering_counter) . '">';
+        $html .= esc_html($numbering_counter);
+        $html .= '</div>';
         
         // Content wrapper div for collapse functionality
         $content_wrapper_class = 'cbd-content';
@@ -211,10 +199,7 @@ class CBD_Block_Renderer {
         $html .= '</div>'; // Close .cbd-container-block
         $html .= '</div>'; // Close .cbd-content
         $html .= '</div>'; // Close .cbd-container
-
-        // Decrement nesting depth before returning
-        self::$nesting_depth--;
-
+        
         return $html;
     }
     

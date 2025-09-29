@@ -113,11 +113,6 @@ class ContainerBlockDesigner {
         // if (!is_admin() || wp_doing_ajax()) {
         //     require_once CBD_PLUGIN_DIR . 'includes/class-master-renderer.php';
         // }
-
-        // Only load Direct Content Processor for HTML content issues
-        if (!is_admin() || wp_doing_ajax()) {
-            require_once CBD_PLUGIN_DIR . 'includes/class-direct-content-processor.php';
-        }
     }
     
     /**

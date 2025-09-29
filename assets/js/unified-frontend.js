@@ -43,9 +43,6 @@
                 CBDUnified.setupCopyText($container);
                 CBDUnified.setupScreenshot($container);
                 CBDUnified.setupNumbering($container);
-
-                // NEUER FIX: Interaktive Elemente neu initialisieren
-                CBDUnified.reinitializeInteractiveElements($container);
             });
         },
 
@@ -181,11 +178,8 @@
                 return;
             }
 
-            // KRITISCHER FIX: Nur direkter Content, NICHT verschachtelte Container
-            // Suche nur innerhalb der direkten .cbd-content Ebene, nicht rekursiv
-            var $directContent = $container.children('.cbd-content');
-            var $contentToToggle = $directContent.find('.cbd-container-content').first();
-            var $toggle = $container.find('.cbd-collapse-toggle').first();
+            var $contentToToggle = $container.find('.cbd-container-content');
+            var $toggle = $container.find('.cbd-collapse-toggle');
 
             if ($contentToToggle.length === 0) {
                 console.log('CBD: Kein Content zum Togglen gefunden');
@@ -203,22 +197,6 @@
             $container.find('.cbd-selection-menu').css('display', 'block');
             $toggle.css('display', 'flex');
 
-            // KRITISCHER FIX: Merke dir Zustand der verschachtelten Container vor Animation
-            var nestedStates = {};
-            var $nestedContainers = $contentToToggle.find('.cbd-container');
-
-            // Speichere Zustände aller verschachtelten Container
-            $nestedContainers.each(function() {
-                var nestedId = $(this).attr('id');
-                var $nestedContent = $(this).find('.cbd-container-content').first();
-                if (nestedId && $nestedContent.length > 0) {
-                    nestedStates[nestedId] = {
-                        wasVisible: $nestedContent.is(':visible'),
-                        wasCollapsed: $(this).hasClass('cbd-collapsed')
-                    };
-                }
-            });
-
             // Nur den Inhalt togglen
             if ($contentToToggle.is(':visible')) {
                 // Einklappen
@@ -229,49 +207,8 @@
                     .addClass('dashicons-arrow-down-alt2');
                 $toggle.find('span').text('Ausklappen');
             } else {
-                // Ausklappen mit WordPress-Kompatibilität
-                $contentToToggle.slideDown(this.config.animationSpeed, function() {
-                    // NACH der Animation: Stelle ursprüngliche Zustände wieder her
-                    // WordPress-spezifischer Fix mit Verzögerung
-                    setTimeout(function() {
-                        Object.keys(nestedStates).forEach(function(nestedId) {
-                            var state = nestedStates[nestedId];
-                            var $nestedContainer = $('#' + nestedId);
-                            var $nestedContent = $nestedContainer.find('.cbd-container-content').first();
-
-                            if (state.wasCollapsed) {
-                                // War eingeklappt -> wieder einklappen
-                                $nestedContent.hide();
-                                $nestedContainer.addClass('cbd-collapsed');
-
-                                // WordPress-spezifisch: Auch Toggle-Button-State wiederherstellen
-                                var $nestedToggle = $nestedContainer.find('.cbd-collapse-toggle').first();
-                                $nestedToggle.find('.dashicons')
-                                    .removeClass('dashicons-arrow-up-alt2')
-                                    .addClass('dashicons-arrow-down-alt2');
-                                $nestedToggle.find('span').text('Ausklappen');
-                            } else {
-                                // War ausgeklappt -> sichtbar lassen
-                                $nestedContent.show();
-                                $nestedContainer.removeClass('cbd-collapsed');
-
-                                // WordPress-spezifisch: Toggle-Button-State korrekt setzen
-                                var $nestedToggle = $nestedContainer.find('.cbd-collapse-toggle').first();
-                                $nestedToggle.find('.dashicons')
-                                    .removeClass('dashicons-arrow-down-alt2')
-                                    .addClass('dashicons-arrow-up-alt2');
-                                $nestedToggle.find('span').text('Einklappen');
-                            }
-                        });
-
-                        // KRITISCH: Interaktive Elemente nach Expand neu initialisieren
-                        setTimeout(function() {
-                            CBDUnified.reinitializeInteractiveElements($container);
-                        }, 150); // Nach DOM-Updates und Animation
-
-                    }, 50); // Kleine Verzögerung für WordPress-DOM-Updates
-                });
-
+                // Ausklappen
+                $contentToToggle.slideDown(this.config.animationSpeed);
                 $container.removeClass('cbd-collapsed');
                 $toggle.find('.dashicons')
                     .removeClass('dashicons-arrow-down-alt2')
@@ -419,7 +356,7 @@
             // Entferne UI-Elemente
             $clone.find('.cbd-selection-menu, .cbd-block-header, .cbd-container-number').remove();
 
-            // Hole Text-Inhalt - so wie es war, funktioniert bereits korrekt
+            // Hole Text-Inhalt
             var text = $clone.find('.cbd-container-content').text() || $clone.text();
 
             return text.trim();
@@ -489,155 +426,6 @@
                 });
 
                 $('head').append($script);
-            });
-        },
-
-        /**
-         * Interaktive Elemente neu initialisieren
-         * Behebt Probleme mit Charts, Diagrammen und anderen interaktiven Komponenten
-         */
-        reinitializeInteractiveElements: function($container) {
-            var containerId = $container.attr('id');
-
-            // Canvas-basierte Elemente (Charts, D3.js, etc.)
-            var $canvasElements = $container.find('canvas');
-            if ($canvasElements.length > 0) {
-                this.reinitializeCanvasElements($canvasElements, containerId);
-            }
-
-            // SVG-basierte Diagramme
-            var $svgElements = $container.find('svg');
-            if ($svgElements.length > 0) {
-                this.reinitializeSvgElements($svgElements, containerId);
-            }
-
-            // Chart.js spezifische Reinitialisierung
-            this.reinitializeChartJS($container);
-
-            // D3.js spezifische Reinitialisierung
-            this.reinitializeD3($container);
-
-            // Custom Event für andere Bibliotheken
-            $container.trigger('cbd:reinitialize-interactive', [containerId]);
-
-            // Generische Resize-Trigger für responsive Elemente
-            setTimeout(function() {
-                $(window).trigger('resize');
-                $container.trigger('resize');
-            }, 100);
-        },
-
-        /**
-         * Canvas-Elemente reinitialisieren
-         */
-        reinitializeCanvasElements: function($canvasElements, containerId) {
-            $canvasElements.each(function() {
-                var canvas = this;
-                var $canvas = $(canvas);
-
-                // Sicherstellen dass Canvas sichtbare Größe hat
-                if (canvas.width === 0 || canvas.height === 0) {
-                    var parentWidth = $canvas.parent().width();
-                    var parentHeight = $canvas.parent().height();
-
-                    if (parentWidth > 0) canvas.width = parentWidth;
-                    if (parentHeight > 0) canvas.height = parentHeight;
-                }
-
-                // Chart.js Canvas neu rendern
-                if (window.Chart && canvas.chart) {
-                    try {
-                        canvas.chart.resize();
-                        canvas.chart.update('none');
-                    } catch (e) {
-                        console.log('CBD: Chart.js resize failed:', e);
-                    }
-                }
-
-                // Custom Canvas-Resize-Event
-                $canvas.trigger('canvas:resize');
-            });
-        },
-
-        /**
-         * SVG-Elemente reinitialisieren
-         */
-        reinitializeSvgElements: function($svgElements, containerId) {
-            $svgElements.each(function() {
-                var $svg = $(this);
-
-                // D3.js SVGs neu skalieren
-                if (window.d3) {
-                    try {
-                        var svg = d3.select(this);
-                        var parentWidth = $svg.parent().width();
-                        if (parentWidth > 0) {
-                            svg.attr('width', parentWidth);
-                        }
-                    } catch (e) {
-                        console.log('CBD: D3.js SVG resize failed:', e);
-                    }
-                }
-
-                // Custom SVG-Resize-Event
-                $svg.trigger('svg:resize');
-            });
-        },
-
-        /**
-         * Chart.js spezifische Reinitialisierung
-         */
-        reinitializeChartJS: function($container) {
-            if (typeof window.Chart === 'undefined') return;
-
-            $container.find('canvas').each(function() {
-                var canvas = this;
-
-                // Wenn Chart-Instanz existiert, aktualisieren
-                if (canvas.chart && typeof canvas.chart.resize === 'function') {
-                    try {
-                        // Chart responsive machen
-                        canvas.chart.options.responsive = true;
-                        canvas.chart.options.maintainAspectRatio = false;
-
-                        // Chart neu rendern
-                        canvas.chart.resize();
-                        canvas.chart.update('none');
-
-                        console.log('CBD: Chart.js reinitialized for canvas:', canvas.id);
-                    } catch (e) {
-                        console.error('CBD: Chart.js reinitialization failed:', e);
-                    }
-                }
-            });
-        },
-
-        /**
-         * D3.js spezifische Reinitialisierung
-         */
-        reinitializeD3: function($container) {
-            if (typeof window.d3 === 'undefined') return;
-
-            // D3 Visualisierungen neu skalieren
-            $container.find('svg, .d3-chart').each(function() {
-                var $element = $(this);
-
-                try {
-                    // Trigger D3 resize wenn verfügbar
-                    if (typeof $element.data('d3-resize') === 'function') {
-                        $element.data('d3-resize')();
-                    }
-
-                    // Standard D3 resize pattern
-                    var selection = d3.select(this);
-                    if (selection.node() && $element.parent().width() > 0) {
-                        selection.attr('width', $element.parent().width());
-                    }
-
-                    console.log('CBD: D3.js element reinitialized');
-                } catch (e) {
-                    console.error('CBD: D3.js reinitialization failed:', e);
-                }
             });
         },
 

@@ -50,16 +50,7 @@
 
 /* Collapse-Funktionalität */
 .cbd-container.cbd-collapsed .cbd-container-content {
-    display: none !important;
-}
-
-/* WordPress-spezifisch: Verschachtelte Container behalten ihren Zustand */
-.cbd-container.cbd-collapsed .cbd-container.cbd-collapsed .cbd-container-content {
-    display: none !important;
-}
-
-.cbd-container:not(.cbd-collapsed) .cbd-container.cbd-collapsed .cbd-container-content {
-    display: none !important;
+    display: none;
 }
 
 .cbd-collapse-toggle {
