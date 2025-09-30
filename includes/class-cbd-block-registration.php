@@ -681,50 +681,48 @@ class CBD_Block_Registration {
         $html .= '>';
         
         // Button styling with Interactivity API directives
+        // ALWAYS show all buttons (like before) - features control functionality, not visibility
         $html .= '<!-- CBD: INTERACTIVE BUTTONS WITH INTERACTIVITY API -->';
         $html .= '<div class="cbd-action-buttons">';
 
-        // Button 1: Collapse - with wp-on--click directive
-        if (!empty($features['collapse']['enabled'])) {
-            $html .= '<button type="button" ';
-            $html .= 'class="cbd-collapse-toggle" ';
-            $html .= 'data-wp-on--click="actions.toggleCollapse" ';
-            $html .= 'data-wp-bind--aria-expanded="!context.isCollapsed" ';
-            $html .= 'title="' . esc_attr($features['collapse']['buttonText'] ?? 'Ein-/Ausklappen') . '">';
-            $html .= '<span class="dashicons" ';
-            $html .= 'data-wp-class--dashicons-arrow-up-alt2="!context.isCollapsed" ';
-            $html .= 'data-wp-class--dashicons-arrow-down-alt2="context.isCollapsed">';
-            $html .= '</span>';
-            $html .= '</button>';
-        }
+        // Button 1: Collapse - ALWAYS visible
+        $html .= '<button type="button" ';
+        $html .= 'class="cbd-collapse-toggle" ';
+        $html .= 'data-wp-on--click="actions.toggleCollapse" ';
+        $html .= 'data-wp-bind--aria-expanded="!context.isCollapsed" ';
+        $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+        $html .= 'title="Ein-/Ausklappen">';
+        $html .= '<span class="dashicons dashicons-arrow-up-alt2" ';
+        $html .= 'data-wp-class--dashicons-arrow-up-alt2="!context.isCollapsed" ';
+        $html .= 'data-wp-class--dashicons-arrow-down-alt2="context.isCollapsed">';
+        $html .= '</span>';
+        $html .= '</button>';
 
-        // Button 2: Copy Text - with wp-on--click directive
-        if (!empty($features['copyText']['enabled'])) {
-            $html .= '<button type="button" ';
-            $html .= 'class="cbd-copy-text" ';
-            $html .= 'data-wp-on--click="actions.copyText" ';
-            $html .= 'title="' . esc_attr($features['copyText']['buttonText'] ?? 'Text kopieren') . '">';
-            $html .= '<span class="dashicons" ';
-            $html .= 'data-wp-class--dashicons-clipboard="!context.copySuccess" ';
-            $html .= 'data-wp-class--dashicons-yes-alt="context.copySuccess">';
-            $html .= '</span>';
-            $html .= '</button>';
-        }
+        // Button 2: Copy Text - ALWAYS visible
+        $html .= '<button type="button" ';
+        $html .= 'class="cbd-copy-text" ';
+        $html .= 'data-wp-on--click="actions.copyText" ';
+        $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+        $html .= 'title="Text kopieren">';
+        $html .= '<span class="dashicons dashicons-clipboard" ';
+        $html .= 'data-wp-class--dashicons-clipboard="!context.copySuccess" ';
+        $html .= 'data-wp-class--dashicons-yes-alt="context.copySuccess">';
+        $html .= '</span>';
+        $html .= '</button>';
 
-        // Button 3: Screenshot - with wp-on--click directive
-        if (!empty($features['screenshot']['enabled'])) {
-            $html .= '<button type="button" ';
-            $html .= 'class="cbd-screenshot" ';
-            $html .= 'data-wp-on--click="actions.createScreenshot" ';
-            $html .= 'data-wp-bind--disabled="context.screenshotLoading" ';
-            $html .= 'title="' . esc_attr($features['screenshot']['buttonText'] ?? 'Screenshot erstellen') . '">';
-            $html .= '<span class="dashicons" ';
-            $html .= 'data-wp-class--dashicons-camera="!context.screenshotLoading && !context.screenshotSuccess" ';
-            $html .= 'data-wp-class--dashicons-update-alt="context.screenshotLoading" ';
-            $html .= 'data-wp-class--dashicons-yes-alt="context.screenshotSuccess">';
-            $html .= '</span>';
-            $html .= '</button>';
-        }
+        // Button 3: Screenshot - ALWAYS visible
+        $html .= '<button type="button" ';
+        $html .= 'class="cbd-screenshot" ';
+        $html .= 'data-wp-on--click="actions.createScreenshot" ';
+        $html .= 'data-wp-bind--disabled="context.screenshotLoading" ';
+        $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+        $html .= 'title="Screenshot erstellen">';
+        $html .= '<span class="dashicons dashicons-camera" ';
+        $html .= 'data-wp-class--dashicons-camera="!context.screenshotLoading && !context.screenshotSuccess" ';
+        $html .= 'data-wp-class--dashicons-update-alt="context.screenshotLoading" ';
+        $html .= 'data-wp-class--dashicons-yes-alt="context.screenshotSuccess">';
+        $html .= '</span>';
+        $html .= '</button>';
 
         $html .= '</div>'; // Close buttons
         
