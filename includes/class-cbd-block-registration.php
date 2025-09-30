@@ -806,6 +806,16 @@ class CBD_Block_Registration {
             $parsed_content = $latex_parser->parse_latex($content);
         }
 
+        // ========================================
+        // FIX: JavaScript in HTML-Blocks isolieren
+        // ========================================
+        // Problem: Wenn mehrere "Individuelles HTML" Blöcke mit <script> Tags
+        // verwendet werden, funktioniert nur der letzte.
+        //
+        // Lösung: Wrap Scripts in sofort ausgeführte Funktionen (IIFE)
+        // und füge unique Identifier hinzu
+        $parsed_content = $this->isolate_inline_scripts($parsed_content, $container_id);
+
         $html .= $parsed_content;
 
         $html .= '</div>'; // Close .cbd-container-content
@@ -1310,21 +1320,89 @@ class CBD_Block_Registration {
     }
     
     /**
+     * Isolate inline scripts in HTML content
+     *
+     * Problem: Multiple HTML blocks with <script> tags interfere with each other
+     * Solution: Wrap each script in IIFE with unique scope
+     *
+     * @param string $content HTML content potentially containing <script> tags
+     * @param string $container_id Unique container ID for scope isolation
+     * @return string Modified content with isolated scripts
+     */
+    private function isolate_inline_scripts($content, $container_id) {
+        // Check if content contains script tags
+        if (stripos($content, '<script') === false) {
+            return $content; // No scripts, return as-is
+        }
+
+        // Counter for multiple scripts in same content
+        static $script_counter = 0;
+
+        // Process all script tags
+        $content = preg_replace_callback(
+            '/<script\b([^>]*)>(.*?)<\/script>/is',
+            function($matches) use ($container_id, &$script_counter) {
+                $script_counter++;
+                $attributes = $matches[1];
+                $script_content = $matches[2];
+
+                // Skip if script has src attribute (external script)
+                if (stripos($attributes, 'src=') !== false) {
+                    return $matches[0]; // Return original
+                }
+
+                // Skip empty scripts
+                if (trim($script_content) === '') {
+                    return $matches[0];
+                }
+
+                // Create unique scope identifier
+                $scope_id = sanitize_key($container_id . '_script_' . $script_counter);
+
+                // Wrap script in IIFE with unique scope
+                $isolated_script = '<script' . $attributes . ' data-cbd-scope="' . esc_attr($scope_id) . '">';
+                $isolated_script .= "\n/* CBD: Isolated script for " . esc_attr($container_id) . " */\n";
+                $isolated_script .= "(function(containerId) {\n";
+                $isolated_script .= "    'use strict';\n";
+                $isolated_script .= "    // Container ID: " . esc_js($container_id) . "\n";
+                $isolated_script .= "    // Scope ID: " . esc_js($scope_id) . "\n\n";
+
+                // Add helper to find container
+                $isolated_script .= "    // Helper: Get this container element\n";
+                $isolated_script .= "    const getContainer = () => document.getElementById('" . esc_js($container_id) . "');\n";
+                $isolated_script .= "    const container = getContainer();\n\n";
+
+                // Original script content
+                $isolated_script .= "    // Original script:\n";
+                $isolated_script .= $script_content . "\n";
+
+                $isolated_script .= "})(" . wp_json_encode($container_id) . ");\n";
+                $isolated_script .= "</script>";
+
+                return $isolated_script;
+            },
+            $content
+        );
+
+        return $content;
+    }
+
+    /**
      * Helper function to convert hex color to rgba
      */
     private function hex_to_rgba($hex, $alpha = 1) {
         // Remove # if present
         $hex = ltrim($hex, '#');
-        
+
         // Convert hex to rgb
         if (strlen($hex) === 3) {
             $hex = str_repeat(substr($hex,0,1), 2) . str_repeat(substr($hex,1,1), 2) . str_repeat(substr($hex,2,1), 2);
         }
-        
+
         $r = hexdec(substr($hex, 0, 2));
         $g = hexdec(substr($hex, 2, 2));
         $b = hexdec(substr($hex, 4, 2));
-        
+
         return "rgba({$r}, {$g}, {$b}, {$alpha})";
     }
     
