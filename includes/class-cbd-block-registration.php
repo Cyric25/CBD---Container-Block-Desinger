@@ -268,20 +268,35 @@ class CBD_Block_Registration {
      */
     public function enqueue_block_assets() {
         // ==============================================
-        // INTERACTIVITY API MODULE
+        // INTERACTIVITY API MODULE WITH FALLBACK
         // ==============================================
 
-        // Register Interactivity API Store (ESM Module)
-        wp_register_script_module(
-            'cbd-interactivity-store',
-            CBD_PLUGIN_URL . 'assets/js/interactivity-store.js',
-            array('@wordpress/interactivity'),
-            CBD_VERSION
-        );
+        // Try to register Interactivity API Store (ESM Module)
+        // This requires WordPress 6.5+ and proper module support
+        if (function_exists('wp_register_script_module')) {
+            wp_register_script_module(
+                'cbd-interactivity-store',
+                CBD_PLUGIN_URL . 'assets/js/interactivity-store.js',
+                array('@wordpress/interactivity'),
+                CBD_VERSION
+            );
 
-        // Enqueue the Interactivity API module for frontend
+            // Enqueue the Interactivity API module for frontend
+            if (!is_admin()) {
+                wp_enqueue_script_module('cbd-interactivity-store');
+            }
+        }
+
+        // ALWAYS enqueue jQuery-based fallback for reliability
+        // This ensures functionality even if Interactivity API doesn't load
         if (!is_admin()) {
-            wp_enqueue_script_module('cbd-interactivity-store');
+            wp_enqueue_script(
+                'cbd-interactivity-fallback',
+                CBD_PLUGIN_URL . 'assets/js/interactivity-fallback.js',
+                array('jquery'),
+                CBD_VERSION,
+                true
+            );
         }
 
         // ==============================================
@@ -307,9 +322,6 @@ class CBD_Block_Registration {
         // Dashicons for frontend icons
         wp_enqueue_style('dashicons');
         
-        // Frontend JavaScript für interaktive Features
-        $this->enqueue_frontend_scripts();
-        
         // Enqueue html2canvas for screenshot functionality
         wp_enqueue_script(
             'html2canvas',
@@ -318,9 +330,11 @@ class CBD_Block_Registration {
             '1.4.1',
             true
         );
-        
+
         // PDF Export is now handled by jspdf-loader.js with multiple CDN fallbacks
-        
+
+        // REMOVED: Old inline scripts - now handled by interactivity-fallback.js
+        /*
         // Fixed inline JavaScript for basic functionality
         wp_add_inline_script('cbd-frontend-working', '
             console.log("CBD: JavaScript loading...");
@@ -436,21 +450,28 @@ class CBD_Block_Registration {
                         console.log("CBD: html2canvas not available");
                     }
                 });
-                
+
                 console.log("CBD: Enhanced functionality loaded");
             });
         ');
+        */
     }
-    
+
     /**
      * Frontend JavaScript einbinden
+     * DEPRECATED: Functionality moved to interactivity-fallback.js
      */
     private function enqueue_frontend_scripts() {
+        // This function is kept for backward compatibility
+        // but functionality is now handled by interactivity-fallback.js
+        return;
+
+        /* DEPRECATED CODE:
         // Prüfe ob interaktive Features verwendet werden
         if (!$this->has_interactive_features()) {
             return;
         }
-        
+
         // jQuery, html2canvas und jsPDF einbinden
         wp_enqueue_script('jquery');
         
@@ -471,7 +492,7 @@ class CBD_Block_Registration {
             CBD_VERSION . '-' . time(),
             true
         );
-        
+
         // Lokalisierung für Frontend
         wp_localize_script('cbd-frontend-working', 'cbdFrontend', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -484,6 +505,7 @@ class CBD_Block_Registration {
                 'screenshotUnavailable' => __('Screenshot-Funktion nicht verfügbar', 'container-block-designer')
             )
         ));
+        */
     }
     
     /**
