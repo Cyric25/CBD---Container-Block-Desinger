@@ -12,7 +12,8 @@
       "Bash(cd:*)",
       "Bash(rm:*)",
       "WebFetch(domain:dlxplugins.com)",
-      "WebFetch(domain:make.wordpress.org)"
+      "WebFetch(domain:make.wordpress.org)",
+      "WebFetch(domain:developer.wordpress.org)"
     ],
     "deny": [],
     "ask": []

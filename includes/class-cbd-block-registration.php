@@ -267,6 +267,27 @@ class CBD_Block_Registration {
      * Block-Assets einbinden (Frontend & Editor)
      */
     public function enqueue_block_assets() {
+        // ==============================================
+        // INTERACTIVITY API MODULE
+        // ==============================================
+
+        // Register Interactivity API Store (ESM Module)
+        wp_register_script_module(
+            'cbd-interactivity-store',
+            CBD_PLUGIN_URL . 'assets/js/interactivity-store.js',
+            array('@wordpress/interactivity'),
+            CBD_VERSION
+        );
+
+        // Enqueue the Interactivity API module for frontend
+        if (!is_admin()) {
+            wp_enqueue_script_module('cbd-interactivity-store');
+        }
+
+        // ==============================================
+        // END INTERACTIVITY API MODULE
+        // ==============================================
+
         // Frontend CSS - Use clean version with button styles
         wp_enqueue_style(
             'cbd-frontend-clean',
@@ -274,7 +295,15 @@ class CBD_Block_Registration {
             array(),
             CBD_VERSION . '-buttons-' . time() // Force cache bust with button styles
         );
-        
+
+        // Interactivity API specific styles
+        wp_enqueue_style(
+            'cbd-interactivity-api',
+            CBD_PLUGIN_URL . 'assets/css/interactivity-api.css',
+            array('cbd-frontend-clean'),
+            CBD_VERSION
+        );
+
         // Dashicons for frontend icons
         wp_enqueue_style('dashicons');
         
@@ -521,50 +550,80 @@ class CBD_Block_Registration {
         $html .= '<!-- CBD DEBUG: Features available: ' . json_encode($features) . ' -->';
         $html .= '<!-- CBD DEBUG: Config available: ' . json_encode($config) . ' -->';
         
-        // Generate unique container ID
-        $container_id = 'cbd-container-' . uniqid();
-        
+        // Generate unique container ID using WordPress native function
+        $container_id = 'cbd-container-' . wp_unique_id();
+
         // Build wrapper classes (.cbd-container - transparent wrapper)
         $wrapper_classes = array('cbd-container');
         $wrapper_attributes = array('id' => $container_id);
-        
+
+        // ==============================================
+        // INTERACTIVITY API INTEGRATION
+        // ==============================================
+
+        // Add wp-interactive directive for Interactivity API
+        $wrapper_attributes['data-wp-interactive'] = 'container-block-designer';
+
+        // Build wp-context with local state for this block instance
+        $local_context = array(
+            'containerId' => $container_id,
+            'blockId' => $block->id,
+            'blockName' => $selected_block,
+            'isCollapsed' => false, // Initial state
+            'copySuccess' => false,
+            'copyError' => false,
+            'screenshotLoading' => false,
+            'screenshotSuccess' => false,
+            'screenshotError' => false,
+            'pdfLoading' => false,
+            'pdfSuccess' => false,
+            'pdfError' => false
+        );
+
+        // Set initial collapsed state from features
+        if (!empty($features['collapse']['enabled'])) {
+            $local_context['isCollapsed'] = ($features['collapse']['defaultState'] ?? 'expanded') === 'collapsed';
+        }
+
+        // Add features to context for use in actions
+        $local_context['features'] = array(
+            'collapse' => !empty($features['collapse']['enabled']),
+            'copyText' => !empty($features['copyText']['enabled']),
+            'screenshot' => !empty($features['screenshot']['enabled']),
+            'icon' => !empty($features['icon']['enabled']),
+            'numbering' => !empty($features['numbering']['enabled'])
+        );
+
+        // Encode wp-context as JSON
+        $wrapper_attributes['data-wp-context'] = esc_attr(wp_json_encode($local_context));
+
+        // Add init callback
+        $wrapper_attributes['data-wp-init'] = 'callbacks.onInit';
+
+        // ==============================================
+        // END INTERACTIVITY API INTEGRATION
+        // ==============================================
+
         // Add legacy classes for backward compatibility
         $wrapper_classes[] = 'cbd-block-' . $selected_block;
-        
+
         if (!empty($custom_classes)) {
             $wrapper_classes[] = $custom_classes;
         }
-        
+
         if (!empty($align)) {
             $wrapper_classes[] = 'align' . $align;
         }
-        
-        // Add feature-based data attributes to wrapper for JavaScript
+
+        // Add CSS classes based on features (for styling)
         if (!empty($features['collapse']['enabled'])) {
-            $wrapper_attributes['data-collapse'] = json_encode($features['collapse']);
             $wrapper_classes[] = 'cbd-collapsible';
             if (($features['collapse']['defaultState'] ?? 'expanded') === 'collapsed') {
                 $wrapper_classes[] = 'cbd-collapsed';
             }
         }
-        
-        if (!empty($features['copyText']['enabled'])) {
-            $wrapper_attributes['data-copy-text'] = json_encode($features['copyText']);
-        }
-        
-        if (!empty($features['screenshot']['enabled'])) {
-            $wrapper_attributes['data-screenshot'] = json_encode($features['screenshot']);
-        }
-        
-        if (!empty($features['icon']['enabled'])) {
-            $wrapper_attributes['data-icon'] = json_encode($features['icon']);
-        }
-        
-        if (!empty($features['numbering']['enabled'])) {
-            $wrapper_attributes['data-numbering'] = json_encode($features['numbering']);
-        }
-        
-        // Legacy data attributes
+
+        // Legacy data attributes (keep for backward compatibility during transition)
         if (!empty($features)) {
             $wrapper_attributes['data-features'] = esc_attr(json_encode($features));
         }
@@ -621,25 +680,52 @@ class CBD_Block_Registration {
         }
         $html .= '>';
         
-        // Button styling with CSS classes + inline fallback for visibility
-        $html .= '<!-- CBD: THREE BUTTONS - CSS + INLINE FALLBACK -->';
+        // Button styling with Interactivity API directives
+        $html .= '<!-- CBD: INTERACTIVE BUTTONS WITH INTERACTIVITY API -->';
         $html .= '<div class="cbd-action-buttons">';
-        
-        // Button 1: Collapse - with Dashicon
-        $html .= "<button type=\"button\" class=\"cbd-collapse-toggle\" data-container-id=\"" . esc_attr($container_id) . "\" style=\"display: flex !important; visibility: visible !important; opacity: 1 !important;\" title=\"Einklappen\">";
-        $html .= '<span class="dashicons dashicons-arrow-up-alt2"></span>';
-        $html .= '</button>';
-        
-        // Button 2: Copy Text - with Dashicon
-        $html .= "<button type=\"button\" class=\"cbd-copy-text\" data-container-id=\"" . esc_attr($container_id) . "\" style=\"display: flex !important; visibility: visible !important; opacity: 1 !important;\" title=\"Text kopieren\">";
-        $html .= '<span class="dashicons dashicons-clipboard"></span>';
-        $html .= '</button>';
-        
-        // Button 3: Screenshot - with Dashicon
-        $html .= "<button type=\"button\" class=\"cbd-screenshot\" data-container-id=\"" . esc_attr($container_id) . "\" style=\"display: flex !important; visibility: visible !important; opacity: 1 !important;\" title=\"Screenshot\">";
-        $html .= '<span class="dashicons dashicons-camera"></span>';
-        $html .= '</button>';
-        
+
+        // Button 1: Collapse - with wp-on--click directive
+        if (!empty($features['collapse']['enabled'])) {
+            $html .= '<button type="button" ';
+            $html .= 'class="cbd-collapse-toggle" ';
+            $html .= 'data-wp-on--click="actions.toggleCollapse" ';
+            $html .= 'data-wp-bind--aria-expanded="!context.isCollapsed" ';
+            $html .= 'title="' . esc_attr($features['collapse']['buttonText'] ?? 'Ein-/Ausklappen') . '">';
+            $html .= '<span class="dashicons" ';
+            $html .= 'data-wp-class--dashicons-arrow-up-alt2="!context.isCollapsed" ';
+            $html .= 'data-wp-class--dashicons-arrow-down-alt2="context.isCollapsed">';
+            $html .= '</span>';
+            $html .= '</button>';
+        }
+
+        // Button 2: Copy Text - with wp-on--click directive
+        if (!empty($features['copyText']['enabled'])) {
+            $html .= '<button type="button" ';
+            $html .= 'class="cbd-copy-text" ';
+            $html .= 'data-wp-on--click="actions.copyText" ';
+            $html .= 'title="' . esc_attr($features['copyText']['buttonText'] ?? 'Text kopieren') . '">';
+            $html .= '<span class="dashicons" ';
+            $html .= 'data-wp-class--dashicons-clipboard="!context.copySuccess" ';
+            $html .= 'data-wp-class--dashicons-yes-alt="context.copySuccess">';
+            $html .= '</span>';
+            $html .= '</button>';
+        }
+
+        // Button 3: Screenshot - with wp-on--click directive
+        if (!empty($features['screenshot']['enabled'])) {
+            $html .= '<button type="button" ';
+            $html .= 'class="cbd-screenshot" ';
+            $html .= 'data-wp-on--click="actions.createScreenshot" ';
+            $html .= 'data-wp-bind--disabled="context.screenshotLoading" ';
+            $html .= 'title="' . esc_attr($features['screenshot']['buttonText'] ?? 'Screenshot erstellen') . '">';
+            $html .= '<span class="dashicons" ';
+            $html .= 'data-wp-class--dashicons-camera="!context.screenshotLoading && !context.screenshotSuccess" ';
+            $html .= 'data-wp-class--dashicons-update-alt="context.screenshotLoading" ';
+            $html .= 'data-wp-class--dashicons-yes-alt="context.screenshotSuccess">';
+            $html .= '</span>';
+            $html .= '</button>';
+        }
+
         $html .= '</div>'; // Close buttons
         
         // Add block header with icon and title (always top-left, visible when collapsed)
@@ -684,9 +770,12 @@ class CBD_Block_Registration {
         // if (!empty($features)) {
         //     $html .= $this->render_features($features, $block->id);
         // }
-        
-        // Wrap the actual content in a collapsible container
-        $html .= '<div class="cbd-container-content">';
+
+        // Wrap the actual content in a collapsible container with Interactivity API
+        $html .= '<div class="cbd-container-content" ';
+        $html .= 'data-wp-class--cbd-collapsed="context.isCollapsed" ';
+        $html .= 'data-wp-bind--aria-hidden="context.isCollapsed" ';
+        $html .= 'role="region">';
 
         // Actual content - Apply LaTeX parsing
         $parsed_content = $content;
