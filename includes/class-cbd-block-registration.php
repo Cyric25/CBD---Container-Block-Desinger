@@ -687,10 +687,18 @@ class CBD_Block_Registration {
         
         // Wrap the actual content in a collapsible container
         $html .= '<div class="cbd-container-content">';
-        
-        // Actual content
-        $html .= $content;
-        
+
+        // Actual content - Apply LaTeX parsing
+        $parsed_content = $content;
+
+        // Apply LaTeX parser if available
+        if (class_exists('CBD_LaTeX_Parser')) {
+            $latex_parser = CBD_LaTeX_Parser::get_instance();
+            $parsed_content = $latex_parser->parse_latex($content);
+        }
+
+        $html .= $parsed_content;
+
         $html .= '</div>'; // Close .cbd-container-content
         $html .= '</div>'; // Close .cbd-container-block
         $html .= '</div>'; // Close .cbd-content

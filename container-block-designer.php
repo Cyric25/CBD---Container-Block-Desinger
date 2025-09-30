@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '2.6.1');
+define('CBD_VERSION', '2.7.0');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -102,12 +102,15 @@ class ContainerBlockDesigner {
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-style-loader.php';
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-registration.php';
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-ajax-handler.php';
-        
+
+        // LaTeX Parser für mathematische Formeln
+        require_once CBD_PLUGIN_DIR . 'includes/class-latex-parser.php';
+
         // Admin-Bereich nur im Backend laden
         if (is_admin()) {
             require_once CBD_PLUGIN_DIR . 'includes/class-cbd-admin.php';
         }
-        
+
         // Frontend-Renderer - DISABLED to prevent conflicts with block registration
         // Master Renderer caused double rendering when block registration is active
         // if (!is_admin() || wp_doing_ajax()) {
@@ -224,7 +227,12 @@ class ContainerBlockDesigner {
             
             // AJAX handler
             $this->container->get('ajax_handler');
-            
+
+            // LaTeX Parser initialization
+            if (class_exists('CBD_LaTeX_Parser')) {
+                CBD_LaTeX_Parser::get_instance();
+            }
+
             // Admin area - aktiviert für normale Funktionalität
             if (is_admin()) {
                 // Fallback: Direct admin initialization wenn Service Container admin nicht verfügbar
@@ -232,7 +240,7 @@ class ContainerBlockDesigner {
                     CBD_Admin::get_instance();
                 }
             }
-            
+
             // Frontend renderer - DISABLED (Block Registration handles rendering)
             // if (!is_admin() || wp_doing_ajax()) {
             //     $frontend_renderer = $this->container->get('consolidated_frontend');

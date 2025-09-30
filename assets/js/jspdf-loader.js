@@ -227,6 +227,12 @@
                 pdf.text('Block ' + (processedBlocks + 1) + ': ' + blockTitle, 20, y);
                 y += titleHeight;
 
+                // Prepare LaTeX formulas for PDF rendering if present
+                if (typeof window.cbdPrepareFormulasForPDF === 'function') {
+                    console.log('CBD: Preparing LaTeX formulas for PDF');
+                    window.cbdPrepareFormulasForPDF($currentBlock[0]);
+                }
+
                 // Process based on mode
                 if (mode === 'text') {
                     // Text-only mode
@@ -352,6 +358,9 @@
                                     // FIRST: Expand all collapsed content before any other modifications
                                     expandAllCollapsedContent(clonedDoc);
 
+                                    // Fix LaTeX formula positioning for PDF
+                                    fixLatexFormulasForPDF(clonedDoc);
+
                                     // SECOND: Apply grayscale and print optimizations
                                     applyPrintModeStyles(clonedDoc);
 
@@ -372,6 +381,9 @@
                                     // FIRST: Expand all collapsed content before any other modifications
                                     expandAllCollapsedContent(clonedDoc);
 
+                                    // Fix LaTeX formula positioning for PDF
+                                    fixLatexFormulasForPDF(clonedDoc);
+
                                     // Remove action buttons in visual mode too
                                     var actionButtons = clonedDoc.querySelectorAll('.cbd-action-buttons, .cbd-action-btn, .cbd-collapse-toggle, .cbd-copy-text, .cbd-screenshot, button, .dashicons');
                                     for (var j = actionButtons.length - 1; j >= 0; j--) {
@@ -381,6 +393,29 @@
                                         }
                                     }
                                 };
+                            }
+
+                            // Function to fix LaTeX formula positioning for PDF export
+                            function fixLatexFormulasForPDF(doc) {
+                                console.log('CBD: Preparing LaTeX formulas for PDF');
+
+                                var formulas = doc.querySelectorAll('.cbd-latex-formula');
+                                console.log('CBD: Found', formulas.length, 'LaTeX formulas');
+
+                                // Add minimal CSS for PDF rendering
+                                var style = doc.createElement('style');
+                                style.textContent = `
+                                    /* Only ensure container is centered - don't touch KaTeX internals */
+                                    .cbd-latex-formula {
+                                        display: block !important;
+                                        text-align: center !important;
+                                        width: 100% !important;
+                                        margin: 20px auto !important;
+                                    }
+                                `;
+                                doc.head.appendChild(style);
+
+                                console.log('CBD: LaTeX formulas ready for PDF (CSS fixes applied)');
                             }
 
                             // Function to expand all collapsed content

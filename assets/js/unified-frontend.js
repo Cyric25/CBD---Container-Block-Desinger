@@ -305,15 +305,122 @@
             // Screenshot der Container-Block-Ebene
             var elementToCapture = $container.find('.cbd-container-block')[0] || $container[0];
 
-            html2canvas(elementToCapture, {
-                backgroundColor: null,
-                scale: 2,
-                useCORS: true,
-                allowTaint: true,
-                logging: false,
-                width: elementToCapture.offsetWidth,
-                height: elementToCapture.offsetHeight
-            }).then(function(canvas) {
+            // Wait for LaTeX to fully render before screenshot
+            var prepareAndCapture = function() {
+                // Prepare LaTeX formulas
+                if (typeof window.cbdPrepareFormulasForPDF === 'function') {
+                    console.log('CBD: Preparing LaTeX formulas for screenshot');
+                    window.cbdPrepareFormulasForPDF(elementToCapture);
+                }
+
+                // Check if formulas are rendered
+                var formulas = elementToCapture.querySelectorAll('.cbd-latex-formula');
+                var allRendered = true;
+                formulas.forEach(function(formula) {
+                    if (!formula.classList.contains('cbd-latex-rendered')) {
+                        allRendered = false;
+                        console.log('CBD: Formula not yet rendered, waiting...');
+                    }
+                });
+
+                if (!allRendered && formulas.length > 0) {
+                    console.log('CBD: Waiting for LaTeX rendering to complete...');
+                    setTimeout(prepareAndCapture, 300);
+                    return;
+                }
+
+                console.log('CBD: All formulas rendered, proceeding with screenshot');
+                captureScreenshot();
+            };
+
+            var captureScreenshot = function() {
+                html2canvas(elementToCapture, {
+                    backgroundColor: null,
+                    scale: 2,
+                    useCORS: true,
+                    allowTaint: true,
+                    logging: false,
+                    width: elementToCapture.offsetWidth,
+                    height: elementToCapture.offsetHeight,
+                    onclone: function(clonedDoc) {
+                        // Ensure LaTeX formulas are visible in clone
+                        var formulas = clonedDoc.querySelectorAll('.cbd-latex-formula');
+                        console.log('CBD Screenshot: Found', formulas.length, 'LaTeX formulas');
+
+                        formulas.forEach(function(formula, index) {
+                            formula.style.setProperty('display', 'block', 'important');
+                            formula.style.setProperty('visibility', 'visible', 'important');
+                            formula.style.setProperty('opacity', '1', 'important');
+
+                            // Use black as default for better visibility in screenshots
+                            var textColor = '#000000';
+
+                            // Try to get container color, but only use it if it's dark enough
+                            var container = formula.closest('.cbd-container-content, .cbd-container-block, [class*="cbd-"]');
+                            if (container) {
+                                try {
+                                    var computedStyle = clonedDoc.defaultView.getComputedStyle(container);
+                                    var containerColor = computedStyle.color;
+
+                                    // Parse RGB to check if color is dark enough
+                                    if (containerColor) {
+                                        var rgb = containerColor.match(/\d+/g);
+                                        if (rgb && rgb.length >= 3) {
+                                            var r = parseInt(rgb[0]);
+                                            var g = parseInt(rgb[1]);
+                                            var b = parseInt(rgb[2]);
+                                            var brightness = (r * 299 + g * 587 + b * 114) / 1000;
+
+                                            // Only use container color if it's dark enough (brightness < 180)
+                                            if (brightness < 180) {
+                                                textColor = containerColor;
+                                                console.log('CBD Screenshot: Formula', index + 1, 'using container color:', textColor);
+                                            } else {
+                                                console.log('CBD Screenshot: Container color too light (brightness:', brightness, '), using black');
+                                            }
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.warn('CBD Screenshot: Could not get computed style', e);
+                                }
+                            }
+
+                            console.log('CBD Screenshot: Formula', index + 1, 'final color:', textColor);
+
+                            // Apply color to formula and all its child elements
+                            formula.style.setProperty('color', textColor, 'important');
+                            formula.style.setProperty('background', 'none', 'important');
+                            formula.style.setProperty('background-color', 'transparent', 'important');
+                            formula.style.setProperty('opacity', '1', 'important');
+                            formula.style.setProperty('filter', 'none', 'important');
+                            formula.style.setProperty('-webkit-filter', 'none', 'important');
+
+                            // Apply to all nested elements (KaTeX generates many spans)
+                            var allElements = formula.querySelectorAll('*');
+                            console.log('CBD Screenshot: Fixing', allElements.length, 'elements in formula', index + 1);
+
+                            allElements.forEach(function(element) {
+                                element.style.setProperty('color', textColor, 'important');
+                                element.style.setProperty('background', 'none', 'important');
+                                element.style.setProperty('background-color', 'transparent', 'important');
+                                element.style.setProperty('opacity', '1', 'important');
+                                element.style.setProperty('filter', 'none', 'important');
+                                element.style.setProperty('-webkit-filter', 'none', 'important');
+
+                                // Also check for inline styles that might override
+                                if (element.style.color && element.style.color !== textColor) {
+                                    console.log('CBD Screenshot: Overriding inline color:', element.style.color, 'with', textColor);
+                                }
+                            });
+                        });
+
+                        // Hide noscript fallback in screenshots
+                        var noscripts = clonedDoc.querySelectorAll('.cbd-latex-formula noscript');
+                        noscripts.forEach(function(noscript) {
+                            noscript.style.display = 'none';
+                        });
+                    }
+                }).then(function(canvas) {
                 // Canvas zu Blob
                 canvas.toBlob(function(blob) {
                     // Download erstellen mit jQuery/JavaScript
@@ -336,29 +443,63 @@
 
                     CBDUnified.showToast('Screenshot heruntergeladen!', 'success');
                 }, 'image/png');
-            }).catch(function(error) {
-                console.error('Screenshot Fehler:', error);
-                CBDUnified.showToast('Screenshot fehlgeschlagen', 'error');
-            }).finally(function() {
-                $button.prop('disabled', false);
-                $button.removeClass('cbd-loading');
-                $button.find('span').text(originalText);
-            });
+                }).catch(function(error) {
+                    console.error('Screenshot Fehler:', error);
+                    CBDUnified.showToast('Screenshot fehlgeschlagen', 'error');
+                }).finally(function() {
+                    $button.prop('disabled', false);
+                    $button.removeClass('cbd-loading');
+                    $button.find('span').text(originalText);
+                });
+            };
+
+            // Start the preparation and capture process
+            prepareAndCapture();
         },
 
         /**
          * Text aus Container extrahieren
          */
         extractTextContent: function($container) {
-            // Klone Container um Original nicht zu verändern
-            var $clone = $container.clone();
+            // Klone Container um Original nicht zu verändern (clone ohne Events)
+            var $clone = $container.clone(false);
 
             // Entferne UI-Elemente
             $clone.find('.cbd-selection-menu, .cbd-block-header, .cbd-container-number').remove();
 
-            // Hole Text-Inhalt
-            var text = $clone.find('.cbd-container-content').text() || $clone.text();
+            // Debug: Log formulas found
+            var formulaCount = $clone.find('.cbd-latex-formula').length;
+            console.log('CBD Copy: Found', formulaCount, 'LaTeX formulas in container');
 
+            // WICHTIG: Formeln komplett durch LaTeX-Code ersetzen
+            var formulas = $clone.find('.cbd-latex-formula').toArray();
+            console.log('CBD Copy: Processing', formulas.length, 'formulas');
+
+            for (var i = 0; i < formulas.length; i++) {
+                var formula = formulas[i];
+                var latex = formula.getAttribute('data-latex');
+
+                console.log('CBD Copy: Formula', i + 1, '- LaTeX:', latex);
+                console.log('CBD Copy: Formula', i + 1, '- Current text:', formula.textContent);
+
+                if (latex) {
+                    // Erstelle ein neues Span-Element mit nur dem LaTeX-Code
+                    var replacement = document.createElement('span');
+                    replacement.className = 'cbd-latex-replacement';
+                    replacement.textContent = '\n\n$$ ' + latex + ' $$\n\n';
+
+                    // Ersetze die Formel
+                    formula.parentNode.replaceChild(replacement, formula);
+                    console.log('CBD Copy: Replaced formula', i + 1);
+                }
+            }
+
+            // Hole Text-Inhalt
+            var $content = $clone.find('.cbd-container-content');
+            var text = $content.length > 0 ? $content.text() : $clone.text();
+
+            console.log('CBD Copy: Final text:', text.substring(0, 100) + '...');
+            console.log('CBD Copy: Final text length:', text.length);
             return text.trim();
         },
 

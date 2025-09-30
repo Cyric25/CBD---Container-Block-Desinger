@@ -42,13 +42,32 @@ if (typeof jQuery !== 'undefined') {
             e.preventDefault();
             e.stopPropagation();
             console.log("CBD: Copy clicked");
-            
+
             var button = $(this);
             var container = button.closest(".cbd-container");
             var content = container.find(".cbd-container-content");
-            
+
             if (content.length > 0) {
-                var textToCopy = content.text().trim();
+                // Clone content to manipulate without affecting original
+                var $clone = content.clone(false);
+
+                // Replace LaTeX formulas with their LaTeX notation
+                var formulas = $clone.find('.cbd-latex-formula').toArray();
+                console.log("CBD Copy: Found", formulas.length, "LaTeX formulas");
+
+                for (var i = 0; i < formulas.length; i++) {
+                    var formula = formulas[i];
+                    var latex = formula.getAttribute('data-latex');
+
+                    if (latex) {
+                        console.log("CBD Copy: Replacing formula", i + 1, "with:", latex);
+                        var replacement = document.createElement('span');
+                        replacement.textContent = '\n\n$$ ' + latex + ' $$\n\n';
+                        formula.parentNode.replaceChild(replacement, formula);
+                    }
+                }
+
+                var textToCopy = $clone.text().trim();
                 console.log("CBD: Text to copy:", textToCopy.substring(0, 50) + "...");
                 
                 // Try multiple copy methods for better compatibility
@@ -149,6 +168,29 @@ if (typeof jQuery !== 'undefined') {
                     backgroundColor: 'white',
                     onclone: function(clonedDoc) {
                         console.log("CBD: Cleaning cloned document for screenshot");
+
+                        // Fix LaTeX formulas first
+                        var formulas = clonedDoc.querySelectorAll('.cbd-latex-formula');
+                        console.log("CBD Screenshot: Found", formulas.length, "LaTeX formulas");
+
+                        for (var f = 0; f < formulas.length; f++) {
+                            var formula = formulas[f];
+
+                            // Force black color for better visibility
+                            formula.style.setProperty('color', '#000000', 'important');
+                            formula.style.setProperty('background', 'none', 'important');
+                            formula.style.setProperty('opacity', '1', 'important');
+                            formula.style.setProperty('filter', 'none', 'important');
+
+                            // Apply to all child elements
+                            var children = formula.querySelectorAll('*');
+                            for (var c = 0; c < children.length; c++) {
+                                children[c].style.setProperty('color', '#000000', 'important');
+                                children[c].style.setProperty('background', 'none', 'important');
+                                children[c].style.setProperty('opacity', '1', 'important');
+                                children[c].style.setProperty('filter', 'none', 'important');
+                            }
+                        }
 
                         // Find all buttons and action elements in the cloned document
                         var elementsToHide = clonedDoc.querySelectorAll(
