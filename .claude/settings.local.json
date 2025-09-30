@@ -10,7 +10,9 @@
       "WebSearch",
       "Bash(git commit:*)",
       "Bash(cd:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "WebFetch(domain:dlxplugins.com)",
+      "WebFetch(domain:make.wordpress.org)"
     ],
     "deny": [],
     "ask": []
