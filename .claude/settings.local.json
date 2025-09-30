@@ -8,7 +8,9 @@
       "Read(//c/Users/mtnhu/**)",
       "Bash(git add:*)",
       "WebSearch",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(cd:*)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []
