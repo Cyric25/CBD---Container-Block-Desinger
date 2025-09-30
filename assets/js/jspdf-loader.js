@@ -395,27 +395,45 @@
                                 };
                             }
 
-                            // Function to fix LaTeX formula positioning for PDF export
+                            // Function to prepare LaTeX formulas for PDF export
                             function fixLatexFormulasForPDF(doc) {
                                 console.log('CBD: Preparing LaTeX formulas for PDF');
 
                                 var formulas = doc.querySelectorAll('.cbd-latex-formula');
                                 console.log('CBD: Found', formulas.length, 'LaTeX formulas');
 
-                                // Add minimal CSS for PDF rendering
+                                // Add ONLY superscript/subscript fix - nothing else
                                 var style = doc.createElement('style');
                                 style.textContent = `
-                                    /* Only ensure container is centered - don't touch KaTeX internals */
-                                    .cbd-latex-formula {
-                                        display: block !important;
-                                        text-align: center !important;
-                                        width: 100% !important;
-                                        margin: 20px auto !important;
+                                    /* Fix für KaTeX Hochzahl - präziser Selektor */
+                                    .cbd-latex-formula .katex .vlist-t {
+                                        position: relative !important;
+                                        top: 0 !important;
+                                        transform: none !important;
+                                        vertical-align: baseline !important;
+                                    }
+
+                                    /* Hochzahl-Container */
+                                    .cbd-latex-formula .katex .vlist-t .vlist-r {
+                                        position: relative !important;
+                                        top: 0 !important;
+                                    }
+
+                                    /* Die eigentliche Hochzahl - sanfte Hochstellung */
+                                    .cbd-latex-formula .katex .vlist-t .vlist-r .vlist span {
+                                        position: relative !important;
+                                        top: -0.15em !important;
+                                        transform: none !important;
+                                    }
+
+                                    /* Verhindere zu große Verschiebungen durch inline styles */
+                                    .cbd-latex-formula .katex [style*="top: -"] {
+                                        top: -0.15em !important;
                                     }
                                 `;
                                 doc.head.appendChild(style);
 
-                                console.log('CBD: LaTeX formulas ready for PDF (CSS fixes applied)');
+                                console.log('CBD: LaTeX formulas ready for PDF (superscript fix applied)');
                             }
 
                             // Function to expand all collapsed content
