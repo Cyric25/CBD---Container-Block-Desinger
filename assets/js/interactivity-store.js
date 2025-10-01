@@ -154,13 +154,35 @@ store('container-block-designer', {
 					backgroundColor: null
 				});
 
-				// Download trigger
-				const link = document.createElement('a');
-				link.download = `cbd-container-${context.blockId || 'screenshot'}-${Date.now()}.png`;
-				link.href = canvas.toDataURL('image/png');
-				document.body.appendChild(link);
-				link.click();
-				document.body.removeChild(link);
+				// Try clipboard first, then fallback to download
+				const blob = yield new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+				let clipboardSuccess = false;
+
+				// Try Clipboard API (modern browsers)
+				if (blob && navigator.clipboard && navigator.clipboard.write) {
+					try {
+						const item = new ClipboardItem({ 'image/png': blob });
+						yield navigator.clipboard.write([item]);
+						clipboardSuccess = true;
+						console.log('[CBD] Screenshot copied to clipboard');
+					} catch (err) {
+						console.warn('[CBD] Clipboard failed, using download fallback:', err);
+					}
+				} else {
+					console.warn('[CBD] Clipboard API not available, using download fallback');
+				}
+
+				// Fallback: Download only if clipboard failed
+				if (!clipboardSuccess) {
+					const link = document.createElement('a');
+					link.download = `cbd-container-${context.blockId || 'screenshot'}-${Date.now()}.png`;
+					link.href = canvas.toDataURL('image/png');
+					document.body.appendChild(link);
+					link.click();
+					document.body.removeChild(link);
+					console.log('[CBD] Screenshot downloaded');
+				}
 
 				// Wieder zusammenklappen falls vorher collapsed
 				if (wasCollapsed) {
