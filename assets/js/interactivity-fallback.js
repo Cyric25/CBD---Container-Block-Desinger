@@ -12,15 +12,35 @@
 (function($) {
     'use strict';
 
+    // Global flag to track if Interactivity API is active
+    let interactivityAPIActive = false;
+
+    // Check immediately and after a delay
+    function checkInteractivityAPI() {
+        if (typeof window.wp !== 'undefined' && typeof window.wp.interactivity !== 'undefined') {
+            interactivityAPIActive = true;
+            return true;
+        }
+        return false;
+    }
+
     // Warte bis DOM bereit ist
     $(document).ready(function() {
         console.log('[CBD Fallback] Initializing Interactivity API fallback...');
 
-        // Prüfe ob WordPress Interactivity API bereits aktiv ist
-        if (typeof window.wp !== 'undefined' && typeof window.wp.interactivity !== 'undefined') {
+        // Initial check
+        if (checkInteractivityAPI()) {
             console.log('[CBD Fallback] WordPress Interactivity API is active, skipping fallback');
             return;
         }
+
+        // Check again after short delay (in case Interactivity API loads later)
+        setTimeout(function() {
+            if (checkInteractivityAPI()) {
+                console.log('[CBD Fallback] WordPress Interactivity API loaded after init, disabling fallback');
+                interactivityAPIActive = true;
+            }
+        }, 100);
 
         console.log('[CBD Fallback] Using jQuery fallback for interactivity');
 
@@ -74,6 +94,12 @@
          * Toggle Collapse Action
          */
         $(document).on('click', '[data-wp-on--click="actions.toggleCollapse"]', function(e) {
+            // Runtime check: Skip if Interactivity API is now active
+            if (interactivityAPIActive || checkInteractivityAPI()) {
+                console.log('[CBD Fallback] Interactivity API is active, skipping jQuery handler');
+                return;
+            }
+
             e.preventDefault();
             e.stopPropagation();
 
@@ -111,6 +137,12 @@
          * Copy Text Action
          */
         $(document).on('click', '[data-wp-on--click="actions.copyText"]', function(e) {
+            // Runtime check: Skip if Interactivity API is now active
+            if (interactivityAPIActive || checkInteractivityAPI()) {
+                console.log('[CBD Fallback] Interactivity API is active, skipping jQuery handler');
+                return;
+            }
+
             e.preventDefault();
             e.stopPropagation();
 
@@ -168,6 +200,12 @@
          * Screenshot Action
          */
         $(document).on('click', '[data-wp-on--click="actions.createScreenshot"]', function(e) {
+            // Runtime check: Skip if Interactivity API is now active
+            if (interactivityAPIActive || checkInteractivityAPI()) {
+                console.log('[CBD Fallback] Interactivity API is active, skipping jQuery handler');
+                return;
+            }
+
             e.preventDefault();
             e.stopPropagation();
 
