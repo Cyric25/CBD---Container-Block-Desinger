@@ -224,6 +224,14 @@
                 return;
             }
 
+            // Check if containerBlock exists
+            if (!$containerBlock.length) {
+                console.error('[CBD Fallback] .cbd-container-block not found');
+                return;
+            }
+
+            console.log('[CBD Fallback] Starting html2canvas...');
+
             // Set loading state
             context.screenshotLoading = true;
             $container.data('cbd-context', context);
@@ -240,6 +248,7 @@
 
             // Small delay for animation
             setTimeout(function() {
+                console.log('[CBD Fallback] Running html2canvas on element:', $containerBlock[0]);
                 html2canvas($containerBlock[0], {
                     useCORS: true,
                     allowTaint: false,

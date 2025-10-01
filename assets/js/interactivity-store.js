@@ -193,7 +193,7 @@ store('container-block-designer', {
 				}
 
 				// Helper: Try Web Share API
-				async function tryWebShare(blob, canvas, context) {
+				function* tryWebShare(blob, canvas, context) {
 					const file = new File([blob], `cbd-screenshot-${Date.now()}.png`, { type: 'image/png' });
 
 					// ==============================================
