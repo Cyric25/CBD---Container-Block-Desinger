@@ -209,48 +209,76 @@
                     logging: false,
                     backgroundColor: null
                 }).then(function(canvas) {
-                    // Try to copy to clipboard first (modern browsers)
                     canvas.toBlob(function(blob) {
-                        if (blob && navigator.clipboard && navigator.clipboard.write) {
-                            // Modern Clipboard API
+                        if (!blob) {
+                            console.error('[CBD Fallback] Failed to create blob');
+                            downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                            return;
+                        }
+
+                        // ==============================================
+                        // TIER 1: Clipboard API (iOS 13.4+, Chrome, Firefox)
+                        // ==============================================
+                        if (navigator.clipboard && navigator.clipboard.write) {
                             const item = new ClipboardItem({ 'image/png': blob });
 
                             navigator.clipboard.write([item])
                                 .then(function() {
-                                    console.log('[CBD Fallback] Screenshot copied to clipboard');
-
-                                    // Collapse again if was collapsed
-                                    if (wasCollapsed) {
-                                        $content.hide();
-                                    }
-
-                                    // Success feedback
-                                    context.screenshotLoading = false;
-                                    context.screenshotSuccess = true;
-                                    $container.data('cbd-context', context);
-                                    $button.prop('disabled', false);
-                                    $icon.removeClass('dashicons-update-alt').addClass('dashicons-yes-alt');
-
-                                    // Reset after 2 seconds
-                                    setTimeout(function() {
-                                        context.screenshotSuccess = false;
-                                        $container.data('cbd-context', context);
-                                        $icon.removeClass('dashicons-yes-alt').addClass('dashicons-camera');
-                                    }, 2000);
+                                    console.log('[CBD Fallback] ✅ Clipboard: Screenshot copied to clipboard');
+                                    showSuccess(context, wasCollapsed, $content, $button, $icon, $container);
                                 })
                                 .catch(function(err) {
-                                    console.warn('[CBD Fallback] Clipboard failed, using download fallback:', err);
-                                    // Fallback: Download
-                                    downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                                    console.warn('[CBD Fallback] ❌ Clipboard failed:', err);
+                                    // Try Tier 2: Web Share API
+                                    tryWebShare(blob, canvas, context, wasCollapsed, $content, $button, $icon, $container);
                                 });
-                        } else {
-                            console.warn('[CBD Fallback] Clipboard API not available, using download fallback');
-                            // Fallback: Download
-                            downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                            return;
                         }
+
+                        // Clipboard not available, try Web Share API
+                        console.warn('[CBD Fallback] Clipboard API not available');
+                        tryWebShare(blob, canvas, context, wasCollapsed, $content, $button, $icon, $container);
+
                     }, 'image/png');
 
-                    // Helper function for download fallback
+                    // ==============================================
+                    // TIER 2: Web Share API (iOS 15+, Safari)
+                    // ==============================================
+                    function tryWebShare(blob, canvas, context, wasCollapsed, $content, $button, $icon, $container) {
+                        // Check if Web Share API with files is supported (iOS/Safari)
+                        const file = new File([blob], 'cbd-screenshot-' + Date.now() + '.png', { type: 'image/png' });
+
+                        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                            navigator.share({
+                                files: [file],
+                                title: 'Container Block Screenshot'
+                            })
+                            .then(function() {
+                                console.log('[CBD Fallback] ✅ Web Share: Screenshot shared via iOS Share Sheet');
+                                showSuccess(context, wasCollapsed, $content, $button, $icon, $container);
+                            })
+                            .catch(function(err) {
+                                // User cancelled or error
+                                if (err.name === 'AbortError') {
+                                    console.log('[CBD Fallback] ℹ️ Web Share: User cancelled');
+                                    resetButton(context, $button, $icon, $container);
+                                } else {
+                                    console.warn('[CBD Fallback] ❌ Web Share failed:', err);
+                                    // Fallback to download
+                                    downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                                }
+                            });
+                            return;
+                        }
+
+                        // Web Share not available, use download
+                        console.warn('[CBD Fallback] Web Share API not available');
+                        downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                    }
+
+                    // ==============================================
+                    // TIER 3: Download Fallback (All browsers)
+                    // ==============================================
                     function downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container) {
                         const link = document.createElement('a');
                         link.download = 'cbd-container-' + context.blockId + '-' + Date.now() + '.png';
@@ -259,6 +287,14 @@
                         link.click();
                         document.body.removeChild(link);
 
+                        console.log('[CBD Fallback] ⬇️ Download: Screenshot downloaded');
+                        showSuccess(context, wasCollapsed, $content, $button, $icon, $container);
+                    }
+
+                    // ==============================================
+                    // Helper Functions
+                    // ==============================================
+                    function showSuccess(context, wasCollapsed, $content, $button, $icon, $container) {
                         // Collapse again if was collapsed
                         if (wasCollapsed) {
                             $content.hide();
@@ -271,14 +307,19 @@
                         $button.prop('disabled', false);
                         $icon.removeClass('dashicons-update-alt').addClass('dashicons-yes-alt');
 
-                        console.log('[CBD Fallback] Screenshot downloaded');
-
                         // Reset after 2 seconds
                         setTimeout(function() {
                             context.screenshotSuccess = false;
                             $container.data('cbd-context', context);
                             $icon.removeClass('dashicons-yes-alt').addClass('dashicons-camera');
                         }, 2000);
+                    }
+
+                    function resetButton(context, $button, $icon, $container) {
+                        context.screenshotLoading = false;
+                        $container.data('cbd-context', context);
+                        $button.prop('disabled', false);
+                        $icon.removeClass('dashicons-update-alt').addClass('dashicons-camera');
                     }
 
                 }).catch(function(error) {

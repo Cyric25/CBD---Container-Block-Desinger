@@ -154,34 +154,73 @@ store('container-block-designer', {
 					backgroundColor: null
 				});
 
-				// Try clipboard first, then fallback to download
+				// Convert to blob
 				const blob = yield new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 
-				let clipboardSuccess = false;
+				if (!blob) {
+					throw new Error('Failed to create blob from canvas');
+				}
 
-				// Try Clipboard API (modern browsers)
-				if (blob && navigator.clipboard && navigator.clipboard.write) {
+				// ==============================================
+				// TIER 1: Clipboard API (iOS 13.4+, Chrome, Firefox)
+				// ==============================================
+				if (navigator.clipboard && navigator.clipboard.write) {
 					try {
 						const item = new ClipboardItem({ 'image/png': blob });
 						yield navigator.clipboard.write([item]);
-						clipboardSuccess = true;
-						console.log('[CBD] Screenshot copied to clipboard');
+						console.log('[CBD] ✅ Clipboard: Screenshot copied to clipboard');
+						// Success - continue to cleanup
 					} catch (err) {
-						console.warn('[CBD] Clipboard failed, using download fallback:', err);
+						console.warn('[CBD] ❌ Clipboard failed:', err);
+						// Try Tier 2: Web Share API
+						yield tryWebShare(blob, canvas, context);
 					}
 				} else {
-					console.warn('[CBD] Clipboard API not available, using download fallback');
+					console.warn('[CBD] Clipboard API not available');
+					// Try Tier 2: Web Share API
+					yield tryWebShare(blob, canvas, context);
 				}
 
-				// Fallback: Download only if clipboard failed
-				if (!clipboardSuccess) {
+				// Helper: Try Web Share API
+				async function tryWebShare(blob, canvas, context) {
+					const file = new File([blob], `cbd-screenshot-${Date.now()}.png`, { type: 'image/png' });
+
+					// ==============================================
+					// TIER 2: Web Share API (iOS 15+, Safari)
+					// ==============================================
+					if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+						try {
+							yield navigator.share({
+								files: [file],
+								title: 'Container Block Screenshot'
+							});
+							console.log('[CBD] ✅ Web Share: Screenshot shared via iOS Share Sheet');
+							// Success - return without download
+							return;
+						} catch (err) {
+							if (err.name === 'AbortError') {
+								console.log('[CBD] ℹ️ Web Share: User cancelled');
+								// User cancelled - don't fallback to download
+								throw err;
+							} else {
+								console.warn('[CBD] ❌ Web Share failed:', err);
+								// Continue to download
+							}
+						}
+					} else {
+						console.warn('[CBD] Web Share API not available');
+					}
+
+					// ==============================================
+					// TIER 3: Download Fallback (All browsers)
+					// ==============================================
 					const link = document.createElement('a');
 					link.download = `cbd-container-${context.blockId || 'screenshot'}-${Date.now()}.png`;
 					link.href = canvas.toDataURL('image/png');
 					document.body.appendChild(link);
 					link.click();
 					document.body.removeChild(link);
-					console.log('[CBD] Screenshot downloaded');
+					console.log('[CBD] ⬇️ Download: Screenshot downloaded');
 				}
 
 				// Wieder zusammenklappen falls vorher collapsed
