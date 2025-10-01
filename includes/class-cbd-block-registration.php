@@ -297,6 +297,15 @@ class CBD_Block_Registration {
                 CBD_VERSION,
                 true
             );
+
+            // Floating PDF Export Button
+            wp_enqueue_script(
+                'cbd-floating-pdf-button',
+                CBD_PLUGIN_URL . 'assets/js/floating-pdf-button.js',
+                array('jquery', 'cbd-jspdf-loader'),
+                CBD_VERSION,
+                true
+            );
         }
 
         // ==============================================
