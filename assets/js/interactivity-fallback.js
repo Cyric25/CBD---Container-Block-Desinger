@@ -209,34 +209,77 @@
                     logging: false,
                     backgroundColor: null
                 }).then(function(canvas) {
-                    // Create download link
-                    const link = document.createElement('a');
-                    link.download = 'cbd-container-' + context.blockId + '-' + Date.now() + '.png';
-                    link.href = canvas.toDataURL('image/png');
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
+                    // Try to copy to clipboard first (modern browsers)
+                    canvas.toBlob(function(blob) {
+                        if (blob && navigator.clipboard && navigator.clipboard.write) {
+                            // Modern Clipboard API
+                            const item = new ClipboardItem({ 'image/png': blob });
 
-                    // Collapse again if was collapsed
-                    if (wasCollapsed) {
-                        $content.hide();
-                    }
+                            navigator.clipboard.write([item])
+                                .then(function() {
+                                    console.log('[CBD Fallback] Screenshot copied to clipboard');
 
-                    // Success feedback
-                    context.screenshotLoading = false;
-                    context.screenshotSuccess = true;
-                    $container.data('cbd-context', context);
-                    $button.prop('disabled', false);
-                    $icon.removeClass('dashicons-update-alt').addClass('dashicons-yes-alt');
+                                    // Collapse again if was collapsed
+                                    if (wasCollapsed) {
+                                        $content.hide();
+                                    }
 
-                    console.log('[CBD Fallback] Screenshot created successfully');
+                                    // Success feedback
+                                    context.screenshotLoading = false;
+                                    context.screenshotSuccess = true;
+                                    $container.data('cbd-context', context);
+                                    $button.prop('disabled', false);
+                                    $icon.removeClass('dashicons-update-alt').addClass('dashicons-yes-alt');
 
-                    // Reset after 2 seconds
-                    setTimeout(function() {
-                        context.screenshotSuccess = false;
+                                    // Reset after 2 seconds
+                                    setTimeout(function() {
+                                        context.screenshotSuccess = false;
+                                        $container.data('cbd-context', context);
+                                        $icon.removeClass('dashicons-yes-alt').addClass('dashicons-camera');
+                                    }, 2000);
+                                })
+                                .catch(function(err) {
+                                    console.warn('[CBD Fallback] Clipboard failed, using download fallback:', err);
+                                    // Fallback: Download
+                                    downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                                });
+                        } else {
+                            console.warn('[CBD Fallback] Clipboard API not available, using download fallback');
+                            // Fallback: Download
+                            downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                        }
+                    }, 'image/png');
+
+                    // Helper function for download fallback
+                    function downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container) {
+                        const link = document.createElement('a');
+                        link.download = 'cbd-container-' + context.blockId + '-' + Date.now() + '.png';
+                        link.href = canvas.toDataURL('image/png');
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+
+                        // Collapse again if was collapsed
+                        if (wasCollapsed) {
+                            $content.hide();
+                        }
+
+                        // Success feedback
+                        context.screenshotLoading = false;
+                        context.screenshotSuccess = true;
                         $container.data('cbd-context', context);
-                        $icon.removeClass('dashicons-yes-alt').addClass('dashicons-camera');
-                    }, 2000);
+                        $button.prop('disabled', false);
+                        $icon.removeClass('dashicons-update-alt').addClass('dashicons-yes-alt');
+
+                        console.log('[CBD Fallback] Screenshot downloaded');
+
+                        // Reset after 2 seconds
+                        setTimeout(function() {
+                            context.screenshotSuccess = false;
+                            $container.data('cbd-context', context);
+                            $icon.removeClass('dashicons-yes-alt').addClass('dashicons-camera');
+                        }, 2000);
+                    }
 
                 }).catch(function(error) {
                     console.error('[CBD Fallback] Screenshot failed:', error);

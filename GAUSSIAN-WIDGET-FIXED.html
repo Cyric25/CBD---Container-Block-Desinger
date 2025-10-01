@@ -1,0 +1,638 @@
+<!-- Gaussian Distribution Widget für WordPress - Mehrfachinstanzen-fähig -->
+<!-- WICHTIG: Das data-instance Attribut wird jetzt automatisch generiert! -->
+<div class="gaussian-tool">
+  <div class="gaussian-tool__container">
+    <div class="gaussian-tool__header">
+      <h3 class="gaussian-tool__title">Gaußsche Normalverteilung</h3>
+      <p class="gaussian-tool__description">Interaktive Visualisierung der Wahrscheinlichkeitsdichte</p>
+    </div>
+
+    <div class="gaussian-tool__canvas-wrapper">
+      <canvas class="gaussian-tool__canvas" width="700" height="400"></canvas>
+      <div class="gaussian-tool__mouse-info" style="display: none;">
+        <span class="gaussian-tool__mouse-x"></span>
+        <span class="gaussian-tool__mouse-y"></span>
+      </div>
+    </div>
+
+    <div class="gaussian-tool__controls">
+      <div class="gaussian-tool__control-item">
+        <div class="gaussian-tool__control-label">
+          <span>Mittelwert (μ)</span>
+          <span class="gaussian-tool__value gaussian-tool__value--mu">0.0</span>
+        </div>
+        <input type="range" class="gaussian-tool__slider gaussian-tool__slider--mu"
+               min="-5" max="5" step="0.1" value="0">
+      </div>
+
+      <div class="gaussian-tool__control-item">
+        <div class="gaussian-tool__control-label">
+          <span>Standardabweichung (σ)</span>
+          <span class="gaussian-tool__value gaussian-tool__value--sigma">1.0</span>
+        </div>
+        <input type="range" class="gaussian-tool__slider gaussian-tool__slider--sigma"
+               min="0.1" max="3" step="0.1" value="1">
+      </div>
+
+      <div class="gaussian-tool__statistics">
+        <div class="gaussian-tool__stat-item">
+          <div class="gaussian-tool__stat-label">68% Bereich</div>
+          <div class="gaussian-tool__stat-value gaussian-tool__stat--68">[-1.0, 1.0]</div>
+        </div>
+        <div class="gaussian-tool__stat-item">
+          <div class="gaussian-tool__stat-label">95% Bereich</div>
+          <div class="gaussian-tool__stat-value gaussian-tool__stat--95">[-2.0, 2.0]</div>
+        </div>
+        <div class="gaussian-tool__stat-item">
+          <div class="gaussian-tool__stat-label">99.7% Bereich</div>
+          <div class="gaussian-tool__stat-value gaussian-tool__stat--99">[-3.0, 3.0]</div>
+        </div>
+        <div class="gaussian-tool__stat-item">
+          <div class="gaussian-tool__stat-label">Varianz (σ²)</div>
+          <div class="gaussian-tool__stat-value gaussian-tool__stat--variance">1.00</div>
+        </div>
+      </div>
+
+      <div class="gaussian-tool__actions">
+        <button class="gaussian-tool__button gaussian-tool__button--animate">Animation starten</button>
+        <button class="gaussian-tool__button gaussian-tool__button--reset">Zurücksetzen</button>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    /* Design System - Gaussian Tool Scope */
+    :root {
+      /* Farben */
+      --gaussian-primary: #2563eb;
+      --gaussian-primary-hover: #1d4ed8;
+      --gaussian-secondary: #64748b;
+      --gaussian-success: #10b981;
+      --gaussian-warning: #f59e0b;
+      --gaussian-danger: #ef4444;
+
+      /* Graustufen */
+      --gaussian-gray-50: #f9fafb;
+      --gaussian-gray-100: #f3f4f6;
+      --gaussian-gray-200: #e5e7eb;
+      --gaussian-gray-700: #374151;
+      --gaussian-gray-900: #111827;
+
+      /* Spacing */
+      --gaussian-space-xs: 4px;
+      --gaussian-space-sm: 8px;
+      --gaussian-space-md: 16px;
+      --gaussian-space-lg: 24px;
+      --gaussian-space-xl: 32px;
+
+      /* Border */
+      --gaussian-radius: 6px;
+      --gaussian-radius-lg: 8px;
+
+      /* Schatten */
+      --gaussian-shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --gaussian-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    }
+
+    /* Root Container */
+    .gaussian-tool {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      border: 1px solid var(--gaussian-gray-200);
+      border-radius: var(--gaussian-radius-lg);
+      background: white;
+    }
+
+    .gaussian-tool__container {
+      display: flex;
+      flex-direction: column;
+      gap: var(--gaussian-space-lg);
+    }
+
+    /* Header */
+    .gaussian-tool__header {
+      text-align: center;
+    }
+
+    .gaussian-tool__title {
+      margin: 0 0 var(--gaussian-space-sm) 0;
+      font-size: 1.5rem;
+      color: var(--gaussian-gray-900);
+      font-weight: 600;
+    }
+
+    .gaussian-tool__description {
+      margin: 0;
+      font-size: 0.875rem;
+      color: var(--gaussian-gray-700);
+    }
+
+    /* Canvas */
+    .gaussian-tool__canvas-wrapper {
+      position: relative;
+      background: linear-gradient(to bottom, #f8f9fa, #ffffff);
+      padding: var(--gaussian-space-md);
+      border-radius: var(--gaussian-radius);
+      border: 1px solid var(--gaussian-gray-200);
+    }
+
+    .gaussian-tool__canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-width: 100%;
+      cursor: crosshair;
+    }
+
+    .gaussian-tool__mouse-info {
+      position: absolute;
+      background: rgba(0, 0, 0, 0.85);
+      color: white;
+      padding: var(--gaussian-space-sm) var(--gaussian-space-md);
+      border-radius: var(--gaussian-radius);
+      font-size: 0.75rem;
+      font-family: monospace;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    .gaussian-tool__mouse-x,
+    .gaussian-tool__mouse-y {
+      display: block;
+      line-height: 1.4;
+    }
+
+    /* Controls */
+    .gaussian-tool__controls {
+      display: flex;
+      flex-direction: column;
+      gap: var(--gaussian-space-lg);
+    }
+
+    .gaussian-tool__control-item {
+      display: flex;
+      flex-direction: column;
+      gap: var(--gaussian-space-sm);
+    }
+
+    .gaussian-tool__control-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.875rem;
+      color: var(--gaussian-gray-700);
+      font-weight: 500;
+    }
+
+    .gaussian-tool__value {
+      background: var(--gaussian-primary);
+      color: white;
+      padding: var(--gaussian-space-xs) var(--gaussian-space-md);
+      border-radius: 20px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      min-width: 60px;
+      text-align: center;
+    }
+
+    .gaussian-tool__value--sigma {
+      background: var(--gaussian-danger);
+    }
+
+    /* Slider */
+    .gaussian-tool__slider {
+      width: 100%;
+      height: 6px;
+      border-radius: var(--gaussian-radius);
+      background: var(--gaussian-gray-200);
+      outline: none;
+      -webkit-appearance: none;
+      appearance: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .gaussian-tool__slider:hover {
+      background: var(--gaussian-gray-200);
+    }
+
+    .gaussian-tool__slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--gaussian-primary);
+      cursor: pointer;
+      box-shadow: var(--gaussian-shadow-md);
+      transition: all 0.2s;
+    }
+
+    .gaussian-tool__slider::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--gaussian-primary);
+      cursor: pointer;
+      border: none;
+      box-shadow: var(--gaussian-shadow-md);
+      transition: all 0.2s;
+    }
+
+    .gaussian-tool__slider--sigma::-webkit-slider-thumb {
+      background: var(--gaussian-danger);
+    }
+
+    .gaussian-tool__slider--sigma::-moz-range-thumb {
+      background: var(--gaussian-danger);
+    }
+
+    .gaussian-tool__slider::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    .gaussian-tool__slider::-moz-range-thumb:hover {
+      transform: scale(1.2);
+    }
+
+    /* Statistics */
+    .gaussian-tool__statistics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: var(--gaussian-space-md);
+      padding: var(--gaussian-space-lg);
+      background: var(--gaussian-gray-50);
+      border-radius: var(--gaussian-radius);
+    }
+
+    .gaussian-tool__stat-item {
+      text-align: center;
+    }
+
+    .gaussian-tool__stat-label {
+      font-size: 0.75rem;
+      color: var(--gaussian-gray-700);
+      margin-bottom: var(--gaussian-space-xs);
+    }
+
+    .gaussian-tool__stat-value {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--gaussian-gray-900);
+    }
+
+    /* Buttons */
+    .gaussian-tool__actions {
+      display: flex;
+      gap: var(--gaussian-space-md);
+    }
+
+    .gaussian-tool__button {
+      flex: 1;
+      padding: var(--gaussian-space-sm) var(--gaussian-space-lg);
+      border: none;
+      border-radius: var(--gaussian-radius);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .gaussian-tool__button--animate {
+      background: var(--gaussian-success);
+      color: white;
+    }
+
+    .gaussian-tool__button--animate:hover {
+      background: #0ea55e;
+      transform: translateY(-1px);
+    }
+
+    .gaussian-tool__button--reset {
+      background: var(--gaussian-gray-200);
+      color: var(--gaussian-gray-700);
+    }
+
+    .gaussian-tool__button--reset:hover {
+      background: var(--gaussian-gray-200);
+    }
+
+    /* Mobile Responsive */
+    @media (max-width: 768px) {
+      .gaussian-tool {
+        padding: var(--gaussian-space-md);
+        margin: var(--gaussian-space-sm);
+      }
+
+      .gaussian-tool__title {
+        font-size: 1.25rem;
+      }
+
+      .gaussian-tool__statistics {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--gaussian-space-sm);
+        padding: var(--gaussian-space-md);
+      }
+
+      .gaussian-tool__actions {
+        flex-direction: column;
+      }
+    }
+  </style>
+
+  <script>
+    // Generate unique instance ID with JavaScript
+    const instanceId = 'gaussian-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+
+    // Set instance ID on container element
+    // Note: 'container' is automatically available from CBD's isolate_inline_scripts()
+    container.querySelector('.gaussian-tool').setAttribute('data-instance', instanceId);
+
+    // Initialize THIS specific widget
+    (function() {
+      'use strict';
+
+      // All elements within THIS container only
+      const canvas = container.querySelector('.gaussian-tool__canvas');
+      const mouseInfo = container.querySelector('.gaussian-tool__mouse-info');
+      const mouseXDisplay = container.querySelector('.gaussian-tool__mouse-x');
+      const mouseYDisplay = container.querySelector('.gaussian-tool__mouse-y');
+
+      const muSlider = container.querySelector('.gaussian-tool__slider--mu');
+      const sigmaSlider = container.querySelector('.gaussian-tool__slider--sigma');
+      const muValue = container.querySelector('.gaussian-tool__value--mu');
+      const sigmaValue = container.querySelector('.gaussian-tool__value--sigma');
+
+      const stat68 = container.querySelector('.gaussian-tool__stat--68');
+      const stat95 = container.querySelector('.gaussian-tool__stat--95');
+      const stat99 = container.querySelector('.gaussian-tool__stat--99');
+      const statVariance = container.querySelector('.gaussian-tool__stat--variance');
+
+      const animateButton = container.querySelector('.gaussian-tool__button--animate');
+      const resetButton = container.querySelector('.gaussian-tool__button--reset');
+
+      // Safety check
+      if (!canvas || !muSlider || !sigmaSlider) {
+        console.warn('Gaussian widget missing required elements:', instanceId);
+        return;
+      }
+
+      // Canvas Context
+      const ctx = canvas.getContext('2d');
+
+      // Instance-specific variables
+      let mu = 0;
+      let sigma = 1;
+      let animationId = null;
+      let animationTime = 0;
+
+      // Gaussian function
+      function gaussian(x, mean, stdDev) {
+        const coefficient = 1 / (stdDev * Math.sqrt(2 * Math.PI));
+        const exponent = -Math.pow(x - mean, 2) / (2 * Math.pow(stdDev, 2));
+        return coefficient * Math.exp(exponent);
+      }
+
+      // Resize canvas
+      function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        const width = Math.min(rect.width, 700);
+        canvas.width = width;
+        canvas.height = width * 0.57;
+        drawGaussian();
+      }
+
+      // Main draw function
+      function drawGaussian() {
+        const w = canvas.width;
+        const h = canvas.height;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, w, h);
+
+        // Background grid
+        ctx.strokeStyle = '#e5e7eb';
+        ctx.lineWidth = 0.5;
+
+        // Vertical lines
+        for (let i = 0; i <= 12; i++) {
+          ctx.beginPath();
+          ctx.moveTo((i * w) / 12, 0);
+          ctx.lineTo((i * w) / 12, h);
+          ctx.stroke();
+        }
+
+        // Horizontal lines
+        for (let i = 0; i <= 8; i++) {
+          ctx.beginPath();
+          ctx.moveTo(0, (i * h) / 8);
+          ctx.lineTo(w, (i * h) / 8);
+          ctx.stroke();
+        }
+
+        const baseY = h - 50;
+        const centerX = w / 2;
+        const scaleX = w / 12;
+        const scaleY = (h - 80) * 2;
+
+        // Confidence intervals
+        // 99.7% (3σ)
+        ctx.fillStyle = 'rgba(155, 89, 182, 0.08)';
+        const x99Start = centerX + ((mu - 3 * sigma) * scaleX);
+        const x99Width = 6 * sigma * scaleX;
+        ctx.fillRect(x99Start, 0, x99Width, baseY);
+
+        // 95% (2σ)
+        ctx.fillStyle = 'rgba(52, 152, 219, 0.12)';
+        const x95Start = centerX + ((mu - 2 * sigma) * scaleX);
+        const x95Width = 4 * sigma * scaleX;
+        ctx.fillRect(x95Start, 0, x95Width, baseY);
+
+        // 68% (1σ)
+        ctx.fillStyle = 'rgba(46, 204, 113, 0.18)';
+        const x68Start = centerX + ((mu - sigma) * scaleX);
+        const x68Width = 2 * sigma * scaleX;
+        ctx.fillRect(x68Start, 0, x68Width, baseY);
+
+        // Draw axes
+        ctx.strokeStyle = '#374151';
+        ctx.lineWidth = 2;
+
+        // X-axis
+        ctx.beginPath();
+        ctx.moveTo(0, baseY);
+        ctx.lineTo(w, baseY);
+        ctx.stroke();
+
+        // Y-axis
+        ctx.beginPath();
+        ctx.moveTo(centerX, 0);
+        ctx.lineTo(centerX, h);
+        ctx.stroke();
+
+        // X-axis labels
+        ctx.fillStyle = '#374151';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+
+        for (let i = -6; i <= 6; i++) {
+          const xPos = centerX + (i * scaleX);
+          ctx.fillText(i.toString(), xPos, h - 30);
+        }
+
+        // Draw Gaussian curve
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+
+        let firstPoint = true;
+        for (let i = 0; i <= 300; i++) {
+          const x = -6 + (12 * i / 300);
+          const y = gaussian(x, mu, sigma);
+
+          const canvasX = centerX + (x * scaleX);
+          const canvasY = baseY - (y * scaleY);
+
+          if (firstPoint) {
+            ctx.moveTo(canvasX, canvasY);
+            firstPoint = false;
+          } else {
+            ctx.lineTo(canvasX, canvasY);
+          }
+        }
+        ctx.stroke();
+
+        // Mean line (μ)
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+
+        ctx.beginPath();
+        const muX = centerX + (mu * scaleX);
+        ctx.moveTo(muX, 0);
+        ctx.lineTo(muX, baseY);
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+
+        // μ Label
+        ctx.fillStyle = '#2563eb';
+        ctx.font = 'bold 12px Arial';
+        ctx.fillText('μ', muX, 15);
+      }
+
+      // Update statistics
+      function updateStatistics() {
+        muValue.textContent = mu.toFixed(1);
+        sigmaValue.textContent = sigma.toFixed(1);
+
+        stat68.textContent = '[' + (mu - sigma).toFixed(1) + ', ' + (mu + sigma).toFixed(1) + ']';
+        stat95.textContent = '[' + (mu - 2 * sigma).toFixed(1) + ', ' + (mu + 2 * sigma).toFixed(1) + ']';
+        stat99.textContent = '[' + (mu - 3 * sigma).toFixed(1) + ', ' + (mu + 3 * sigma).toFixed(1) + ']';
+        statVariance.textContent = (sigma * sigma).toFixed(2);
+      }
+
+      // Animation
+      function startAnimation() {
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = null;
+          animateButton.textContent = 'Animation starten';
+          return;
+        }
+
+        animateButton.textContent = 'Animation stoppen';
+
+        function animate() {
+          animationTime += 0.02;
+
+          mu = Math.sin(animationTime) * 2.5;
+          sigma = 1 + Math.sin(animationTime * 0.7) * 0.9;
+
+          muSlider.value = mu;
+          sigmaSlider.value = sigma;
+
+          updateStatistics();
+          drawGaussian();
+
+          animationId = requestAnimationFrame(animate);
+        }
+
+        animate();
+      }
+
+      // Reset
+      function resetWidget() {
+        if (animationId) {
+          cancelAnimationFrame(animationId);
+          animationId = null;
+          animateButton.textContent = 'Animation starten';
+        }
+
+        mu = 0;
+        sigma = 1;
+        animationTime = 0;
+
+        muSlider.value = mu;
+        sigmaSlider.value = sigma;
+
+        updateStatistics();
+        drawGaussian();
+      }
+
+      // Event listeners - only for THIS instance
+      muSlider.addEventListener('input', function(e) {
+        mu = parseFloat(e.target.value);
+        updateStatistics();
+        drawGaussian();
+      });
+
+      sigmaSlider.addEventListener('input', function(e) {
+        sigma = parseFloat(e.target.value);
+        updateStatistics();
+        drawGaussian();
+      });
+
+      animateButton.addEventListener('click', startAnimation);
+      resetButton.addEventListener('click', resetWidget);
+
+      // Canvas mouse tracking
+      canvas.addEventListener('mousemove', function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const xValue = (x - canvas.width / 2) * 12 / canvas.width;
+        const yValue = gaussian(xValue, mu, sigma);
+
+        mouseXDisplay.textContent = 'x = ' + xValue.toFixed(2);
+        mouseYDisplay.textContent = 'p(x) = ' + yValue.toFixed(4);
+
+        mouseInfo.style.display = 'block';
+        mouseInfo.style.left = Math.min(x + 10, canvas.width - 120) + 'px';
+        mouseInfo.style.top = Math.max(y - 40, 10) + 'px';
+      });
+
+      canvas.addEventListener('mouseleave', function() {
+        mouseInfo.style.display = 'none';
+      });
+
+      // Initial setup
+      updateStatistics();
+      resizeCanvas();
+
+      // Responsive handler with debouncing
+      let resizeTimer;
+      window.addEventListener('resize', function() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function() {
+          resizeCanvas();
+        }, 250);
+      });
+
+      console.log('[Gaussian Widget] Initialized:', instanceId);
+    })();
+  </script>
+</div>
