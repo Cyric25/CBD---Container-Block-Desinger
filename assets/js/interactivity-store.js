@@ -124,15 +124,21 @@ store('container-block-designer', {
 				// Setze Loading-State
 				context.screenshotLoading = true;
 
-				// Icon zu Loading ändern
-				const icon = element.ref.querySelector('.cbd-screenshot .dashicons');
+				// Icon zu Loading ändern (element.ref ist der Button selbst)
+				const icon = element.ref.querySelector('.dashicons');
 				if (icon) {
 					icon.classList.remove('dashicons-camera');
 					icon.classList.add('dashicons-update-alt');
 				}
 
 				// Finde Container-Block Element für Screenshot
-				const containerBlock = element.ref.querySelector('.cbd-container-block');
+				// element.ref ist der Button, wir müssen zum Container navigieren
+				const mainContainer = element.ref.closest('[data-wp-interactive="container-block-designer"]');
+				if (!mainContainer) {
+					throw new Error('Main container not found');
+				}
+
+				const containerBlock = mainContainer.querySelector('.cbd-container-block');
 				if (!containerBlock) {
 					throw new Error('Container block not found');
 				}
