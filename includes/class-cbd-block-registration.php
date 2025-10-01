@@ -331,9 +331,19 @@ class CBD_Block_Registration {
             true
         );
 
-        // PDF Export is now handled by jspdf-loader.js with multiple CDN fallbacks
+        // PDF Export: Load jsPDF with fallback mechanism
+        if (!is_admin()) {
+            wp_enqueue_script(
+                'cbd-jspdf-loader',
+                CBD_PLUGIN_URL . 'assets/js/jspdf-loader.js',
+                array(),
+                CBD_VERSION,
+                true
+            );
+        }
 
-        // REMOVED: Old inline scripts - now handled by interactivity-fallback.js
+        // REMOVED: Old inline scripts (container-blocks-inline.js)
+        // Now handled by interactivity-fallback.js and interactivity-store.js
         /*
         // Fixed inline JavaScript for basic functionality
         wp_add_inline_script('cbd-frontend-working', '
@@ -823,15 +833,12 @@ class CBD_Block_Registration {
         $html .= '</div>'; // Close .cbd-content
         $html .= '</div>'; // Close .cbd-container
         
-        // Add separate JavaScript file and required libraries
-        static $js_added = false;
-        if (!$js_added) {
-            // Load robust jsPDF loader with fallbacks
-            $html .= '<script src="' . CBD_PLUGIN_URL . 'assets/js/jspdf-loader.js?v=' . time() . mt_rand() . '"></script>';
-            // Load our custom JavaScript
-            $html .= '<script src="' . CBD_PLUGIN_URL . 'assets/js/container-blocks-inline.js?v=' . time() . mt_rand() . '"></script>';
-            $js_added = true;
-        }
+        // REMOVED: Old inline scripts are replaced by:
+        // 1. Interactivity API (interactivity-store.js) - loaded via wp_enqueue_script_module()
+        // 2. jQuery Fallback (interactivity-fallback.js) - loaded via wp_enqueue_script()
+        //
+        // These are now properly enqueued in enqueue_block_assets() method
+        // No need for inline script tags anymore
         
         return $html;
     }
