@@ -151,6 +151,21 @@ store('container-block-designer', {
 					yield new Promise(resolve => setTimeout(resolve, 350));
 				}
 
+				// Buttons ausblenden für Screenshot
+				const actionButtons = mainContainer.querySelector('.cbd-action-buttons');
+				let originalVisibility = '';
+				if (actionButtons) {
+					// Speichere originale Sichtbarkeit
+					originalVisibility = actionButtons.style.visibility || '';
+					// Verwende visibility statt display, damit Layout erhalten bleibt
+					// und !important inline styles nicht überschrieben werden müssen
+					actionButtons.style.setProperty('visibility', 'hidden', 'important');
+					actionButtons.style.setProperty('opacity', '0', 'important');
+				}
+
+				// Kurze Verzögerung damit DOM aktualisiert wird
+				yield new Promise(resolve => setTimeout(resolve, 50));
+
 				// Screenshot erstellen
 				const canvas = yield html2canvas(containerBlock, {
 					useCORS: true,
@@ -159,6 +174,12 @@ store('container-block-designer', {
 					logging: false,
 					backgroundColor: null
 				});
+
+				// Buttons wieder einblenden
+				if (actionButtons) {
+					actionButtons.style.removeProperty('visibility');
+					actionButtons.style.removeProperty('opacity');
+				}
 
 				// Convert to blob
 				const blob = yield new Promise(resolve => canvas.toBlob(resolve, 'image/png'));

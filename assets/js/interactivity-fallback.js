@@ -249,13 +249,28 @@
             // Small delay for animation
             setTimeout(function() {
                 console.log('[CBD Fallback] Running html2canvas on element:', $containerBlock[0]);
-                html2canvas($containerBlock[0], {
-                    useCORS: true,
-                    allowTaint: false,
-                    scale: 2,
-                    logging: false,
-                    backgroundColor: null
-                }).then(function(canvas) {
+
+                // Buttons ausblenden für Screenshot
+                const $actionButtons = $container.find('.cbd-action-buttons');
+                $actionButtons.css({
+                    'visibility': 'hidden !important',
+                    'opacity': '0 !important'
+                });
+
+                // Kurze Verzögerung damit DOM aktualisiert wird
+                setTimeout(function() {
+                    html2canvas($containerBlock[0], {
+                        useCORS: true,
+                        allowTaint: false,
+                        scale: 2,
+                        logging: false,
+                        backgroundColor: null
+                    }).then(function(canvas) {
+                        // Buttons wieder einblenden
+                        $actionButtons.css({
+                            'visibility': '',
+                            'opacity': ''
+                        });
                     canvas.toBlob(function(blob) {
                         if (!blob) {
                             console.error('[CBD Fallback] Failed to create blob');
@@ -369,22 +384,29 @@
                         $icon.removeClass('dashicons-update-alt').addClass('dashicons-camera');
                     }
 
-                }).catch(function(error) {
-                    console.error('[CBD Fallback] Screenshot failed:', error);
+                    }).catch(function(error) {
+                        console.error('[CBD Fallback] Screenshot failed:', error);
 
-                    // Error state
-                    context.screenshotLoading = false;
-                    context.screenshotError = true;
-                    $container.data('cbd-context', context);
-                    $button.prop('disabled', false);
-                    $icon.removeClass('dashicons-update-alt').addClass('dashicons-camera');
+                        // Buttons wieder einblenden auch bei Fehler
+                        $actionButtons.css({
+                            'visibility': '',
+                            'opacity': ''
+                        });
 
-                    // Reset error after 2 seconds
-                    setTimeout(function() {
-                        context.screenshotError = false;
+                        // Error state
+                        context.screenshotLoading = false;
+                        context.screenshotError = true;
                         $container.data('cbd-context', context);
-                    }, 2000);
-                });
+                        $button.prop('disabled', false);
+                        $icon.removeClass('dashicons-update-alt').addClass('dashicons-camera');
+
+                        // Reset error after 2 seconds
+                        setTimeout(function() {
+                            context.screenshotError = false;
+                            $container.data('cbd-context', context);
+                        }, 2000);
+                    });
+                }, 50); // Verzögerung für Button-Ausblendung
             }, wasCollapsed ? 350 : 50);
         });
 
