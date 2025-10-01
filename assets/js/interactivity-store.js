@@ -164,20 +164,25 @@ store('container-block-designer', {
 				// ==============================================
 				// TIER 1: Clipboard API (iOS 13.4+, Chrome, Firefox)
 				// ==============================================
+				let clipboardSuccess = false;
+
 				if (navigator.clipboard && navigator.clipboard.write) {
 					try {
 						const item = new ClipboardItem({ 'image/png': blob });
 						yield navigator.clipboard.write([item]);
 						console.log('[CBD] ✅ Clipboard: Screenshot copied to clipboard');
-						// Success - continue to cleanup
+						clipboardSuccess = true;
+						// Success - skip other tiers
 					} catch (err) {
 						console.warn('[CBD] ❌ Clipboard failed:', err);
-						// Try Tier 2: Web Share API
-						yield tryWebShare(blob, canvas, context);
+						// Will fallback to Tier 2 below
 					}
 				} else {
 					console.warn('[CBD] Clipboard API not available');
-					// Try Tier 2: Web Share API
+				}
+
+				// Only try other tiers if clipboard failed
+				if (!clipboardSuccess) {
 					yield tryWebShare(blob, canvas, context);
 				}
 
