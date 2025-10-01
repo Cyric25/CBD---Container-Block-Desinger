@@ -756,6 +756,20 @@ class CBD_Block_Registration {
         $html .= '</span>';
         $html .= '</button>';
 
+        // Button 4: PDF Export - ALWAYS visible
+        $html .= '<button type="button" ';
+        $html .= 'class="cbd-pdf-export" ';
+        $html .= 'data-wp-on--click="actions.createPDF" ';
+        $html .= 'data-wp-bind--disabled="context.pdfLoading" ';
+        $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+        $html .= 'title="Als PDF exportieren">';
+        $html .= '<span class="dashicons dashicons-pdf" ';
+        $html .= 'data-wp-class--dashicons-pdf="!context.pdfLoading && !context.pdfSuccess" ';
+        $html .= 'data-wp-class--dashicons-update-alt="context.pdfLoading" ';
+        $html .= 'data-wp-class--dashicons-yes-alt="context.pdfSuccess">';
+        $html .= '</span>';
+        $html .= '</button>';
+
         $html .= '</div>'; // Close buttons
         
         // Add block header with icon and title (always top-left, visible when collapsed)

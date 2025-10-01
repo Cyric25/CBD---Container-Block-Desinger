@@ -313,8 +313,20 @@ store('container-block-designer', {
 			try {
 				context.pdfLoading = true;
 
-				// Analog zu Screenshot, aber mit jsPDF
-				const containerBlock = element.ref.querySelector('.cbd-container-block');
+				// Icon zu Loading ändern
+				const icon = element.ref.querySelector('.dashicons');
+				if (icon) {
+					icon.classList.remove('dashicons-pdf');
+					icon.classList.add('dashicons-update-alt');
+				}
+
+				// Finde Container-Block Element für PDF
+				const mainContainer = element.ref.closest('[data-wp-interactive="container-block-designer"]');
+				if (!mainContainer) {
+					throw new Error('Main container not found');
+				}
+
+				const containerBlock = mainContainer.querySelector('.cbd-container-block');
 				if (!containerBlock) {
 					throw new Error('Container block not found');
 				}
@@ -326,13 +338,30 @@ store('container-block-designer', {
 					yield new Promise(resolve => setTimeout(resolve, 350));
 				}
 
+				// Buttons ausblenden für PDF
+				const actionButtons = mainContainer.querySelector('.cbd-action-buttons');
+				if (actionButtons) {
+					actionButtons.style.setProperty('visibility', 'hidden', 'important');
+					actionButtons.style.setProperty('opacity', '0', 'important');
+				}
+
+				// Kurze Verzögerung damit DOM aktualisiert wird
+				yield new Promise(resolve => setTimeout(resolve, 50));
+
 				// Canvas erstellen
 				const canvas = yield html2canvas(containerBlock, {
 					useCORS: true,
 					allowTaint: false,
 					scale: 2,
-					logging: false
+					logging: false,
+					backgroundColor: null
 				});
+
+				// Buttons wieder einblenden
+				if (actionButtons) {
+					actionButtons.style.removeProperty('visibility');
+					actionButtons.style.removeProperty('opacity');
+				}
 
 				// PDF erstellen
 				const imgData = canvas.toDataURL('image/png');
@@ -353,14 +382,30 @@ store('container-block-designer', {
 				context.pdfSuccess = true;
 				context.pdfLoading = false;
 
+				// Icon Feedback
+				if (icon) {
+					icon.classList.remove('dashicons-update-alt');
+					icon.classList.add('dashicons-yes-alt');
+				}
+
 				setTimeout(() => {
 					context.pdfSuccess = false;
+					if (icon) {
+						icon.classList.remove('dashicons-yes-alt');
+						icon.classList.add('dashicons-pdf');
+					}
 				}, 2000);
 
 			} catch (error) {
 				console.error('[CBD] PDF export failed:', error);
 				context.pdfError = true;
 				context.pdfLoading = false;
+
+				// Icon zurücksetzen
+				if (icon) {
+					icon.classList.remove('dashicons-update-alt', 'dashicons-yes-alt');
+					icon.classList.add('dashicons-pdf');
+				}
 
 				setTimeout(() => {
 					context.pdfError = false;
