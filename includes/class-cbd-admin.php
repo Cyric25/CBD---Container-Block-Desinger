@@ -141,20 +141,6 @@ class CBD_Admin {
         error_log('[CBD Menu Debug] Has cbd_edit_blocks: ' . (current_user_can('cbd_edit_blocks') ? 'YES' : 'NO'));
         error_log('[CBD Menu Debug] Has cbd_admin_blocks: ' . (current_user_can('cbd_admin_blocks') ? 'YES' : 'NO'));
 
-        // Temporäres Debug-Notice
-        if (current_user_can('manage_options')) {
-            $debug_message = sprintf(
-                'CBD Debug - User: %s, Rollen: %s, Block-Redakteur: %s, cbd_edit_blocks: %s',
-                $current_user->user_login,
-                implode(', ', $current_user->roles),
-                $is_block_redakteur ? 'JA' : 'NEIN',
-                current_user_can('cbd_edit_blocks') ? 'JA' : 'NEIN'
-            );
-            add_action('admin_notices', function() use ($debug_message) {
-                echo '<div class="notice notice-info is-dismissible"><p>' . esc_html($debug_message) . '</p></div>';
-            });
-        }
-
         if ($is_block_redakteur) {
             // Für Block-Redakteure: Nur Block-Vorschau als Hauptmenü
             // Verwende read als minimale Capability falls cbd_edit_blocks fehlt

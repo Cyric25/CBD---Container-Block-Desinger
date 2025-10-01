@@ -271,18 +271,15 @@
                             'visibility': '',
                             'opacity': ''
                         });
-                    canvas.toBlob(function(blob) {
-                        if (!blob) {
-                            console.error('[CBD Fallback] Failed to create blob');
-                            downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
-                            return;
-                        }
 
                         // ==============================================
                         // TIER 1: Clipboard API (iOS 13.4+, Chrome, Firefox)
                         // ==============================================
                         if (navigator.clipboard && navigator.clipboard.write) {
-                            const item = new ClipboardItem({ 'image/png': blob });
+                            // Safari/iOS FIX: Promise direkt an ClipboardItem übergeben
+                            // NICHT vorher awaiten, sonst verliert Safari die User-Gesture
+                            const blobPromise = new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                            const item = new ClipboardItem({ 'image/png': blobPromise });
 
                             navigator.clipboard.write([item])
                                 .then(function() {
@@ -291,17 +288,30 @@
                                 })
                                 .catch(function(err) {
                                     console.warn('[CBD Fallback] ❌ Clipboard failed:', err);
-                                    // Try Tier 2: Web Share API
-                                    tryWebShare(blob, canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                                    // Clipboard failed, erstelle Blob für Fallback
+                                    canvas.toBlob(function(blob) {
+                                        if (!blob) {
+                                            console.error('[CBD Fallback] Failed to create blob');
+                                            downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                                            return;
+                                        }
+                                        // Try Tier 2: Web Share API
+                                        tryWebShare(blob, canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                                    }, 'image/png');
                                 });
                             return;
                         }
 
-                        // Clipboard not available, try Web Share API
+                        // Clipboard not available, erstelle Blob für Fallback
                         console.warn('[CBD Fallback] Clipboard API not available');
-                        tryWebShare(blob, canvas, context, wasCollapsed, $content, $button, $icon, $container);
-
-                    }, 'image/png');
+                        canvas.toBlob(function(blob) {
+                            if (!blob) {
+                                console.error('[CBD Fallback] Failed to create blob');
+                                downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                                return;
+                            }
+                            tryWebShare(blob, canvas, context, wasCollapsed, $content, $button, $icon, $container);
+                        }, 'image/png');
 
                     // ==============================================
                     // TIER 2: Web Share API (iOS 15+, Safari)

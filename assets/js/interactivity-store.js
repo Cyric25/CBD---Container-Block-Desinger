@@ -181,13 +181,6 @@ store('container-block-designer', {
 					actionButtons.style.removeProperty('opacity');
 				}
 
-				// Convert to blob
-				const blob = yield new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-
-				if (!blob) {
-					throw new Error('Failed to create blob from canvas');
-				}
-
 				// ==============================================
 				// TIER 1: Clipboard API (iOS 13.4+, Chrome, Firefox)
 				// ==============================================
@@ -195,7 +188,11 @@ store('container-block-designer', {
 
 				if (navigator.clipboard && navigator.clipboard.write) {
 					try {
-						const item = new ClipboardItem({ 'image/png': blob });
+						// Safari/iOS FIX: Promise direkt an ClipboardItem übergeben
+						// NICHT vorher awaiten, sonst verliert Safari die User-Gesture
+						const blobPromise = new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+						const item = new ClipboardItem({ 'image/png': blobPromise });
 						yield navigator.clipboard.write([item]);
 						console.log('[CBD] ✅ Clipboard: Screenshot copied to clipboard');
 						clipboardSuccess = true;
@@ -208,8 +205,13 @@ store('container-block-designer', {
 					console.warn('[CBD] Clipboard API not available');
 				}
 
-				// Only try other tiers if clipboard failed
+				// Blob für Tier 2/3 Fallbacks erstellen (nur wenn Clipboard fehlschlägt)
+				let blob = null;
 				if (!clipboardSuccess) {
+					blob = yield new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+					if (!blob) {
+						throw new Error('Failed to create blob from canvas');
+					}
 					yield tryWebShare(blob, canvas, context);
 				}
 
