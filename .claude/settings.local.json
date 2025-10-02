@@ -15,7 +15,9 @@
       "WebFetch(domain:make.wordpress.org)",
       "WebFetch(domain:developer.wordpress.org)",
       "Bash(wp core:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git checkout:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

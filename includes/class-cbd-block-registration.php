@@ -539,11 +539,19 @@ class CBD_Block_Registration {
     /**
      * Block rendern - Updated with new structure
      */
+    // Track nesting level for counter
+    private static $render_depth = 0;
+
     public function render_block($attributes, $content) {
+        // Track rendering depth to detect nested blocks
+        self::$render_depth++;
+
         // DEBUG: Add HTML comment to verify this renderer is active
         $html = '<!-- ========================================= -->';
         $html .= '<!-- CBD DEBUG: BLOCK REGISTRATION IS ACTIVE -->';
         $html .= '<!-- TIME: ' . date('Y-m-d H:i:s') . ' -->';
+        $html .= '<!-- RENDER DEPTH START: ' . self::$render_depth . ' -->';
+        $html .= '<!-- IS TOP LEVEL: ' . (self::$render_depth == 1 ? 'YES' : 'NO') . ' -->';
         $html .= '<!-- ========================================= -->';
         
         $selected_block = isset($attributes['selectedBlock']) ? $attributes['selectedBlock'] : '';
@@ -700,13 +708,18 @@ class CBD_Block_Registration {
         }
         $html .= '>';
         
-        // Add numbering OUTSIDE everything (in the main container) - ALWAYS for now
-        static $numbering_counter = 0;
-        $numbering_counter++;
-        
-        $html .= "<div class=\"cbd-container-number cbd-outside-number\" data-number=\"" . esc_attr($numbering_counter) . "\" style=\"position: absolute !important; top: -40px !important; left: -40px !important; background: rgba(0,0,0,0.9) !important; color: white !important; width: 34px !important; height: 34px !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 15px !important; font-weight: bold !important; z-index: 99999 !important; border: 2px solid white !important;\">";
-        $html .= esc_html($numbering_counter);
-        $html .= '</div>';
+        // Add numbering OUTSIDE everything (in the main container) - Only for TOP-LEVEL blocks
+        // NOTE: We add a placeholder and renumber via JavaScript after DOM is ready
+        // because WordPress renders blocks in unpredictable order
+
+        $show_number = (self::$render_depth == 1);
+
+        if ($show_number) {
+            // Add a marker class for JavaScript to find and renumber
+            $html .= "<div class=\"cbd-container-number cbd-outside-number cbd-needs-numbering\" data-number=\"0\" style=\"position: absolute !important; top: -40px !important; left: -40px !important; background: rgba(0,0,0,0.9) !important; color: white !important; width: 34px !important; height: 34px !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 15px !important; font-weight: bold !important; z-index: 99999 !important; border: 2px solid white !important;\">";
+            $html .= '?'; // Placeholder - will be replaced by JavaScript
+            $html .= '</div>';
+        }
         
         // Content wrapper div for collapse functionality
         $content_wrapper_class = 'cbd-content';
@@ -862,7 +875,10 @@ class CBD_Block_Registration {
         //
         // These are now properly enqueued in enqueue_block_assets() method
         // No need for inline script tags anymore
-        
+
+        // Decrement render depth after rendering this block
+        self::$render_depth--;
+
         return $html;
     }
     

@@ -28,6 +28,44 @@
     $(document).ready(function() {
         console.log('[CBD Fallback] Initializing Interactivity API fallback...');
 
+        // RENUMBER BLOCKS IN DOM ORDER
+        // This fixes the issue where WordPress renders blocks in unpredictable order
+        function renumberBlocks() {
+            // Find all numbering elements
+            const allNumberElements = document.querySelectorAll('.cbd-needs-numbering');
+            console.log('[CBD Numbering] Found ' + allNumberElements.length + ' total numbering elements');
+
+            // Filter to only TOP-LEVEL blocks (not nested inside other .cbd-container)
+            const topLevelNumbers = Array.from(allNumberElements).filter(function(element) {
+                // Get the container this number belongs to
+                const container = element.closest('.cbd-container');
+                if (!container) return false;
+
+                // Check if this container is nested inside another .cbd-container
+                const parentContainer = container.parentElement.closest('.cbd-container');
+                const isTopLevel = !parentContainer;
+
+                console.log('[CBD Numbering] Element check - Container:', container.id, 'Has parent:', !!parentContainer, 'Is top-level:', isTopLevel);
+
+                return isTopLevel;
+            });
+
+            console.log('[CBD Numbering] Found ' + topLevelNumbers.length + ' top-level blocks to renumber');
+
+            // Renumber only top-level blocks
+            topLevelNumbers.forEach(function(element, index) {
+                const blockNumber = index + 1;
+                element.textContent = blockNumber;
+                element.setAttribute('data-number', blockNumber);
+
+                const container = element.closest('.cbd-container');
+                console.log('[CBD Numbering] Block ' + container.id + ' renumbered to: ' + blockNumber);
+            });
+        }
+
+        // Run renumbering immediately
+        renumberBlocks();
+
         // Initial check
         if (checkInteractivityAPI()) {
             console.log('[CBD Fallback] WordPress Interactivity API is active, skipping fallback');
