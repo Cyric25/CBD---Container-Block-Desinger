@@ -147,20 +147,28 @@
          * Copy Text Action
          */
         $(document).on('click', '[data-wp-on--click="actions.copyText"]', function(e) {
+            // WICHTIG: Sofort stoppen damit Event nicht zu Parent-Containern bubblet
+            e.preventDefault();
+            e.stopPropagation();
+
             // Runtime check: Skip if Interactivity API is now active
             if (interactivityAPIActive || checkInteractivityAPI()) {
                 console.log('[CBD Fallback] Interactivity API is active, skipping jQuery handler');
                 return;
             }
 
-            e.preventDefault();
-            e.stopPropagation();
-
             const $button = $(this);
             const $container = $button.closest('[data-wp-interactive="container-block-designer"]');
             const context = $container.data('cbd-context') || {};
-            // WICHTIG: Nur das DIREKTE Content-Element
-            const $content = $container.children('.cbd-container-block').children('.cbd-container-content');
+
+            // WICHTIG: Nur das DIREKTE Content-Element - Fallback-Strategie
+            let $content = $container.children('.cbd-container-content');
+            if ($content.length === 0) {
+                $content = $container.find('> .cbd-container-block > .cbd-container-content');
+            }
+            if ($content.length === 0) {
+                $content = $container.find('.cbd-container-content').first();
+            }
             const $icon = $button.find('.dashicons');
 
             console.log('[CBD Fallback] Copy text:', $container.attr('id'));
@@ -211,22 +219,30 @@
          * Screenshot Action
          */
         $(document).on('click', '[data-wp-on--click="actions.createScreenshot"]', function(e) {
+            // WICHTIG: Sofort stoppen damit Event nicht zu Parent-Containern bubblet
+            e.preventDefault();
+            e.stopPropagation();
+
             // Runtime check: Skip if Interactivity API is now active
             if (interactivityAPIActive || checkInteractivityAPI()) {
                 console.log('[CBD Fallback] Interactivity API is active, skipping jQuery handler');
                 return;
             }
 
-            e.preventDefault();
-            e.stopPropagation();
-
             const $button = $(this);
             const $container = $button.closest('[data-wp-interactive="container-block-designer"]');
             const context = $container.data('cbd-context') || {};
             const $containerBlock = $container.children('.cbd-container-block');
             const $icon = $button.find('.dashicons');
-            // WICHTIG: Nur das DIREKTE Content-Element
-            const $content = $containerBlock.children('.cbd-container-content');
+
+            // WICHTIG: Nur das DIREKTE Content-Element - Fallback-Strategie
+            let $content = $container.children('.cbd-container-content');
+            if ($content.length === 0) {
+                $content = $container.find('> .cbd-container-block > .cbd-container-content');
+            }
+            if ($content.length === 0) {
+                $content = $containerBlock.children('.cbd-container-content');
+            }
 
             console.log('[CBD Fallback] Create screenshot:', $container.attr('id'));
 
