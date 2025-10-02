@@ -22,6 +22,28 @@
     position: relative; /* Prevent positioning issues in screenshots/PDF */
 }
 
+/* Inline formulas - stay within text flow */
+.cbd-latex-formula.cbd-latex-inline {
+    display: inline;
+    width: auto;
+    margin: 0 0.2em;
+    padding: 0;
+    text-align: inherit;
+    clear: none;
+    overflow-x: visible;
+    vertical-align: baseline;
+}
+
+/* Display formulas - block level, centered */
+.cbd-latex-formula.cbd-latex-display {
+    display: block;
+    width: 100%;
+    margin: 20px auto;
+    padding: 15px 0;
+    text-align: center;
+    clear: both;
+}
+
 /* The rendered formula content */
 .cbd-latex-content {
     display: inline-block;
@@ -31,6 +53,21 @@
     color: inherit; /* Inherit color from parent */
     position: relative; /* Prevent positioning issues */
     vertical-align: middle; /* Better alignment */
+}
+
+/* Content for inline formulas - smaller, inline */
+.cbd-latex-inline .cbd-latex-content {
+    display: inline;
+    font-size: inherit;
+    line-height: inherit;
+    vertical-align: baseline;
+}
+
+/* Content for display formulas - larger, block */
+.cbd-latex-display .cbd-latex-content {
+    display: inline-block;
+    font-size: 1.2em;
+    line-height: 1.6;
 }
 
 /* KaTeX rendered math should be centered and inherit color */
@@ -153,18 +190,23 @@
 
 /* Responsive adjustments for mobile */
 @media screen and (max-width: 768px) {
-    .cbd-latex-formula {
+    .cbd-latex-formula.cbd-latex-display {
         margin: 15px 0;
         padding: 10px 0;
     }
 
-    .cbd-latex-content {
+    .cbd-latex-display .cbd-latex-content {
         font-size: 1em;
     }
 
     .cbd-latex-fallback {
         font-size: 1em;
         padding: 12px;
+    }
+
+    /* Inline formulas stay same size on mobile */
+    .cbd-latex-inline .cbd-latex-content {
+        font-size: inherit;
     }
 }
 

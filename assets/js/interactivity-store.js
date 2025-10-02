@@ -27,21 +27,49 @@ store('container-block-designer', {
 		 * Toggle-Funktion für Collapse/Expand
 		 * Verwendet lokalen Context - jeder Block ist unabhängig
 		 */
-		*toggleCollapse() {
+		*toggleCollapse(event) {
 			const context = getContext();
 			const element = getElement();
+
+			// WICHTIG: Prüfe ob dieser Event wirklich für DIESEN Container ist
+			// element.ref ist der Button, der den Handler definiert
+			const button = element.ref;
+
+			// Finde den Container dieses Buttons
+			const thisContainer = button.closest('[data-wp-interactive="container-block-designer"]');
+			const thisContainerId = thisContainer?.id;
+
+			// Event-Propagation sofort stoppen
+			if (event) {
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+				event.preventDefault();
+			}
+
+			// Wenn event.target ein verschachtelter Button ist, ignoriere
+			if (event && event.target) {
+				const targetButton = event.target.closest('[data-wp-on--click="actions.toggleCollapse"]');
+				const targetContainer = targetButton?.closest('[data-wp-interactive="container-block-designer"]');
+				const targetContainerId = targetContainer?.id;
+
+				// Nur ausführen wenn der Klick auf unserem Container war
+				if (targetContainerId !== thisContainerId) {
+					console.log('[CBD] Ignoring propagated event from nested container');
+					return;
+				}
+			}
 
 			// Toggle collapsed state im lokalen Context
 			context.isCollapsed = !context.isCollapsed;
 
 			// Update aria-expanded für Accessibility
-			const contentElement = element.ref.querySelector('.cbd-container-content');
+			const contentElement = button.closest('[data-wp-interactive="container-block-designer"]')?.querySelector('.cbd-container-content');
 			if (contentElement) {
 				contentElement.setAttribute('aria-hidden', context.isCollapsed ? 'true' : 'false');
 			}
 
 			// Update icon direction
-			const icon = element.ref.querySelector('.cbd-collapse-toggle .dashicons');
+			const icon = button.querySelector('.dashicons');
 			if (icon) {
 				if (context.isCollapsed) {
 					icon.classList.remove('dashicons-arrow-up-alt2');
@@ -56,13 +84,34 @@ store('container-block-designer', {
 		/**
 		 * Text kopieren - verwendet lokalen Context für Container-ID
 		 */
-		*copyText() {
+		*copyText(event) {
 			const context = getContext();
 			const element = getElement();
 
+			const button = element.ref;
+			const thisContainer = button.closest('[data-wp-interactive="container-block-designer"]');
+			const thisContainerId = thisContainer?.id;
+
+			// Event-Propagation sofort stoppen
+			if (event) {
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+				event.preventDefault();
+			}
+
+			// Nur ausführen wenn der Klick auf unserem Container war
+			if (event && event.target) {
+				const targetButton = event.target.closest('[data-wp-on--click="actions.copyText"]');
+				const targetContainer = targetButton?.closest('[data-wp-interactive="container-block-designer"]');
+				if (targetContainer?.id !== thisContainerId) {
+					return;
+				}
+			}
+
 			try {
 				// Finde Content-Element im aktuellen Block
-				const contentElement = element.ref.querySelector('.cbd-container-content');
+				const container = button.closest('[data-wp-interactive="container-block-designer"]');
+				const contentElement = container?.querySelector('.cbd-container-content');
 				if (!contentElement) {
 					console.warn('[CBD] Content element not found');
 					return;
@@ -82,7 +131,7 @@ store('container-block-designer', {
 				context.copySuccess = true;
 
 				// Icon feedback
-				const icon = element.ref.querySelector('.cbd-copy-text .dashicons');
+				const icon = button.querySelector('.dashicons');
 				if (icon) {
 					icon.classList.remove('dashicons-clipboard');
 					icon.classList.add('dashicons-yes-alt');
@@ -109,9 +158,29 @@ store('container-block-designer', {
 		/**
 		 * Screenshot erstellen - verwendet html2canvas
 		 */
-		*createScreenshot() {
+		*createScreenshot(event) {
 			const context = getContext();
 			const element = getElement();
+
+			const button = element.ref;
+			const thisContainer = button.closest('[data-wp-interactive="container-block-designer"]');
+			const thisContainerId = thisContainer?.id;
+
+			// Event-Propagation sofort stoppen
+			if (event) {
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+				event.preventDefault();
+			}
+
+			// Nur ausführen wenn der Klick auf unserem Container war
+			if (event && event.target) {
+				const targetButton = event.target.closest('[data-wp-on--click="actions.createScreenshot"]');
+				const targetContainer = targetButton?.closest('[data-wp-interactive="container-block-designer"]');
+				if (targetContainer?.id !== thisContainerId) {
+					return;
+				}
+			}
 
 			// Prüfe ob html2canvas verfügbar ist
 			if (typeof html2canvas === 'undefined') {
@@ -124,16 +193,15 @@ store('container-block-designer', {
 				// Setze Loading-State
 				context.screenshotLoading = true;
 
-				// Icon zu Loading ändern (element.ref ist der Button selbst)
-				const icon = element.ref.querySelector('.dashicons');
+				// Icon zu Loading ändern
+				const icon = button.querySelector('.dashicons');
 				if (icon) {
 					icon.classList.remove('dashicons-camera');
 					icon.classList.add('dashicons-update-alt');
 				}
 
 				// Finde Container-Block Element für Screenshot
-				// element.ref ist der Button, wir müssen zum Container navigieren
-				const mainContainer = element.ref.closest('[data-wp-interactive="container-block-designer"]');
+				const mainContainer = button.closest('[data-wp-interactive="container-block-designer"]');
 				if (!mainContainer) {
 					throw new Error('Main container not found');
 				}
@@ -299,9 +367,29 @@ store('container-block-designer', {
 		/**
 		 * PDF Export erstellen
 		 */
-		*createPDF() {
+		*createPDF(event) {
 			const context = getContext();
 			const element = getElement();
+
+			const button = element.ref;
+			const thisContainer = button.closest('[data-wp-interactive="container-block-designer"]');
+			const thisContainerId = thisContainer?.id;
+
+			// Event-Propagation sofort stoppen
+			if (event) {
+				event.stopPropagation();
+				event.stopImmediatePropagation();
+				event.preventDefault();
+			}
+
+			// Nur ausführen wenn der Klick auf unserem Container war
+			if (event && event.target) {
+				const targetButton = event.target.closest('[data-wp-on--click="actions.createPDF"]');
+				const targetContainer = targetButton?.closest('[data-wp-interactive="container-block-designer"]');
+				if (targetContainer?.id !== thisContainerId) {
+					return;
+				}
+			}
 
 			// Prüfe Dependencies
 			if (typeof html2canvas === 'undefined' || typeof jspdf === 'undefined') {
@@ -314,14 +402,14 @@ store('container-block-designer', {
 				context.pdfLoading = true;
 
 				// Icon zu Loading ändern
-				const icon = element.ref.querySelector('.dashicons');
+				const icon = button.querySelector('.dashicons');
 				if (icon) {
 					icon.classList.remove('dashicons-pdf');
 					icon.classList.add('dashicons-update-alt');
 				}
 
 				// Finde Container-Block Element für PDF
-				const mainContainer = element.ref.closest('[data-wp-interactive="container-block-designer"]');
+				const mainContainer = button.closest('[data-wp-interactive="container-block-designer"]');
 				if (!mainContainer) {
 					throw new Error('Main container not found');
 				}

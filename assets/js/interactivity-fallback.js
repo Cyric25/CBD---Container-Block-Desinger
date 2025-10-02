@@ -100,11 +100,28 @@
                 return;
             }
 
+            // Event-Propagation SOFORT stoppen
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
 
+            // WICHTIG: Prüfe ob dieser Button zum gleichen Container gehört wie event.target
             const $button = $(this);
-            const $container = $button.closest('[data-wp-interactive="container-block-designer"]');
+            const $thisContainer = $button.closest('[data-wp-interactive="container-block-designer"]');
+            const thisContainerId = $thisContainer.attr('id');
+
+            // Finde den Container des Klick-Ziels
+            const $targetButton = $(e.target).closest('[data-wp-on--click="actions.toggleCollapse"]');
+            const $targetContainer = $targetButton.closest('[data-wp-interactive="container-block-designer"]');
+            const targetContainerId = $targetContainer.attr('id');
+
+            // Nur ausführen wenn IDs übereinstimmen
+            if (thisContainerId !== targetContainerId) {
+                console.log('[CBD Fallback] Ignoring event from nested container');
+                return;
+            }
+
+            const $container = $thisContainer;
             const context = $container.data('cbd-context') || {};
             const $content = $container.find('.cbd-container-content');
             const $icon = $button.find('.dashicons');
@@ -145,9 +162,20 @@
 
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
 
             const $button = $(this);
-            const $container = $button.closest('[data-wp-interactive="container-block-designer"]');
+            const $thisContainer = $button.closest('[data-wp-interactive="container-block-designer"]');
+            const thisContainerId = $thisContainer.attr('id');
+
+            const $targetButton = $(e.target).closest('[data-wp-on--click="actions.copyText"]');
+            const $targetContainer = $targetButton.closest('[data-wp-interactive="container-block-designer"]');
+
+            if ($targetContainer.attr('id') !== thisContainerId) {
+                return;
+            }
+
+            const $container = $thisContainer;
             const context = $container.data('cbd-context') || {};
             const $content = $container.find('.cbd-container-content');
             const $icon = $button.find('.dashicons');
@@ -208,9 +236,20 @@
 
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
 
             const $button = $(this);
-            const $container = $button.closest('[data-wp-interactive="container-block-designer"]');
+            const $thisContainer = $button.closest('[data-wp-interactive="container-block-designer"]');
+            const thisContainerId = $thisContainer.attr('id');
+
+            const $targetButton = $(e.target).closest('[data-wp-on--click="actions.createScreenshot"]');
+            const $targetContainer = $targetButton.closest('[data-wp-interactive="container-block-designer"]');
+
+            if ($targetContainer.attr('id') !== thisContainerId) {
+                return;
+            }
+
+            const $container = $thisContainer;
             const context = $container.data('cbd-context') || {};
             const $containerBlock = $container.find('.cbd-container-block');
             const $icon = $button.find('.dashicons');

@@ -104,7 +104,8 @@ class CBD_LaTeX_Parser {
      * Parse LaTeX formulas from content
      *
      * Supports:
-     * - $$formula$$ syntax (display math)
+     * - $$formula$$ syntax (display math - block level, centered)
+     * - $formula$ syntax (inline math - within text flow)
      * - [latex]formula[/latex] shortcode syntax
      *
      * @param string $content Content to parse
@@ -123,19 +124,47 @@ class CBD_LaTeX_Parser {
         // Reset counter for each content block
         $this->formula_counter = 0;
 
-        // Parse $$formula$$ syntax (display math)
+        // WICHTIG: Parse $$formula$$ ZUERST (display math)
+        // Dies muss vor $formula$ geparst werden, damit $$ nicht als zwei $ interpretiert wird
+        // Temporär ersetzen mit Platzhalter um Konflikte zu vermeiden
+        $display_formulas = array();
+        $display_counter = 0;
+
         $content = preg_replace_callback(
             '/\$\$(.+?)\$\$/s',
-            array($this, 'render_display_formula'),
+            function($matches) use (&$display_formulas, &$display_counter) {
+                $placeholder = '___CBD_DISPLAY_FORMULA_' . $display_counter . '___';
+                $display_formulas[$placeholder] = $this->render_display_formula($matches);
+                $display_counter++;
+                return $placeholder;
+            },
             $content
         );
 
-        // Parse [latex]formula[/latex] shortcode syntax
+        // Parse [latex]formula[/latex] shortcode syntax (display math)
         $content = preg_replace_callback(
             '/\[latex\](.+?)\[\/latex\]/si',
-            array($this, 'render_display_formula'),
+            function($matches) use (&$display_formulas, &$display_counter) {
+                $placeholder = '___CBD_DISPLAY_FORMULA_' . $display_counter . '___';
+                $display_formulas[$placeholder] = $this->render_display_formula($matches);
+                $display_counter++;
+                return $placeholder;
+            },
             $content
         );
+
+        // Parse $formula$ syntax (inline math) - nun ohne $$ Konflikte
+        // Einfacher Regex: einzelnes $ gefolgt von non-$ content, gefolgt von einzelnem $
+        $content = preg_replace_callback(
+            '/\$([^\$]+?)\$/s',
+            array($this, 'render_inline_formula'),
+            $content
+        );
+
+        // Platzhalter zurück durch gerenderte Display-Formeln ersetzen
+        foreach ($display_formulas as $placeholder => $formula_html) {
+            $content = str_replace($placeholder, $formula_html, $content);
+        }
 
         return $content;
     }
@@ -158,9 +187,36 @@ class CBD_LaTeX_Parser {
         // Return HTML structure for KaTeX rendering
         // The span is empty - KaTeX will fill it with rendered content
         $html = sprintf(
-            '<div class="cbd-latex-formula" id="%s" data-latex="%s" data-formula-id="%s">
+            '<div class="cbd-latex-formula cbd-latex-display" id="%s" data-latex="%s" data-formula-id="%s">
                 <span class="cbd-latex-content"></span>
             </div>',
+            esc_attr($formula_id),
+            esc_attr($formula),
+            esc_attr($formula_id)
+        );
+
+        return $html;
+    }
+
+    /**
+     * Render inline formula (within text flow)
+     *
+     * @param array $matches Regex matches
+     * @return string Rendered HTML
+     */
+    private function render_inline_formula($matches) {
+        $formula = trim($matches[1]);
+        $this->formula_counter++;
+
+        $formula_id = 'cbd-latex-inline-' . uniqid() . '-' . $this->formula_counter;
+
+        // Store formula for potential PDF export
+        $this->formulas[$formula_id] = $formula;
+
+        // Return HTML structure for inline KaTeX rendering
+        // Uses span instead of div to stay within text flow
+        $html = sprintf(
+            '<span class="cbd-latex-formula cbd-latex-inline" id="%s" data-latex="%s" data-formula-id="%s"><span class="cbd-latex-content"></span></span>',
             esc_attr($formula_id),
             esc_attr($formula),
             esc_attr($formula_id)
