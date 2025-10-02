@@ -69,7 +69,8 @@
                 $container.data('cbd-context', context);
 
                 // Set initial aria attributes
-                const $content = $container.find('.cbd-container-content');
+                // WICHTIG: Nur das DIREKTE Content-Element, nicht verschachtelte!
+                const $content = $container.children('.cbd-container-block').children('.cbd-container-content');
                 if ($content.length) {
                     $content.attr('aria-hidden', context.isCollapsed ? 'true' : 'false');
                     $content.attr('role', 'region');
@@ -81,7 +82,8 @@
                 }
 
                 // Initialize icon states
-                const $collapseIcon = $container.find('.cbd-collapse-toggle .dashicons');
+                // WICHTIG: Nur das DIREKTE Icon, nicht verschachtelte!
+                const $collapseIcon = $container.children('.cbd-action-buttons').find('.cbd-collapse-toggle .dashicons');
                 if (context.isCollapsed) {
                     $collapseIcon.removeClass('dashicons-arrow-up-alt2').addClass('dashicons-arrow-down-alt2');
                 } else {
@@ -94,39 +96,30 @@
          * Toggle Collapse Action
          */
         $(document).on('click', '[data-wp-on--click="actions.toggleCollapse"]', function(e) {
+            // WICHTIG: Sofort stoppen damit Event nicht zu Parent-Containern bubblet
+            e.preventDefault();
+            e.stopPropagation();
+
             // Runtime check: Skip if Interactivity API is now active
             if (interactivityAPIActive || checkInteractivityAPI()) {
                 console.log('[CBD Fallback] Interactivity API is active, skipping jQuery handler');
                 return;
             }
 
-            // Event-Propagation SOFORT stoppen
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-
-            // WICHTIG: Prüfe ob dieser Button zum gleichen Container gehört wie event.target
             const $button = $(this);
-            const $thisContainer = $button.closest('[data-wp-interactive="container-block-designer"]');
-            const thisContainerId = $thisContainer.attr('id');
-
-            // Finde den Container des Klick-Ziels
-            const $targetButton = $(e.target).closest('[data-wp-on--click="actions.toggleCollapse"]');
-            const $targetContainer = $targetButton.closest('[data-wp-interactive="container-block-designer"]');
-            const targetContainerId = $targetContainer.attr('id');
-
-            // Nur ausführen wenn IDs übereinstimmen
-            if (thisContainerId !== targetContainerId) {
-                console.log('[CBD Fallback] Ignoring event from nested container');
-                return;
-            }
-
-            const $container = $thisContainer;
+            const $container = $button.closest('[data-wp-interactive="container-block-designer"]');
             const context = $container.data('cbd-context') || {};
-            const $content = $container.find('.cbd-container-content');
-            const $icon = $button.find('.dashicons');
 
-            console.log('[CBD Fallback] Toggle collapse:', $container.attr('id'));
+            // WICHTIG: Nur das DIREKTE Content-Element dieses Containers, nicht verschachtelte
+            // Fallback-Strategie: Versuche mehrere Selektoren
+            let $content = $container.children('.cbd-container-content');
+            if ($content.length === 0) {
+                $content = $container.find('> .cbd-container-block > .cbd-container-content');
+            }
+            if ($content.length === 0) {
+                $content = $container.find('.cbd-container-content').first();
+            }
+            const $icon = $button.find('.dashicons');
 
             // Toggle state
             context.isCollapsed = !context.isCollapsed;
@@ -162,22 +155,12 @@
 
             e.preventDefault();
             e.stopPropagation();
-            e.stopImmediatePropagation();
 
             const $button = $(this);
-            const $thisContainer = $button.closest('[data-wp-interactive="container-block-designer"]');
-            const thisContainerId = $thisContainer.attr('id');
-
-            const $targetButton = $(e.target).closest('[data-wp-on--click="actions.copyText"]');
-            const $targetContainer = $targetButton.closest('[data-wp-interactive="container-block-designer"]');
-
-            if ($targetContainer.attr('id') !== thisContainerId) {
-                return;
-            }
-
-            const $container = $thisContainer;
+            const $container = $button.closest('[data-wp-interactive="container-block-designer"]');
             const context = $container.data('cbd-context') || {};
-            const $content = $container.find('.cbd-container-content');
+            // WICHTIG: Nur das DIREKTE Content-Element
+            const $content = $container.children('.cbd-container-block').children('.cbd-container-content');
             const $icon = $button.find('.dashicons');
 
             console.log('[CBD Fallback] Copy text:', $container.attr('id'));
@@ -236,24 +219,14 @@
 
             e.preventDefault();
             e.stopPropagation();
-            e.stopImmediatePropagation();
 
             const $button = $(this);
-            const $thisContainer = $button.closest('[data-wp-interactive="container-block-designer"]');
-            const thisContainerId = $thisContainer.attr('id');
-
-            const $targetButton = $(e.target).closest('[data-wp-on--click="actions.createScreenshot"]');
-            const $targetContainer = $targetButton.closest('[data-wp-interactive="container-block-designer"]');
-
-            if ($targetContainer.attr('id') !== thisContainerId) {
-                return;
-            }
-
-            const $container = $thisContainer;
+            const $container = $button.closest('[data-wp-interactive="container-block-designer"]');
             const context = $container.data('cbd-context') || {};
-            const $containerBlock = $container.find('.cbd-container-block');
+            const $containerBlock = $container.children('.cbd-container-block');
             const $icon = $button.find('.dashicons');
-            const $content = $container.find('.cbd-container-content');
+            // WICHTIG: Nur das DIREKTE Content-Element
+            const $content = $containerBlock.children('.cbd-container-content');
 
             console.log('[CBD Fallback] Create screenshot:', $container.attr('id'));
 
