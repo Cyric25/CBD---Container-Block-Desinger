@@ -41,16 +41,44 @@
                 );
                 pdfButton.on("click", function() {
 
+                    // DEBUG: Log all containers first
+                    console.log('[CBD PDF] Total visible containers:', $(".cbd-container:visible").length);
+
+                    $(".cbd-container:visible").each(function(i) {
+                        var $this = $(this);
+                        var isInContent = $this.closest('.cbd-container-content').length > 0;
+                        var title = $this.find('.cbd-block-title').first().text().trim();
+                        console.log('[CBD PDF] Container', i + 1, ':', {
+                            title: title || 'No title',
+                            id: this.id,
+                            isInsideContent: isInContent,
+                            isTopLevel: !isInContent
+                        });
+                    });
+
                     // Filter out empty Gutenberg containers and only include containers with actual content
+                    // PLUS: Filter out nested containers - only get top-level containers
                     var containerBlocks = $(".cbd-container:visible").filter(function() {
                         var $this = $(this);
+
+                        // First check: Is this a top-level container?
+                        // A container is nested if it's inside another container's CONTENT area
+                        var isNested = $this.closest('.cbd-container-content').length > 0;
+                        if (isNested) {
+                            console.log('[CBD PDF] Filtering out nested container:', this.id);
+                            return false; // Skip nested containers
+                        }
+
+                        // Second check: Does it have actual content?
                         var hasTitle = $this.find('.cbd-block-title').text().trim().length > 0;
                         var hasContent = $this.find('.cbd-container-content').text().trim().length > 0;
                         var hasId = this.id && this.id.length > 0;
 
-                        // Include only containers that have either title, content, or a proper ID
+                        // Include only top-level containers that have either title, content, or a proper ID
                         return hasTitle || hasContent || hasId;
                     });
+
+                    console.log('[CBD PDF] After filtering, top-level containers:', containerBlocks.length);
 
 
                     if (containerBlocks.length === 0) {
@@ -67,6 +95,8 @@
                     // Remove existing modal if any
                     $('#cbd-pdf-modal').remove();
 
+                    // containerBlocks already filtered to only include top-level containers
+
                     var modalHtml = '<div id="cbd-pdf-modal" style="' +
                         'position: fixed; top: 0; left: 0; width: 100%; height: 100%; ' +
                         'background: rgba(0,0,0,0.7); z-index: 999999; display: flex; ' +
@@ -79,7 +109,7 @@
                             '<h3 style="margin: 0 0 10px 0; color: #555; font-size: 16px;">Container auswählen:</h3>' +
                             '<div id="cbd-block-selection" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 6px;">';
 
-                    // Add checkboxes for each container
+                    // Add checkboxes for each top-level container
                     containerBlocks.each(function(index) {
                         var $this = $(this);
                         var blockTitle = $this.find('.cbd-block-title').text() || 'Block ' + (index + 1);
@@ -153,7 +183,7 @@
                         var mode = $('input[name="pdf-mode"]:checked').val();
                         var quality = parseFloat($('#cbd-quality-select').val());
 
-                        // Get selected blocks
+                        // Get selected blocks (already filtered to top-level only)
                         $('#cbd-block-selection input[type="checkbox"]:checked').each(function() {
                             var index = parseInt($(this).data('block-index'));
                             selectedBlocks.push($(containerBlocks[index]));

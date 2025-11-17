@@ -152,6 +152,14 @@
                 $ = function(el) { return containerBlocks.constructor(el); };
             }
 
+            // CRITICAL FIX: Filter out nested containers to prevent duplication
+            // Only process top-level containers (containers not inside .cbd-container-content)
+            containerBlocks = containerBlocks.filter(function() {
+                // A container is nested if it's inside another container's content area
+                var isNested = $(this).closest('.cbd-container-content').length > 0;
+                return !isNested; // Keep only non-nested containers
+            });
+
             // Process containers one by one using the SIMPLE method (like single block export)
             var processedBlocks = 0;
 
