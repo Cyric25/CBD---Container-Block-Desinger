@@ -306,6 +306,19 @@
                                 }
                             }
 
+                            // Calculate actual content dimensions to ensure full capture
+                            var blockElement = $currentBlock[0];
+                            var actualWidth = Math.max(
+                                blockElement.scrollWidth,
+                                blockElement.offsetWidth,
+                                blockElement.clientWidth
+                            );
+                            var actualHeight = Math.max(
+                                blockElement.scrollHeight,
+                                blockElement.offsetHeight,
+                                blockElement.clientHeight
+                            );
+
                             var canvasOptions = {
                                 useCORS: true,
                                 allowTaint: false,
@@ -313,7 +326,11 @@
                                 logging: false,
                                 backgroundColor: 'white',
                                 scrollX: 0,
-                                scrollY: 0
+                                scrollY: 0,
+                                width: actualWidth,
+                                height: actualHeight,
+                                windowWidth: actualWidth,
+                                windowHeight: actualHeight
                             };
 
                             // Print mode - modify styles for print
@@ -736,9 +753,36 @@
                                 return '#000000';
                             }
 
+                            // Add delay to ensure DOM is fully updated after expansion
+                            setTimeout(function() {
+                                // Temporarily hide sibling blocks to prevent them from being captured
+                                var siblingBlocks = [];
+                                var blockParent = $currentBlock.parent();
+                                if (blockParent.length > 0) {
+                                    blockParent.children('.cbd-container-block').each(function() {
+                                        if (this !== $currentBlock[0]) {
+                                            var $sibling = $(this);
+                                            siblingBlocks.push({
+                                                element: $sibling,
+                                                originalVisibility: $sibling.css('visibility'),
+                                                originalDisplay: $sibling.css('display')
+                                            });
+                                            $sibling.css('visibility', 'hidden');
+                                        }
+                                    });
+                                }
 
-                            try {
-                                html2canvas($currentBlock[0], canvasOptions).then(function(canvas) {
+                                try {
+                                    html2canvas($currentBlock[0], canvasOptions).then(function(canvas) {
+
+                                        // Restore sibling blocks visibility
+                                        for (var i = 0; i < siblingBlocks.length; i++) {
+                                            siblingBlocks[i].element.css({
+                                                'visibility': siblingBlocks[i].originalVisibility,
+                                                'display': siblingBlocks[i].originalDisplay
+                                            });
+                                        }
+
 
                                     // Restore original collapsed states after rendering
                                     restoreOriginalStates();
@@ -897,20 +941,37 @@
 
                                     }
 
-                                }).catch(function(error) {
+                                    }).catch(function(error) {
+
+                                        // Restore sibling blocks visibility
+                                        for (var i = 0; i < siblingBlocks.length; i++) {
+                                            siblingBlocks[i].element.css({
+                                                'visibility': siblingBlocks[i].originalVisibility,
+                                                'display': siblingBlocks[i].originalDisplay
+                                            });
+                                        }
+
+                                        // Restore original states even on error
+                                        restoreOriginalStates();
+
+                                        addTextOnly();
+                                    });
+                                } catch (syncError) {
+
+                                    // Restore sibling blocks visibility
+                                    for (var i = 0; i < siblingBlocks.length; i++) {
+                                        siblingBlocks[i].element.css({
+                                            'visibility': siblingBlocks[i].originalVisibility,
+                                            'display': siblingBlocks[i].originalDisplay
+                                        });
+                                    }
 
                                     // Restore original states even on error
                                     restoreOriginalStates();
 
                                     addTextOnly();
-                                });
-                            } catch (syncError) {
-
-                                // Restore original states even on error
-                                restoreOriginalStates();
-
-                                addTextOnly();
-                            }
+                                }
+                            }, 100); // 100ms delay for DOM to fully render after expansion
                         }
                     } else {
                         addTextOnly();
