@@ -10,10 +10,8 @@
     
     // Warte auf vollständiges Laden
     wp.domReady(function() {
-        console.log('CBD: Block Editor bereit');
         
         if (!wp || !wp.blocks || !wp.element || !wp.blockEditor) {
-            console.error('CBD: WordPress Block Editor Module nicht verfügbar');
             return;
         }
         
@@ -84,19 +82,16 @@
             }, []);
             
             const loadBlocks = () => {
-                console.log('CBD: Starte Laden der Blocks...');
                 setIsLoading(true);
                 
                 // Prüfe lokale Daten
                 if (blockData.blocks && blockData.blocks.length > 0) {
-                    console.log('CBD: Verwende lokale Blocks:', blockData.blocks.length);
                     setAvailableBlocks(blockData.blocks);
                     setIsLoading(false);
                     return;
                 }
                 
                 // AJAX Request
-                console.log('CBD: Lade via AJAX von:', blockData.ajaxUrl);
                 
                 fetch(blockData.ajaxUrl, {
                     method: 'POST',
@@ -110,24 +105,20 @@
                 })
                 .then(response => response.json())
                 .then(data => {
-                    console.log('CBD: AJAX Response:', data);
                     
                     if (data.success && data.data) {
                         const blocks = Array.isArray(data.data) ? data.data : [];
-                        console.log('CBD: Gefundene Blocks:', blocks.length);
                         
                         // Store blocks globally
                         window.cbdBlockData.blocks = blocks;
                         
                         setAvailableBlocks(blocks);
                     } else {
-                        console.log('CBD: Keine Blocks gefunden oder Fehler');
                         setAvailableBlocks([]);
                     }
                     setIsLoading(false);
                 })
                 .catch(err => {
-                    console.error('CBD: AJAX Fehler:', err);
                     setAvailableBlocks([]);
                     setIsLoading(false);
                 });
@@ -239,28 +230,16 @@
                     // Check if attributes changed
                     if (lastSelectedBlock && lastSelectedBlock.clientId === block.clientId) {
                         if (JSON.stringify(lastSelectedBlock.attributes) !== JSON.stringify(block.attributes)) {
-                            console.log('CBD DEBUG: Block attributes changed!');
-                            console.log('CBD DEBUG: Old attributes:', lastSelectedBlock.attributes);
-                            console.log('CBD DEBUG: New attributes:', block.attributes);
                         }
                     } else if (block.name && block.name.includes('container-block-designer')) {
-                        console.log('CBD DEBUG: Block selection changed');
-                        console.log('CBD DEBUG: New block ID:', block.clientId);
-                        console.log('CBD DEBUG: Block object:', block);
                         
                         if (block.name && block.name.includes('container-block-designer')) {
-                            console.log('CBD DEBUG: Block name:', block.name);
-                            console.log('CBD DEBUG: Block attributes:', block.attributes);
                             
                             if (block.attributes && block.attributes.selectedBlock !== undefined) {
-                                console.log('CBD DEBUG: Container block detected!');
                                 const blockSlug = block.attributes.selectedBlock;
-                                console.log('CBD DEBUG: Block slug from attributes:', blockSlug);
                                 
                                 if (!blockSlug) {
-                                    console.log('CBD DEBUG: No block slug found in attributes');
                                 } else {
-                                    console.log('CBD DEBUG: Found block slug:', blockSlug);
                                 }
                             }
                         }
@@ -272,7 +251,6 @@
                             const newSlug = block.attributes && block.attributes.selectedBlock;
 
                             if (oldSlug !== newSlug) {
-                                console.log('CBD DEBUG: Dropdown changed from', oldSlug, 'to', newSlug, '(Template-Styles deaktiviert für Live-Preview)');
                                 // applyRealStyles(newSlug, block.clientId); // DEAKTIVIERT
                             }
                         }
@@ -280,7 +258,6 @@
                         // DEAKTIVIERT: Template-Styles beim Block-Select
                         const currentSlug = block.attributes && block.attributes.selectedBlock;
                         if (currentSlug) {
-                            console.log('CBD DEBUG: Block selected with slug:', currentSlug, '(Template-Styles deaktiviert für Live-Preview)');
                             // applyRealStyles(currentSlug, block.clientId); // DEAKTIVIERT
                         }
                         
@@ -295,7 +272,6 @@
         // Apply real styles function (ohne Testfarben)
         function applyRealStyles(blockSlug, blockId) {
             if (!blockSlug) {
-                console.log('CBD DEBUG: No slug provided, clearing any existing styles');
                 // Clear styles for empty selection
                 const selectedBlock = document.querySelector('.wp-block.is-selected[data-type*="container-block-designer"]');
                 if (selectedBlock) {
@@ -304,12 +280,10 @@
                     selectedBlock.style.removeProperty('border-radius');
                     selectedBlock.style.removeProperty('color');
                     selectedBlock.style.removeProperty('padding');
-                    console.log('CBD DEBUG: Cleared styles for empty selection');
                 }
                 return;
             }
             
-            console.log('CBD DEBUG: Applying real styles for slug:', blockSlug);
             
             // Find the selected container block with multiple selectors
             let selectedBlock = document.querySelector('.wp-block.is-selected[data-type*="container-block-designer"]');
@@ -323,11 +297,9 @@
             }
             
             if (!selectedBlock) {
-                console.log('CBD DEBUG: No selected container block found with any selector');
                 return;
             }
             
-            console.log('CBD DEBUG: Found selected container block:', selectedBlock);
             
             // Get block data
             let blocks = null;
@@ -336,24 +308,20 @@
             }
             
             if (!blocks || blocks.length === 0) {
-                console.log('CBD DEBUG: No block data available, using fallback styles');
                 applyFallbackStyles(selectedBlock, blockSlug);
                 return;
             }
             
             const blockData = blocks.find(b => b.slug === blockSlug);
             if (blockData) {
-                console.log('CBD DEBUG: Found block data for:', blockSlug, blockData);
                 applyBlockStyles(selectedBlock, blockData);
             } else {
-                console.log('CBD DEBUG: No specific data found, using fallback');
                 applyFallbackStyles(selectedBlock, blockSlug);
             }
         }
         
         // Apply fallback styles - DEAKTIVIERT für Live-Preview
         function applyFallbackStyles(element, slug) {
-            console.log('CBD DEBUG: Fallback styles deaktiviert für Live-Preview. Slug:', slug);
 
             // ENTFERNT: Hardcoded orange/gray styles um Live-Preview zu ermöglichen
             // Keine fallback styles mehr - Live-Preview hat Priorität
@@ -362,7 +330,6 @@
         
         // Apply database styles
         function applyBlockStyles(element, blockData) {
-            console.log('CBD DEBUG: Applying database styles for block:', blockData);
             
             // Try to parse database styles
             let styles = null;
@@ -371,20 +338,17 @@
                 try {
                     styles = typeof blockData.styles === 'string' ? JSON.parse(blockData.styles) : blockData.styles;
                 } catch (e) {
-                    console.log('CBD DEBUG: Could not parse blockData.styles:', e);
                 }
             } else if (blockData.css_styles) {
                 try {
                     styles = typeof blockData.css_styles === 'string' ? JSON.parse(blockData.css_styles) : blockData.css_styles;
                 } catch (e) {
-                    console.log('CBD DEBUG: Could not parse blockData.css_styles:', e);
                 }
             } else if (blockData.config && blockData.config.styles) {
                 styles = blockData.config.styles;
             }
             
             if (styles && typeof styles === 'object') {
-                console.log('CBD DEBUG: Found database styles:', styles);
                 
                 // Apply database styles similar to fallback styles
                 if (styles.background && styles.background.color) {
@@ -408,9 +372,7 @@
                     element.style.setProperty('color', styles.color, 'important');
                 }
                 
-                console.log('CBD DEBUG: Database styles applied successfully');
             } else {
-                console.log('CBD DEBUG: No valid database styles found, using fallbacks');
                 applyFallbackStyles(element, blockData.slug);
             }
         }
@@ -453,32 +415,26 @@
             save: ContainerBlockSave
         });
         
-        console.log('CBD: Container-Block registriert');
         
         // Add direct event listener for dropdown changes
         setTimeout(() => {
-            console.log('CBD: Setting up dropdown change listeners...');
             
             // Listen for any select changes in the inspector
             document.addEventListener('change', (e) => {
                 if (e.target && e.target.tagName === 'SELECT') {
-                    console.log('CBD DEBUG: Select change detected!', e.target, 'Value:', e.target.value);
                     
                     // Check if this might be our dropdown
                     const selectValue = e.target.value;
                     if (selectValue === 'infotext_k1' || selectValue === 'infotext_k2' || selectValue === '') {
-                        console.log('CBD DEBUG: This looks like our container block dropdown! Value:', selectValue);
                         
                         // Apply styles immediately
                         setTimeout(() => {
                             // applyRealStyles(selectValue); // DEAKTIVIERT für Live-Preview
-                            console.log('CBD DEBUG: Select change detected but template styles deaktiviert:', selectValue);
                         }, 100);
                     }
                 }
             });
             
-            console.log('CBD: Dropdown listeners set up');
         }, 1000);
     });
     

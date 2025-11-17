@@ -1,0 +1,36 @@
+{
+  "name": "container-block-designer",
+  "version": "2.7.6",
+  "description": "WordPress Plugin - Erstellt anpassbare Container-Blocks für den Gutenberg Editor",
+  "main": "container-block-designer.php",
+  "scripts": {
+    "zip": "node create-plugin-zip.js",
+    "syntax-check": "node syntax-check.js",
+    "syntax-check:watch": "node syntax-check.js --watch",
+    "prezip": "npm run syntax-check",
+    "build": "npm run syntax-check && npm run zip"
+  },
+  "keywords": [
+    "wordpress",
+    "gutenberg",
+    "blocks",
+    "container",
+    "pdf",
+    "latex",
+    "education"
+  ],
+  "author": "Your Name",
+  "license": "GPL-2.0-or-later",
+  "devDependencies": {
+    "archiver": "^7.0.1",
+    "chokidar": "^3.5.3",
+    "glob": "^10.3.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cyric25/CBD---Container-Block-Desinger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Cyric25/CBD---Container-Block-Desinger/issues"
+  }
+}

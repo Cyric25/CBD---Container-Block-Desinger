@@ -18,7 +18,6 @@
         // Initialisierung
         init: function() {
             if (this.config.debug) {
-                console.log('CBD Unified Frontend: Initializing...');
             }
 
             this.initContainerBlocks();
@@ -174,7 +173,6 @@
         toggleCollapse: function(containerId) {
             var $container = $('#' + containerId);
             if ($container.length === 0) {
-                console.log('CBD: Container nicht gefunden:', containerId);
                 return;
             }
 
@@ -182,7 +180,6 @@
             var $toggle = $container.find('.cbd-collapse-toggle');
 
             if ($contentToToggle.length === 0) {
-                console.log('CBD: Kein Content zum Togglen gefunden');
                 return;
             }
 
@@ -309,7 +306,6 @@
             var prepareAndCapture = function() {
                 // Prepare LaTeX formulas
                 if (typeof window.cbdPrepareFormulasForPDF === 'function') {
-                    console.log('CBD: Preparing LaTeX formulas for screenshot');
                     window.cbdPrepareFormulasForPDF(elementToCapture);
                 }
 
@@ -319,17 +315,14 @@
                 formulas.forEach(function(formula) {
                     if (!formula.classList.contains('cbd-latex-rendered')) {
                         allRendered = false;
-                        console.log('CBD: Formula not yet rendered, waiting...');
                     }
                 });
 
                 if (!allRendered && formulas.length > 0) {
-                    console.log('CBD: Waiting for LaTeX rendering to complete...');
                     setTimeout(prepareAndCapture, 300);
                     return;
                 }
 
-                console.log('CBD: All formulas rendered, proceeding with screenshot');
                 captureScreenshot();
             };
 
@@ -345,7 +338,6 @@
                     onclone: function(clonedDoc) {
                         // Ensure LaTeX formulas are visible in clone
                         var formulas = clonedDoc.querySelectorAll('.cbd-latex-formula');
-                        console.log('CBD Screenshot: Found', formulas.length, 'LaTeX formulas');
 
                         formulas.forEach(function(formula, index) {
                             formula.style.setProperty('display', 'block', 'important');
@@ -374,18 +366,14 @@
                                             // Only use container color if it's dark enough (brightness < 180)
                                             if (brightness < 180) {
                                                 textColor = containerColor;
-                                                console.log('CBD Screenshot: Formula', index + 1, 'using container color:', textColor);
                                             } else {
-                                                console.log('CBD Screenshot: Container color too light (brightness:', brightness, '), using black');
                                             }
                                         }
                                     }
                                 } catch (e) {
-                                    console.warn('CBD Screenshot: Could not get computed style', e);
                                 }
                             }
 
-                            console.log('CBD Screenshot: Formula', index + 1, 'final color:', textColor);
 
                             // Apply color to formula and all its child elements
                             formula.style.setProperty('color', textColor, 'important');
@@ -397,7 +385,6 @@
 
                             // Apply to all nested elements (KaTeX generates many spans)
                             var allElements = formula.querySelectorAll('*');
-                            console.log('CBD Screenshot: Fixing', allElements.length, 'elements in formula', index + 1);
 
                             allElements.forEach(function(element) {
                                 element.style.setProperty('color', textColor, 'important');
@@ -409,7 +396,6 @@
 
                                 // Also check for inline styles that might override
                                 if (element.style.color && element.style.color !== textColor) {
-                                    console.log('CBD Screenshot: Overriding inline color:', element.style.color, 'with', textColor);
                                 }
                             });
                         });
@@ -469,18 +455,14 @@
 
             // Debug: Log formulas found
             var formulaCount = $clone.find('.cbd-latex-formula').length;
-            console.log('CBD Copy: Found', formulaCount, 'LaTeX formulas in container');
 
             // WICHTIG: Formeln komplett durch LaTeX-Code ersetzen
             var formulas = $clone.find('.cbd-latex-formula').toArray();
-            console.log('CBD Copy: Processing', formulas.length, 'formulas');
 
             for (var i = 0; i < formulas.length; i++) {
                 var formula = formulas[i];
                 var latex = formula.getAttribute('data-latex');
 
-                console.log('CBD Copy: Formula', i + 1, '- LaTeX:', latex);
-                console.log('CBD Copy: Formula', i + 1, '- Current text:', formula.textContent);
 
                 if (latex) {
                     // Erstelle ein neues Span-Element mit nur dem LaTeX-Code
@@ -490,7 +472,6 @@
 
                     // Ersetze die Formel
                     formula.parentNode.replaceChild(replacement, formula);
-                    console.log('CBD Copy: Replaced formula', i + 1);
                 }
             }
 
@@ -498,8 +479,6 @@
             var $content = $clone.find('.cbd-container-content');
             var text = $content.length > 0 ? $content.text() : $clone.text();
 
-            console.log('CBD Copy: Final text:', text.substring(0, 100) + '...');
-            console.log('CBD Copy: Final text length:', text.length);
             return text.trim();
         },
 
@@ -557,12 +536,10 @@
                 $script.attr('src', 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
 
                 $script.on('load', function() {
-                    console.log('CBD: html2canvas geladen');
                     resolve();
                 });
 
                 $script.on('error', function() {
-                    console.error('CBD: html2canvas konnte nicht geladen werden');
                     reject(new Error('Bibliothek konnte nicht geladen werden'));
                 });
 
@@ -607,7 +584,6 @@
             return;
         }
 
-        console.log('CBD Unified Frontend: Initializing...');
         window.CBDUnifiedInitialized = true;
         CBDUnified.init();
     });

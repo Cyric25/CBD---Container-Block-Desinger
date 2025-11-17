@@ -7,11 +7,9 @@
 (function($) {
     'use strict';
     
-    console.log('CBD Working Frontend: Loading...');
     
     // Initialize when DOM is ready
     $(document).ready(function() {
-        console.log('CBD Working Frontend: Initializing...');
         
         // Remove ALL existing handlers to prevent conflicts
         $(document).off('click', '.cbd-collapse-toggle');
@@ -28,21 +26,16 @@
             e.preventDefault();
             e.stopPropagation();
             
-            console.log('CBD Working: Toggle clicked');
             
             var $container = $(this).closest('.cbd-container');
             var $contentToToggle = $container.find('.cbd-container-content');
             
-            console.log('CBD Working: Container found:', $container.length);
-            console.log('CBD Working: Content found:', $contentToToggle.length);
             
             if ($contentToToggle.length === 0) {
-                console.log('CBD Working: No content - aborting');
                 return;
             }
             
             // PROTECTION: Force all container parts visible
-            console.log('CBD Working: Protecting container visibility');
             $container.css('display', 'block');
             $container.find('.cbd-content').css('display', 'block');
             $container.find('.cbd-container-block').css('display', 'block');
@@ -51,14 +44,12 @@
             
             // SIMPLE TOGGLE
             if ($contentToToggle.is(':visible')) {
-                console.log('CBD Working: Hiding content');
                 $contentToToggle.hide();
                 $container.addClass('cbd-collapsed');
                 $(this).find('.dashicons')
                     .removeClass('dashicons-arrow-up-alt2')
                     .addClass('dashicons-arrow-down-alt2');
             } else {
-                console.log('CBD Working: Showing content');
                 $contentToToggle.show();
                 $container.removeClass('cbd-collapsed');
                 $(this).find('.dashicons')
@@ -66,7 +57,6 @@
                     .addClass('dashicons-arrow-up-alt2');
             }
             
-            console.log('CBD Working: Toggle complete');
         });
         
         // DROPDOWN MENU HANDLER
@@ -74,7 +64,6 @@
             e.preventDefault();
             e.stopPropagation();
             
-            console.log('CBD Working: Menu toggle clicked');
             
             var $menu = $(this).siblings('.cbd-dropdown-menu');
             var $allMenus = $('.cbd-dropdown-menu');
@@ -85,7 +74,6 @@
             // Toggle current menu
             $menu.toggleClass('show');
             
-            console.log('CBD Working: Menu toggled');
         });
         
         // CLOSE DROPDOWN WHEN CLICKING OUTSIDE
@@ -103,7 +91,6 @@
             var $button = $(this);
             var $container = $button.closest('.cbd-container');
             
-            console.log('CBD Working: Dropdown action clicked:', $button.attr('class'));
             
             // Handle different button types
             if ($button.hasClass('cbd-copy-text')) {
@@ -120,12 +107,10 @@
             $(this).closest('.cbd-container').removeClass('cbd-selected');
         });
         
-        console.log('CBD Working Frontend: Ready');
     });
     
     // SELECTION-BASED MENU SYSTEM
     function initializeSelectionMenu() {
-        console.log('CBD Working: Initializing selection menu');
         
         // Detect touch device
         const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -199,7 +184,6 @@
     
     // INITIALIZE COLLAPSE STATES
     function initializeCollapseStates() {
-        console.log('CBD Working: Initializing collapse states');
         
         $('.cbd-container').each(function() {
             const $container = $(this);
@@ -210,14 +194,12 @@
                 const $content = $container.find('.cbd-container-content');
                 
                 if (defaultState === 'collapsed') {
-                    console.log('CBD Working: Setting initial collapsed state');
                     $content.hide();
                     $container.addClass('cbd-collapsed');
                     $container.find('.cbd-collapse-toggle .dashicons')
                         .removeClass('dashicons-arrow-up-alt2')
                         .addClass('dashicons-arrow-down-alt2');
                 } else {
-                    console.log('CBD Working: Setting initial expanded state');
                     $content.show();
                     $container.removeClass('cbd-collapsed');
                     $container.find('.cbd-collapse-toggle .dashicons')
@@ -230,7 +212,6 @@
     
     // SCREENSHOT FUNCTIONALITY
     function takeScreenshot($container) {
-        console.log('CBD Working: Taking screenshot');
         
         if (typeof html2canvas === 'undefined') {
             alert('Screenshot-Funktion nicht verfügbar. html2canvas library fehlt.');
@@ -252,16 +233,13 @@
             link.download = 'container-screenshot-' + Date.now() + '.png';
             link.href = canvas.toDataURL();
             link.click();
-            console.log('CBD Working: Screenshot saved');
         }).catch(function(error) {
-            console.error('CBD Working: Screenshot error:', error);
             alert('Screenshot-Fehler: ' + error.message);
         });
     }
     
     // COPY TEXT FUNCTIONALITY
     function copyContainerText($container) {
-        console.log('CBD Working: Copying text');
         
         var $content = $container.find('.cbd-container-content');
         var text = $content.text().trim();
@@ -273,10 +251,8 @@
         
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(function() {
-                console.log('CBD Working: Text copied to clipboard');
                 showCopyFeedback($container);
             }).catch(function(error) {
-                console.error('CBD Working: Clipboard error:', error);
                 fallbackCopyText(text);
             });
         } else {
@@ -297,9 +273,7 @@
         
         try {
             document.execCommand('copy');
-            console.log('CBD Working: Text copied via fallback');
         } catch (error) {
-            console.error('CBD Working: Fallback copy failed:', error);
             alert('Text konnte nicht kopiert werden.');
         }
         

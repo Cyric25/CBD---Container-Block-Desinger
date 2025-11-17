@@ -26,14 +26,12 @@
 
     // Warte bis DOM bereit ist
     $(document).ready(function() {
-        console.log('[CBD Fallback] Initializing Interactivity API fallback...');
 
         // RENUMBER BLOCKS IN DOM ORDER
         // This fixes the issue where WordPress renders blocks in unpredictable order
         function renumberBlocks() {
             // Find all numbering elements
             const allNumberElements = document.querySelectorAll('.cbd-needs-numbering');
-            console.log('[CBD Numbering] Found ' + allNumberElements.length + ' total numbering elements');
 
             // Filter to only TOP-LEVEL blocks (not nested inside other .cbd-container)
             const topLevelNumbers = Array.from(allNumberElements).filter(function(element) {
@@ -45,12 +43,10 @@
                 const parentContainer = container.parentElement.closest('.cbd-container');
                 const isTopLevel = !parentContainer;
 
-                console.log('[CBD Numbering] Element check - Container:', container.id, 'Has parent:', !!parentContainer, 'Is top-level:', isTopLevel);
 
                 return isTopLevel;
             });
 
-            console.log('[CBD Numbering] Found ' + topLevelNumbers.length + ' top-level blocks to renumber');
 
             // Renumber only top-level blocks
             topLevelNumbers.forEach(function(element, index) {
@@ -59,7 +55,6 @@
                 element.setAttribute('data-number', blockNumber);
 
                 const container = element.closest('.cbd-container');
-                console.log('[CBD Numbering] Block ' + container.id + ' renumbered to: ' + blockNumber);
             });
         }
 
@@ -68,19 +63,16 @@
 
         // Initial check
         if (checkInteractivityAPI()) {
-            console.log('[CBD Fallback] WordPress Interactivity API is active, skipping fallback');
             return;
         }
 
         // Check again after short delay (in case Interactivity API loads later)
         setTimeout(function() {
             if (checkInteractivityAPI()) {
-                console.log('[CBD Fallback] WordPress Interactivity API loaded after init, disabling fallback');
                 interactivityAPIActive = true;
             }
         }, 100);
 
-        console.log('[CBD Fallback] Using jQuery fallback for interactivity');
 
         /**
          * Initialisiere alle Container-Blöcke
@@ -101,7 +93,6 @@
                     console.error('[CBD Fallback] Failed to parse context:', e);
                 }
 
-                console.log('[CBD Fallback] Initializing container:', containerId, context);
 
                 // Set initial state
                 $container.data('cbd-context', context);
@@ -140,7 +131,6 @@
 
             // Runtime check: Skip if Interactivity API is now active
             if (interactivityAPIActive || checkInteractivityAPI()) {
-                console.log('[CBD Fallback] Interactivity API is active, skipping jQuery handler');
                 return;
             }
 
@@ -191,7 +181,6 @@
 
             // Runtime check: Skip if Interactivity API is now active
             if (interactivityAPIActive || checkInteractivityAPI()) {
-                console.log('[CBD Fallback] Interactivity API is active, skipping jQuery handler');
                 return;
             }
 
@@ -209,17 +198,14 @@
             }
             const $icon = $button.find('.dashicons');
 
-            console.log('[CBD Fallback] Copy text:', $container.attr('id'));
 
             if (!$content.length) {
-                console.warn('[CBD Fallback] Content element not found');
                 return;
             }
 
             const textToCopy = $content.text().trim();
 
             if (!textToCopy) {
-                console.warn('[CBD Fallback] No text to copy');
                 return;
             }
 
@@ -227,7 +213,6 @@
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(textToCopy)
                     .then(function() {
-                        console.log('[CBD Fallback] Text copied successfully');
 
                         // Update context
                         context.copySuccess = true;
@@ -244,12 +229,10 @@
                         }, 2000);
                     })
                     .catch(function(err) {
-                        console.error('[CBD Fallback] Copy failed:', err);
                         context.copyError = true;
                         $container.data('cbd-context', context);
                     });
             } else {
-                console.error('[CBD Fallback] Clipboard API not available');
             }
         });
 
@@ -263,7 +246,6 @@
 
             // Runtime check: Skip if Interactivity API is now active
             if (interactivityAPIActive || checkInteractivityAPI()) {
-                console.log('[CBD Fallback] Interactivity API is active, skipping jQuery handler');
                 return;
             }
 
@@ -282,21 +264,17 @@
                 $content = $containerBlock.children('.cbd-container-content');
             }
 
-            console.log('[CBD Fallback] Create screenshot:', $container.attr('id'));
 
             // Check if html2canvas is available
             if (typeof html2canvas === 'undefined') {
-                console.error('[CBD Fallback] html2canvas not loaded');
                 return;
             }
 
             // Check if containerBlock exists
             if (!$containerBlock.length) {
-                console.error('[CBD Fallback] .cbd-container-block not found');
                 return;
             }
 
-            console.log('[CBD Fallback] Starting html2canvas...');
 
             // Set loading state
             context.screenshotLoading = true;
@@ -314,7 +292,6 @@
 
             // Small delay for animation
             setTimeout(function() {
-                console.log('[CBD Fallback] Running html2canvas on element:', $containerBlock[0]);
 
                 // Buttons ausblenden für Screenshot
                 const $actionButtons = $container.find('.cbd-action-buttons');
@@ -349,11 +326,9 @@
 
                             navigator.clipboard.write([item])
                                 .then(function() {
-                                    console.log('[CBD Fallback] ✅ Clipboard: Screenshot copied to clipboard');
                                     showSuccess(context, wasCollapsed, $content, $button, $icon, $container);
                                 })
                                 .catch(function(err) {
-                                    console.warn('[CBD Fallback] ❌ Clipboard failed:', err);
                                     // Clipboard failed, erstelle Blob für Fallback
                                     canvas.toBlob(function(blob) {
                                         if (!blob) {
@@ -369,7 +344,6 @@
                         }
 
                         // Clipboard not available, erstelle Blob für Fallback
-                        console.warn('[CBD Fallback] Clipboard API not available');
                         canvas.toBlob(function(blob) {
                             if (!blob) {
                                 console.error('[CBD Fallback] Failed to create blob');
@@ -392,16 +366,13 @@
                                 title: 'Container Block Screenshot'
                             })
                             .then(function() {
-                                console.log('[CBD Fallback] ✅ Web Share: Screenshot shared via iOS Share Sheet');
                                 showSuccess(context, wasCollapsed, $content, $button, $icon, $container);
                             })
                             .catch(function(err) {
                                 // User cancelled or error
                                 if (err.name === 'AbortError') {
-                                    console.log('[CBD Fallback] ℹ️ Web Share: User cancelled');
                                     resetButton(context, $button, $icon, $container);
                                 } else {
-                                    console.warn('[CBD Fallback] ❌ Web Share failed:', err);
                                     // Fallback to download
                                     downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
                                 }
@@ -410,7 +381,6 @@
                         }
 
                         // Web Share not available, use download
-                        console.warn('[CBD Fallback] Web Share API not available');
                         downloadScreenshot(canvas, context, wasCollapsed, $content, $button, $icon, $container);
                     }
 
@@ -425,7 +395,6 @@
                         link.click();
                         document.body.removeChild(link);
 
-                        console.log('[CBD Fallback] ⬇️ Download: Screenshot downloaded');
                         showSuccess(context, wasCollapsed, $content, $button, $icon, $container);
                     }
 
@@ -461,7 +430,6 @@
                     }
 
                     }).catch(function(error) {
-                        console.error('[CBD Fallback] Screenshot failed:', error);
 
                         // Buttons wieder einblenden auch bei Fehler
                         $actionButtons.css({
@@ -489,7 +457,6 @@
         // Initialize all containers on page load
         initializeContainers();
 
-        console.log('[CBD Fallback] Initialization complete');
     });
 
 })(jQuery);

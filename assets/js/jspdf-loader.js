@@ -6,11 +6,9 @@
 (function() {
     'use strict';
 
-    console.log('CBD: jspdf-loader.js starting execution');
 
     // Check if jsPDF is already loaded
     if (typeof window.jsPDF !== 'undefined' || typeof jsPDF !== 'undefined') {
-        console.log('CBD: jsPDF already loaded');
         // Still set up status for existing installation
         window.cbdPDFStatus = {
             loading: false,
@@ -24,7 +22,6 @@
         return;
     }
     
-    console.log('CBD: Loading jsPDF with fallback mechanism...');
 
     // Create global status tracking
     window.cbdPDFStatus = {
@@ -45,7 +42,6 @@
     
     function loadFromCDN() {
         if (currentSourceIndex >= maxRetries) {
-            console.error('CBD: All jsPDF CDN sources failed');
             window.cbdPDFStatus.loading = false;
             window.cbdPDFStatus.loaded = false;
             window.cbdPDFStatus.error = 'All CDN sources failed: ' + window.cbdPDFStatus.attempts.join(', ');
@@ -68,7 +64,6 @@
                 link.href = URL.createObjectURL(blob);
                 link.download = 'container-blocks-' + new Date().toISOString().slice(0, 10) + '.txt';
                 link.click();
-                console.log('CBD: Text export fallback used');
             };
             return;
         }
@@ -78,12 +73,10 @@
         script.async = true;
         
         script.onload = function() {
-            console.log('CBD: jsPDF loaded successfully from:', cdnSources[currentSourceIndex]);
             window.cbdPDFStatus.attempts.push('SUCCESS: ' + cdnSources[currentSourceIndex]);
 
             // Give the script a moment to initialize fully
             setTimeout(function() {
-                console.log('CBD: Testing jsPDF initialization after loading...');
                 // Verify jsPDF is accessible
                 (function() {
                 var testPdf = null;
@@ -103,7 +96,6 @@
                     }
 
                     if (testPdf) {
-                        console.log('CBD: jsPDF instance test successful');
                         window.cbdPDFStatus.loading = false;
                         window.cbdPDFStatus.loaded = true;
 
@@ -113,7 +105,6 @@
                         throw new Error('Cannot create jsPDF instance');
                     }
                 } catch (error) {
-                    console.log('CBD: jsPDF test failed:', error.message);
                     window.cbdPDFStatus.attempts.push('FAILED: ' + cdnSources[currentSourceIndex] + ' (test failed: ' + error.message + ')');
                     currentSourceIndex++;
                     loadFromCDN();
@@ -129,13 +120,11 @@
             loadFromCDN();
         };
         
-        console.log('CBD: Trying jsPDF source:', cdnSources[currentSourceIndex]);
         document.head.appendChild(script);
     }
     
     // Function to setup PDF export functions
     function setupPDFExportFunctions() {
-        console.log('CBD: Setting up PDF export functions');
 
         // Create enhanced export function with options
         window.cbdPDFExportWithOptions = function(containerBlocks, mode, quality) {
@@ -147,7 +136,6 @@
             return cbdCreatePDF(containerBlocks, 'visual', 1);
         };
 
-        console.log('CBD: PDF export functions are now available globally');
     }
 
     // Main PDF creation function
@@ -193,7 +181,6 @@
                 $ = function(el) { return containerBlocks.constructor(el); };
             }
 
-            console.log('CBD: Processing ' + containerBlocks.length + ' container blocks for PDF');
 
             // Process containers one by one using html2canvas for images
             var processedBlocks = 0;
@@ -203,21 +190,18 @@
                     // All blocks processed, save PDF
                     var filename = 'container-blocks-' + new Date().toISOString().slice(0, 10) + '.pdf';
                     pdf.save(filename);
-                    console.log('CBD: PDF saved successfully:', filename);
                     return true;
                 }
 
                 var $currentBlock = $(containerBlocks[processedBlocks]);
                 var blockTitle = $currentBlock.find('.cbd-block-title').text() || 'Block ' + (processedBlocks + 1);
 
-                console.log('CBD: Processing Block ' + (processedBlocks + 1) + ' - Title: "' + blockTitle + '"');
 
                 // Check if we need a new page for the block title and some content
                 var titleHeight = 15;
                 var minContentSpace = 50; // Minimum space needed for content after title
 
                 if (y + titleHeight + minContentSpace > 280) {
-                    console.log('CBD: Moving to new page to keep title and content together');
                     pdf.addPage();
                     y = 30;
                 }
@@ -229,7 +213,6 @@
 
                 // Prepare LaTeX formulas for PDF rendering if present
                 if (typeof window.cbdPrepareFormulasForPDF === 'function') {
-                    console.log('CBD: Preparing LaTeX formulas for PDF');
                     window.cbdPrepareFormulasForPDF($currentBlock[0]);
                 }
 
@@ -240,15 +223,12 @@
                 } else {
                     // Visual or print mode - ALWAYS use visual rendering for these modes
                     if (mode === 'visual' || mode === 'print') {
-                        console.log('CBD: Block has visual content, using html2canvas (mode: ' + mode + ')');
 
                         // Load html2canvas if needed
                         if (typeof html2canvas === 'undefined') {
-                            console.log('CBD: html2canvas not found, loading from CDN...');
                             var script = document.createElement('script');
                             script.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
                             script.onload = function() {
-                                console.log('CBD: html2canvas loaded from CDN, calling renderBlockWithImages()');
                                 renderBlockWithImages();
                             };
                             script.onerror = function() {
@@ -257,24 +237,20 @@
                             };
                             document.head.appendChild(script);
                         } else {
-                            console.log('CBD: html2canvas already available, calling renderBlockWithImages()');
                             renderBlockWithImages();
                         }
 
                         function renderBlockWithImages() {
-                            console.log('CBD: renderBlockWithImages called with mode:', mode, 'quality:', quality);
 
                             // Store original collapsed state and expand content before rendering
                             var collapsedStates = [];
                             expandContentBeforeRendering();
 
                             function expandContentBeforeRendering() {
-                                console.log('CBD: Expanding collapsed content in original DOM before rendering');
 
                                 // Find collapsed content in the current block
                                 var blockContent = $currentBlock.find('.cbd-container-content');
                                 if (blockContent.length > 0 && !blockContent.is(':visible')) {
-                                    console.log('CBD: Found collapsed main content, expanding temporarily');
                                     collapsedStates.push({
                                         element: blockContent[0],
                                         wasHidden: true,
@@ -300,7 +276,6 @@
                                         });
 
                                         $(this).show().css('visibility', 'visible');
-                                        console.log('CBD: Temporarily expanded hidden element:', this.className);
                                     }
                                 });
 
@@ -314,15 +289,12 @@
                                             originalOpen: false
                                         });
                                         this.open = true;
-                                        console.log('CBD: Temporarily opened details element');
                                     }
                                 });
 
-                                console.log('CBD: Temporarily expanded', collapsedStates.length, 'elements');
                             }
 
                             function restoreOriginalStates() {
-                                console.log('CBD: Restoring original collapsed states');
                                 for (var i = 0; i < collapsedStates.length; i++) {
                                     var state = collapsedStates[i];
                                     if (state.wasDetails) {
@@ -332,7 +304,6 @@
                                         state.element.style.visibility = state.originalVisibility;
                                     }
                                 }
-                                console.log('CBD: Restored', collapsedStates.length, 'elements to original state');
                             }
 
                             var canvasOptions = {
@@ -341,19 +312,13 @@
                                 scale: quality,
                                 logging: false,
                                 backgroundColor: 'white',
-                                height: null, // Let html2canvas determine optimal height
-                                width: null,  // Let html2canvas determine optimal width
                                 scrollX: 0,
-                                scrollY: 0,
-                                windowWidth: $currentBlock[0].scrollWidth,
-                                windowHeight: $currentBlock[0].scrollHeight
+                                scrollY: 0
                             };
 
                             // Print mode - modify styles for print
                             if (mode === 'print') {
-                                console.log('CBD: Applying PRINT mode styling');
                                 canvasOptions.onclone = function(clonedDoc) {
-                                    console.log('CBD: Applying print-friendly styles and expanding content');
 
                                     // FIRST: Expand all collapsed content before any other modifications
                                     expandAllCollapsedContent(clonedDoc);
@@ -374,9 +339,7 @@
                                     }
                                 };
                             } else {
-                                console.log('CBD: Applying VISUAL mode styling');
                                 canvasOptions.onclone = function(clonedDoc) {
-                                    console.log('CBD: Expanding content and removing action buttons');
 
                                     // FIRST: Expand all collapsed content before any other modifications
                                     expandAllCollapsedContent(clonedDoc);
@@ -397,10 +360,8 @@
 
                             // Function to prepare LaTeX formulas for PDF export
                             function fixLatexFormulasForPDF(doc) {
-                                console.log('CBD: Preparing LaTeX formulas for PDF');
 
                                 var formulas = doc.querySelectorAll('.cbd-latex-formula');
-                                console.log('CBD: Found', formulas.length, 'LaTeX formulas');
 
                                 // Add ONLY superscript/subscript fix - nothing else
                                 var style = doc.createElement('style');
@@ -433,12 +394,10 @@
                                 `;
                                 doc.head.appendChild(style);
 
-                                console.log('CBD: LaTeX formulas ready for PDF (superscript fix applied)');
                             }
 
                             // Function to expand all collapsed content
                             function expandAllCollapsedContent(doc) {
-                                console.log('CBD: Starting to expand all collapsed content');
 
                                 // Find all container content that might be collapsed
                                 var containerContents = doc.querySelectorAll('.cbd-container-content');
@@ -454,7 +413,6 @@
                                                   doc.defaultView.getComputedStyle(content).display === 'none';
 
                                     if (isHidden) {
-                                        console.log('CBD: Expanding collapsed content block', i + 1);
 
                                         // Force show the content
                                         content.style.setProperty('display', 'block', 'important');
@@ -488,7 +446,6 @@
                                 var detailsElements = doc.querySelectorAll('details');
                                 for (var k = 0; k < detailsElements.length; k++) {
                                     if (!detailsElements[k].open) {
-                                        console.log('CBD: Opening details element', k + 1);
                                         detailsElements[k].open = true;
                                         expandedCount++;
                                     }
@@ -508,7 +465,6 @@
                                 // ENHANCED: Optimize text rendering for lists and headers
                                 optimizeTextRendering(doc);
 
-                                console.log('CBD: Expanded', expandedCount, 'collapsed elements');
 
                                 // Small delay to allow DOM to update
                                 return new Promise(function(resolve) {
@@ -518,7 +474,6 @@
 
                             // Function to optimize text rendering for better PDF output
                             function optimizeTextRendering(doc) {
-                                console.log('CBD: Optimizing text rendering for lists and headers');
 
                                 // Ensure all text elements are fully visible
                                 var textElements = doc.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, span, div');
@@ -604,12 +559,10 @@
                                     }
                                 }
 
-                                console.log('CBD: Text rendering optimization completed');
                             }
 
                             // Function to apply print mode optimizations (grayscale, white backgrounds)
                             function applyPrintModeStyles(doc) {
-                                console.log('CBD: Applying print mode grayscale and white background optimizations');
 
                                 // Get all elements in the document
                                 var allElements = doc.querySelectorAll('*');
@@ -707,7 +660,6 @@
                                     body.style.setProperty('background-color', 'white', 'important');
                                 }
 
-                                console.log('CBD: Print mode applied - converted', convertedElements, 'text colors to grayscale');
                             }
 
                             // Function to convert color values to grayscale
@@ -784,11 +736,9 @@
                                 return '#000000';
                             }
 
-                            console.log('CBD: Starting html2canvas...');
 
                             try {
                                 html2canvas($currentBlock[0], canvasOptions).then(function(canvas) {
-                                    console.log('CBD: html2canvas successful - Canvas size:', canvas.width + 'x' + canvas.height);
 
                                     // Restore original collapsed states after rendering
                                     restoreOriginalStates();
@@ -797,59 +747,62 @@
                                     var imageQuality = mode === 'print' ? 0.9 : 0.8;
                                     var imgData = canvas.toDataURL('image/jpeg', imageQuality);
 
-                                    // PDF page dimensions (A4 with margins)
+                                    // PDF page dimensions (A4 with margins in mm)
                                     var pageHeight = 280; // A4 page height minus margins
-                                    var maxPageWidth = 170; // Maximum width for images
+                                    var maxPageWidth = 170; // Maximum width for images in mm
                                     var maxSinglePageHeight = pageHeight - 50; // Leave space for headers
 
                                     // Calculate optimal image dimensions with proper scaling
-                                    var originalWidth = canvas.width;
-                                    var originalHeight = canvas.height;
-                                    var aspectRatio = originalWidth / originalHeight;
+                                    var originalWidth = canvas.width / quality; // Convert to logical pixels
+                                    var originalHeight = canvas.height / quality;
 
-                                    // Calculate scale factors for both width and height constraints
-                                    var widthScale = maxPageWidth / originalWidth;
-                                    var heightScale = maxSinglePageHeight / originalHeight;
+                                    // Convert canvas pixels to mm (assuming 96 DPI)
+                                    var MM_PER_INCH = 25.4;
+                                    var DPI = 96;
+                                    var pixelsPerMM = DPI / MM_PER_INCH;
 
-                                    // Use the smaller scale factor to ensure image fits within both constraints
-                                    var scale = Math.min(widthScale, heightScale, 1.0); // Never scale up
+                                    var originalWidthMM = originalWidth / pixelsPerMM;
+                                    var originalHeightMM = originalHeight / pixelsPerMM;
 
-                                    var imgWidth = originalWidth * scale;
-                                    var imgHeight = originalHeight * scale;
+                                    // Calculate scale factors to fit within page constraints
+                                    var widthScale = maxPageWidth / originalWidthMM;
+                                    var heightScale = maxSinglePageHeight / originalHeightMM;
+
+                                    // Use the smaller scale factor to ensure complete image fits
+                                    var scale = Math.min(widthScale, heightScale, 1.0); // Never scale up beyond 100%
+
+                                    var imgWidth = originalWidthMM * scale;
+                                    var imgHeight = originalHeightMM * scale;
 
                                     // Ensure minimum readable size while maintaining aspect ratio
-                                    var minWidth = 100;
-                                    var minHeight = 50;
+                                    var minWidth = 80;  // mm
+                                    var minHeight = 40; // mm
 
                                     if (imgWidth < minWidth || imgHeight < minHeight) {
-                                        var minScale = Math.max(minWidth / originalWidth, minHeight / originalHeight);
-                                        if (minScale < scale || scale < 0.1) {
-                                            imgWidth = originalWidth * minScale;
-                                            imgHeight = originalHeight * minScale;
-                                            console.log('CBD: Applied minimum size scaling - factor:', minScale);
+                                        var minScale = Math.max(minWidth / originalWidthMM, minHeight / originalHeightMM);
+                                        // Only apply min scale if it doesn't exceed page constraints
+                                        if (minScale * originalWidthMM <= maxPageWidth &&
+                                            minScale * originalHeightMM <= maxSinglePageHeight) {
+                                            imgWidth = originalWidthMM * minScale;
+                                            imgHeight = originalHeightMM * minScale;
                                         }
                                     }
 
-                                    console.log('CBD: Original canvas:', originalWidth + 'x' + originalHeight);
-                                    console.log('CBD: Scaled image dimensions - Width:', imgWidth, 'Height:', imgHeight, 'Current Y:', y);
 
                                     // Intelligent page splitting for large blocks
                                     var availableHeight = pageHeight - y;
 
                                     if (imgHeight > maxSinglePageHeight) {
                                         // Block is too large for a single page - split it intelligently
-                                        console.log('CBD: Block too large (' + imgHeight + 'px), splitting into multiple pages');
                                         splitLargeBlockAcrossPages(canvas, imgData, imgWidth, imgHeight, imageFormat, imageQuality);
                                     } else if (imgHeight > availableHeight) {
                                         // Block doesn't fit on current page but fits on a new page
-                                        console.log('CBD: Block doesn\'t fit on current page, moving to new page');
                                         pdf.addPage();
                                         y = 30;
                                         pdf.addImage(imgData, imageFormat, 20, y, imgWidth, imgHeight);
                                         y += imgHeight + 10;
                                     } else {
                                         // Block fits on current page
-                                        console.log('CBD: Block fits on current page');
                                         pdf.addImage(imgData, imageFormat, 20, y, imgWidth, imgHeight);
                                         y += imgHeight + 10;
                                     }
@@ -858,7 +811,6 @@
                                     processNextBlock();
 
                                     function splitLargeBlockAcrossPages(canvas, imgData, imgWidth, imgHeight, imageFormat, imageQuality) {
-                                        console.log('CBD: Starting intelligent block splitting');
 
                                         var pageHeight = 280;
                                         var headerSpace = 30;
@@ -875,11 +827,9 @@
                                             if (adjustedSegmentHeight <= usablePageHeight * 1.1) {
                                                 totalPages = totalPages - 1;
                                                 usablePageHeight = adjustedSegmentHeight;
-                                                console.log('CBD: Redistributed to avoid tiny segments - new segment height:', usablePageHeight);
                                             }
                                         }
 
-                                        console.log('CBD: Will split block across', totalPages, 'pages with segment height:', usablePageHeight);
 
                                         // Start on a new page for large blocks
                                         if (y > headerSpace) {
@@ -892,7 +842,6 @@
                                             var segmentStartY = pageIndex * usablePageHeight;
                                             var segmentHeight = Math.min(usablePageHeight, imgHeight - segmentStartY);
 
-                                            console.log('CBD: Processing page', pageIndex + 1, '- segment height:', segmentHeight);
 
                                             // Create a new canvas for this segment
                                             var segmentCanvas = document.createElement('canvas');
@@ -944,28 +893,22 @@
 
                                             y += segmentHeight + 10;
 
-                                            console.log('CBD: Added segment', pageIndex + 1, 'at Y position:', y - segmentHeight - 10);
                                         }
 
-                                        console.log('CBD: Block splitting completed across', totalPages, 'pages');
                                     }
 
                                 }).catch(function(error) {
-                                    console.error('CBD: html2canvas failed for block ' + (processedBlocks + 1) + ':', error);
 
                                     // Restore original states even on error
                                     restoreOriginalStates();
 
-                                    console.log('CBD: Falling back to text-only for this block');
                                     addTextOnly();
                                 });
                             } catch (syncError) {
-                                console.error('CBD: html2canvas synchronous error:', syncError);
 
                                 // Restore original states even on error
                                 restoreOriginalStates();
 
-                                console.log('CBD: Falling back to text-only due to sync error');
                                 addTextOnly();
                             }
                         }
@@ -975,11 +918,9 @@
                 }
 
                 function addTextOnly() {
-                    console.log('CBD: addTextOnly called for block', processedBlocks + 1);
 
                     // Enhanced text extraction that preserves structure
                     var structuredContent = extractStructuredContent($currentBlock.find('.cbd-container-content'));
-                    console.log('CBD: Extracted', structuredContent.length, 'content elements');
 
                     var pageHeight = 280;
                     var pageIndex = 0;
@@ -987,7 +928,6 @@
                     function checkNewPage(requiredHeight) {
                         if (y + requiredHeight > pageHeight) {
                             pageIndex++;
-                            console.log('CBD: Starting new page for structured content at page', pageIndex + 1);
                             pdf.addPage();
                             y = 30;
 
@@ -1141,7 +1081,6 @@
                     }
 
                     function addTableToPDF(tableElement) {
-                        console.log('CBD: Adding table with', tableElement.rows.length, 'rows');
 
                         var colCount = Math.max(
                             tableElement.headers.length,
@@ -1166,7 +1105,6 @@
                             if (totalTableHeight < pageHeight - 50) {
                                 // Start new page for entire table
                                 pageIndex++;
-                                console.log('CBD: Moving entire table to new page');
                                 pdf.addPage();
                                 y = 30;
 
@@ -1234,7 +1172,6 @@
                     }
 
                     function addLargeTableToPDF(tableElement, colWidth, rowHeight, headerHeight) {
-                        console.log('CBD: Splitting large table across multiple pages');
 
                         var colCount = Math.max(tableElement.headers.length,
                                               tableElement.rows.length > 0 ? tableElement.rows[0].length : 0);
@@ -1322,7 +1259,6 @@
                     }
 
                     function addListToPDF(listElement) {
-                        console.log('CBD: Adding list with', listElement.items.length, 'items');
                         pdf.setFontSize(10);
 
                         for (var i = 0; i < listElement.items.length; i++) {
@@ -1347,7 +1283,6 @@
                     function addParagraphToPDF(paragraphElement) {
                         if (!paragraphElement.text || paragraphElement.text.length === 0) return;
 
-                        console.log('CBD: Adding paragraph, length:', paragraphElement.text.length);
                         pdf.setFontSize(10);
                         var lines = pdf.splitTextToSize(paragraphElement.text, 170);
 
@@ -1370,7 +1305,6 @@
             processNextBlock();
 
         } catch (error) {
-            console.error('CBD: PDF generation failed:', error);
             alert('Fehler beim PDF erstellen: ' + error.message);
             return false;
         }

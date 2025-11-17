@@ -64,14 +64,12 @@ store('container-block-designer', {
 				// Finde Content-Element im aktuellen Block
 				const contentElement = element.ref.querySelector('.cbd-container-content');
 				if (!contentElement) {
-					console.warn('[CBD] Content element not found');
 					return;
 				}
 
 				const textToCopy = contentElement.innerText.trim();
 
 				if (!textToCopy) {
-					console.warn('[CBD] No text to copy');
 					return;
 				}
 
@@ -98,7 +96,6 @@ store('container-block-designer', {
 				}, 2000);
 
 			} catch (error) {
-				console.error('[CBD] Copy failed:', error);
 				context.copyError = true;
 				setTimeout(() => {
 					context.copyError = false;
@@ -115,7 +112,6 @@ store('container-block-designer', {
 
 			// Prüfe ob html2canvas verfügbar ist
 			if (typeof html2canvas === 'undefined') {
-				console.error('[CBD] html2canvas not loaded');
 				context.screenshotError = true;
 				return;
 			}
@@ -194,15 +190,12 @@ store('container-block-designer', {
 
 						const item = new ClipboardItem({ 'image/png': blobPromise });
 						yield navigator.clipboard.write([item]);
-						console.log('[CBD] ✅ Clipboard: Screenshot copied to clipboard');
 						clipboardSuccess = true;
 						// Success - skip other tiers
 					} catch (err) {
-						console.warn('[CBD] ❌ Clipboard failed:', err);
 						// Will fallback to Tier 2 below
 					}
 				} else {
-					console.warn('[CBD] Clipboard API not available');
 				}
 
 				// Blob für Tier 2/3 Fallbacks erstellen (nur wenn Clipboard fehlschlägt)
@@ -228,21 +221,17 @@ store('container-block-designer', {
 								files: [file],
 								title: 'Container Block Screenshot'
 							});
-							console.log('[CBD] ✅ Web Share: Screenshot shared via iOS Share Sheet');
 							// Success - return without download
 							return;
 						} catch (err) {
 							if (err.name === 'AbortError') {
-								console.log('[CBD] ℹ️ Web Share: User cancelled');
 								// User cancelled - don't fallback to download
 								throw err;
 							} else {
-								console.warn('[CBD] ❌ Web Share failed:', err);
 								// Continue to download
 							}
 						}
 					} else {
-						console.warn('[CBD] Web Share API not available');
 					}
 
 					// ==============================================
@@ -254,7 +243,6 @@ store('container-block-designer', {
 					document.body.appendChild(link);
 					link.click();
 					document.body.removeChild(link);
-					console.log('[CBD] ⬇️ Download: Screenshot downloaded');
 				}
 
 				// Wieder zusammenklappen falls vorher collapsed
@@ -279,7 +267,6 @@ store('container-block-designer', {
 				}, 2000);
 
 			} catch (error) {
-				console.error('[CBD] Screenshot failed:', error);
 				context.screenshotError = true;
 				context.screenshotLoading = false;
 
@@ -305,7 +292,6 @@ store('container-block-designer', {
 
 			// Prüfe Dependencies
 			if (typeof html2canvas === 'undefined' || typeof jspdf === 'undefined') {
-				console.error('[CBD] PDF dependencies not loaded');
 				context.pdfError = true;
 				return;
 			}
@@ -397,7 +383,6 @@ store('container-block-designer', {
 				}, 2000);
 
 			} catch (error) {
-				console.error('[CBD] PDF export failed:', error);
 				context.pdfError = true;
 				context.pdfLoading = false;
 

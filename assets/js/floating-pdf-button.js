@@ -10,11 +10,9 @@
     'use strict';
 
     $(document).ready(function() {
-        console.log('[CBD PDF Button] Initializing...');
 
         // Add PDF Export button if there are container blocks
         var totalContainers = $(".cbd-container");
-        console.log("[CBD PDF Button] Found " + totalContainers.length + " total .cbd-container elements on page");
 
         if (totalContainers.length > 0) {
             if ($("#cbd-pdf-export-fab").length === 0) {
@@ -42,7 +40,6 @@
                     function() { $(this).css("transform", "scale(1)"); }
                 );
                 pdfButton.on("click", function() {
-                    console.log("[CBD PDF Button] PDF Export clicked");
 
                     // Filter out empty Gutenberg containers and only include containers with actual content
                     var containerBlocks = $(".cbd-container:visible").filter(function() {
@@ -55,7 +52,6 @@
                         return hasTitle || hasContent || hasId;
                     });
 
-                    console.log("[CBD PDF Button] Found " + containerBlocks.length + " container blocks with content");
 
                     if (containerBlocks.length === 0) {
                         alert("Keine sichtbaren Container-Blöcke zum Exportieren gefunden.");
@@ -168,7 +164,6 @@
                             return;
                         }
 
-                        console.log('[CBD PDF Button] Creating PDF with', selectedBlocks.length, 'blocks, mode:', mode, 'quality:', quality);
 
                         $('#cbd-pdf-modal').remove();
 
@@ -180,29 +175,23 @@
                 function tryCreatePDF(selectedBlocks, mode, quality, attempts) {
                     attempts = attempts || 0;
 
-                    console.log('[CBD PDF Button] tryCreatePDF called, attempt:', attempts);
                     console.log('[CBD PDF Button] window.cbdPDFExportWithOptions exists:', typeof window.cbdPDFExportWithOptions);
 
                     if (typeof window.cbdPDFExportWithOptions === 'function') {
-                        console.log('[CBD PDF Button] PDF function available, creating PDF...');
                         window.cbdPDFExportWithOptions(selectedBlocks, mode, quality);
                     } else if (typeof window.cbdPDFExport === 'function') {
-                        console.log('[CBD PDF Button] Using fallback cbdPDFExport...');
                         window.cbdPDFExport(selectedBlocks);
                     } else if (attempts < 50) {
                         // PDF functions not available yet, wait and retry
-                        console.log('[CBD PDF Button] PDF functions not available, waiting... (attempt ' + attempts + '/50)');
                         setTimeout(function() {
                             tryCreatePDF(selectedBlocks, mode, quality, attempts + 1);
                         }, 300);
                     } else {
-                        console.error('[CBD PDF Button] PDF functions never became available after 15 seconds');
                         alert('PDF-Erstellung fehlgeschlagen: PDF-Bibliothek konnte nicht geladen werden.');
                     }
                 }
 
                 $("body").append(pdfButton);
-                console.log("[CBD PDF Button] PDF button added");
             }
         }
     });

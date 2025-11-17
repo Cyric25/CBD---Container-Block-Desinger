@@ -16,7 +16,6 @@
      */
     function initLaTeXRendering() {
         if (typeof renderMathInElement === 'undefined' || typeof katex === 'undefined') {
-            console.warn('CBD LaTeX: KaTeX library not loaded');
             return;
         }
 
@@ -74,7 +73,6 @@
             formulaElement.setAttribute('data-rendered', 'true');
 
         } catch (error) {
-            console.error('CBD LaTeX: Error rendering formula:', error);
             contentSpan.innerHTML = '<span class="cbd-latex-error">LaTeX Error: ' +
                                    escapeHtml(error.message) + '</span>';
         }
@@ -144,7 +142,6 @@
             return html;
 
         } catch (error) {
-            console.error('CBD LaTeX: Error converting to SVG:', error);
             return '<div class="cbd-latex-error">LaTeX Error</div>';
         }
     }

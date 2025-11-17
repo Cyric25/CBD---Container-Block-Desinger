@@ -5,7 +5,6 @@
 
 if (typeof jQuery !== 'undefined') {
     jQuery(document).ready(function($) {
-        console.log("CBD: Container blocks JavaScript loading...");
         
         // Remove old event handlers to prevent duplicates
         $(document).off("click", ".cbd-collapse-toggle, .cbd-copy-text, .cbd-screenshot");
@@ -17,7 +16,6 @@ if (typeof jQuery !== 'undefined') {
         $(document).on("click", ".cbd-collapse-toggle", function(e) {
             e.preventDefault();
             e.stopPropagation();
-            console.log("CBD: Toggle clicked");
             
             var button = $(this);
             var container = button.closest(".cbd-container");
@@ -28,11 +26,9 @@ if (typeof jQuery !== 'undefined') {
                 if (content.is(":visible")) {
                     content.slideUp(300);
                     icon.removeClass("dashicons-arrow-up-alt2").addClass("dashicons-arrow-down-alt2");
-                    console.log("CBD: Content collapsed");
                 } else {
                     content.slideDown(300);
                     icon.removeClass("dashicons-arrow-down-alt2").addClass("dashicons-arrow-up-alt2");
-                    console.log("CBD: Content expanded");
                 }
             }
         });
@@ -41,7 +37,6 @@ if (typeof jQuery !== 'undefined') {
         $(document).on("click", ".cbd-copy-text", function(e) {
             e.preventDefault();
             e.stopPropagation();
-            console.log("CBD: Copy clicked");
 
             var button = $(this);
             var container = button.closest(".cbd-container");
@@ -53,14 +48,12 @@ if (typeof jQuery !== 'undefined') {
 
                 // Replace LaTeX formulas with their LaTeX notation
                 var formulas = $clone.find('.cbd-latex-formula').toArray();
-                console.log("CBD Copy: Found", formulas.length, "LaTeX formulas");
 
                 for (var i = 0; i < formulas.length; i++) {
                     var formula = formulas[i];
                     var latex = formula.getAttribute('data-latex');
 
                     if (latex) {
-                        console.log("CBD Copy: Replacing formula", i + 1, "with:", latex);
                         var replacement = document.createElement('span');
                         replacement.textContent = '\n\n$$ ' + latex + ' $$\n\n';
                         formula.parentNode.replaceChild(replacement, formula);
@@ -68,7 +61,6 @@ if (typeof jQuery !== 'undefined') {
                 }
 
                 var textToCopy = $clone.text().trim();
-                console.log("CBD: Text to copy:", textToCopy.substring(0, 50) + "...");
                 
                 // Try multiple copy methods for better compatibility
                 if (navigator.clipboard && window.isSecureContext) {
@@ -76,7 +68,6 @@ if (typeof jQuery !== 'undefined') {
                     navigator.clipboard.writeText(textToCopy).then(function() {
                         showCopySuccess(button);
                     }).catch(function(error) {
-                        console.log("CBD: Modern clipboard failed, trying fallback:", error);
                         fallbackCopy(textToCopy, button);
                     });
                 } else {
@@ -87,7 +78,6 @@ if (typeof jQuery !== 'undefined') {
             
             function showCopySuccess(button) {
                 button.find(".dashicons").removeClass("dashicons-clipboard").addClass("dashicons-yes-alt");
-                console.log("CBD: Copy successful");
                 setTimeout(function() { 
                     button.find(".dashicons").removeClass("dashicons-yes-alt").addClass("dashicons-clipboard"); 
                 }, 2000);
@@ -108,11 +98,9 @@ if (typeof jQuery !== 'undefined') {
                     if (successful) {
                         showCopySuccess(button);
                     } else {
-                        console.log("CBD: Fallback copy failed");
                         alert('Text kopiert: ' + text.substring(0, 100) + '...');
                     }
                 } catch (err) {
-                    console.log("CBD: Copy error:", err);
                     alert('Text kopiert: ' + text.substring(0, 100) + '...');
                 } finally {
                     document.body.removeChild(textarea);
@@ -124,7 +112,6 @@ if (typeof jQuery !== 'undefined') {
         $(document).on("click", ".cbd-screenshot", function(e) {
             e.preventDefault();
             e.stopPropagation();
-            console.log("CBD: Screenshot clicked");
             
             var button = $(this);
             var container = button.closest(".cbd-container");
@@ -142,14 +129,12 @@ if (typeof jQuery !== 'undefined') {
                 '.cbd-actions, .dashicons, .cbd-menu-toggle, ' +
                 'button, .cbd-icon, .cbd-button-group'
             );
-            console.log("CBD: Found", buttonsToHide.length, "buttons to hide for screenshot");
             
             // Load html2canvas if not available
             if (typeof html2canvas === "undefined") {
                 var script = document.createElement("script");
                 script.src = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
                 script.onload = function() {
-                    console.log("CBD: html2canvas loaded dynamically");
                     takeScreenshot();
                 };
                 document.head.appendChild(script);
@@ -167,11 +152,9 @@ if (typeof jQuery !== 'undefined') {
                     logging: false, // Disable detailed logging for cleaner output
                     backgroundColor: 'white',
                     onclone: function(clonedDoc) {
-                        console.log("CBD: Cleaning cloned document for screenshot");
 
                         // Fix LaTeX formulas first
                         var formulas = clonedDoc.querySelectorAll('.cbd-latex-formula');
-                        console.log("CBD Screenshot: Found", formulas.length, "LaTeX formulas");
 
                         for (var f = 0; f < formulas.length; f++) {
                             var formula = formulas[f];
@@ -218,16 +201,13 @@ if (typeof jQuery !== 'undefined') {
                             }
                         }
 
-                        console.log("CBD: Removed", elementsToHide.length, "button elements from screenshot");
                     }
                 }).then(function(canvas) {
-                    console.log("CBD: html2canvas success, canvas size:", canvas.width + "x" + canvas.height);
 
                     // Try to copy to clipboard first, fallback to download
                     copyCanvasToClipboard(canvas, function(success) {
                         if (success) {
                             button.find(".dashicons").removeClass("dashicons-update-alt").addClass("dashicons-yes-alt");
-                            console.log("CBD: Screenshot copied to clipboard");
                             showToastMessage("📋 Screenshot in Zwischenablage kopiert!", "success");
                         } else {
                             // Fallback: Download the image
@@ -239,7 +219,6 @@ if (typeof jQuery !== 'undefined') {
                             document.body.removeChild(link);
 
                             button.find(".dashicons").removeClass("dashicons-update-alt").addClass("dashicons-yes-alt");
-                            console.log("CBD: Screenshot downloaded (clipboard not available)");
                             showToastMessage("💾 Screenshot heruntergeladen", "info");
                         }
 
@@ -253,7 +232,6 @@ if (typeof jQuery !== 'undefined') {
                         }
                     });
                 }).catch(function(error) {
-                    console.error("CBD: Screenshot failed:", error);
                     button.find(".dashicons").removeClass("dashicons-update-alt").addClass("dashicons-camera");
 
                     // Collapse again if it was collapsed
@@ -267,11 +245,9 @@ if (typeof jQuery !== 'undefined') {
 
             // Clipboard functionality for screenshots
             function copyCanvasToClipboard(canvas, callback) {
-                console.log("CBD: Attempting to copy canvas to clipboard...");
 
                 // Check basic clipboard support
                 if (!navigator.clipboard) {
-                    console.log("CBD: Clipboard API not available");
                     callback(false);
                     return;
                 }
@@ -279,7 +255,6 @@ if (typeof jQuery !== 'undefined') {
                 // Check ClipboardItem support
                 var ClipboardItemConstructor = window.ClipboardItem || ClipboardItem;
                 if (typeof ClipboardItemConstructor === 'undefined') {
-                    console.log("CBD: ClipboardItem not supported");
                     callback(false);
                     return;
                 }
@@ -293,11 +268,9 @@ if (typeof jQuery !== 'undefined') {
                             return;
                         }
 
-                        console.log("CBD: Canvas converted to blob, size:", blob.size);
 
                         // Check MIME type support if available
                         if (ClipboardItemConstructor.supports && !ClipboardItemConstructor.supports('image/png')) {
-                            console.log("CBD: Browser does not support image/png in clipboard");
                             callback(false);
                             return;
                         }
@@ -322,19 +295,15 @@ if (typeof jQuery !== 'undefined') {
 
                             // Write to clipboard
                             navigator.clipboard.write([clipboardItem]).then(function() {
-                                console.log("CBD: Successfully copied image to clipboard");
                                 callback(true);
                             }).catch(function(error) {
-                                console.error("CBD: Clipboard write failed:", error);
                                 callback(false);
                             });
                         } catch (clipboardError) {
-                            console.error("CBD: ClipboardItem creation failed:", clipboardError);
                             callback(false);
                         }
                     }, 'image/png');
                 } catch (error) {
-                    console.error("CBD: Canvas blob conversion failed:", error);
                     callback(false);
                 }
             }
@@ -385,13 +354,10 @@ if (typeof jQuery !== 'undefined') {
             }
         });
 
-        console.log("CBD: Container functionality loaded successfully");
         
         // Add PDF Export button if there are container blocks
         var totalContainers = $(".cbd-container");
-        console.log("CBD: Found " + totalContainers.length + " total .cbd-container elements on page");
         totalContainers.each(function(i) {
-            console.log("CBD: Container " + (i+1) + " - Class: " + this.className + ", ID: " + this.id + ", Visible: " + $(this).is(':visible'));
         });
         
         if (totalContainers.length > 0) {
@@ -419,7 +385,6 @@ if (typeof jQuery !== 'undefined') {
                     function() { $(this).css("transform", "scale(1)"); }
                 );
                 pdfButton.on("click", function() {
-                    console.log("CBD: PDF Export clicked");
                     
                     // Filter out empty Gutenberg containers and only include containers with actual content
                     var containerBlocks = $(".cbd-container:visible").filter(function() {
@@ -432,7 +397,6 @@ if (typeof jQuery !== 'undefined') {
                         return hasTitle || hasContent || hasId;
                     });
                     
-                    console.log("CBD: Found " + containerBlocks.length + " container blocks with content");
                     
                     if (containerBlocks.length === 0) {
                         alert("Keine sichtbaren Container-Blöcke zum Exportieren gefunden.");
@@ -545,7 +509,6 @@ if (typeof jQuery !== 'undefined') {
                             return;
                         }
                         
-                        console.log('CBD: Creating PDF with', selectedBlocks.length, 'blocks, mode:', mode, 'quality:', quality);
                         
                         $('#cbd-pdf-modal').remove();
                         
@@ -553,14 +516,10 @@ if (typeof jQuery !== 'undefined') {
                         function tryCreatePDF(attempts) {
                             attempts = attempts || 0;
 
-                            console.log('CBD: tryCreatePDF called, attempt:', attempts);
-                            console.log('CBD: window.cbdPDFStatus exists:', !!window.cbdPDFStatus);
-                            console.log('CBD: window.cbdPDFExport exists:', typeof window.cbdPDFExport);
                             console.log('CBD: window.cbdPDFExportWithOptions exists:', typeof window.cbdPDFExportWithOptions);
 
                             // If no cbdPDFStatus at all and first attempt, wait a bit for jspdf-loader to initialize
                             if (!window.cbdPDFStatus && attempts === 0) {
-                                console.log('CBD: No cbdPDFStatus found, waiting 500ms for jspdf-loader initialization...');
                                 setTimeout(function() {
                                     tryCreatePDF(1);
                                 }, 500);
@@ -574,32 +533,25 @@ if (typeof jQuery !== 'undefined') {
                             }
 
                             if (typeof window.cbdPDFExportWithOptions === 'function') {
-                                console.log('CBD: PDF function available, creating PDF...');
                                 window.cbdPDFExportWithOptions(selectedBlocks, mode, quality);
                             } else if (typeof window.cbdPDFExport === 'function') {
-                                console.log('CBD: Using fallback PDF function...');
                                 window.cbdPDFExport($(selectedBlocks));
                             } else if (window.cbdPDFStatus && window.cbdPDFStatus.error) {
-                                console.error('CBD: PDF loading failed:', window.cbdPDFStatus.error);
                                 alert('PDF-Erstellung fehlgeschlagen: ' + window.cbdPDFStatus.error);
                             } else if (window.cbdPDFStatus && window.cbdPDFStatus.loading) {
                                 // Still loading, wait more
                                 if (attempts < 50) {
-                                    console.log('CBD: PDF library still loading, waiting... (attempt ' + (attempts + 1) + '/50)');
                                     setTimeout(function() {
                                         tryCreatePDF(attempts + 1);
                                     }, 300);
                                 } else {
-                                    console.error('CBD: PDF library failed to load after 15 seconds');
                                     alert('PDF-Erstellung fehlgeschlagen: PDF-Bibliothek konnte nach 15 Sekunden nicht geladen werden.');
                                 }
                             } else if (attempts < 50) {
-                                console.log('CBD: PDF functions not ready, waiting... (attempt ' + (attempts + 1) + '/50)');
                                 setTimeout(function() {
                                     tryCreatePDF(attempts + 1);
                                 }, 300);
                             } else {
-                                console.error('CBD: PDF functions never became available after 15 seconds');
                                 var errorMsg = 'PDF-Erstellung fehlgeschlagen: PDF-Bibliothek konnte nicht geladen werden nach 15 Sekunden.';
                                 if (window.cbdPDFStatus && window.cbdPDFStatus.attempts && window.cbdPDFStatus.attempts.length > 0) {
                                     errorMsg += ' Versuche: ' + window.cbdPDFStatus.attempts.join(', ');
@@ -613,7 +565,6 @@ if (typeof jQuery !== 'undefined') {
                     });
                 }
                 $("body").append(pdfButton);
-                console.log("CBD: PDF button added");
             }
         }
 
@@ -632,7 +583,6 @@ if (typeof jQuery !== 'undefined') {
                     // Set correct icon
                     icon.removeClass('dashicons-arrow-up-alt2').addClass('dashicons-arrow-down-alt2');
 
-                    console.log('CBD: Initialized collapsed state for container');
                 }
             });
         }

@@ -8,7 +8,6 @@
 
     // Warte bis WordPress und alle Scripts geladen sind
     $(document).ready(function() {
-        console.log('CBD Live Preview Fix: Script geladen');
 
         // Funktion zur Live-Preview-Aktualisierung (Backend-Admin)
         function updateAdminLivePreview() {
@@ -22,11 +21,9 @@
             }
 
             if (!$preview.length) {
-                console.log('CBD Live Preview Fix: Kein Admin-Preview-Container gefunden');
                 return;
             }
 
-            console.log('CBD Live Preview Fix: Admin-Preview wird aktualisiert');
 
             // Sammle Styles aus Formular-Inputs
             const styles = {
@@ -68,18 +65,15 @@
             // Styles mit !important anwenden um Template-Styles zu überschreiben
             $preview.attr('style', css + ' position: relative; z-index: 1000;');
 
-            console.log('CBD Live Preview Fix: Admin-Preview aktualisiert mit CSS:', css);
         }
 
         // Event-Listener für Admin-Formular-Änderungen
         $('input[name^="styles["], select[name^="styles["]').on('change keyup input', function() {
-            console.log('CBD Live Preview Fix: Admin-Formular-Änderung erkannt');
             updateAdminLivePreview();
         });
 
         // Update-Button Event
         $('#cbd-update-preview').on('click', function() {
-            console.log('CBD Live Preview Fix: Update-Button geklickt');
             updateAdminLivePreview();
         });
 
@@ -88,23 +82,19 @@
             updateAdminLivePreview();
         }, 500);
 
-        console.log('CBD Live Preview Fix: Event-Listener registriert');
     });
 
     // Funktion für Gutenberg-Editor Live-Preview
     function initGutenbergLivePreview() {
         if (!window.wp || !window.wp.data) {
-            console.log('CBD Live Preview Fix: Gutenberg nicht verfügbar');
             return;
         }
 
-        console.log('CBD Live Preview Fix: Gutenberg-Integration wird initialisiert');
 
         // Override der Template-Style-Anwendung
         if (window.applyRealStyles) {
             const originalApplyRealStyles = window.applyRealStyles;
             window.applyRealStyles = function(blockSlug, blockId) {
-                console.log('CBD Live Preview Fix: applyRealStyles abgefangen und deaktiviert für:', blockSlug);
                 // Keine Template-Styles anwenden - Live-Preview hat Priorität
                 return;
             };
@@ -120,7 +110,6 @@
                 // Prüfe ob es benutzerdefinierte Styles in den Attributen gibt
                 if (selectedBlock.attributes && selectedBlock.attributes.customStyles) {
                     const customStyles = selectedBlock.attributes.customStyles;
-                    console.log('CBD Live Preview Fix: Custom Styles erkannt:', customStyles);
 
                     // Wende Custom Styles an statt Template-Styles
                     applyCustomStylesToBlock(selectedBlock, customStyles);
@@ -133,7 +122,6 @@
     function applyCustomStylesToBlock(block, customStyles) {
         const blockElement = document.querySelector(`[data-block="${block.clientId}"]`);
         if (!blockElement) {
-            console.log('CBD Live Preview Fix: Block-Element nicht gefunden');
             return;
         }
 
@@ -153,7 +141,6 @@
         }
 
         blockElement.style.cssText += css;
-        console.log('CBD Live Preview Fix: Custom Styles angewendet:', css);
     }
 
     // Versuche Gutenberg-Integration nach DOM-Load
