@@ -194,28 +194,72 @@
 
                     // Store original collapsed state and expand ALL content before rendering
                     var collapsedStates = [];
-                    expandContentBeforeRendering();
+                    expandAllContentBeforeRendering();
 
-                    function expandContentBeforeRendering() {
-                        // Find collapsed content in the current block
-                        var blockContent = $currentBlock.find('.cbd-container-content');
-                        if (blockContent.length > 0 && !blockContent.is(':visible')) {
-                            collapsedStates.push({
-                                element: blockContent[0],
-                                wasHidden: true,
-                                originalDisplay: blockContent[0].style.display,
-                                originalVisibility: blockContent[0].style.visibility
-                            });
-                            blockContent.show();
+                    function expandAllContentBeforeRendering() {
+                        // CRITICAL: Find ALL container blocks (including nested ones!)
+                        var allContainerBlocks = $currentBlock.find('[data-wp-interactive="container-block-designer"]');
+
+                        // If current block itself is an interactive container, include it
+                        if ($currentBlock.is('[data-wp-interactive="container-block-designer"]')) {
+                            allContainerBlocks = allContainerBlocks.add($currentBlock);
                         }
 
-                        // Find any other collapsed elements within the block
+                        // Expand EACH container block (including nested ones)
+                        allContainerBlocks.each(function() {
+                            var $container = $(this);
+                            var content = $container.find('.cbd-container-content').first();
+
+                            // Check if this specific container's content is collapsed
+                            if (content.length > 0) {
+                                var computedDisplay = window.getComputedStyle(content[0]).display;
+                                var isHidden = computedDisplay === 'none' ||
+                                             !content.is(':visible') ||
+                                             content.css('display') === 'none';
+
+                                if (isHidden) {
+                                    collapsedStates.push({
+                                        element: content[0],
+                                        wasHidden: true,
+                                        originalDisplay: content[0].style.display,
+                                        originalVisibility: content[0].style.visibility,
+                                        originalMaxHeight: content[0].style.maxHeight,
+                                        originalOverflow: content[0].style.overflow
+                                    });
+
+                                    // Force expand with !important to override all styles
+                                    content[0].style.setProperty('display', 'block', 'important');
+                                    content[0].style.setProperty('visibility', 'visible', 'important');
+                                    content[0].style.setProperty('opacity', '1', 'important');
+                                    content[0].style.setProperty('max-height', 'none', 'important');
+                                    content[0].style.setProperty('overflow', 'visible', 'important');
+                                    content[0].style.setProperty('height', 'auto', 'important');
+                                }
+                            }
+
+                            // Also expand collapse toggle if exists
+                            var collapseToggle = $container.find('.cbd-collapse-toggle').first();
+                            if (collapseToggle.length > 0) {
+                                var icon = collapseToggle.find('.dashicons');
+                                if (icon.hasClass('dashicons-arrow-down-alt2')) {
+                                    // Was collapsed, store state
+                                    collapsedStates.push({
+                                        element: icon[0],
+                                        wasCollapsedIcon: true
+                                    });
+                                }
+                            }
+                        });
+
+                        // Find any other hidden elements (not action buttons)
                         var hiddenElements = $currentBlock.find('[style*="display: none"], [style*="visibility: hidden"]');
                         hiddenElements.each(function() {
-                            // Skip action buttons and controls
-                            if (!$(this).hasClass('cbd-action-buttons') &&
-                                !$(this).hasClass('cbd-action-btn') &&
-                                !$(this).hasClass('dashicons')) {
+                            var $elem = $(this);
+                            // Skip action buttons, controls, and already processed content
+                            if (!$elem.hasClass('cbd-action-buttons') &&
+                                !$elem.hasClass('cbd-action-btn') &&
+                                !$elem.hasClass('dashicons') &&
+                                !$elem.hasClass('cbd-container-content')) {
 
                                 collapsedStates.push({
                                     element: this,
@@ -224,7 +268,8 @@
                                     originalVisibility: this.style.visibility
                                 });
 
-                                $(this).show().css('visibility', 'visible');
+                                this.style.setProperty('display', 'block', 'important');
+                                this.style.setProperty('visibility', 'visible', 'important');
                             }
                         });
 
@@ -247,9 +292,26 @@
                             var state = collapsedStates[i];
                             if (state.wasDetails) {
                                 state.element.open = state.originalOpen;
+                            } else if (state.wasCollapsedIcon) {
+                                // Icon state restoration not needed, will be handled by next toggle
                             } else if (state.wasHidden) {
-                                state.element.style.display = state.originalDisplay;
-                                state.element.style.visibility = state.originalVisibility;
+                                // Remove important flags and restore original values
+                                state.element.style.removeProperty('display');
+                                state.element.style.removeProperty('visibility');
+                                state.element.style.removeProperty('opacity');
+                                state.element.style.removeProperty('max-height');
+                                state.element.style.removeProperty('overflow');
+                                state.element.style.removeProperty('height');
+
+                                // Restore original inline styles
+                                state.element.style.display = state.originalDisplay || '';
+                                state.element.style.visibility = state.originalVisibility || '';
+                                if (state.originalMaxHeight !== undefined) {
+                                    state.element.style.maxHeight = state.originalMaxHeight || '';
+                                }
+                                if (state.originalOverflow !== undefined) {
+                                    state.element.style.overflow = state.originalOverflow || '';
+                                }
                             }
                         }
                     }
