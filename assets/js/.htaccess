@@ -1,0 +1,6 @@
+# Container Block Designer - Asset Access Control
+# Temporarily allow all JavaScript files for debugging
+
+# Allow all JavaScript files
+Order Allow,Deny
+Allow from all

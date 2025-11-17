@@ -1,0 +1,97 @@
+/**
+ * Container Block Designer - Base Block Styles
+ * Basic foundation styles for all container blocks
+ */
+
+.cbd-container-block {
+    position: relative;
+    margin: 1.5em 0; /* Proper spacing for the actual content block */
+    padding: 1rem;
+    border-radius: 4px;
+    box-sizing: border-box;
+    width: 100%;
+    transition: all 0.3s ease;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    /* This is where all visual styling should be applied */
+}
+
+.cbd-container-block * {
+    box-sizing: border-box;
+}
+
+.cbd-container-block .cbd-block-content {
+    position: relative;
+    z-index: 1;
+}
+
+.cbd-container-block .cbd-block-header {
+    margin-bottom: 0.5em;
+}
+
+.cbd-container-block .cbd-block-title {
+    margin: 0 0 0.5em 0;
+    font-weight: 600;
+}
+
+/* Icon positioning base */
+.cbd-container-block .cbd-block-icon {
+    position: absolute;
+    font-size: 1.2em;
+    z-index: 2;
+}
+
+/* Numbering positioning base */
+.cbd-container-block .cbd-block-number {
+    position: absolute;
+    font-weight: bold;
+    z-index: 2;
+    font-size: 0.9em;
+}
+
+/* Feature buttons base */
+.cbd-container-block .cbd-feature-buttons {
+    margin-top: 0.5em;
+}
+
+.cbd-container-block .cbd-feature-button {
+    display: inline-block;
+    padding: 0.25em 0.5em;
+    margin-right: 0.5em;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background: #f9f9f9;
+    cursor: pointer;
+    font-size: 0.85em;
+    text-decoration: none;
+    color: #333;
+    transition: all 0.2s ease;
+}
+
+.cbd-container-block .cbd-feature-button:hover {
+    background: #e9e9e9;
+    border-color: #999;
+}
+
+/* Collapsible content */
+.cbd-container-block .cbd-collapsible-content {
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.cbd-container-block.cbd-collapsed .cbd-collapsible-content {
+    max-height: 0;
+}
+
+/* Responsive base */
+@media (max-width: 768px) {
+    .cbd-container-block {
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    
+    .cbd-container-block .cbd-block-icon,
+    .cbd-container-block .cbd-block-number {
+        font-size: 1em;
+    }
+}

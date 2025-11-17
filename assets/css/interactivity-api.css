@@ -1,0 +1,156 @@
+/**
+ * Container Block Designer - Interactivity API Styles
+ * Styles für die WordPress Interactivity API Integration
+ *
+ * @package ContainerBlockDesigner
+ * @since 2.8.0
+ */
+
+/* ==============================================
+   COLLAPSE ANIMATION
+   ============================================== */
+
+/* Content transitions for smooth collapse/expand */
+.cbd-container-content {
+    transition: all 0.3s ease-in-out;
+    overflow: hidden;
+    max-height: none;
+}
+
+/* Collapsed state */
+.cbd-container-content.cbd-collapsed {
+    max-height: 0 !important;
+    opacity: 0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Accessibility - hide from screen readers when collapsed */
+.cbd-container-content[aria-hidden="true"] {
+    visibility: hidden;
+}
+
+/* ==============================================
+   BUTTON STATES
+   ============================================== */
+
+/* Loading state for buttons */
+button[disabled].cbd-screenshot,
+button[disabled].cbd-pdf-export {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+/* Rotating animation for loading icons */
+.dashicons.dashicons-update-alt {
+    animation: cbd-rotate 1s linear infinite;
+}
+
+@keyframes cbd-rotate {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Success feedback */
+.cbd-action-buttons button .dashicons-yes-alt {
+    color: #46b450;
+}
+
+/* Error state (optional - can be added to context) */
+.cbd-action-buttons button.error .dashicons {
+    color: #dc3232;
+}
+
+/* ==============================================
+   CONTEXT-BASED DYNAMIC CLASSES
+   ============================================== */
+
+/* These are applied via data-wp-class directives */
+.cbd-container[data-wp-interactive="container-block-designer"] {
+    position: relative;
+}
+
+/* Smooth transitions for all interactive elements */
+.cbd-action-buttons button {
+    transition: all 0.2s ease;
+}
+
+.cbd-action-buttons button:hover {
+    transform: scale(1.1);
+}
+
+.cbd-action-buttons button:active {
+    transform: scale(0.95);
+}
+
+/* ==============================================
+   ACCESSIBILITY ENHANCEMENTS
+   ============================================== */
+
+/* Focus styles for keyboard navigation */
+.cbd-action-buttons button:focus-visible {
+    outline: 2px solid #2271b1;
+    outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .cbd-action-buttons button {
+        border: 2px solid currentColor;
+    }
+}
+
+/* Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+    .cbd-container-content,
+    .cbd-action-buttons button,
+    .dashicons.dashicons-update-alt {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+
+/* ==============================================
+   RESPONSIVE BEHAVIOR
+   ============================================== */
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+    .cbd-action-buttons {
+        gap: 8px;
+    }
+
+    .cbd-action-buttons button {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+    }
+}
+
+/* ==============================================
+   DEBUG MODE STYLES (Optional)
+   ============================================== */
+
+/* Add visual indicator when in debug mode */
+body.cbd-debug-mode .cbd-container[data-wp-interactive] {
+    outline: 2px dashed orange;
+    outline-offset: 4px;
+}
+
+body.cbd-debug-mode .cbd-container[data-wp-interactive]::before {
+    content: "Interactivity API Active: " attr(data-wp-interactive);
+    position: absolute;
+    top: -24px;
+    left: 0;
+    background: orange;
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    z-index: 999999;
+    font-family: monospace;
+}

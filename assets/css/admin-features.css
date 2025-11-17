@@ -1,0 +1,232 @@
+/**
+ * Container Block Designer - Advanced Features Styles
+ * Version: 2.3.0 - FIXED
+ */
+
+/* Container Base Styles */
+.wp-block-container-block-designer-container {
+    position: relative;
+    min-height: 50px;
+}
+
+/* Icon Feature */
+.wp-block-container-block-designer-container.has-icon {
+    padding-left: 40px !important;
+}
+
+.cbd-container-icon {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+    line-height: 1;
+    z-index: 10;
+}
+
+/* Collapse Feature */
+.wp-block-container-block-designer-container.has-collapse {
+    padding-top: 40px !important;
+}
+
+.cbd-collapse-toggle {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: #007cba;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 5px 10px;
+    cursor: pointer;
+    z-index: 10;
+    transition: background 0.2s;
+}
+
+.cbd-collapse-toggle:hover {
+    background: #005a87;
+}
+
+.cbd-collapse-toggle .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+}
+
+.cbd-collapse-content {
+    transition: all 0.3s ease;
+}
+
+.wp-block-container-block-designer-container.is-collapsed .cbd-collapse-content {
+    overflow: hidden;
+}
+
+/* When container has both icon and collapse */
+.wp-block-container-block-designer-container.has-icon.has-collapse {
+    padding-left: 40px !important;
+    padding-top: 40px !important;
+}
+
+/* Numbering Feature */
+.wp-block-container-block-designer-container.has-numbering {
+    padding-left: 50px !important;
+}
+
+.cbd-container-number {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+    font-weight: bold;
+    font-size: 18px;
+    color: #007cba;
+    z-index: 9;
+}
+
+.wp-block-container-block-designer-container.has-icon.has-numbering {
+    padding-left: 70px !important;
+}
+
+.wp-block-container-block-designer-container.has-icon.has-numbering .cbd-container-number {
+    left: 40px;
+}
+
+/* Copy Text Feature */
+.cbd-copy-button {
+    position: absolute;
+    background: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    z-index: 10;
+    transition: all 0.2s;
+}
+
+.cbd-copy-button:hover {
+    background: #007cba;
+    color: white;
+    border-color: #007cba;
+}
+
+.cbd-copy-button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+
+.cbd-copy-button.position-top-right {
+    top: 10px;
+    right: 10px;
+}
+
+.cbd-copy-button.position-top-left {
+    top: 10px;
+    left: 10px;
+}
+
+.cbd-copy-button.position-bottom-right {
+    bottom: 10px;
+    right: 10px;
+}
+
+.cbd-copy-button.position-bottom-left {
+    bottom: 10px;
+    left: 10px;
+}
+
+/* Adjust position when collapse is present */
+.wp-block-container-block-designer-container.has-collapse .cbd-copy-button.position-top-right {
+    right: 50px;
+}
+
+/* Screenshot Feature */
+.cbd-screenshot-button {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    z-index: 10;
+    transition: background 0.2s;
+}
+
+.cbd-screenshot-button:hover {
+    background: #45a049;
+}
+
+.cbd-screenshot-button .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 5px;
+}
+
+/* Notifications */
+.cbd-notification {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: #333;
+    color: white;
+    padding: 12px 20px;
+    border-radius: 4px;
+    z-index: 100000;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.3s;
+}
+
+.cbd-notification.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.cbd-notification-success {
+    background: #4CAF50;
+}
+
+.cbd-notification-error {
+    background: #f44336;
+}
+
+/* Editor Styles */
+.editor-styles-wrapper .wp-block-container-block-designer-container {
+    min-height: 100px;
+    border: 2px dashed #ddd;
+    position: relative;
+}
+
+.editor-styles-wrapper .wp-block-container-block-designer-container:hover {
+    border-color: #007cba;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .cbd-copy-button,
+    .cbd-screenshot-button,
+    .cbd-collapse-toggle {
+        font-size: 12px;
+        padding: 4px 8px;
+    }
+    
+    .cbd-container-icon {
+        font-size: 20px;
+        width: 20px;
+        height: 20px;
+    }
+    
+    .cbd-container-number {
+        font-size: 16px;
+    }
+}

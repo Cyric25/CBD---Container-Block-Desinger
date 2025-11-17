@@ -1,0 +1,178 @@
+/**
+ * Container Block Designer - Editor Base Styles
+ * Styles for Gutenberg editor to match frontend appearance
+ */
+
+/* Import clean frontend styles for editor preview */
+@import url('cbd-frontend-clean.css');
+
+/* Editor-specific wrapper - Universal selectors for all container blocks */
+.wp-block[data-type*="container-block-designer"],
+[class*="wp-block-container-block-designer"] {
+    /* Remove margins from outer wrapper to prevent double spacing */
+    margin: 0;
+}
+
+/* Ensure inner container blocks get proper spacing in editor */
+.wp-block[data-type*="container-block-designer"] .cbd-container-block,
+[class*="wp-block-container-block-designer"] .cbd-container-block {
+    margin: 1.5em 0; /* This matches the frontend spacing */
+}
+
+/* Make sure the outer .cbd-container has no visual styling in editor */
+.wp-block[data-type*="container-block-designer"] .cbd-container,
+[class*="wp-block-container-block-designer"] .cbd-container {
+    /* Override any inherited margins or padding */
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    box-shadow: none;
+}
+
+/* Editor container block styling - Additional editor-specific styles */
+.wp-block[data-type*="container-block-designer"] .cbd-container-block,
+[class*="wp-block-container-block-designer"] .cbd-container-block {
+    /* Ensure proper display in editor */
+    position: relative;
+    display: block;
+    width: 100%;
+    min-height: 50px;
+    transition: all 0.2s ease;
+}
+
+/* Editor preview styling */
+.wp-block[data-type*="container-block-designer"] .cbd-container-block:hover,
+[class*="wp-block-container-block-designer"] .cbd-container-block:hover {
+    outline: 2px solid #007cba;
+    outline-offset: 2px;
+}
+
+/* Make sure positioned elements work in editor */
+.wp-block[data-type*="container-block-designer"] .cbd-block-icon,
+.wp-block[data-type*="container-block-designer"] .cbd-block-number,
+[class*="wp-block-container-block-designer"] .cbd-block-icon,
+[class*="wp-block-container-block-designer"] .cbd-block-number {
+    position: absolute;
+    z-index: 10;
+    pointer-events: none; /* Prevent interference with editor interactions */
+}
+
+/* Feature buttons in editor */
+.wp-block[data-type*="container-block-designer"] .cbd-feature-buttons,
+[class*="wp-block-container-block-designer"] .cbd-feature-buttons {
+    margin-top: 10px;
+    padding: 10px 0;
+    border-top: 1px solid #e0e0e0;
+}
+
+.wp-block[data-type*="container-block-designer"] .cbd-feature-button,
+[class*="wp-block-container-block-designer"] .cbd-feature-button {
+    pointer-events: none; /* Disable in editor */
+    opacity: 0.7;
+    margin-right: 8px;
+    font-size: 12px;
+    padding: 4px 8px;
+}
+
+/* Collapse button in editor */
+.wp-block[data-type*="container-block-designer"] .cbd-collapse-toggle,
+[class*="wp-block-container-block-designer"] .cbd-collapse-toggle {
+    pointer-events: none; /* Disable in editor */
+    opacity: 0.8;
+}
+
+/* Editor placeholder styles */
+.wp-block[data-type*="container-block-designer"] .cbd-container-placeholder,
+[class*="wp-block-container-block-designer"] .cbd-container-placeholder {
+    padding: 40px 20px;
+    text-align: center;
+    background: #f8f9fa;
+    border: 2px dashed #ccd0d4;
+    border-radius: 4px;
+    color: #666;
+    font-style: italic;
+}
+
+/* Error state in editor */
+.wp-block[data-type*="container-block-designer"] .cbd-container-error,
+[class*="wp-block-container-block-designer"] .cbd-container-error {
+    margin: 10px 0;
+    font-size: 14px;
+}
+
+.wp-block[data-type*="container-block-designer"] .cbd-container-error a,
+[class*="wp-block-container-block-designer"] .cbd-container-error a {
+    color: #007cba;
+    text-decoration: none;
+}
+
+.wp-block[data-type*="container-block-designer"] .cbd-container-error a:hover,
+[class*="wp-block-container-block-designer"] .cbd-container-error a:hover {
+    text-decoration: underline;
+}
+
+/* Modern effects work in editor too */
+.wp-block-container-block-designer-dfgdfgdfg .cbd-container-block.cbd-glassmorphism,
+[data-type*="container-block-designer"] .cbd-container-block.cbd-glassmorphism {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.wp-block-container-block-designer-dfgdfgdfg .cbd-container-block.cbd-neumorphism,
+[data-type*="container-block-designer"] .cbd-container-block.cbd-neumorphism {
+    box-shadow: 
+        5px 5px 10px rgba(0, 0, 0, 0.1),
+        -5px -5px 10px rgba(255, 255, 255, 0.7);
+}
+
+/* Animation preview (reduced for editor) */
+.wp-block-container-block-designer-dfgdfgdfg .cbd-container-block.cbd-animated:hover,
+[data-type*="container-block-designer"] .cbd-container-block.cbd-animated:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Make sure content is editable */
+.wp-block-container-block-designer-dfgdfgdfg .cbd-block-content,
+[data-type*="container-block-designer"] .cbd-block-content {
+    position: relative;
+    z-index: 1;
+    min-height: 20px;
+}
+
+/* Dashicons support in editor */
+.wp-block-container-block-designer-dfgdfgdfg .dashicons,
+[data-type*="container-block-designer"] .dashicons {
+    font-family: dashicons;
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+    line-height: 1;
+    font-weight: 400;
+    font-style: normal;
+    speak: never;
+    text-decoration: inherit;
+    text-transform: none;
+    text-rendering: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Editor responsive adjustments */
+@media (max-width: 768px) {
+    .wp-block-container-block-designer-dfgdfgdfg .cbd-container-block,
+    [data-type*="container-block-designer"] .cbd-container-block {
+        padding: 15px;
+    }
+    
+    .wp-block-container-block-designer-dfgdfgdfg .cbd-block-icon,
+    .wp-block-container-block-designer-dfgdfgdfg .cbd-block-number,
+    [data-type*="container-block-designer"] .cbd-block-icon,
+    [data-type*="container-block-designer"] .cbd-block-number {
+        position: static;
+        display: inline-block;
+        margin-right: 8px;
+    }
+}

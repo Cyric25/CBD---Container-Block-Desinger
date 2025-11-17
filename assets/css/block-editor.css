@@ -1,0 +1,330 @@
+/**
+ * Container Block Designer - Block Editor Styles
+ * Version: 2.6.0
+ */
+
+/* Block Editor Layout */
+.cbd-editor-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 30px;
+    margin: 20px 0;
+}
+
+.cbd-editor-main {
+    background: white;
+}
+
+.cbd-editor-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Editor Sections */
+.cbd-editor-section {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    overflow: hidden;
+}
+
+.cbd-editor-section h2 {
+    background: #f5f5f5;
+    margin: 0;
+    padding: 15px 20px;
+    border-bottom: 1px solid #ddd;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+.cbd-editor-section .form-table {
+    margin: 0;
+    border: none;
+}
+
+.cbd-editor-section .form-table th,
+.cbd-editor-section .form-table td {
+    padding: 15px 20px;
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.cbd-editor-section .form-table tr:last-child th,
+.cbd-editor-section .form-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Style Editor */
+#cbd-style-editor {
+    padding: 20px;
+    min-height: 400px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #f9f9f9;
+}
+
+.cbd-style-group {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    overflow: hidden;
+}
+
+.cbd-style-group-header {
+    background: #f8f9fa;
+    padding: 12px 15px;
+    border-bottom: 1px solid #e0e0e0;
+    font-weight: 600;
+    color: #495057;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cbd-style-group-header:hover {
+    background: #e9ecef;
+}
+
+.cbd-style-group-content {
+    padding: 15px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.cbd-style-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.cbd-style-field label {
+    font-weight: 500;
+    color: #555;
+    font-size: 14px;
+}
+
+.cbd-style-field input,
+.cbd-style-field select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.cbd-style-field input:focus,
+.cbd-style-field select:focus {
+    outline: none;
+    border-color: #0073aa;
+    box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.2);
+}
+
+/* Color Picker */
+.cbd-color-picker {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cbd-color-preview {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    position: relative;
+}
+
+.cbd-color-preview::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, #ccc 25%, transparent 25%), 
+                linear-gradient(-45deg, #ccc 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #ccc 75%), 
+                linear-gradient(-45deg, transparent 75%, #ccc 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
+    z-index: 1;
+}
+
+.cbd-color-preview .color {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+}
+
+/* Features Editor */
+#cbd-features-editor {
+    padding: 20px;
+}
+
+.cbd-feature-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 15px;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    margin-bottom: 10px;
+}
+
+.cbd-feature-info h4 {
+    margin: 0 0 5px 0;
+    color: #333;
+    font-size: 16px;
+}
+
+.cbd-feature-info p {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+}
+
+.cbd-toggle-switch {
+    position: relative;
+    width: 50px;
+    height: 24px;
+    background: #ccc;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.cbd-toggle-switch.active {
+    background: #0073aa;
+}
+
+.cbd-toggle-switch::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.3s;
+}
+
+.cbd-toggle-switch.active::before {
+    transform: translateX(26px);
+}
+
+.cbd-feature-options {
+    margin-top: 15px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    display: none;
+}
+
+.cbd-feature-options.active {
+    display: block;
+}
+
+/* Preview Box */
+#cbd-block-preview {
+    min-height: 200px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 15px;
+    position: relative;
+}
+
+#cbd-block-preview::before {
+    content: 'Vorschau';
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: #666;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.cbd-preview-container {
+    border: 2px dashed #ccc;
+    border-radius: 4px;
+    padding: 20px;
+    text-align: center;
+    color: #666;
+    font-style: italic;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    .cbd-editor-layout {
+        grid-template-columns: 1fr;
+    }
+    
+    .cbd-editor-sidebar {
+        order: -1;
+    }
+}
+
+@media (max-width: 768px) {
+    .cbd-style-group-content {
+        grid-template-columns: 1fr;
+    }
+    
+    .cbd-editor-section .form-table th,
+    .cbd-editor-section .form-table td {
+        padding: 12px 15px;
+    }
+    
+    .cbd-feature-toggle {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+}
+
+/* Animation for collapsible sections */
+.cbd-style-group-content,
+.cbd-feature-options {
+    transition: all 0.3s ease;
+}
+
+.cbd-style-group.collapsed .cbd-style-group-content {
+    display: none;
+}
+
+/* Custom scrollbar for long lists */
+.cbd-blocks-selection::-webkit-scrollbar,
+#cbd-style-editor::-webkit-scrollbar {
+    width: 8px;
+}
+
+.cbd-blocks-selection::-webkit-scrollbar-track,
+#cbd-style-editor::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.cbd-blocks-selection::-webkit-scrollbar-thumb,
+#cbd-style-editor::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.cbd-blocks-selection::-webkit-scrollbar-thumb:hover,
+#cbd-style-editor::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}

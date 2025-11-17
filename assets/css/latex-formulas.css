@@ -1,0 +1,265 @@
+/**
+ * LaTeX Formula Styling
+ *
+ * Styles for LaTeX formulas rendered with KaTeX
+ * Ensures formulas are centered, readable, and print-friendly
+ *
+ * @package ContainerBlockDesigner
+ * @since 2.7.0
+ */
+
+/* Container for LaTeX formulas - BASE styles only */
+.cbd-latex-formula {
+    color: inherit; /* Inherit color from parent block */
+    position: relative; /* Prevent positioning issues in screenshots/PDF */
+    overflow-y: visible;
+}
+
+/* Display formulas - block level, centered */
+.cbd-latex-formula.cbd-latex-display {
+    display: block !important;
+    width: 100%;
+    margin: 20px auto;
+    padding: 15px 0;
+    text-align: center;
+    clear: both;
+    overflow-x: auto; /* Allow horizontal scrolling for long formulas */
+}
+
+/* Inline formulas - stay within text flow */
+.cbd-latex-formula.cbd-latex-inline {
+    display: inline !important;
+    width: auto;
+    margin: 0 0.2em;
+    padding: 0;
+    text-align: inherit;
+    clear: none;
+    overflow-x: visible;
+    vertical-align: baseline;
+}
+
+/* The rendered formula content */
+.cbd-latex-content {
+    display: inline-block;
+    font-size: 1.2em;
+    line-height: 1.6;
+    max-width: 100%;
+    color: inherit; /* Inherit color from parent */
+    position: relative; /* Prevent positioning issues */
+    vertical-align: middle; /* Better alignment */
+}
+
+/* Content for inline formulas - smaller, inline */
+.cbd-latex-inline .cbd-latex-content {
+    display: inline;
+    font-size: inherit;
+    line-height: inherit;
+    vertical-align: baseline;
+}
+
+/* Content for display formulas - larger, block */
+.cbd-latex-display .cbd-latex-content {
+    display: inline-block;
+    font-size: 1.2em;
+    line-height: 1.6;
+}
+
+/* KaTeX rendered math should be centered and inherit color */
+.cbd-latex-formula .katex-display {
+    margin: 0 auto;
+    text-align: center;
+    color: inherit !important; /* Force color inheritance */
+}
+
+/* Ensure KaTeX elements inherit color from container */
+.cbd-latex-formula .katex,
+.cbd-latex-formula .katex * {
+    font-size: inherit;
+    color: inherit !important; /* Force all KaTeX elements to inherit color */
+}
+
+/* Ensure KaTeX horizontal layout is preserved */
+.cbd-latex-formula .katex-html {
+    display: inline-block !important;
+    white-space: nowrap !important;
+}
+
+/* Ensure spans inside KaTeX stay inline */
+.cbd-latex-formula .katex-html .base,
+.cbd-latex-formula .katex-html .strut,
+.cbd-latex-formula .katex-html .mord,
+.cbd-latex-formula .katex-html .mrel,
+.cbd-latex-formula .katex-html .mbin,
+.cbd-latex-formula .katex-html .mopen,
+.cbd-latex-formula .katex-html .mclose,
+.cbd-latex-formula .katex-html .mpunct {
+    display: inline !important;
+    white-space: nowrap !important;
+}
+
+/* Fallback styling for browsers without JavaScript */
+.cbd-latex-fallback {
+    display: block;
+    font-family: 'Times New Roman', Times, serif;
+    font-size: 1.1em;
+    font-style: italic;
+    color: #333;
+    background-color: #f9f9f9;
+    border: 1px dashed #ccc;
+    border-radius: 4px;
+    padding: 15px;
+    margin: 10px auto;
+    max-width: 90%;
+    text-align: center;
+    word-wrap: break-word;
+}
+
+/* Hide noscript when JavaScript is enabled (rendered formulas are shown) */
+.cbd-latex-rendered noscript {
+    display: none !important;
+}
+
+/* Error display for malformed LaTeX */
+.cbd-latex-error {
+    display: block;
+    color: #cc0000;
+    background-color: #ffe6e6;
+    border: 1px solid #cc0000;
+    border-radius: 4px;
+    padding: 10px;
+    margin: 10px 0;
+    font-family: monospace;
+    font-size: 0.9em;
+    text-align: left;
+}
+
+/* Successfully rendered formulas */
+.cbd-latex-rendered {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Print-specific styles */
+@media print {
+    .cbd-latex-formula {
+        page-break-inside: avoid;
+        margin: 15px 0;
+    }
+
+    .cbd-latex-content {
+        font-size: 1.1em;
+    }
+
+    /* Hide error messages in print */
+    .cbd-latex-error {
+        display: none;
+    }
+
+    /* Show fallback in print if JavaScript failed */
+    noscript .cbd-latex-fallback {
+        display: block !important;
+    }
+}
+
+/* PDF export specific (when captured by html2canvas) */
+.cbd-latex-pdf {
+    display: block;
+    text-align: center;
+    margin: 15px 0;
+    padding: 10px;
+}
+
+/* Inside container blocks */
+.cbd-container-content .cbd-latex-formula {
+    margin: 15px 0;
+}
+
+/* Responsive adjustments for mobile */
+@media screen and (max-width: 768px) {
+    .cbd-latex-formula.cbd-latex-display {
+        margin: 15px 0;
+        padding: 10px 0;
+    }
+
+    .cbd-latex-display .cbd-latex-content {
+        font-size: 1em;
+    }
+
+    .cbd-latex-fallback {
+        font-size: 1em;
+        padding: 12px;
+    }
+
+    /* Inline formulas stay same size on mobile */
+    .cbd-latex-inline .cbd-latex-content {
+        font-size: inherit;
+    }
+}
+
+/* Dark mode support (optional) */
+@media (prefers-color-scheme: dark) {
+    .cbd-latex-fallback {
+        background-color: #2a2a2a;
+        border-color: #555;
+        color: #e0e0e0;
+    }
+
+    .cbd-latex-error {
+        background-color: #3a1a1a;
+        border-color: #ff6b6b;
+        color: #ff6b6b;
+    }
+}
+
+/* Accessibility - ensure formulas are keyboard accessible */
+.cbd-latex-formula:focus-within {
+    outline: 2px solid #0073aa;
+    outline-offset: 2px;
+}
+
+/* Loading state (optional) */
+.cbd-latex-formula:not(.cbd-latex-rendered) .cbd-latex-content {
+    opacity: 0.3;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 0.3;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* Ensure proper spacing in lists */
+li .cbd-latex-formula {
+    margin: 10px 0;
+}
+
+/* Ensure proper spacing in tables */
+td .cbd-latex-formula,
+th .cbd-latex-formula {
+    margin: 5px 0;
+}
+
+/* WordPress block editor compatibility */
+.wp-block .cbd-latex-formula {
+    margin: 20px auto;
+}
+
+/* Screenshot capture optimization */
+.cbd-latex-formula[data-pdf-ready="true"] {
+    /* Ensure formulas are fully visible for screenshots */
+    visibility: visible !important;
+    display: block !important;
+    opacity: 1 !important;
+}

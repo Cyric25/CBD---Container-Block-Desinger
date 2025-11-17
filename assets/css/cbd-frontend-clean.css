@@ -1,0 +1,1133 @@
+/**
+ * Container Block Designer - Clean Frontend Styles
+ * Version: 2.6.0 - UPDATED 10:55
+ * 
+ * Fixed structure to prevent double container styling:
+ * - .cbd-container = invisible wrapper (no visual styling)
+ * - .cbd-container-block = visible content block (all styling here)
+ */
+
+/* ============================================
+   WRAPPER STYLES - COMPLETELY TRANSPARENT
+   ============================================ */
+
+/* .cbd-container is INVISIBLE - only for positioning controls outside content */
+.cbd-container {
+    position: relative;
+    margin: 40px 0; /* Even more spacing between blocks for better separation */
+    /* IMPORTANT: Absolutely no visual styling - completely transparent wrapper */
+    background: none !important;
+    background-color: transparent !important;
+    border: none !important;
+    border-color: transparent !important;
+    padding: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+    color: inherit !important;
+    /* Remove any inherited styles that could cause visual appearance */
+    box-sizing: content-box !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    overflow: visible !important;
+    /* Ensure no theme styles interfere */
+    border-radius: 0 !important;
+    text-decoration: none !important;
+}
+
+/* Override any WordPress/theme styles that might interfere with wrapper transparency */
+.cbd-container,
+.cbd-container::before,
+.cbd-container::after {
+    background: none !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    border: none !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+}
+
+/* Ensure wrapper children that should be outside remain outside */
+.cbd-container > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* Content wrapper should not have visual styling either */
+.cbd-container .cbd-content {
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+}
+
+/* ============================================
+   CONTENT BLOCK STYLES - All Visual Styling
+   ============================================ */
+
+/* IMPORTANT: Only .cbd-container-block should have visual styling!
+   Icons, buttons, headers are positioned in the outer .cbd-container wrapper
+   but should NOT have background/border/padding styles that interfere. */
+
+/* Main content block - this is the ONLY element that should have visual container styling */
+.cbd-container-block {
+    position: relative;
+    margin: 0; /* No margin to avoid double spacing with wrapper */
+    padding: 1.5rem;
+    box-sizing: border-box;
+    width: 100%;
+    transition: all 0.3s ease;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    /* Enhanced default styling that can be overridden by inline styles */
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06);
+    /* This is the ONLY visible container - everything else is transparent */
+    /* Support for advanced styling options */
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Add top padding when header is inside content block */
+.cbd-container-block:has(.cbd-header) {
+    padding-top: 60px;
+}
+
+/* Fallback for browsers without :has() support */
+.cbd-container-block .cbd-header ~ * {
+    margin-top: 10px;
+}
+
+.cbd-container-block .cbd-header:first-child ~ *:first-of-type {
+    margin-top: 0;
+}
+
+/* Ensure content after header has proper spacing */
+.cbd-container-block .cbd-header + * {
+    margin-top: 15px !important;
+}
+
+.cbd-container-block * {
+    box-sizing: border-box;
+}
+
+/* ============================================
+   ALIGNMENT CLASSES
+   ============================================ */
+
+.cbd-container-block.alignwide {
+    max-width: 1140px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.cbd-container-block.alignfull {
+    max-width: 100%;
+    width: 100vw;
+    position: relative;
+    left: 50%;
+    right: 50%;
+    margin-left: -50vw;
+    margin-right: -50vw;
+}
+
+.cbd-container-block.aligncenter {
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+}
+
+/* ============================================
+   FEATURE ELEMENTS (Outside styled container)
+   ============================================ */
+
+/* ============================================
+   SELECTION-BASED MENU SYSTEM
+   ============================================ */
+
+/* Header with title and dropdown menu */
+.cbd-container-block .cbd-header {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 15px 20px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 8px 8px 0 0;
+    margin-bottom: 0;
+    z-index: 10;
+    gap: 15px;
+}
+
+/* Block title */
+.cbd-header-title {
+    flex: 1;
+    font-size: 1.2em;
+    font-weight: 600;
+    color: #2c3e50;
+    margin: 0;
+    line-height: 1.4;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* When title is long, allow wrapping */
+.cbd-header-title {
+    max-width: calc(100% - 120px); /* Leave space for dropdown */
+}
+
+/* Dropdown menu container */
+.cbd-header-menu {
+    position: relative;
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+
+/* Dropdown toggle button */
+.cbd-menu-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #495057;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.cbd-menu-toggle:hover {
+    background: #f8f9fa;
+    border-color: #007cba;
+    color: #007cba;
+}
+
+.cbd-menu-toggle .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* Dropdown arrow */
+.cbd-menu-toggle::after {
+    content: '▼';
+    font-size: 10px;
+    margin-left: 5px;
+    transition: transform 0.2s ease;
+}
+
+.cbd-menu-toggle.active::after {
+    transform: rotate(180deg);
+}
+
+/* Dropdown menu */
+.cbd-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    min-width: 180px;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-5px);
+    transition: all 0.2s ease;
+}
+
+.cbd-dropdown-menu.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* Dropdown items */
+.cbd-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    font-size: 14px;
+    color: #495057;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.cbd-dropdown-item:hover {
+    background: #f8f9fa;
+}
+
+.cbd-dropdown-item:first-child {
+    border-radius: 6px 6px 0 0;
+}
+
+.cbd-dropdown-item:last-child {
+    border-radius: 0 0 6px 6px;
+}
+
+.cbd-dropdown-item .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: #6c757d;
+}
+
+/* Separator */
+.cbd-dropdown-separator {
+    height: 1px;
+    background: #e9ecef;
+    margin: 4px 0;
+}
+
+/* Old header styles - keep for compatibility but hidden */
+.cbd-container .cbd-header {
+    position: relative;
+    z-index: 2;
+    margin-bottom: 15px;
+}
+
+.cbd-collapse-toggle {
+    background: transparent;
+    border: 1px solid #ddd;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    color: #333;
+}
+
+.cbd-collapse-toggle:hover {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: #007cba;
+}
+
+.cbd-collapse-toggle .cbd-toggle-icon {
+    display: flex;
+    align-items: center;
+}
+
+.cbd-collapse-toggle .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    transition: transform 0.3s ease;
+}
+
+.cbd-content {
+    overflow: visible;
+    /* Removed transition - can cause display issues */
+}
+
+/* Simple collapse logic - just hide/show content */
+.cbd-container-content {
+    /* No special styling needed - JavaScript handles visibility */
+}
+
+/* Collapsed state - content hidden by default, JavaScript can override */
+.cbd-container.cbd-collapsed .cbd-container-content {
+    display: none;
+}
+
+/* Icon state for collapsed containers */
+.cbd-container.cbd-collapsed .cbd-collapse-toggle .dashicons {
+    /* JavaScript will set the correct icon class */
+}
+
+/* ============================================
+   FEATURE BUTTONS
+   ============================================ */
+
+/* Action Buttons - Only show on hover or focus */
+.cbd-actions {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 4;
+    display: flex;
+    gap: 5px;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    transform: translateY(-5px);
+}
+
+/* Show buttons on container hover, focus, or when container has focus-within */
+.cbd-container:hover .cbd-actions,
+.cbd-container:focus-within .cbd-actions,
+.cbd-container.cbd-selected .cbd-actions {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+/* DISABLED: All separate buttons hidden - only dropdown menu allowed */
+.cbd-copy-text:not(.cbd-dropdown-item),
+.cbd-screenshot:not(.cbd-dropdown-item) {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Only allow dropdown buttons */
+.cbd-dropdown-item.cbd-copy-text,
+.cbd-dropdown-item.cbd-screenshot {
+    background: transparent;
+    color: inherit;
+    border: none;
+    border-radius: 0;
+    width: 100%;
+    height: auto;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    position: relative;
+    font-size: 14px;
+    padding: 8px 12px;
+    transition: background-color 0.2s ease;
+}
+
+/* Only dropdown buttons get hover effect */
+.cbd-dropdown-item.cbd-copy-text:hover,
+.cbd-dropdown-item.cbd-screenshot:hover {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.cbd-copy-text.cbd-copied {
+    background: #28a745;
+}
+
+.cbd-screenshot.cbd-loading {
+    background: #007cba;
+    cursor: not-allowed;
+}
+
+.cbd-copy-text .dashicons,
+.cbd-screenshot .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* Button labels - hidden by default, shown on hover for larger buttons */
+.cbd-copy-label,
+.cbd-screenshot-label {
+    display: none;
+    margin-left: 5px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+/* ============================================
+   ICONS
+   ============================================ */
+
+/* Icon positioning */
+.cbd-icon {
+    position: absolute;
+    z-index: 3;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cbd-icon.top-left {
+    top: 10px;
+    left: 10px;
+}
+
+.cbd-icon.top-right {
+    top: 10px;
+    right: 10px;
+}
+
+.cbd-icon.bottom-left {
+    bottom: 10px;
+    left: 10px;
+}
+
+.cbd-icon.bottom-right {
+    bottom: 10px;
+    right: 10px;
+}
+
+.cbd-icon .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+}
+
+.cbd-container:hover .cbd-icon .dashicons {
+    opacity: 1;
+}
+
+/* ============================================
+   NUMBERING
+   ============================================ */
+
+.cbd-number {
+    display: inline-block;
+    margin-right: 8px;
+    font-weight: bold;
+    color: #007cba;
+}
+
+/* ============================================
+   TOAST NOTIFICATIONS
+   ============================================ */
+
+.cbd-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 999999;
+    padding: 12px 20px;
+    border-radius: 6px;
+    color: white;
+    font-size: 14px;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+    max-width: 300px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.cbd-toast.cbd-toast-show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.cbd-toast.cbd-toast-success {
+    background-color: #28a745;
+}
+
+.cbd-toast.cbd-toast-error {
+    background-color: #dc3545;
+}
+
+.cbd-toast.cbd-toast-info {
+    background-color: #007cba;
+}
+
+/* ============================================
+   LEGACY ELEMENTS - HIDDEN
+   ============================================ */
+
+/* Hide old feature buttons inside content blocks - they should be outside now */
+.cbd-feature-buttons,
+.cbd-container-block .cbd-feature-buttons,
+/* Hide any buttons that might accidentally appear inside content - EXCEPT toggle button */
+.cbd-container-block .cbd-copy-text,
+.cbd-container-block .cbd-screenshot,
+.cbd-container-block .cbd-actions,
+.cbd-container-block .cbd-icon {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Allow toggle button and header inside content block */
+.cbd-container-block .cbd-collapse-toggle,
+.cbd-container-block .cbd-header {
+    display: flex !important;
+    visibility: visible !important;
+}
+
+/* Ensure controls are ONLY visible outside content block */
+.cbd-container > .cbd-header,
+.cbd-container > .cbd-icon {
+    display: flex !important;
+    visibility: visible !important;
+}
+
+/* HIDE ALL SEPARATE BUTTONS - Only dropdown menu allowed */
+.cbd-container > .cbd-copy-text,
+.cbd-container > .cbd-screenshot,
+.cbd-container > .cbd-collapse-toggle,
+.cbd-container > .cbd-actions {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* Additional protection against theme interference */
+.cbd-container,
+.cbd-container *:not(.cbd-container-block):not(.cbd-container-block *) {
+    /* Remove any possible theme styles from wrapper and its direct children (but not from content block) */
+    background: none !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* Content block styling remains as default - inline styles will naturally override */
+
+/* Wrapper styling - keep minimal and safe */
+.cbd-container {
+    position: relative;
+    margin: 2.5em 0;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+@media (max-width: 768px) {
+    .cbd-container-block {
+        margin: 1em 0;
+        padding: 0.8rem;
+    }
+    
+    .cbd-actions {
+        position: static;
+        opacity: 1;
+        margin-top: 10px;
+        justify-content: flex-end;
+    }
+    
+    .cbd-icon {
+        position: static;
+        margin-bottom: 10px;
+    }
+    
+    .cbd-collapse-toggle {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .cbd-container-block {
+        padding: 0.6rem;
+        margin: 0.8em 0;
+    }
+    
+    .cbd-copy-text,
+    .cbd-screenshot {
+        width: 28px;
+        height: 28px;
+    }
+    
+    .cbd-copy-text .dashicons,
+    .cbd-screenshot .dashicons {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
+    }
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+    .cbd-actions,
+    .cbd-copy-text,
+    .cbd-screenshot {
+        display: none !important;
+    }
+    
+    .cbd-container-block {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ccc;
+    }
+    
+    .cbd-container.cbd-collapsed .cbd-content {
+        display: block !important;
+    }
+}
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+    .cbd-container-block,
+    .cbd-actions,
+    .cbd-copy-text,
+    .cbd-screenshot,
+    .cbd-toast,
+    .cbd-icon .dashicons,
+    .cbd-collapse-toggle {
+        transition: none;
+    }
+}
+
+/* Focus styles */
+.cbd-container:focus-visible,
+.cbd-collapse-toggle:focus-visible,
+.cbd-copy-text:focus-visible,
+.cbd-screenshot:focus-visible {
+    outline: 2px solid #007cba;
+    outline-offset: 2px;
+}
+
+/* ============================================
+   DARK MODE SUPPORT
+   ============================================ */
+
+@media (prefers-color-scheme: dark) {
+    .cbd-container-block {
+        background: #1e1e1e;
+        border-color: #404040;
+        color: #e0e0e0;
+    }
+    
+    .cbd-collapse-toggle {
+        background: transparent;
+        border-color: #555;
+        color: #e0e0e0;
+    }
+    
+    .cbd-collapse-toggle:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: #007cba;
+    }
+    
+    .cbd-icon .dashicons {
+        color: #e0e0e0;
+    }
+}
+
+/* ============================================
+   HIGH CONTRAST MODE
+   ============================================ */
+
+@media (prefers-contrast: high) {
+    .cbd-container-block {
+        border: 2px solid #000;
+    }
+    
+    .cbd-copy-text,
+    .cbd-screenshot {
+        background: #000;
+        color: #fff;
+        border: 1px solid #fff;
+    }
+    
+    .cbd-collapse-toggle {
+        border: 2px solid #000;
+        background: #fff;
+        color: #000;
+    }
+}
+
+/* ============================================
+   COPY FEEDBACK NOTIFICATION
+   ============================================ */
+
+.cbd-copy-feedback {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 9999;
+    display: none;
+    white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* ============================================
+   NEW SELECTION-BASED MENU SYSTEM
+   ============================================ */
+
+/* Hide old header styles */
+.cbd-header,
+.cbd-header-title,
+.cbd-header-menu {
+    display: none !important;
+}
+
+/* Selection menu - appears on hover/tap */
+.cbd-selection-menu {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    transition: all 0.2s ease;
+    pointer-events: auto;
+}
+
+/* Menu toggle button */
+.cbd-selection-menu .cbd-menu-toggle {
+    background: rgba(0, 0, 0, 0.7);
+    border: none;
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.cbd-selection-menu .cbd-menu-toggle::after {
+    display: none !important;
+}
+
+.cbd-selection-menu .cbd-menu-toggle:hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: scale(1.1);
+}
+
+.cbd-selection-menu .cbd-menu-toggle .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+/* Dropdown menu */
+.cbd-selection-menu .cbd-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    z-index: 1001;
+    min-width: 180px;
+    display: none;
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+    transition: all 0.2s ease;
+    overflow: hidden;
+    visibility: hidden;
+}
+
+.cbd-selection-menu .cbd-dropdown-menu.show {
+    display: block !important;
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+}
+
+/* Dropdown items */
+.cbd-selection-menu .cbd-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 16px;
+    border: none;
+    background: none;
+    color: #2c3e50;
+    cursor: pointer;
+    font-size: 14px;
+    text-align: left;
+    transition: background-color 0.2s ease;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.cbd-selection-menu .cbd-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.cbd-selection-menu .cbd-dropdown-item:hover {
+    background: #f8f9fa;
+}
+
+.cbd-selection-menu .cbd-dropdown-item:active {
+    background: #e9ecef;
+}
+
+.cbd-selection-menu .cbd-dropdown-item .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: #666;
+    flex-shrink: 0;
+}
+
+.cbd-selection-menu .cbd-dropdown-item span {
+    flex: 1;
+}
+
+/* Show menu on container hover/selection */
+.cbd-container:hover .cbd-selection-menu,
+.cbd-container.cbd-selected .cbd-selection-menu {
+    display: block !important;
+}
+
+/* Keep menu visible when dropdown is open */
+.cbd-container .cbd-selection-menu:hover,
+.cbd-container .cbd-selection-menu .cbd-dropdown-menu.show {
+    display: block !important;
+}
+
+.cbd-container:has(.cbd-dropdown-menu.show) .cbd-selection-menu {
+    display: block !important;
+}
+
+/* Touch-optimized styles */
+@media (hover: none) and (pointer: coarse) {
+    .cbd-selection-menu .cbd-menu-toggle {
+        width: 44px;
+        height: 44px;
+    }
+    
+    .cbd-selection-menu .cbd-dropdown-item {
+        padding: 16px 18px;
+        font-size: 16px;
+        min-height: 48px;
+    }
+    
+    .cbd-selection-menu .cbd-dropdown-item .dashicons {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+    }
+}
+
+/* ============================================
+   ICON & NUMBERING POSITIONING
+   ============================================ */
+
+/* Icons inside styled container */
+.cbd-icon-inside {
+    position: absolute;
+    z-index: 5;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cbd-icon-inside.top-left {
+    top: 10px;
+    left: 10px;
+}
+
+.cbd-icon-inside.top-right {
+    top: 10px;
+    right: 10px;
+}
+
+.cbd-icon-inside.bottom-left {
+    bottom: 10px;
+    left: 10px;
+}
+
+.cbd-icon-inside.bottom-right {
+    bottom: 10px;
+    right: 10px;
+}
+
+/* Transparent wrapper - no special padding needed now */
+.cbd-transparent-wrapper {
+    position: relative;
+    background: transparent;
+}
+
+/* Numbering COMPLETELY outside any styling - in main container */
+.cbd-container-number.cbd-outside-number {
+    position: absolute !important;
+    top: -40px !important;
+    left: -40px !important;
+    background: rgba(0, 0, 0, 0.9) !important;
+    color: white !important;
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 15px !important;
+    font-weight: bold !important;
+    z-index: 99999 !important;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5) !important;
+    border: 2px solid white !important;
+}
+
+/* ============================================
+   ACTION BUTTONS STYLING - Professional Design
+   ============================================ */
+
+/* Button container */
+.cbd-action-buttons {
+    position: absolute !important;
+    top: 10px !important;
+    right: 10px !important;
+    z-index: 9999 !important;
+    display: flex !important;
+    gap: 4px !important;
+    background: rgba(0, 0, 0, 0.1) !important;
+    padding: 4px !important;
+    border-radius: 8px !important;
+    backdrop-filter: blur(5px) !important;
+}
+
+/* Individual action buttons - White background */
+.cbd-action-buttons button {
+    background: rgba(255, 255, 255, 0.95) !important;
+    color: #333333 !important;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+    padding: 8px !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    width: 32px !important;
+    height: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 10000 !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15) !important;
+    font-size: 16px !important;
+    line-height: 1 !important;
+}
+
+/* Button hover effects - White background */
+.cbd-action-buttons button:hover {
+    background: rgba(255, 255, 255, 1) !important;
+    color: #000000 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
+    border-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Button active/pressed state */
+.cbd-action-buttons button:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Specific button focus states */
+.cbd-action-buttons button:focus {
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3) !important;
+}
+
+/* ============================================
+   BLOCK HEADER SYSTEM (Icon + Title)
+   ============================================ */
+
+/* Block header with icon and title */
+.cbd-block-header {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Horizontally center icon and title */
+    gap: 0; /* No gap - icon has margin-right */
+    position: static; /* Not absolutely positioned anymore */
+    z-index: 1;
+    /* Use container background and text colors */
+    background: inherit;
+    color: inherit;
+    border-radius: inherit;
+    text-align: center; /* Center alignment fallback */
+}
+
+/* Header icon - ALWAYS visible, larger and aligned with title baseline */
+.cbd-header-icon {
+    display: inline-flex !important; /* Always visible */
+    align-items: center;
+    justify-content: center;
+    width: 32px; /* Larger icon container */
+    height: 32px; /* Larger icon container */
+    flex-shrink: 0;
+    margin-right: 12px; /* More space between icon and title */
+    vertical-align: baseline; /* Align with text baseline */
+    transform: translateY(-6px); /* Move icon even higher for perfect alignment */
+}
+
+.cbd-header-icon .dashicons {
+    font-size: 24px; /* Larger icon */
+    width: 24px;
+    height: 24px;
+}
+
+/* Block title - larger and inline with icon */
+.cbd-block-title {
+    margin: 0;
+    padding: 0;
+    font-size: 20px; /* Larger title */
+    font-weight: 700; /* Bolder text */
+    line-height: 1.2;
+    word-break: break-word;
+    display: inline;
+    vertical-align: middle;
+    /* Remove background and styling - inherit from container */
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: inherit; /* Use container text color */
+    max-width: none;
+}
+
+/* Responsive title and icon scaling */
+@media (max-width: 768px) {
+    .cbd-block-title {
+        font-size: 18px; /* Still large on tablets */
+    }
+    .cbd-header-icon {
+        width: 28px;
+        height: 28px;
+        margin-right: 10px;
+        transform: translateY(-4px); /* Higher adjustment for tablets */
+    }
+    .cbd-header-icon .dashicons {
+        font-size: 20px;
+        width: 20px;
+        height: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    .cbd-block-title {
+        font-size: 16px; /* Smaller on mobile but still larger than before */
+    }
+    .cbd-header-icon {
+        width: 24px;
+        height: 24px;
+        margin-right: 8px;
+        transform: translateY(-3px); /* Higher adjustment for mobile */
+    }
+    .cbd-header-icon .dashicons {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+    }
+}

@@ -1,0 +1,1477 @@
+<?php
+/**
+ * Container Block Designer - Block Registration
+ * 
+ * @package ContainerBlockDesigner
+ * @since 2.5.2
+ */
+
+// Sicherheit: Direkten Zugriff verhindern
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+/**
+ * Block Registration Klasse
+ */
+class CBD_Block_Registration {
+    
+    /**
+     * Singleton-Instanz
+     */
+    private static $instance = null;
+    
+    /**
+     * Registrierte Blöcke
+     */
+    private $registered_blocks = array();
+    
+    /**
+     * Singleton-Getter
+     */
+    public static function get_instance() {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+    
+    /**
+     * Konstruktor
+     */
+    private function __construct() {
+        // Nur Asset-Hooks hier, Block-Registrierung erfolgt manuell über register_blocks()
+        add_action('enqueue_block_editor_assets', array($this, 'enqueue_block_editor_assets'));
+        add_action('enqueue_block_assets', array($this, 'enqueue_block_assets'));
+    }
+    
+    /**
+     * Blöcke registrieren
+     */
+    public function register_blocks() {
+        // Verwende WordPress Block Registry als einzige Wahrheitsquelle
+        if (WP_Block_Type_Registry::get_instance()->is_registered('container-block-designer/container')) {
+            // Reduziere Logging - nur bei Debug-Modus
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD Block Registration] Blocks already registered, skipping');
+            }
+            return;
+        }
+        
+        global $wpdb;
+        
+        // Hole alle aktiven Blöcke aus der Datenbank
+        $blocks = $wpdb->get_results(
+            "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active'"
+        );
+        
+        // Registriere jeden Block
+        foreach ($blocks as $block) {
+            $this->register_block_type($block);
+        }
+        
+        // Registriere den Haupt-Container-Block
+        $this->register_main_container_block();
+        
+        // Reduziere Logging - nur bei Debug-Modus
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('[CBD Block Registration] Blocks registered');
+        }
+    }
+    
+    /**
+     * Einzelnen Block-Typ registrieren
+     */
+    private function register_block_type($block) {
+        // Konvertiere Block-Name in gültiges Format (lowercase, keine Leerzeichen)
+        $sanitized_name = $this->sanitize_block_name($block->name);
+        $block_name = 'container-block-designer/' . $sanitized_name;
+        
+        // Überprüfe ob dieser spezifische Block bereits registriert ist
+        if (WP_Block_Type_Registry::get_instance()->is_registered($block_name)) {
+            // Reduziere Logging - nur bei Debug-Modus
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD Block Registration] Block ' . $block_name . ' already registered, skipping');
+            }
+            return;
+        }
+        
+        $config = !empty($block->config) ? json_decode($block->config, true) : array();
+        $features = !empty($block->features) ? json_decode($block->features, true) : array();
+        
+        // Block-Attribute definieren
+        $attributes = array(
+            'selectedBlock' => array(
+                'type' => 'string',
+                'default' => $sanitized_name  // Verwende den sanitized name
+            ),
+            'customClasses' => array(
+                'type' => 'string',
+                'default' => ''
+            ),
+            'blockConfig' => array(
+                'type' => 'object',
+                'default' => $config
+            ),
+            'blockFeatures' => array(
+                'type' => 'object',
+                'default' => $features
+            ),
+            'align' => array(
+                'type' => 'string',
+                'default' => ''
+            ),
+            'anchor' => array(
+                'type' => 'string',
+                'default' => ''
+            )
+        );
+        
+        // Block-Supports definieren
+        $supports = array(
+            'html' => false,
+            'className' => true,
+            'anchor' => true,
+            'align' => array('wide', 'full'),
+            'spacing' => array(
+                'margin' => true,
+                'padding' => true
+            ),
+            'color' => array(
+                'background' => true,
+                'text' => true,
+                'link' => true
+            ),
+            '__experimentalBorder' => array(
+                'radius' => true,
+                'width' => true,
+                'color' => true,
+                'style' => true
+            )
+        );
+        
+        // Block registrieren - nutze den sanitized block_name
+        $result = register_block_type($block_name, array(
+            'editor_script' => 'cbd-block-editor',
+            'editor_style' => 'cbd-editor-base',
+            'style' => 'cbd-editor-frontend-consolidated',
+            'script' => null,
+            'render_callback' => array($this, 'render_block'),
+            'attributes' => $attributes,
+            'supports' => $supports
+        ));
+        
+        if ($result) {
+            $this->registered_blocks[$block_name] = $block;
+            error_log('[CBD Block Registration] Block type registered: ' . $block_name);
+        } else {
+            error_log('[CBD Block Registration] Failed to register block type: ' . $block_name);
+        }
+    }
+    
+    /**
+     * Sanitize block name for WordPress requirements
+     * Block names must be lowercase and without spaces
+     */
+    private function sanitize_block_name($name) {
+        // Konvertiere zu lowercase und ersetze Leerzeichen/Sonderzeichen durch Bindestriche
+        $name = strtolower($name);
+        $name = preg_replace('/[^a-z0-9]+/', '-', $name);
+        $name = trim($name, '-');
+        return $name;
+    }
+    
+    /**
+     * Haupt-Container-Block registrieren
+     */
+    private function register_main_container_block() {
+        $block_name = 'container-block-designer/container';
+        
+        // Überprüfe nochmals ob Block bereits registriert ist
+        if (WP_Block_Type_Registry::get_instance()->is_registered($block_name)) {
+            error_log('[CBD Block Registration] Main container block already registered');
+            return;
+        }
+        
+        register_block_type($block_name, array(
+            'editor_script' => 'cbd-block-editor',
+            'editor_style' => 'cbd-editor-base',
+            'style' => 'cbd-editor-frontend-consolidated',
+            'render_callback' => array($this, 'render_block'),
+            'attributes' => array(
+                'selectedBlock' => array(
+                    'type' => 'string',
+                    'default' => ''
+                ),
+                'customClasses' => array(
+                    'type' => 'string',
+                    'default' => ''
+                ),
+                'align' => array(
+                    'type' => 'string',
+                    'default' => ''
+                ),
+                'anchor' => array(
+                    'type' => 'string',
+                    'default' => ''
+                )
+            ),
+            'supports' => array(
+                'html' => false,
+                'className' => true,
+                'anchor' => true,
+                'align' => array('wide', 'full')
+            )
+        ));
+        
+        error_log('[CBD Block Registration] Main container block registered');
+    }
+    
+    /**
+     * Block-Editor-Assets einbinden
+     */
+    public function enqueue_block_editor_assets() {
+        // Block-Editor JavaScript
+        wp_register_script(
+            'cbd-block-editor',
+            CBD_PLUGIN_URL . 'assets/js/block-editor.js',
+            array('wp-blocks', 'wp-element', 'wp-editor', 'wp-components', 'wp-i18n'),
+            CBD_VERSION,
+            true
+        );
+        
+        // Lokalisierung für JavaScript
+        wp_localize_script('cbd-block-editor', 'cbdBlockEditor', array(
+            'blocks' => $this->get_available_blocks(),
+            'ajaxurl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('cbd_block_editor'),
+            'pluginUrl' => CBD_PLUGIN_URL,
+            'strings' => array(
+                'selectBlock' => __('Block auswählen', 'container-block-designer'),
+                'noBlocks' => __('Keine Blöcke verfügbar', 'container-block-designer'),
+                'customClasses' => __('Zusätzliche CSS-Klassen', 'container-block-designer'),
+                'blockSettings' => __('Block-Einstellungen', 'container-block-designer')
+            )
+        ));
+        
+        // Block-Editor CSS
+        wp_enqueue_style(
+            'cbd-block-editor',
+            CBD_PLUGIN_URL . 'assets/css/block-editor.css',
+            array('wp-edit-blocks'),
+            CBD_VERSION
+        );
+    }
+    
+    /**
+     * Block-Assets einbinden (Frontend & Editor)
+     */
+    public function enqueue_block_assets() {
+        // ==============================================
+        // INTERACTIVITY API MODULE WITH FALLBACK
+        // ==============================================
+
+        // Try to register Interactivity API Store (ESM Module)
+        // This requires WordPress 6.5+ and proper module support
+        if (function_exists('wp_register_script_module')) {
+            wp_register_script_module(
+                'cbd-interactivity-store',
+                CBD_PLUGIN_URL . 'assets/js/interactivity-store.js',
+                array('@wordpress/interactivity'),
+                CBD_VERSION
+            );
+
+            // Enqueue the Interactivity API module for frontend
+            if (!is_admin()) {
+                wp_enqueue_script_module('cbd-interactivity-store');
+            }
+        }
+
+        // ALWAYS enqueue jQuery-based fallback for reliability
+        // This ensures functionality even if Interactivity API doesn't load
+        if (!is_admin()) {
+            wp_enqueue_script(
+                'cbd-interactivity-fallback',
+                CBD_PLUGIN_URL . 'assets/js/interactivity-fallback.js',
+                array('jquery'),
+                CBD_VERSION,
+                true
+            );
+
+            // Floating PDF Export Button
+            wp_enqueue_script(
+                'cbd-floating-pdf-button',
+                CBD_PLUGIN_URL . 'assets/js/floating-pdf-button.js',
+                array('jquery', 'cbd-jspdf-loader'),
+                CBD_VERSION,
+                true
+            );
+        }
+
+        // ==============================================
+        // END INTERACTIVITY API MODULE
+        // ==============================================
+
+        // Frontend CSS - Use clean version with button styles
+        wp_enqueue_style(
+            'cbd-frontend-clean',
+            CBD_PLUGIN_URL . 'assets/css/cbd-frontend-clean.css',
+            array(),
+            CBD_VERSION . '-buttons-' . time() // Force cache bust with button styles
+        );
+
+        // Interactivity API specific styles
+        wp_enqueue_style(
+            'cbd-interactivity-api',
+            CBD_PLUGIN_URL . 'assets/css/interactivity-api.css',
+            array('cbd-frontend-clean'),
+            CBD_VERSION
+        );
+
+        // Dashicons for frontend icons
+        wp_enqueue_style('dashicons');
+        
+        // Enqueue html2canvas for screenshot functionality
+        wp_enqueue_script(
+            'html2canvas',
+            CBD_PLUGIN_URL . 'assets/lib/html2canvas.min.js',
+            array(),
+            '1.4.1',
+            true
+        );
+
+        // PDF Export: Load jsPDF with fallback mechanism
+        if (!is_admin()) {
+            wp_enqueue_script(
+                'cbd-jspdf-loader',
+                CBD_PLUGIN_URL . 'assets/js/jspdf-loader.js',
+                array(),
+                CBD_VERSION,
+                true
+            );
+        }
+
+        // REMOVED: Old inline scripts (container-blocks-inline.js)
+        // Now handled by interactivity-fallback.js and interactivity-store.js
+        /*
+        // Fixed inline JavaScript for basic functionality
+        wp_add_inline_script('cbd-frontend-working', '
+            console.log("CBD: JavaScript loading...");
+            jQuery(document).ready(function($) {
+                console.log("CBD: jQuery ready - Starting CBD functionality");
+                
+                // Remove old event handlers
+                $(document).off("click", ".cbd-collapse-toggle, .cbd-copy-text, .cbd-screenshot");
+                
+                // Toggle functionality
+                $(document).on("click", ".cbd-collapse-toggle", function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log("CBD: Toggle clicked");
+                    
+                    var button = $(this);
+                    var container = button.closest(".cbd-container");
+                    var content = container.find(".cbd-container-content");
+                    var icon = button.find(".dashicons");
+                    
+                    if (content.length > 0) {
+                        if (content.is(":visible")) {
+                            content.slideUp(300);
+                            icon.removeClass("dashicons-arrow-up-alt2").addClass("dashicons-arrow-down-alt2");
+                            console.log("CBD: Content collapsed");
+                        } else {
+                            content.slideDown(300);
+                            icon.removeClass("dashicons-arrow-down-alt2").addClass("dashicons-arrow-up-alt2");
+                            console.log("CBD: Content expanded");
+                        }
+                    } else {
+                        console.log("CBD: Content element not found");
+                    }
+                });
+                
+                // Copy functionality
+                $(document).on("click", ".cbd-copy-text", function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log("CBD: Copy clicked");
+                    
+                    var button = $(this);
+                    var container = button.closest(".cbd-container");
+                    var content = container.find(".cbd-container-content");
+                    
+                    if (content.length > 0) {
+                        var textToCopy = content.text().trim();
+                        console.log("CBD: Text to copy:", textToCopy.substring(0, 50) + "...");
+                        
+                        if (navigator.clipboard) {
+                            navigator.clipboard.writeText(textToCopy).then(function() {
+                                button.find(".dashicons").removeClass("dashicons-clipboard").addClass("dashicons-yes-alt");
+                                console.log("CBD: Copy successful");
+                                setTimeout(function() { 
+                                    button.find(".dashicons").removeClass("dashicons-yes-alt").addClass("dashicons-clipboard"); 
+                                }, 2000);
+                            }).catch(function() {
+                                console.log("CBD: Copy failed");
+                            });
+                        }
+                    }
+                });
+                
+                // Screenshot functionality
+                $(document).on("click", ".cbd-screenshot", function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log("CBD: Screenshot clicked");
+                    
+                    var button = $(this);
+                    var container = button.closest(".cbd-container");
+                    var content = container.find(".cbd-container-content");
+                    
+                    // Expand if collapsed before screenshot
+                    var wasCollapsed = !content.is(":visible");
+                    if (wasCollapsed) {
+                        content.show();
+                    }
+                    
+                    if (typeof html2canvas !== "undefined") {
+                        button.find(".dashicons").removeClass("dashicons-camera").addClass("dashicons-update-alt");
+                        
+                        // Use entire container for screenshot to include images
+                        html2canvas(container[0], {
+                            useCORS: true,
+                            allowTaint: false,
+                            scale: 1,
+                            logging: true
+                        }).then(function(canvas) {
+                            var link = document.createElement("a");
+                            link.download = "container-block-screenshot.png";
+                            link.href = canvas.toDataURL("image/png");
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            
+                            button.find(".dashicons").removeClass("dashicons-update-alt").addClass("dashicons-yes-alt");
+                            console.log("CBD: Screenshot created");
+                            
+                            setTimeout(function() { 
+                                button.find(".dashicons").removeClass("dashicons-yes-alt").addClass("dashicons-camera"); 
+                            }, 2000);
+                            
+                            // Collapse again if it was collapsed
+                            if (wasCollapsed) {
+                                content.hide();
+                            }
+                        }).catch(function(error) {
+                            console.error("CBD: Screenshot failed:", error);
+                            button.find(".dashicons").removeClass("dashicons-update-alt").addClass("dashicons-camera");
+                        });
+                    } else {
+                        console.log("CBD: html2canvas not available");
+                    }
+                });
+
+                console.log("CBD: Enhanced functionality loaded");
+            });
+        ');
+        */
+    }
+
+    /**
+     * Frontend JavaScript einbinden
+     * DEPRECATED: Functionality moved to interactivity-fallback.js
+     */
+    private function enqueue_frontend_scripts() {
+        // This function is kept for backward compatibility
+        // but functionality is now handled by interactivity-fallback.js
+        return;
+
+        /* DEPRECATED CODE:
+        // Prüfe ob interaktive Features verwendet werden
+        if (!$this->has_interactive_features()) {
+            return;
+        }
+
+        // jQuery, html2canvas und jsPDF einbinden
+        wp_enqueue_script('jquery');
+        
+        wp_enqueue_script(
+            'html2canvas',
+            'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+            array(),
+            '1.4.1',
+            true
+        );
+        
+        // PDF functionality is handled by the new jspdf-loader.js system
+        
+        wp_enqueue_script(
+            'cbd-frontend-working',
+            '',
+            array('jquery', 'html2canvas'),
+            CBD_VERSION . '-' . time(),
+            true
+        );
+
+        // Lokalisierung für Frontend
+        wp_localize_script('cbd-frontend-working', 'cbdFrontend', array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('cbd_frontend'),
+            'i18n' => array(
+                'copySuccess' => __('Text kopiert!', 'container-block-designer'),
+                'copyError' => __('Kopieren fehlgeschlagen', 'container-block-designer'),
+                'screenshotSuccess' => __('Screenshot erstellt!', 'container-block-designer'),
+                'screenshotError' => __('Screenshot fehlgeschlagen', 'container-block-designer'),
+                'screenshotUnavailable' => __('Screenshot-Funktion nicht verfügbar', 'container-block-designer')
+            )
+        ));
+        */
+    }
+    
+    /**
+     * Prüfen ob interaktive Features vorhanden sind
+     */
+    private function has_interactive_features() {
+        // Always return true since we now always render the action buttons
+        // The buttons are displayed for all container blocks
+        return true;
+    }
+    
+    /**
+     * Block rendern - Updated with new structure
+     */
+    // Track nesting level for counter
+    private static $render_depth = 0;
+
+    public function render_block($attributes, $content) {
+        // Track rendering depth to detect nested blocks
+        self::$render_depth++;
+
+        // DEBUG: Add HTML comment to verify this renderer is active
+        $html = '<!-- ========================================= -->';
+        $html .= '<!-- CBD DEBUG: BLOCK REGISTRATION IS ACTIVE -->';
+        $html .= '<!-- TIME: ' . date('Y-m-d H:i:s') . ' -->';
+        $html .= '<!-- RENDER DEPTH START: ' . self::$render_depth . ' -->';
+        $html .= '<!-- IS TOP LEVEL: ' . (self::$render_depth == 1 ? 'YES' : 'NO') . ' -->';
+        $html .= '<!-- ========================================= -->';
+        
+        $selected_block = isset($attributes['selectedBlock']) ? $attributes['selectedBlock'] : '';
+        $custom_classes = isset($attributes['customClasses']) ? $attributes['customClasses'] : '';
+        $align = isset($attributes['align']) ? $attributes['align'] : '';
+        $anchor = isset($attributes['anchor']) ? $attributes['anchor'] : '';
+        
+        if (empty($selected_block)) {
+            return '<!-- Container Block: No block selected -->';
+        }
+        
+        // Block-Daten aus der Datenbank holen
+        global $wpdb;
+        
+        // Suche zuerst nach dem sanitized Namen
+        $block = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE name = %s AND status = 'active'",
+            $selected_block
+        ));
+        
+        // Falls nicht gefunden, suche nach Blocks deren sanitized Name dem selected_block entspricht
+        if (!$block) {
+            $all_blocks = $wpdb->get_results("SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active'");
+            
+            foreach ($all_blocks as $test_block) {
+                $sanitized_name = $this->sanitize_block_name($test_block->name);
+                
+                if ($sanitized_name === $selected_block) {
+                    $block = $test_block;
+                    break;
+                }
+            }
+        }
+        
+        if (!$block) {
+            return '<!-- Container Block: Block "' . esc_html($selected_block) . '" not found -->';
+        }
+        
+        // Parse block data
+        $styles = !empty($block->styles) ? json_decode($block->styles, true) : array();
+        $features = !empty($block->features) ? json_decode($block->features, true) : array();
+        $config = !empty($block->config) ? json_decode($block->config, true) : array();
+        
+        // DEBUG: Add debug output to see what features are available
+        $html .= '<!-- CBD DEBUG: Features available: ' . json_encode($features) . ' -->';
+        $html .= '<!-- CBD DEBUG: Config available: ' . json_encode($config) . ' -->';
+        
+        // Generate unique container ID using WordPress native function
+        $container_id = 'cbd-container-' . wp_unique_id();
+
+        // Build wrapper classes (.cbd-container - transparent wrapper)
+        $wrapper_classes = array('cbd-container');
+        $wrapper_attributes = array('id' => $container_id);
+
+        // ==============================================
+        // INTERACTIVITY API INTEGRATION
+        // ==============================================
+
+        // Add wp-interactive directive for Interactivity API
+        $wrapper_attributes['data-wp-interactive'] = 'container-block-designer';
+
+        // Build wp-context with local state for this block instance
+        $local_context = array(
+            'containerId' => $container_id,
+            'blockId' => $block->id,
+            'blockName' => $selected_block,
+            'isCollapsed' => false, // Initial state
+            'copySuccess' => false,
+            'copyError' => false,
+            'screenshotLoading' => false,
+            'screenshotSuccess' => false,
+            'screenshotError' => false,
+            'pdfLoading' => false,
+            'pdfSuccess' => false,
+            'pdfError' => false
+        );
+
+        // Set initial collapsed state from features
+        if (!empty($features['collapse']['enabled'])) {
+            $local_context['isCollapsed'] = ($features['collapse']['defaultState'] ?? 'expanded') === 'collapsed';
+        }
+
+        // Add features to context for use in actions
+        $local_context['features'] = array(
+            'collapse' => !empty($features['collapse']['enabled']),
+            'copyText' => !empty($features['copyText']['enabled']),
+            'screenshot' => !empty($features['screenshot']['enabled']),
+            'icon' => !empty($features['icon']['enabled']),
+            'numbering' => !empty($features['numbering']['enabled'])
+        );
+
+        // Encode wp-context as JSON
+        $wrapper_attributes['data-wp-context'] = esc_attr(wp_json_encode($local_context));
+
+        // Add init callback
+        $wrapper_attributes['data-wp-init'] = 'callbacks.onInit';
+
+        // ==============================================
+        // END INTERACTIVITY API INTEGRATION
+        // ==============================================
+
+        // Add legacy classes for backward compatibility
+        $wrapper_classes[] = 'cbd-block-' . $selected_block;
+
+        if (!empty($custom_classes)) {
+            $wrapper_classes[] = $custom_classes;
+        }
+
+        if (!empty($align)) {
+            $wrapper_classes[] = 'align' . $align;
+        }
+
+        // Add CSS classes based on features (for styling)
+        if (!empty($features['collapse']['enabled'])) {
+            $wrapper_classes[] = 'cbd-collapsible';
+            if (($features['collapse']['defaultState'] ?? 'expanded') === 'collapsed') {
+                $wrapper_classes[] = 'cbd-collapsed';
+            }
+        }
+
+        // Legacy data attributes (keep for backward compatibility during transition)
+        if (!empty($features)) {
+            $wrapper_attributes['data-features'] = esc_attr(json_encode($features));
+        }
+        
+        $wrapper_attributes['data-block-id'] = esc_attr($block->id);
+        $wrapper_attributes['data-block-name'] = esc_attr($selected_block);
+        
+        if (!empty($anchor)) {
+            $wrapper_attributes['id'] = $anchor;
+        }
+        
+        $wrapper_attributes['class'] = implode(' ', $wrapper_classes);
+        
+        // Inner content block classes (.cbd-container-block)
+        $content_classes = array('cbd-container-block');
+        $content_attributes = array();
+        
+        // Add block-specific class to content block
+        $content_classes[] = 'cbd-block-' . sanitize_html_class($selected_block);
+        
+        $content_attributes['class'] = implode(' ', $content_classes);
+        
+        // Generate inline styles for content block only
+        $inline_styles = $this->generate_inline_styles($styles);
+        if (!empty($inline_styles)) {
+            $content_attributes['style'] = $inline_styles;
+        }
+        
+        // Start outer wrapper (.cbd-container) - for controls and positioning
+        $html .= '<div';
+        foreach ($wrapper_attributes as $attr => $value) {
+            $html .= ' ' . $attr . '="' . esc_attr($value) . '"';
+        }
+        $html .= '>';
+        
+        // Add numbering OUTSIDE everything (in the main container) - Only for TOP-LEVEL blocks
+        // NOTE: We add a placeholder and renumber via JavaScript after DOM is ready
+        // because WordPress renders blocks in unpredictable order
+
+        $show_number = (self::$render_depth == 1);
+
+        if ($show_number) {
+            // Add a marker class for JavaScript to find and renumber
+            $html .= "<div class=\"cbd-container-number cbd-outside-number cbd-needs-numbering\" data-number=\"0\" style=\"position: absolute !important; top: -40px !important; left: -40px !important; background: rgba(0,0,0,0.9) !important; color: white !important; width: 34px !important; height: 34px !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 15px !important; font-weight: bold !important; z-index: 99999 !important; border: 2px solid white !important;\">";
+            $html .= '?'; // Placeholder - will be replaced by JavaScript
+            $html .= '</div>';
+        }
+        
+        // Content wrapper div for collapse functionality
+        $content_wrapper_class = 'cbd-content';
+        $content_wrapper_id = $container_id . '-content';
+        
+        $html .= '<div class="' . $content_wrapper_class . '" id="' . esc_attr($content_wrapper_id) . '">';
+        
+        // Inner content block (.cbd-container-block) - this gets the visual styling
+        $html .= '<div';
+        foreach ($content_attributes as $attr => $value) {
+            $html .= ' ' . $attr . '="' . esc_attr($value) . '"';
+        }
+        $html .= '>';
+        
+        // Button styling with Interactivity API directives
+        // ALWAYS show all buttons (like before) - features control functionality, not visibility
+        $html .= '<!-- CBD: INTERACTIVE BUTTONS WITH INTERACTIVITY API -->';
+        $html .= '<div class="cbd-action-buttons">';
+
+        // Button 1: Collapse - ALWAYS visible
+        $html .= '<button type="button" ';
+        $html .= 'class="cbd-collapse-toggle" ';
+        $html .= 'data-wp-on--click="actions.toggleCollapse" ';
+        $html .= 'data-wp-bind--aria-expanded="!context.isCollapsed" ';
+        $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+        $html .= 'title="Ein-/Ausklappen">';
+        $html .= '<span class="dashicons dashicons-arrow-up-alt2" ';
+        $html .= 'data-wp-class--dashicons-arrow-up-alt2="!context.isCollapsed" ';
+        $html .= 'data-wp-class--dashicons-arrow-down-alt2="context.isCollapsed">';
+        $html .= '</span>';
+        $html .= '</button>';
+
+        // Button 2: Copy Text - ALWAYS visible
+        $html .= '<button type="button" ';
+        $html .= 'class="cbd-copy-text" ';
+        $html .= 'data-wp-on--click="actions.copyText" ';
+        $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+        $html .= 'title="Text kopieren">';
+        $html .= '<span class="dashicons dashicons-clipboard" ';
+        $html .= 'data-wp-class--dashicons-clipboard="!context.copySuccess" ';
+        $html .= 'data-wp-class--dashicons-yes-alt="context.copySuccess">';
+        $html .= '</span>';
+        $html .= '</button>';
+
+        // Button 3: Screenshot - ALWAYS visible
+        $html .= '<button type="button" ';
+        $html .= 'class="cbd-screenshot" ';
+        $html .= 'data-wp-on--click="actions.createScreenshot" ';
+        $html .= 'data-wp-bind--disabled="context.screenshotLoading" ';
+        $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+        $html .= 'title="Screenshot erstellen">';
+        $html .= '<span class="dashicons dashicons-camera" ';
+        $html .= 'data-wp-class--dashicons-camera="!context.screenshotLoading && !context.screenshotSuccess" ';
+        $html .= 'data-wp-class--dashicons-update-alt="context.screenshotLoading" ';
+        $html .= 'data-wp-class--dashicons-yes-alt="context.screenshotSuccess">';
+        $html .= '</span>';
+        $html .= '</button>';
+
+        // Button 4: PDF Export - ALWAYS visible
+        $html .= '<button type="button" ';
+        $html .= 'class="cbd-pdf-export" ';
+        $html .= 'data-wp-on--click="actions.createPDF" ';
+        $html .= 'data-wp-bind--disabled="context.pdfLoading" ';
+        $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+        $html .= 'title="Als PDF exportieren">';
+        $html .= '<span class="dashicons dashicons-pdf" ';
+        $html .= 'data-wp-class--dashicons-pdf="!context.pdfLoading && !context.pdfSuccess" ';
+        $html .= 'data-wp-class--dashicons-update-alt="context.pdfLoading" ';
+        $html .= 'data-wp-class--dashicons-yes-alt="context.pdfSuccess">';
+        $html .= '</span>';
+        $html .= '</button>';
+
+        $html .= '</div>'; // Close buttons
+        
+        // Add block header with icon and title (always top-left, visible when collapsed)
+        $block_title = '';
+        
+        // Only use editor-entered titles, not database block titles
+        if (!empty($attributes['blockTitle'])) {
+            $block_title = $attributes['blockTitle'];
+        } elseif (!empty($attributes['title'])) {
+            $block_title = $attributes['title'];  
+        }
+        // Note: We explicitly do NOT use config or database titles anymore
+        
+        $has_icon = !empty($features['icon']['enabled']);
+        
+        // DEBUG: Always show icon for testing until we fix feature detection
+        $has_icon = true; // Force icon display for now
+        
+        // Always show header if there's a title OR icon - inline layout
+        if ($has_icon || !empty($block_title)) {
+            $html .= '<div class="cbd-block-header" style="margin-bottom: 15px; padding: 12px 20px;">';
+            
+            // Icon (always visible, inline with title)
+            if ($has_icon) {
+                $icon_class = sanitize_html_class($features['icon']['value'] ?? 'dashicons-admin-generic');
+                $icon_color = !empty($features['icon']['color']) ? $features['icon']['color'] : 'inherit';
+                    
+                $html .= '<span class="cbd-header-icon" style="color: ' . esc_attr($icon_color) . ';">';
+                $html .= '<i class="dashicons ' . $icon_class . '"></i>';
+                $html .= '</span>';
+            }
+            
+            // Block title (inline next to icon) - ALWAYS if not empty
+            if (!empty($block_title)) {
+                $html .= '<h3 class="cbd-block-title">' . esc_html($block_title) . '</h3>';
+            }
+            
+            $html .= '</div>'; // Close block header
+        }
+        
+        // Legacy feature rendering for backward compatibility - DISABLED to prevent duplicate icons
+        // if (!empty($features)) {
+        //     $html .= $this->render_features($features, $block->id);
+        // }
+
+        // Wrap the actual content in a collapsible container with Interactivity API
+        $html .= '<div class="cbd-container-content" ';
+        $html .= 'data-wp-class--cbd-collapsed="context.isCollapsed" ';
+        $html .= 'data-wp-bind--aria-hidden="context.isCollapsed" ';
+        $html .= 'role="region">';
+
+        // Actual content
+        // NOTE: LaTeX parsing is now handled globally via render_block filter in CBD_LaTeX_Parser
+        // No need to parse LaTeX here anymore - it's automatic for all blocks!
+        $parsed_content = $content;
+
+        // ========================================
+        // FIX: JavaScript in HTML-Blocks isolieren
+        // ========================================
+        // Problem: Wenn mehrere "Individuelles HTML" Blöcke mit <script> Tags
+        // verwendet werden, funktioniert nur der letzte.
+        //
+        // Lösung: Wrap Scripts in sofort ausgeführte Funktionen (IIFE)
+        // und füge unique Identifier hinzu
+        $parsed_content = $this->isolate_inline_scripts($parsed_content, $container_id);
+
+        $html .= $parsed_content;
+
+        $html .= '</div>'; // Close .cbd-container-content
+        $html .= '</div>'; // Close .cbd-container-block
+        $html .= '</div>'; // Close .cbd-content
+        $html .= '</div>'; // Close .cbd-container
+        
+        // REMOVED: Old inline scripts are replaced by:
+        // 1. Interactivity API (interactivity-store.js) - loaded via wp_enqueue_script_module()
+        // 2. jQuery Fallback (interactivity-fallback.js) - loaded via wp_enqueue_script()
+        //
+        // These are now properly enqueued in enqueue_block_assets() method
+        // No need for inline script tags anymore
+
+        // Decrement render depth after rendering this block
+        self::$render_depth--;
+
+        return $html;
+    }
+    
+    /**
+     * Features rendern
+     */
+    private function render_features($features, $block_id) {
+        $html = '';
+        
+        // Icon Feature
+        if (!empty($features['icon']['enabled'])) {
+            $icon_class = $features['icon']['value'] ?? 'dashicons-admin-generic';
+            $html .= '<div class="cbd-container-icon">';
+            $html .= '<span class="dashicons ' . esc_attr($icon_class) . '" aria-hidden="true"></span>';
+            $html .= '</div>';
+        }
+        
+        // Numbering Feature
+        if (!empty($features['numbering']['enabled'])) {
+            static $numbering_counter = 0;
+            $numbering_counter++;
+            
+            $format = $features['numbering']['format'] ?? 'numeric';
+            $number = $this->format_number($numbering_counter, $format);
+            
+            $html .= '<div class="cbd-container-number" data-number="' . esc_attr($numbering_counter) . '">';
+            $html .= esc_html($number);
+            $html .= '</div>';
+        }
+        
+        // Action Buttons - DISABLED: All buttons now in dropdown menu only
+        // No separate action buttons are generated - all functionality is in the dropdown menu
+        
+        return $html;
+    }
+    
+    /**
+     * Nummer formatieren basierend auf Format
+     */
+    private function format_number($number, $format) {
+        switch ($format) {
+            case 'alphabetic':
+                return chr(64 + $number); // A, B, C...
+                
+            case 'roman':
+                $map = array('', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X');
+                return isset($map[$number]) ? $map[$number] : $number;
+                
+            case 'numeric':
+            default:
+                return $number;
+        }
+    }
+    
+    /**
+     * Inline-Styles generieren - Enhanced with all styling options
+     */
+    private function generate_inline_styles($styles) {
+        $css = '';
+        
+        // Background Properties - Support admin structure
+        if (!empty($styles['background'])) {
+            $bg = $styles['background'];
+            
+            // Admin structure handles color and gradient separately
+            if (!empty($bg['type'])) {
+                if ($bg['type'] === 'color' && !empty($bg['color'])) {
+                    $css .= 'background-color: ' . esc_attr($bg['color']) . ';';
+                } elseif ($bg['type'] === 'gradient') {
+                    // Handle gradient from admin structure
+                    if (!empty($bg['gradient']['type']) && !empty($bg['gradient']['color1']) && !empty($bg['gradient']['color2'])) {
+                        $type = $bg['gradient']['type'];
+                        $color1 = $bg['gradient']['color1'];
+                        $color2 = $bg['gradient']['color2'];
+                        $angle = $bg['gradient']['angle'] ?? 45;
+                        
+                        if ($type === 'linear') {
+                            $css .= "background: linear-gradient({$angle}deg, {$color1}, {$color2});";
+                        } elseif ($type === 'radial') {
+                            $css .= "background: radial-gradient(circle, {$color1}, {$color2});";
+                        }
+                    }
+                }
+            } else {
+                // Fallback for direct background properties
+                if (!empty($bg['color'])) {
+                    $css .= 'background-color: ' . esc_attr($bg['color']) . ';';
+                }
+            }
+            
+            // Standard background properties (for future extensions)
+            if (!empty($bg['image'])) {
+                $css .= 'background-image: url(' . esc_url($bg['image']) . ');';
+            }
+            
+            if (!empty($bg['size'])) {
+                $css .= 'background-size: ' . esc_attr($bg['size']) . ';';
+            }
+            
+            if (!empty($bg['position'])) {
+                $css .= 'background-position: ' . esc_attr($bg['position']) . ';';
+            }
+            
+            if (!empty($bg['repeat'])) {
+                $css .= 'background-repeat: ' . esc_attr($bg['repeat']) . ';';
+            }
+        }
+        
+        // Text Properties
+        if (!empty($styles['text'])) {
+            $text = $styles['text'];
+            
+            // Text Color
+            if (!empty($text['color'])) {
+                $css .= 'color: ' . esc_attr($text['color']) . ';';
+            }
+            
+            // Text Alignment
+            if (!empty($text['alignment'])) {
+                $css .= 'text-align: ' . esc_attr($text['alignment']) . ';';
+            }
+            
+            // Font Size
+            if (!empty($text['fontSize'])) {
+                $css .= 'font-size: ' . esc_attr($text['fontSize']) . ';';
+            }
+            
+            // Font Weight
+            if (!empty($text['fontWeight'])) {
+                $css .= 'font-weight: ' . esc_attr($text['fontWeight']) . ';';
+            }
+            
+            // Font Family
+            if (!empty($text['fontFamily'])) {
+                $css .= 'font-family: ' . esc_attr($text['fontFamily']) . ';';
+            }
+            
+            // Line Height
+            if (!empty($text['lineHeight'])) {
+                $css .= 'line-height: ' . esc_attr($text['lineHeight']) . ';';
+            }
+            
+            // Letter Spacing
+            if (!empty($text['letterSpacing'])) {
+                $css .= 'letter-spacing: ' . esc_attr($text['letterSpacing']) . ';';
+            }
+            
+            // Text Transform
+            if (!empty($text['textTransform'])) {
+                $css .= 'text-transform: ' . esc_attr($text['textTransform']) . ';';
+            }
+            
+            // Text Decoration
+            if (!empty($text['textDecoration'])) {
+                $css .= 'text-decoration: ' . esc_attr($text['textDecoration']) . ';';
+            }
+        }
+        
+        // Spacing Properties
+        // Padding
+        if (!empty($styles['padding'])) {
+            if (is_array($styles['padding'])) {
+                $top = $styles['padding']['top'] ?? 0;
+                $right = $styles['padding']['right'] ?? 0;
+                $bottom = $styles['padding']['bottom'] ?? 0;
+                $left = $styles['padding']['left'] ?? 0;
+                $css .= "padding: {$top}px {$right}px {$bottom}px {$left}px;";
+            } else {
+                $css .= 'padding: ' . esc_attr($styles['padding']) . ';';
+            }
+        }
+        
+        // Margin
+        if (!empty($styles['margin'])) {
+            if (is_array($styles['margin'])) {
+                $top = $styles['margin']['top'] ?? 0;
+                $right = $styles['margin']['right'] ?? 0;
+                $bottom = $styles['margin']['bottom'] ?? 0;
+                $left = $styles['margin']['left'] ?? 0;
+                $css .= "margin: {$top}px {$right}px {$bottom}px {$left}px;";
+            } else {
+                $css .= 'margin: ' . esc_attr($styles['margin']) . ';';
+            }
+        }
+        
+        // Border Properties
+        if (!empty($styles['border'])) {
+            $border = $styles['border'];
+            
+            // Border width, style, color (combined)
+            if (!empty($border['width']) && !empty($border['style']) && !empty($border['color'])) {
+                $width = $border['width'] . 'px';
+                $style = esc_attr($border['style']);
+                $color = esc_attr($border['color']);
+                $css .= "border: {$width} {$style} {$color};";
+            } else {
+                // Individual border properties
+                if (!empty($border['width'])) {
+                    $css .= 'border-width: ' . esc_attr($border['width']) . 'px;';
+                }
+                if (!empty($border['style'])) {
+                    $css .= 'border-style: ' . esc_attr($border['style']) . ';';
+                }
+                if (!empty($border['color'])) {
+                    $css .= 'border-color: ' . esc_attr($border['color']) . ';';
+                }
+            }
+            
+            // Border radius
+            if (!empty($border['radius'])) {
+                $css .= 'border-radius: ' . esc_attr($border['radius']) . 'px;';
+            }
+            
+            // Individual border sides
+            $sides = ['top', 'right', 'bottom', 'left'];
+            foreach ($sides as $side) {
+                if (!empty($border[$side])) {
+                    $sideProps = $border[$side];
+                    if (!empty($sideProps['width']) && !empty($sideProps['style']) && !empty($sideProps['color'])) {
+                        $css .= "border-{$side}: {$sideProps['width']}px {$sideProps['style']} {$sideProps['color']};";
+                    }
+                }
+            }
+        }
+        
+        // Box Shadow - Support both new and admin data structures
+        $shadowValues = [];
+        
+        // New structure: boxShadow array
+        if (!empty($styles['boxShadow'])) {
+            $shadows = $styles['boxShadow'];
+            if (is_array($shadows)) {
+                foreach ($shadows as $shadow) {
+                    if (is_array($shadow)) {
+                        $offsetX = $shadow['offsetX'] ?? 0;
+                        $offsetY = $shadow['offsetY'] ?? 0;
+                        $blurRadius = $shadow['blurRadius'] ?? 0;
+                        $spreadRadius = $shadow['spreadRadius'] ?? 0;
+                        $color = $shadow['color'] ?? 'rgba(0,0,0,0.1)';
+                        $inset = !empty($shadow['inset']) ? 'inset ' : '';
+                        $shadowValues[] = "{$inset}{$offsetX}px {$offsetY}px {$blurRadius}px {$spreadRadius}px {$color}";
+                    }
+                }
+            } else {
+                // Simple string shadow value
+                $shadowValues[] = esc_attr($shadows);
+            }
+        }
+        
+        // Admin structure: shadow.outer and shadow.inner
+        if (!empty($styles['shadow'])) {
+            $shadow = $styles['shadow'];
+            
+            // Outer shadow
+            if (!empty($shadow['outer']['enabled'])) {
+                $outer = $shadow['outer'];
+                $x = $outer['x'] ?? 0;
+                $y = $outer['y'] ?? 4;
+                $blur = $outer['blur'] ?? 6;
+                $spread = $outer['spread'] ?? 0;
+                $color = $outer['color'] ?? 'rgba(0,0,0,0.1)';
+                $shadowValues[] = "{$x}px {$y}px {$blur}px {$spread}px {$color}";
+            }
+            
+            // Inner shadow
+            if (!empty($shadow['inner']['enabled'])) {
+                $inner = $shadow['inner'];
+                $x = $inner['x'] ?? 0;
+                $y = $inner['y'] ?? 2;
+                $blur = $inner['blur'] ?? 4;
+                $spread = $inner['spread'] ?? 0;
+                $color = $inner['color'] ?? 'rgba(0,0,0,0.1)';
+                $shadowValues[] = "inset {$x}px {$y}px {$blur}px {$spread}px {$color}";
+            }
+        }
+        
+        if (!empty($shadowValues)) {
+            $css .= 'box-shadow: ' . implode(', ', $shadowValues) . ';';
+        }
+        
+        // Text Shadow
+        if (!empty($styles['textShadow'])) {
+            $css .= 'text-shadow: ' . esc_attr($styles['textShadow']) . ';';
+        }
+        
+        // Opacity
+        if (isset($styles['opacity']) && $styles['opacity'] !== '') {
+            $css .= 'opacity: ' . esc_attr($styles['opacity']) . ';';
+        }
+        
+        // Transform
+        if (!empty($styles['transform'])) {
+            $css .= 'transform: ' . esc_attr($styles['transform']) . ';';
+        }
+        
+        // Transition
+        if (!empty($styles['transition'])) {
+            $css .= 'transition: ' . esc_attr($styles['transition']) . ';';
+        }
+        
+        // Display
+        if (!empty($styles['display'])) {
+            $css .= 'display: ' . esc_attr($styles['display']) . ';';
+        }
+        
+        // Position
+        if (!empty($styles['position'])) {
+            $css .= 'position: ' . esc_attr($styles['position']) . ';';
+        }
+        
+        // Z-Index
+        if (!empty($styles['zIndex'])) {
+            $css .= 'z-index: ' . esc_attr($styles['zIndex']) . ';';
+        }
+        
+        // Width and Height
+        if (!empty($styles['width'])) {
+            $css .= 'width: ' . esc_attr($styles['width']) . ';';
+        }
+        
+        if (!empty($styles['height'])) {
+            $css .= 'height: ' . esc_attr($styles['height']) . ';';
+        }
+        
+        // Min/Max Width and Height
+        if (!empty($styles['minWidth'])) {
+            $css .= 'min-width: ' . esc_attr($styles['minWidth']) . ';';
+        }
+        
+        if (!empty($styles['maxWidth'])) {
+            $css .= 'max-width: ' . esc_attr($styles['maxWidth']) . ';';
+        }
+        
+        if (!empty($styles['minHeight'])) {
+            $css .= 'min-height: ' . esc_attr($styles['minHeight']) . ';';
+        }
+        
+        if (!empty($styles['maxHeight'])) {
+            $css .= 'max-height: ' . esc_attr($styles['maxHeight']) . ';';
+        }
+        
+        // Overflow
+        if (!empty($styles['overflow'])) {
+            $css .= 'overflow: ' . esc_attr($styles['overflow']) . ';';
+        }
+        
+        if (!empty($styles['overflowX'])) {
+            $css .= 'overflow-x: ' . esc_attr($styles['overflowX']) . ';';
+        }
+        
+        if (!empty($styles['overflowY'])) {
+            $css .= 'overflow-y: ' . esc_attr($styles['overflowY']) . ';';
+        }
+        
+        // Flexbox Properties
+        if (!empty($styles['flex'])) {
+            $flex = $styles['flex'];
+            
+            if (!empty($flex['direction'])) {
+                $css .= 'flex-direction: ' . esc_attr($flex['direction']) . ';';
+            }
+            
+            if (!empty($flex['wrap'])) {
+                $css .= 'flex-wrap: ' . esc_attr($flex['wrap']) . ';';
+            }
+            
+            if (!empty($flex['justifyContent'])) {
+                $css .= 'justify-content: ' . esc_attr($flex['justifyContent']) . ';';
+            }
+            
+            if (!empty($flex['alignItems'])) {
+                $css .= 'align-items: ' . esc_attr($flex['alignItems']) . ';';
+            }
+            
+            if (!empty($flex['alignContent'])) {
+                $css .= 'align-content: ' . esc_attr($flex['alignContent']) . ';';
+            }
+            
+            if (!empty($flex['gap'])) {
+                $css .= 'gap: ' . esc_attr($flex['gap']) . ';';
+            }
+        }
+        
+        // Grid Properties
+        if (!empty($styles['grid'])) {
+            $grid = $styles['grid'];
+            
+            if (!empty($grid['templateColumns'])) {
+                $css .= 'grid-template-columns: ' . esc_attr($grid['templateColumns']) . ';';
+            }
+            
+            if (!empty($grid['templateRows'])) {
+                $css .= 'grid-template-rows: ' . esc_attr($grid['templateRows']) . ';';
+            }
+            
+            if (!empty($grid['gap'])) {
+                $css .= 'grid-gap: ' . esc_attr($grid['gap']) . ';';
+            }
+        }
+        
+        // Special Effects from Admin Interface
+        if (!empty($styles['effects'])) {
+            $effects = $styles['effects'];
+            
+            // Glassmorphism effect
+            if (!empty($effects['glassmorphism']['enabled'])) {
+                $glass = $effects['glassmorphism'];
+                $opacity = $glass['opacity'] ?? 0.1;
+                $blur = $glass['blur'] ?? 10;
+                $saturate = $glass['saturate'] ?? 100;
+                $color = $glass['color'] ?? '#ffffff';
+                
+                // Convert color to rgba with opacity
+                $rgba_color = $this->hex_to_rgba($color, $opacity);
+                $css .= "background: {$rgba_color};";
+                $css .= "backdrop-filter: blur({$blur}px) saturate({$saturate}%);";
+                $css .= "-webkit-backdrop-filter: blur({$blur}px) saturate({$saturate}%);";
+            }
+            
+            // CSS Filters
+            if (!empty($effects['filters'])) {
+                $filters = $effects['filters'];
+                $filterValues = [];
+                
+                if (isset($filters['brightness']) && $filters['brightness'] != 100) {
+                    $filterValues[] = "brightness({$filters['brightness']}%)";
+                }
+                if (isset($filters['contrast']) && $filters['contrast'] != 100) {
+                    $filterValues[] = "contrast({$filters['contrast']}%)";
+                }
+                if (isset($filters['hue']) && $filters['hue'] != 0) {
+                    $filterValues[] = "hue-rotate({$filters['hue']}deg)";
+                }
+                
+                if (!empty($filterValues)) {
+                    $css .= 'filter: ' . implode(' ', $filterValues) . ';';
+                }
+            }
+            
+            // Neumorphism effect
+            if (!empty($effects['neumorphism']['enabled'])) {
+                $neuro = $effects['neumorphism'];
+                $style = $neuro['style'] ?? 'raised';
+                $intensity = $neuro['intensity'] ?? 10;
+                $background = $neuro['background'] ?? '#e0e0e0';
+                $distance = $neuro['distance'] ?? 15;
+                
+                $css .= "background: {$background};";
+                if ($style === 'raised') {
+                    $css .= "box-shadow: {$distance}px {$distance}px {$intensity}px rgba(0,0,0,0.2), -{$distance}px -{$distance}px {$intensity}px rgba(255,255,255,0.7);";
+                } else {
+                    $css .= "box-shadow: inset {$distance}px {$distance}px {$intensity}px rgba(0,0,0,0.2), inset -{$distance}px -{$distance}px {$intensity}px rgba(255,255,255,0.7);";
+                }
+            }
+            
+            // Animation effects
+            if (!empty($effects['animation'])) {
+                $animation = $effects['animation'];
+                $duration = $animation['duration'] ?? 300;
+                $easing = $animation['easing'] ?? 'ease';
+                
+                $css .= "transition: all {$duration}ms {$easing};";
+                
+                if (!empty($animation['origin'])) {
+                    $css .= "transform-origin: {$animation['origin']};";
+                }
+            }
+        }
+        
+        // Custom CSS Properties (CSS Variables)
+        if (!empty($styles['customProperties'])) {
+            foreach ($styles['customProperties'] as $property => $value) {
+                if (strpos($property, '--') === 0) {
+                    $css .= esc_attr($property) . ': ' . esc_attr($value) . ';';
+                }
+            }
+        }
+        
+        // Any additional custom CSS
+        if (!empty($styles['custom'])) {
+            $css .= esc_attr($styles['custom']) . ';';
+        }
+        
+        return $css;
+    }
+    
+    /**
+     * Isolate inline scripts in HTML content
+     *
+     * Problem: Multiple HTML blocks with <script> tags interfere with each other
+     * Solution: Wrap each script in IIFE with unique scope
+     *
+     * @param string $content HTML content potentially containing <script> tags
+     * @param string $container_id Unique container ID for scope isolation
+     * @return string Modified content with isolated scripts
+     */
+    private function isolate_inline_scripts($content, $container_id) {
+        // Check if content contains script tags
+        if (stripos($content, '<script') === false) {
+            return $content; // No scripts, return as-is
+        }
+
+        // Counter for multiple scripts in same content
+        static $script_counter = 0;
+
+        // Process all script tags
+        $content = preg_replace_callback(
+            '/<script\b([^>]*)>(.*?)<\/script>/is',
+            function($matches) use ($container_id, &$script_counter) {
+                $script_counter++;
+                $attributes = $matches[1];
+                $script_content = $matches[2];
+
+                // Skip if script has src attribute (external script)
+                if (stripos($attributes, 'src=') !== false) {
+                    return $matches[0]; // Return original
+                }
+
+                // Skip empty scripts
+                if (trim($script_content) === '') {
+                    return $matches[0];
+                }
+
+                // Create unique scope identifier
+                $scope_id = sanitize_key($container_id . '_script_' . $script_counter);
+
+                // Wrap script in IIFE with unique scope
+                $isolated_script = '<script' . $attributes . ' data-cbd-scope="' . esc_attr($scope_id) . '">';
+                $isolated_script .= "\n/* CBD: Isolated script for " . esc_attr($container_id) . " */\n";
+                $isolated_script .= "(function(containerId) {\n";
+                $isolated_script .= "    'use strict';\n";
+                $isolated_script .= "    // Container ID: " . esc_js($container_id) . "\n";
+                $isolated_script .= "    // Scope ID: " . esc_js($scope_id) . "\n\n";
+
+                // Add helper to find container
+                $isolated_script .= "    // Helper: Get this container element\n";
+                $isolated_script .= "    const getContainer = () => document.getElementById('" . esc_js($container_id) . "');\n";
+                $isolated_script .= "    const container = getContainer();\n\n";
+
+                // Original script content
+                $isolated_script .= "    // Original script:\n";
+                $isolated_script .= $script_content . "\n";
+
+                $isolated_script .= "})(" . wp_json_encode($container_id) . ");\n";
+                $isolated_script .= "</script>";
+
+                return $isolated_script;
+            },
+            $content
+        );
+
+        return $content;
+    }
+
+    /**
+     * Helper function to convert hex color to rgba
+     */
+    private function hex_to_rgba($hex, $alpha = 1) {
+        // Remove # if present
+        $hex = ltrim($hex, '#');
+
+        // Convert hex to rgb
+        if (strlen($hex) === 3) {
+            $hex = str_repeat(substr($hex,0,1), 2) . str_repeat(substr($hex,1,1), 2) . str_repeat(substr($hex,2,1), 2);
+        }
+
+        $r = hexdec(substr($hex, 0, 2));
+        $g = hexdec(substr($hex, 2, 2));
+        $b = hexdec(substr($hex, 4, 2));
+
+        return "rgba({$r}, {$g}, {$b}, {$alpha})";
+    }
+    
+    /**
+     * Verfügbare Blöcke abrufen
+     */
+    public function get_available_blocks() {
+        global $wpdb;
+        
+        $blocks = $wpdb->get_results(
+            "SELECT name, title, description FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active'",
+            ARRAY_A
+        );
+        
+        $formatted_blocks = array();
+        
+        foreach ($blocks as $block) {
+            // Verwende den sanitized name als Wert
+            $sanitized_name = $this->sanitize_block_name($block['name']);
+            
+            $formatted_blocks[] = array(
+                'value' => $sanitized_name,
+                'label' => $block['title'] ?: $block['name'],
+                'description' => $block['description']
+            );
+        }
+        
+        return $formatted_blocks;
+    }
+}
