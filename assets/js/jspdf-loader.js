@@ -192,6 +192,68 @@
                     // Find the actual container block element
                     var containerBlock = $currentBlock.find('.cbd-container-block')[0] || $currentBlock[0];
 
+                    // Store original collapsed state and expand ALL content before rendering
+                    var collapsedStates = [];
+                    expandContentBeforeRendering();
+
+                    function expandContentBeforeRendering() {
+                        // Find collapsed content in the current block
+                        var blockContent = $currentBlock.find('.cbd-container-content');
+                        if (blockContent.length > 0 && !blockContent.is(':visible')) {
+                            collapsedStates.push({
+                                element: blockContent[0],
+                                wasHidden: true,
+                                originalDisplay: blockContent[0].style.display,
+                                originalVisibility: blockContent[0].style.visibility
+                            });
+                            blockContent.show();
+                        }
+
+                        // Find any other collapsed elements within the block
+                        var hiddenElements = $currentBlock.find('[style*="display: none"], [style*="visibility: hidden"]');
+                        hiddenElements.each(function() {
+                            // Skip action buttons and controls
+                            if (!$(this).hasClass('cbd-action-buttons') &&
+                                !$(this).hasClass('cbd-action-btn') &&
+                                !$(this).hasClass('dashicons')) {
+
+                                collapsedStates.push({
+                                    element: this,
+                                    wasHidden: true,
+                                    originalDisplay: this.style.display,
+                                    originalVisibility: this.style.visibility
+                                });
+
+                                $(this).show().css('visibility', 'visible');
+                            }
+                        });
+
+                        // Handle details elements
+                        var detailsElements = $currentBlock.find('details');
+                        detailsElements.each(function() {
+                            if (!this.open) {
+                                collapsedStates.push({
+                                    element: this,
+                                    wasDetails: true,
+                                    originalOpen: false
+                                });
+                                this.open = true;
+                            }
+                        });
+                    }
+
+                    function restoreOriginalStates() {
+                        for (var i = 0; i < collapsedStates.length; i++) {
+                            var state = collapsedStates[i];
+                            if (state.wasDetails) {
+                                state.element.open = state.originalOpen;
+                            } else if (state.wasHidden) {
+                                state.element.style.display = state.originalDisplay;
+                                state.element.style.visibility = state.originalVisibility;
+                            }
+                        }
+                    }
+
                     // Hide action buttons temporarily
                     var actionButtons = $currentBlock.find('.cbd-action-buttons');
                     var originalVisibility = '';
@@ -203,13 +265,7 @@
                         });
                     }
 
-                    // Expand collapsed content
-                    var wasCollapsed = $currentBlock.find('.cbd-container-content').css('display') === 'none';
-                    if (wasCollapsed) {
-                        $currentBlock.find('.cbd-container-content').show();
-                    }
-
-                    // Wait for DOM to update
+                    // Wait for DOM to update after expansion (350ms for collapse animation)
                     setTimeout(function() {
                         // Create canvas with SIMPLE options (like single block export)
                         html2canvas(containerBlock, {
@@ -228,10 +284,8 @@
                                 });
                             }
 
-                            // Restore collapsed state
-                            if (wasCollapsed) {
-                                $currentBlock.find('.cbd-container-content').hide();
-                            }
+                            // Restore ALL original collapsed states
+                            restoreOriginalStates();
 
                             // Create or add to PDF with EXACT canvas dimensions (NO A4 scaling!)
                             var imgData = canvas.toDataURL('image/png');
@@ -274,15 +328,15 @@
                                     'opacity': '1'
                                 });
                             }
-                            if (wasCollapsed) {
-                                $currentBlock.find('.cbd-container-content').hide();
-                            }
+
+                            // Restore ALL original collapsed states even on error
+                            restoreOriginalStates();
 
                             // Skip this block and continue
                             processedBlocks++;
                             processNextBlock();
                         });
-                    }, 100); // 100ms delay for DOM updates
+                    }, 350); // 350ms delay for collapse animation to complete
                 }
 
                 // OLD COMPLEX CODE REMOVED - Now using simple method like single block export
