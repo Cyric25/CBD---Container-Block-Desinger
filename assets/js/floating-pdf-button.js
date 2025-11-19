@@ -118,6 +118,13 @@
                     // Remove existing modal if any
                     $('#cbd-pdf-modal').remove();
 
+                    // Lese Theme-Farben aus CSS-Variablen (gleiche wie beim Button)
+                    var rootStyles = getComputedStyle(document.documentElement);
+                    var modalThemeColor = rootStyles.getPropertyValue('--color-ui-surface').trim() || themeColor || '#e24614';
+                    var modalPrimaryText = rootStyles.getPropertyValue('--color-primary-text').trim() || '#333';
+                    var modalBorderColor = rootStyles.getPropertyValue('--color-sidebar-border').trim() || '#e0e0e0';
+                    var modalLightBg = rootStyles.getPropertyValue('--color-light-background').trim() || '#f8f9fa';
+
                     // containerBlocks already filtered to only include top-level containers
 
                     var modalHtml = '<div id="cbd-pdf-modal" style="' +
@@ -127,10 +134,10 @@
                         '<div style="background: white; border-radius: 12px; padding: 30px; ' +
                         'max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; ' +
                         'box-shadow: 0 20px 40px rgba(0,0,0,0.3);">' +
-                        '<h2 style="margin: 0 0 20px 0; color: #333; font-size: 24px;">📄 PDF Export Optionen</h2>' +
+                        '<h2 style="margin: 0 0 20px 0; color: ' + modalPrimaryText + '; font-size: 24px;">📄 PDF Export Optionen</h2>' +
                         '<div style="margin-bottom: 20px;">' +
-                            '<h3 style="margin: 0 0 10px 0; color: #555; font-size: 16px;">Container auswählen:</h3>' +
-                            '<div id="cbd-block-selection" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 6px;">';
+                            '<h3 style="margin: 0 0 10px 0; color: ' + modalPrimaryText + '; font-size: 16px;">Container auswählen:</h3>' +
+                            '<div id="cbd-block-selection" style="max-height: 200px; overflow-y: auto; border: 1px solid ' + modalBorderColor + '; padding: 10px; border-radius: 6px;">';
 
                     // Add checkboxes for each top-level container
                     containerBlocks.each(function(index) {
@@ -151,7 +158,7 @@
 
                     modalHtml += '</div></div>' +
                         '<div style="margin-bottom: 20px;">' +
-                            '<h3 style="margin: 0 0 10px 0; color: #555; font-size: 16px;">Export Optionen:</h3>' +
+                            '<h3 style="margin: 0 0 10px 0; color: ' + modalPrimaryText + '; font-size: 16px;">Export Optionen:</h3>' +
                             '<div style="margin-bottom: 10px;">' +
                                 '<label style="display: flex; align-items: center; cursor: pointer;">' +
                                 '<input type="radio" name="pdf-mode" value="visual" checked ' +
@@ -175,8 +182,8 @@
                             '</div>' +
                         '</div>' +
                         '<div style="margin-bottom: 20px;">' +
-                            '<h3 style="margin: 0 0 10px 0; color: #555; font-size: 16px;">Qualität:</h3>' +
-                            '<select id="cbd-quality-select" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">' +
+                            '<h3 style="margin: 0 0 10px 0; color: ' + modalPrimaryText + '; font-size: 16px;">Qualität:</h3>' +
+                            '<select id="cbd-quality-select" style="width: 100%; padding: 8px; border: 1px solid ' + modalBorderColor + '; border-radius: 4px;">' +
                                 '<option value="1">Niedrig (schnell, kleine Datei)</option>' +
                                 '<option value="1.5" selected>Standard</option>' +
                                 '<option value="2">Hoch (langsam, große Datei)</option>' +
@@ -184,15 +191,26 @@
                             '</select>' +
                         '</div>' +
                         '<div style="display: flex; gap: 10px; justify-content: flex-end;">' +
-                            '<button id="cbd-pdf-cancel" style="padding: 10px 20px; border: 1px solid #ddd; ' +
-                            'background: #f5f5f5; border-radius: 6px; cursor: pointer;">Abbrechen</button>' +
+                            '<button id="cbd-pdf-cancel" style="padding: 10px 20px; border: 1px solid ' + modalBorderColor + '; ' +
+                            'background: ' + modalLightBg + '; border-radius: 6px; cursor: pointer;">Abbrechen</button>' +
                             '<button id="cbd-pdf-create" style="padding: 10px 20px; border: none; ' +
-                            'background: #0073aa; color: white; border-radius: 6px; cursor: pointer; ' +
+                            'background: ' + modalThemeColor + '; color: white; border-radius: 6px; cursor: pointer; ' +
                             'font-weight: bold;">📄 PDF erstellen</button>' +
                         '</div>' +
                         '</div></div>';
 
                     $('body').append(modalHtml);
+
+                    // Hover-Effekt für PDF erstellen Button
+                    var modalThemeColorDark = rootStyles.getPropertyValue('--color-ui-surface-dark').trim() || themeColorDark || '#c93d12';
+                    $('#cbd-pdf-create').hover(
+                        function() {
+                            $(this).css('background', modalThemeColorDark);
+                        },
+                        function() {
+                            $(this).css('background', modalThemeColor);
+                        }
+                    );
 
                     // Modal event handlers
                     $('#cbd-pdf-cancel, #cbd-pdf-modal').on('click', function(e) {
