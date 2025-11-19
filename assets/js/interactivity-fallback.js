@@ -457,6 +457,52 @@
         // Initialize all containers on page load
         initializeContainers();
 
+        /**
+         * Touch Device Support - Show buttons on tap/touch
+         * Fügt .cbd-selected Klasse hinzu bei Touch-Interaktion
+         */
+        function initTouchSupport() {
+            // Prüfe ob Touch-Gerät
+            const isTouchDevice = ('ontouchstart' in window) ||
+                                 (navigator.maxTouchPoints > 0) ||
+                                 (navigator.msMaxTouchPoints > 0);
+
+            if (!isTouchDevice) {
+                return; // Nur auf Touch-Geräten aktivieren
+            }
+
+            // Touch-Handler für Container
+            $(document).on('touchstart click', '.cbd-container', function(e) {
+                // Verhindere dass Event zu Parent-Containern bubblet
+                e.stopPropagation();
+
+                const $container = $(this);
+
+                // Entferne .cbd-selected von allen anderen Containern
+                $('.cbd-container').not($container).removeClass('cbd-selected');
+
+                // Füge .cbd-selected zu diesem Container hinzu
+                $container.addClass('cbd-selected');
+            });
+
+            // Klick außerhalb entfernt Selektion
+            $(document).on('touchstart click', function(e) {
+                // Wenn nicht auf Container geklickt wurde
+                if (!$(e.target).closest('.cbd-container').length) {
+                    $('.cbd-container').removeClass('cbd-selected');
+                }
+            });
+
+            // Wenn auf Button geklickt wird, behalte Selektion
+            $(document).on('touchstart click', '.cbd-action-buttons button, .cbd-selection-menu', function(e) {
+                e.stopPropagation();
+                // Container bleibt selektiert
+            });
+        }
+
+        // Initialisiere Touch-Support
+        initTouchSupport();
+
     });
 
 })(jQuery);

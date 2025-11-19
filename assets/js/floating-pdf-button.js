@@ -16,13 +16,26 @@
 
         if (totalContainers.length > 0) {
             if ($("#cbd-pdf-export-fab").length === 0) {
+                // Lese Theme-Farben aus CSS-Variablen
+                var rootStyles = getComputedStyle(document.documentElement);
+                var themeColor = rootStyles.getPropertyValue('--color-ui-surface').trim() || '#e24614';
+                var themeColorDark = rootStyles.getPropertyValue('--color-ui-surface-dark').trim() || '#c93d12';
+
+                // Fallback: Wenn CSS-Variablen nicht gesetzt sind, verwende Default-Werte
+                if (!themeColor || themeColor === '') {
+                    themeColor = '#e24614';
+                }
+                if (!themeColorDark || themeColorDark === '') {
+                    themeColorDark = '#c93d12';
+                }
+
                 var pdfButton = $('<div id="cbd-pdf-export-fab">📄 PDF</div>');
                 pdfButton.css({
                     position: "fixed",
                     bottom: "30px",
                     right: "30px",
                     zIndex: "999999",
-                    background: "#0073aa",
+                    background: themeColor,
                     color: "white",
                     borderRadius: "12px",
                     padding: "15px",
@@ -32,12 +45,22 @@
                     fontWeight: "bold",
                     textAlign: "center",
                     minWidth: "80px",
-                    transition: "transform 0.2s ease"
+                    transition: "all 0.2s ease"
                 });
                 pdfButton.attr("title", "Container-Blöcke als PDF exportieren");
                 pdfButton.hover(
-                    function() { $(this).css("transform", "scale(1.05)"); },
-                    function() { $(this).css("transform", "scale(1)"); }
+                    function() {
+                        $(this).css({
+                            "transform": "scale(1.05)",
+                            "background": themeColorDark
+                        });
+                    },
+                    function() {
+                        $(this).css({
+                            "transform": "scale(1)",
+                            "background": themeColor
+                        });
+                    }
                 );
                 pdfButton.on("click", function() {
 
