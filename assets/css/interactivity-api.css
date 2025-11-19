@@ -57,7 +57,7 @@ button[disabled].cbd-pdf-export {
 
 /* Success feedback */
 .cbd-action-buttons button .dashicons-yes-alt {
-    color: #46b450;
+    color: var(--color-ui-surface, #46b450);
 }
 
 /* Error state (optional - can be added to context) */
@@ -93,7 +93,7 @@ button[disabled].cbd-pdf-export {
 
 /* Focus styles for keyboard navigation */
 .cbd-action-buttons button:focus-visible {
-    outline: 2px solid #2271b1;
+    outline: 2px solid var(--color-ui-surface, #e24614);
     outline-offset: 2px;
 }
 

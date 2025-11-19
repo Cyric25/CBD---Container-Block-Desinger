@@ -34,12 +34,12 @@
 }
 
 .cbd-toast.cbd-toast-info {
-    background-color: #17a2b8;
+    background-color: var(--color-ui-surface, #e24614);
 }
 
 .cbd-toast.cbd-toast-warning {
     background-color: #ffc107;
-    color: #212529;
+    color: var(--color-primary-text, #333);
 }
 
 /* Container Basis-Styles */
@@ -126,7 +126,7 @@
 }
 
 .cbd-dropdown-menu button:hover {
-    background-color: rgba(0, 0, 0, 0.05);
+    background-color: var(--color-ui-surface-light, rgba(245, 237, 233, 0.3));
 }
 
 .cbd-dropdown-menu button .dashicons {
@@ -171,7 +171,7 @@
     position: absolute;
     top: -8px;
     left: -8px;
-    background: #0073aa;
+    background: var(--color-ui-surface, #e24614);
     color: white;
     width: 24px;
     height: 24px;
@@ -225,7 +225,7 @@
 .cbd-collapse-toggle:focus,
 .cbd-menu-toggle:focus,
 .cbd-dropdown-menu button:focus {
-    outline: 2px solid #005cbe;
+    outline: 2px solid var(--color-ui-surface, #e24614);
     outline-offset: 1px;
 }
 
