@@ -738,7 +738,7 @@ class CBD_Block_Registration {
 
         if ($show_number) {
             // Add a marker class for JavaScript to find and renumber
-            $html .= "<div class=\"cbd-container-number cbd-outside-number cbd-needs-numbering\" data-number=\"0\" style=\"position: absolute !important; top: -40px !important; left: -40px !important; background: rgba(0,0,0,0.9) !important; color: white !important; width: 34px !important; height: 34px !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 15px !important; font-weight: bold !important; z-index: 99999 !important; border: 2px solid white !important;\">";
+            $html .= "<div class=\"cbd-container-number cbd-outside-number cbd-needs-numbering\" data-number=\"0\" style=\"position: absolute !important; top: -40px !important; left: -40px !important; background: rgba(0,0,0,0.9) !important; color: white !important; width: 34px !important; height: 34px !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 15px !important; font-weight: bold !important; z-index: -1 !important; border: 2px solid white !important;\">";
             $html .= '?'; // Placeholder - will be replaced by JavaScript
             $html .= '</div>';
         }
