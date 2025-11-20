@@ -181,21 +181,24 @@
             console.log('CBD PDF: Wrapper HTML length:', $wrapper.html().length);
 
             // Add wrapper to body (positioned for rendering)
-            // Use fixed positioning on screen but hidden from view
+            // Must be fully visible (opacity: 1) for html2canvas to work
+            // Position on screen but behind everything with low z-index
             $wrapper.css({
                 position: 'fixed',
                 top: '0',
                 left: '0',
                 width: '794px', // A4 width in pixels (210mm)
                 backgroundColor: '#fff',
-                zIndex: '-1', // Behind everything
-                opacity: '0.01', // Nearly invisible but renderable
+                zIndex: '-9999', // Behind everything
+                opacity: '1', // MUST be 1 for html2canvas to render
                 pointerEvents: 'none', // No interaction
-                overflow: 'visible'
+                overflow: 'visible',
+                visibility: 'visible' // Explicitly visible
             });
             $('body').append($wrapper);
 
             console.log('CBD PDF: Wrapper appended to body');
+            console.log('CBD PDF: Wrapper dimensions:', $wrapper[0].offsetWidth, 'x', $wrapper[0].offsetHeight);
 
             // Configure html2pdf options
             var opt = {

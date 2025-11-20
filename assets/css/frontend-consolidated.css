@@ -69,60 +69,60 @@
 .cbd-container-block .cbd-block-number.top-left {
     top: 0.5rem;
     left: 0.5rem;
-    z-index: 0; /* Low level - behind header and other elements */
+    z-index: -1; /* Behind all elements including header */
 }
 
 .cbd-container-block .cbd-block-number.top-center {
     top: 0.5rem;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 0; /* Low level - behind header and other elements */
+    z-index: -1; /* Behind all elements including header */
 }
 
 .cbd-container-block .cbd-block-number.top-right {
     top: 0.5rem;
     right: 0.5rem;
-    z-index: 0; /* Low level - behind header and other elements */
+    z-index: -1; /* Behind all elements including header */
 }
 
 .cbd-container-block .cbd-block-number.middle-left {
     top: 50%;
     left: 0.5rem;
     transform: translateY(-50%);
-    z-index: 0; /* Low level - behind header and other elements */
+    z-index: -1; /* Behind all elements including header */
 }
 
 .cbd-container-block .cbd-block-number.middle-center {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    z-index: 0; /* Low level - behind header and other elements */
+    z-index: -1; /* Behind all elements including header */
 }
 
 .cbd-container-block .cbd-block-number.middle-right {
     top: 50%;
     right: 0.5rem;
     transform: translateY(-50%);
-    z-index: 0; /* Low level - behind header and other elements */
+    z-index: -1; /* Behind all elements including header */
 }
 
 .cbd-container-block .cbd-block-number.bottom-left {
     bottom: 0.5rem;
     left: 0.5rem;
-    z-index: 0; /* Low level - behind header and other elements */
+    z-index: -1; /* Behind all elements including header */
 }
 
 .cbd-container-block .cbd-block-number.bottom-center {
     bottom: 0.5rem;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 0; /* Low level - behind header and other elements */
+    z-index: -1; /* Behind all elements including header */
 }
 
 .cbd-container-block .cbd-block-number.bottom-right {
     bottom: 0.5rem;
     right: 0.5rem;
-    z-index: 0; /* Low level - behind header and other elements */
+    z-index: -1; /* Behind all elements including header */
 }
 
 /* Modern effects support */
