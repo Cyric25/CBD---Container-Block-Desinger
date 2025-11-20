@@ -1393,6 +1393,11 @@ class CBD_Block_Registration {
                     return $matches[0]; // Return original
                 }
 
+                // Skip JSON script tags (used for data storage, not executable code)
+                if (preg_match('/type\s*=\s*["\']application\/json["\']/i', $attributes)) {
+                    return $matches[0]; // Return original
+                }
+
                 // Skip empty scripts
                 if (trim($script_content) === '') {
                     return $matches[0];
