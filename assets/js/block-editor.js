@@ -37,9 +37,10 @@
                 }
             };
         }
-        
+
+        // FIX: Verwende cbdBlockData (nicht cbdBlockEditor - war Tippfehler)
         const blockData = window.cbdBlockData;
-        
+
         // Stelle sicher dass ajaxUrl vorhanden ist
         if (!blockData.ajaxUrl) {
             blockData.ajaxUrl = window.ajaxurl || '/wp-admin/admin-ajax.php';

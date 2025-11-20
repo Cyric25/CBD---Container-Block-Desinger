@@ -3,8 +3,8 @@
  * Styles for Gutenberg editor to match frontend appearance
  */
 
-/* Import clean frontend styles for editor preview */
-@import url('cbd-frontend-clean.css');
+/* Note: cbd-frontend-clean.css is loaded separately by WordPress */
+/* No @import needed - prevents 404 errors in admin context */
 
 /* Editor-specific wrapper - Universal selectors for all container blocks */
 .wp-block[data-type*="container-block-designer"],

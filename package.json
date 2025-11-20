@@ -1,6 +1,6 @@
 {
   "name": "container-block-designer",
-  "version": "2.7.6",
+  "version": "2.7.7",
   "description": "WordPress Plugin - Erstellt anpassbare Container-Blocks für den Gutenberg Editor",
   "main": "container-block-designer.php",
   "scripts": {
