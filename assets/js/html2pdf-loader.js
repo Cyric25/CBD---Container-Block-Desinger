@@ -253,44 +253,75 @@
             setTimeout(function() {
                 console.log('CBD PDF: Delay complete, starting capture...');
 
-                // Direct html2canvas test first
-                if (typeof html2canvas !== 'undefined') {
-                    console.log('CBD PDF: Testing direct html2canvas first...');
+                // Use html2canvas directly and create PDF with jsPDF
+                // This bypasses html2pdf.js which seems to have issues
+
+                // Check for jsPDF (html2pdf bundles it)
+                var jsPDF = window.jspdf ? window.jspdf.jsPDF : (window.jsPDF || null);
+                console.log('CBD PDF: jsPDF available:', !!jsPDF);
+                console.log('CBD PDF: html2canvas available:', typeof html2canvas !== 'undefined');
+
+                if (typeof html2canvas !== 'undefined' && jsPDF) {
+                    console.log('CBD PDF: Using html2canvas + jsPDF directly...');
+
                     html2canvas($wrapper[0], {
                         scale: quality,
                         useCORS: true,
-                        logging: true,
+                        logging: false, // Disable for production
                         backgroundColor: '#ffffff',
                         scrollY: 0,
                         scrollX: 0
                     }).then(function(canvas) {
                         console.log('CBD PDF: html2canvas SUCCESS! Canvas size:', canvas.width, 'x', canvas.height);
-                        console.log('CBD PDF: Canvas has data:', canvas.toDataURL('image/png').length, 'bytes');
 
-                        // Now try html2pdf
-                        html2pdf()
-                            .set(opt)
-                            .from($wrapper[0])
-                            .save()
-                            .then(function() {
-                                console.log('CBD PDF: PDF generation successful');
-                                $wrapper.remove();
-                                $loadingMsg.remove();
-                            })
-                            .catch(function(error) {
-                                console.error('CBD PDF: Generation error:', error);
-                                $wrapper.remove();
-                                $loadingMsg.remove();
-                                alert('Fehler beim PDF erstellen: ' + error.message);
-                            });
+                        // Create jsPDF instance
+                        var pdf = new jsPDF({
+                            orientation: 'portrait',
+                            unit: 'mm',
+                            format: 'a4'
+                        });
+
+                        // Calculate dimensions to fit A4
+                        var imgWidth = 190; // A4 width minus margins (210 - 20)
+                        var imgHeight = (canvas.height * imgWidth) / canvas.width;
+                        var pageHeight = 277; // A4 height minus margins (297 - 20)
+
+                        var heightLeft = imgHeight;
+                        var position = 10; // Top margin
+
+                        // Convert canvas to image data
+                        var imgData = canvas.toDataURL('image/jpeg', 0.98);
+
+                        // Add first page
+                        pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
+                        heightLeft -= pageHeight;
+
+                        // Add additional pages if needed
+                        while (heightLeft > 0) {
+                            position = heightLeft - imgHeight + 10;
+                            pdf.addPage();
+                            pdf.addImage(imgData, 'JPEG', 10, position, imgWidth, imgHeight);
+                            heightLeft -= pageHeight;
+                        }
+
+                        // Save PDF
+                        var filename = 'container-blocks-' + new Date().toISOString().slice(0, 10) + '.pdf';
+                        pdf.save(filename);
+
+                        console.log('CBD PDF: PDF saved successfully via jsPDF!');
+
+                        // Cleanup
+                        $wrapper.remove();
+                        $loadingMsg.remove();
                     }).catch(function(error) {
                         console.error('CBD PDF: html2canvas FAILED:', error);
                         $wrapper.remove();
                         $loadingMsg.remove();
-                        alert('html2canvas Fehler: ' + error.message);
+                        alert('Fehler beim Canvas erstellen: ' + error.message);
                     });
-                } else {
-                    console.log('CBD PDF: html2canvas not available, using html2pdf directly');
+                } else if (typeof html2canvas !== 'undefined') {
+                    console.log('CBD PDF: jsPDF not available separately, using html2pdf');
+                    // Fallback to html2pdf
                     html2pdf()
                         .set(opt)
                         .from($wrapper[0])
@@ -306,8 +337,13 @@
                             $loadingMsg.remove();
                             alert('Fehler beim PDF erstellen: ' + error.message);
                         });
+                } else {
+                    console.error('CBD PDF: Neither html2canvas nor html2pdf available!');
+                    $wrapper.remove();
+                    $loadingMsg.remove();
+                    alert('PDF-Bibliotheken nicht geladen!');
                 }
-            }, 500); // Increased delay to 500ms for better rendering
+            }, 500);
 
             console.log('CBD PDF: html2pdf() will start after render delay...');
             return true;
