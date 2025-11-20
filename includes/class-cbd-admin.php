@@ -300,14 +300,25 @@ class CBD_Admin {
                     CBD_VERSION
                 );
 
-                // Emoji Picker Library
+                // Emoji Picker Library (ES Module)
                 wp_enqueue_script(
                     'emoji-picker-element',
                     'https://cdn.jsdelivr.net/npm/emoji-picker-element@1.21.0/index.js',
                     array(),
                     '1.21.0',
-                    true
+                    array(
+                        'strategy' => 'defer',
+                        'in_footer' => true
+                    )
                 );
+
+                // Mark as module type
+                add_filter('script_loader_tag', function($tag, $handle) {
+                    if ('emoji-picker-element' === $handle) {
+                        return str_replace(' src', ' type="module" src', $tag);
+                    }
+                    return $tag;
+                }, 10, 2);
 
                 wp_enqueue_script(
                     'cbd-block-editor',

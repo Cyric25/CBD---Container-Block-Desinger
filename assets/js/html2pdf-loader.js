@@ -117,6 +117,16 @@
         try {
             var $ = window.jQuery || window.$;
 
+            // Ensure containerBlocks is a jQuery object
+            if (!$ || typeof $.fn === 'undefined') {
+                throw new Error('jQuery is not available');
+            }
+
+            // Convert to jQuery object if needed
+            if (!containerBlocks.jquery) {
+                containerBlocks = $(containerBlocks);
+            }
+
             // Filter out nested containers to prevent duplication
             containerBlocks = containerBlocks.filter(function() {
                 var isNested = $(this).closest('.cbd-container-content').length > 0;

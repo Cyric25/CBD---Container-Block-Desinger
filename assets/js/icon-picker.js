@@ -199,20 +199,6 @@
             };
         });
 
-        // Emoji Selection (emoji-picker-element)
-        const emojiPicker = document.querySelector('emoji-picker');
-        if (emojiPicker) {
-            emojiPicker.addEventListener('emoji-click', function(event) {
-                selectedIcon = {
-                    type: 'emoji',
-                    value: event.detail.unicode
-                };
-                $('.cbd-icon-grid').empty().append(
-                    `<div class="cbd-icon-item selected" style="font-size: 48px; padding: 20px;">${event.detail.unicode}</div>`
-                );
-            });
-        }
-
         // Confirm Selection
         $('.cbd-select-icon').on('click', function() {
             if (selectedIcon) {
@@ -238,6 +224,9 @@
             $('.cbd-icon-categories').hide();
             $('.cbd-icon-grid').hide();
             $('.cbd-emoji-picker-container').show();
+
+            // Initialize emoji picker
+            initEmojiPicker();
         } else {
             $('.cbd-icon-search').show();
             $('.cbd-icon-categories').show();
@@ -248,6 +237,43 @@
             populateCategories();
             populateIconGrid();
         }
+    }
+
+    // Initialize Emoji Picker
+    function initEmojiPicker() {
+        const emojiPicker = document.querySelector('emoji-picker');
+
+        if (!emojiPicker) {
+            console.error('CBD: emoji-picker element not found');
+            return;
+        }
+
+        // Remove old event listener if exists
+        const oldListener = emojiPicker._cbdEmojiListener;
+        if (oldListener) {
+            emojiPicker.removeEventListener('emoji-click', oldListener);
+        }
+
+        // Create new event listener
+        const newListener = function(event) {
+            selectedIcon = {
+                type: 'emoji',
+                value: event.detail.unicode
+            };
+
+            // Show selected emoji in grid
+            $('.cbd-icon-grid').empty().append(
+                `<div class="cbd-icon-item selected" style="font-size: 48px; padding: 20px; text-align: center;">${event.detail.unicode}</div>`
+            );
+
+            console.log('CBD: Emoji selected:', event.detail.unicode);
+        };
+
+        // Store listener reference for cleanup
+        emojiPicker._cbdEmojiListener = newListener;
+
+        // Add event listener
+        emojiPicker.addEventListener('emoji-click', newListener);
     }
 
     // Populate Category Buttons
