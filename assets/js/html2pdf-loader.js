@@ -156,17 +156,29 @@
             containerBlocks.each(function(index) {
                 var $block = $(this);
                 console.log('CBD PDF: Processing block', index + 1, 'of', containerBlocks.length);
+                console.log('CBD PDF: Block', index + 1, 'classes:', $block.attr('class'));
 
-                var $clone = $block.clone();
+                // Clone with deep copy
+                var $clone = $block.clone(true, true);
                 console.log('CBD PDF: Block', index + 1, 'cloned, HTML length:', $clone.html().length);
+
+                // Find the actual content block inside
+                var $contentBlock = $clone.find('.cbd-container-block').first();
+                if ($contentBlock.length === 0) {
+                    console.warn('CBD PDF: Block', index + 1, 'has no .cbd-container-block, using whole clone');
+                } else {
+                    console.log('CBD PDF: Block', index + 1, 'found .cbd-container-block');
+                }
 
                 // Expand collapsed content
                 expandContent($clone);
                 console.log('CBD PDF: Block', index + 1, 'content expanded');
 
-                // Hide action buttons
+                // Hide action buttons and menus
                 $clone.find('.cbd-action-buttons').remove();
                 $clone.find('.cbd-collapse-toggle').remove();
+                $clone.find('.cbd-header-menu').remove();
+                $clone.find('.cbd-container-number').remove(); // Remove counter circles
 
                 // Add page break after each block (except last)
                 if (index < containerBlocks.length - 1) {
@@ -211,12 +223,14 @@
                 html2canvas: {
                     scale: quality,
                     useCORS: true,
-                    logging: false,
+                    logging: true, // Enable logging to debug
                     letterRendering: true,
                     scrollY: 0,
                     scrollX: 0,
                     windowWidth: 794,
-                    windowHeight: $wrapper[0].scrollHeight
+                    windowHeight: $wrapper[0].scrollHeight,
+                    backgroundColor: '#ffffff',
+                    removeContainer: false // Keep container for debugging
                 },
                 jsPDF: {
                     unit: 'mm',
@@ -226,6 +240,10 @@
                 pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
             };
 
+            console.log('CBD PDF: Wrapper scroll height:', $wrapper[0].scrollHeight);
+            console.log('CBD PDF: Wrapper has children:', $wrapper.children().length);
+            console.log('CBD PDF: First child:', $wrapper.children().first()[0]);
+
             // Generate PDF
             console.log('CBD PDF: Starting html2pdf generation...');
             console.log('CBD PDF: Wrapper element:', $wrapper[0]);
@@ -233,23 +251,63 @@
 
             // Small delay to ensure rendering
             setTimeout(function() {
-                html2pdf()
-                    .set(opt)
-                    .from($wrapper[0])
-                    .save()
-                    .then(function() {
-                        console.log('CBD PDF: PDF generation successful');
-                        // Remove wrapper and loading message
+                console.log('CBD PDF: Delay complete, starting capture...');
+
+                // Direct html2canvas test first
+                if (typeof html2canvas !== 'undefined') {
+                    console.log('CBD PDF: Testing direct html2canvas first...');
+                    html2canvas($wrapper[0], {
+                        scale: quality,
+                        useCORS: true,
+                        logging: true,
+                        backgroundColor: '#ffffff',
+                        scrollY: 0,
+                        scrollX: 0
+                    }).then(function(canvas) {
+                        console.log('CBD PDF: html2canvas SUCCESS! Canvas size:', canvas.width, 'x', canvas.height);
+                        console.log('CBD PDF: Canvas has data:', canvas.toDataURL('image/png').length, 'bytes');
+
+                        // Now try html2pdf
+                        html2pdf()
+                            .set(opt)
+                            .from($wrapper[0])
+                            .save()
+                            .then(function() {
+                                console.log('CBD PDF: PDF generation successful');
+                                $wrapper.remove();
+                                $loadingMsg.remove();
+                            })
+                            .catch(function(error) {
+                                console.error('CBD PDF: Generation error:', error);
+                                $wrapper.remove();
+                                $loadingMsg.remove();
+                                alert('Fehler beim PDF erstellen: ' + error.message);
+                            });
+                    }).catch(function(error) {
+                        console.error('CBD PDF: html2canvas FAILED:', error);
                         $wrapper.remove();
                         $loadingMsg.remove();
-                    })
-                    .catch(function(error) {
-                        console.error('CBD PDF: Generation error:', error);
-                        $wrapper.remove();
-                        $loadingMsg.remove();
-                        alert('Fehler beim PDF erstellen: ' + error.message);
+                        alert('html2canvas Fehler: ' + error.message);
                     });
-            }, 100);
+                } else {
+                    console.log('CBD PDF: html2canvas not available, using html2pdf directly');
+                    html2pdf()
+                        .set(opt)
+                        .from($wrapper[0])
+                        .save()
+                        .then(function() {
+                            console.log('CBD PDF: PDF generation successful');
+                            $wrapper.remove();
+                            $loadingMsg.remove();
+                        })
+                        .catch(function(error) {
+                            console.error('CBD PDF: Generation error:', error);
+                            $wrapper.remove();
+                            $loadingMsg.remove();
+                            alert('Fehler beim PDF erstellen: ' + error.message);
+                        });
+                }
+            }, 500); // Increased delay to 500ms for better rendering
 
             console.log('CBD PDF: html2pdf() will start after render delay...');
             return true;
