@@ -298,11 +298,11 @@ class CBD_Block_Registration {
                 true
             );
 
-            // Floating PDF Export Button
+            // Floating PDF Export Button (now uses html2pdf for text-based PDFs)
             wp_enqueue_script(
                 'cbd-floating-pdf-button',
                 CBD_PLUGIN_URL . 'assets/js/floating-pdf-button.js',
-                array('jquery', 'cbd-jspdf-loader'),
+                array('jquery', 'cbd-html2pdf-loader'),
                 CBD_VERSION,
                 true
             );
@@ -362,11 +362,11 @@ class CBD_Block_Registration {
             true
         );
 
-        // PDF Export: Load jsPDF with fallback mechanism
+        // PDF Export: Load html2pdf.js with fallback mechanism (text-based PDFs)
         if (!is_admin()) {
             wp_enqueue_script(
-                'cbd-jspdf-loader',
-                CBD_PLUGIN_URL . 'assets/js/jspdf-loader.js',
+                'cbd-html2pdf-loader',
+                CBD_PLUGIN_URL . 'assets/js/html2pdf-loader.js',
                 array(),
                 CBD_VERSION,
                 true
