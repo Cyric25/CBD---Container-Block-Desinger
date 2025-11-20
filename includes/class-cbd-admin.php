@@ -292,6 +292,14 @@ class CBD_Admin {
                     CBD_VERSION
                 );
 
+                // Icon Picker Styles
+                wp_enqueue_style(
+                    'cbd-icon-picker',
+                    CBD_PLUGIN_URL . 'assets/css/icon-picker.css',
+                    array('cbd-admin-common'),
+                    CBD_VERSION
+                );
+
                 // Emoji Picker Library
                 wp_enqueue_script(
                     'emoji-picker-element',
@@ -305,6 +313,15 @@ class CBD_Admin {
                     'cbd-block-editor',
                     CBD_PLUGIN_URL . 'assets/js/block-editor.js',
                     array('jquery', 'wp-color-picker'),
+                    CBD_VERSION,
+                    true
+                );
+
+                // Icon Picker with multi-library support
+                wp_enqueue_script(
+                    'cbd-icon-picker',
+                    CBD_PLUGIN_URL . 'assets/js/icon-picker.js',
+                    array('jquery'),
                     CBD_VERSION,
                     true
                 );

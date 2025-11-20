@@ -1,0 +1,250 @@
+/**
+ * Multi-Library Icon Picker Styles
+ */
+
+/* Library Tabs */
+.cbd-icon-library-tabs {
+    display: flex;
+    gap: 8px;
+    padding: 16px;
+    background: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+    flex-wrap: wrap;
+}
+
+.cbd-library-tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #fff;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.cbd-library-tab:hover {
+    border-color: #2271b1;
+    background: #f6f7f7;
+}
+
+.cbd-library-tab.active {
+    background: #2271b1;
+    border-color: #2271b1;
+    color: #fff;
+}
+
+.cbd-library-tab .dashicons,
+.cbd-library-tab i,
+.cbd-library-tab .material-icons {
+    font-size: 18px;
+    line-height: 1;
+}
+
+.cbd-library-tab.active .dashicons,
+.cbd-library-tab.active i,
+.cbd-library-tab.active .material-icons {
+    color: #fff;
+}
+
+/* Icon Grid */
+.cbd-icon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 8px;
+    padding: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.cbd-icon-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #fff;
+}
+
+.cbd-icon-item:hover {
+    border-color: #2271b1;
+    background: #f6f7f7;
+    transform: scale(1.05);
+}
+
+.cbd-icon-item.selected {
+    border-color: #2271b1;
+    background: #2271b1;
+    box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.2);
+}
+
+.cbd-icon-item .dashicons {
+    font-size: 24px;
+    line-height: 1;
+}
+
+.cbd-icon-item.selected .dashicons {
+    color: #fff;
+}
+
+.cbd-icon-item i {
+    font-size: 24px;
+    line-height: 1;
+}
+
+.cbd-icon-item.selected i {
+    color: #fff;
+}
+
+.cbd-icon-item .material-icons {
+    font-size: 28px;
+    line-height: 1;
+}
+
+.cbd-icon-item.selected .material-icons {
+    color: #fff;
+}
+
+.cbd-icon-item .lucide {
+    width: 24px;
+    height: 24px;
+}
+
+.cbd-icon-item.selected .lucide {
+    color: #fff;
+}
+
+/* Emoji Picker */
+.cbd-emoji-picker-container {
+    padding: 16px;
+    display: flex;
+    justify-content: center;
+}
+
+.cbd-emoji-picker-container emoji-picker {
+    width: 100%;
+    max-width: 500px;
+    --border-radius: 8px;
+}
+
+/* Selected Icon Display */
+.cbd-selected-icon {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #f6f7f7;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.cbd-selected-icon .dashicons,
+.cbd-selected-icon i,
+.cbd-selected-icon .material-icons,
+.cbd-selected-icon .cbd-emoji-icon {
+    font-size: 24px;
+    line-height: 1;
+}
+
+.cbd-selected-icon .lucide {
+    width: 24px;
+    height: 24px;
+}
+
+.cbd-icon-name {
+    flex: 1;
+    font-family: monospace;
+    font-size: 13px;
+    color: #666;
+}
+
+/* Icon Categories (within each library) */
+.cbd-icon-categories {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #fafafa;
+    border-bottom: 1px solid #ddd;
+    flex-wrap: wrap;
+}
+
+.cbd-icon-category {
+    padding: 6px 12px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 13px;
+}
+
+.cbd-icon-category:hover {
+    border-color: #2271b1;
+    background: #f6f7f7;
+}
+
+.cbd-icon-category.active {
+    background: #2271b1;
+    border-color: #2271b1;
+    color: #fff;
+}
+
+/* Search */
+.cbd-icon-search {
+    padding: 12px 16px;
+    background: #fafafa;
+    border-bottom: 1px solid #ddd;
+}
+
+.cbd-icon-search-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.cbd-icon-search-input:focus {
+    outline: none;
+    border-color: #2271b1;
+    box-shadow: 0 0 0 1px rgba(34, 113, 177, 0.2);
+}
+
+/* Responsive */
+@media (max-width: 782px) {
+    .cbd-icon-library-tabs {
+        gap: 4px;
+        padding: 12px;
+    }
+
+    .cbd-library-tab {
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .cbd-icon-grid {
+        grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+        gap: 6px;
+    }
+
+    .cbd-icon-item {
+        width: 50px;
+        height: 50px;
+    }
+
+    .cbd-icon-item .dashicons,
+    .cbd-icon-item i {
+        font-size: 20px;
+    }
+
+    .cbd-icon-item .material-icons {
+        font-size: 24px;
+    }
+}
