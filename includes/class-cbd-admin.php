@@ -263,13 +263,44 @@ class CBD_Admin {
         switch ($page) {
             case 'cbd-new-block':
             case 'cbd-edit-block':
+                // Icon Libraries CDN
+                wp_enqueue_style(
+                    'font-awesome',
+                    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
+                    array(),
+                    '6.5.1'
+                );
+
+                wp_enqueue_style(
+                    'material-icons',
+                    'https://fonts.googleapis.com/icon?family=Material+Icons',
+                    array(),
+                    null
+                );
+
+                wp_enqueue_style(
+                    'lucide-icons',
+                    'https://unpkg.com/lucide-static@latest/font/lucide.css',
+                    array(),
+                    null
+                );
+
                 wp_enqueue_style(
                     'cbd-block-editor',
                     CBD_PLUGIN_URL . 'assets/css/block-editor.css',
                     array('cbd-admin-common'),
                     CBD_VERSION
                 );
-                
+
+                // Emoji Picker Library
+                wp_enqueue_script(
+                    'emoji-picker-element',
+                    'https://cdn.jsdelivr.net/npm/emoji-picker-element@1.21.0/index.js',
+                    array(),
+                    '1.21.0',
+                    true
+                );
+
                 wp_enqueue_script(
                     'cbd-block-editor',
                     CBD_PLUGIN_URL . 'assets/js/block-editor.js',

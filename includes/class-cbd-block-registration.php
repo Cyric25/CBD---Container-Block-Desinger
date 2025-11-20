@@ -330,7 +330,29 @@ class CBD_Block_Registration {
 
         // Dashicons for frontend icons
         wp_enqueue_style('dashicons');
-        
+
+        // Icon Libraries for multi-library support (Font Awesome, Material Icons, Lucide)
+        wp_enqueue_style(
+            'font-awesome',
+            'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
+            array(),
+            '6.5.1'
+        );
+
+        wp_enqueue_style(
+            'material-icons',
+            'https://fonts.googleapis.com/icon?family=Material+Icons',
+            array(),
+            null
+        );
+
+        wp_enqueue_style(
+            'lucide-icons',
+            'https://unpkg.com/lucide-static@latest/font/lucide.css',
+            array(),
+            null
+        );
+
         // Enqueue html2canvas for screenshot functionality
         wp_enqueue_script(
             'html2canvas',
@@ -816,11 +838,11 @@ class CBD_Block_Registration {
             
             // Icon (always visible, inline with title)
             if ($has_icon) {
-                $icon_class = sanitize_html_class($features['icon']['value'] ?? 'dashicons-admin-generic');
+                $icon_value = $features['icon']['value'] ?? 'dashicons-admin-generic';
                 $icon_color = !empty($features['icon']['color']) ? $features['icon']['color'] : 'inherit';
-                    
-                $html .= '<span class="cbd-header-icon" style="color: ' . esc_attr($icon_color) . ';">';
-                $html .= '<i class="dashicons ' . $icon_class . '"></i>';
+
+                $html .= '<span class="cbd-header-icon">';
+                $html .= $this->render_icon($icon_value, $icon_color);
                 $html .= '</span>';
             }
             
@@ -886,9 +908,10 @@ class CBD_Block_Registration {
         
         // Icon Feature
         if (!empty($features['icon']['enabled'])) {
-            $icon_class = $features['icon']['value'] ?? 'dashicons-admin-generic';
+            $icon_value = $features['icon']['value'] ?? 'dashicons-admin-generic';
+            $icon_color = $features['icon']['color'] ?? 'inherit';
             $html .= '<div class="cbd-container-icon">';
-            $html .= '<span class="dashicons ' . esc_attr($icon_class) . '" aria-hidden="true"></span>';
+            $html .= $this->render_icon($icon_value, $icon_color, array('aria-hidden' => 'true'));
             $html .= '</div>';
         }
         
@@ -1476,7 +1499,91 @@ class CBD_Block_Registration {
                 'description' => $block['description']
             );
         }
-        
+
         return $formatted_blocks;
+    }
+
+    /**
+     * Render icon based on type
+     *
+     * Supports: Dashicons, Font Awesome, Material Icons, Lucide, Emojis
+     *
+     * @param string $icon_value Icon value (can be JSON or legacy dashicons class)
+     * @param string $color Icon color
+     * @param array $attributes Additional HTML attributes
+     * @return string Icon HTML
+     */
+    private function render_icon($icon_value, $color = 'inherit', $attributes = array()) {
+        if (empty($icon_value)) {
+            return '';
+        }
+
+        // Parse icon value (can be JSON or legacy format)
+        $icon_data = $this->parse_icon_value($icon_value);
+        $type = $icon_data['type'];
+        $value = $icon_data['value'];
+
+        // Build attribute string
+        $attr_string = '';
+        foreach ($attributes as $key => $val) {
+            $attr_string .= ' ' . esc_attr($key) . '="' . esc_attr($val) . '"';
+        }
+
+        $style = 'color: ' . esc_attr($color) . ';';
+
+        // Render based on type
+        switch ($type) {
+            case 'fontawesome':
+                // Font Awesome: <i class="fa-solid fa-star"></i>
+                return '<i class="' . esc_attr($value) . '" style="' . $style . '"' . $attr_string . '></i>';
+
+            case 'material':
+                // Material Icons: <span class="material-icons">star</span>
+                return '<span class="material-icons" style="' . $style . '"' . $attr_string . '>' . esc_html($value) . '</span>';
+
+            case 'lucide':
+                // Lucide: <i class="lucide lucide-star"></i>
+                return '<i class="lucide lucide-' . esc_attr($value) . '" style="' . $style . '"' . $attr_string . '></i>';
+
+            case 'emoji':
+                // Emoji: <span>😀</span>
+                return '<span class="cbd-emoji-icon" style="' . $style . ' font-size: 1.2em;"' . $attr_string . '>' . $value . '</span>';
+
+            case 'dashicons':
+            default:
+                // Dashicons (legacy): <span class="dashicons dashicons-star-filled"></span>
+                $class = strpos($value, 'dashicons-') === 0 ? $value : 'dashicons-' . $value;
+                return '<span class="dashicons ' . esc_attr($class) . '" style="' . $style . '"' . $attr_string . '></span>';
+        }
+    }
+
+    /**
+     * Parse icon value into type and value
+     *
+     * @param string $icon_value Icon value (JSON or legacy)
+     * @return array ['type' => 'dashicons', 'value' => 'star-filled']
+     */
+    private function parse_icon_value($icon_value) {
+        // Try to parse as JSON
+        $decoded = json_decode($icon_value, true);
+
+        if (is_array($decoded) && isset($decoded['type']) && isset($decoded['value'])) {
+            return $decoded;
+        }
+
+        // Legacy format: dashicons class name
+        // Examples: "dashicons-admin-generic" or "admin-generic"
+        if (strpos($icon_value, 'dashicons-') === 0) {
+            return array(
+                'type' => 'dashicons',
+                'value' => $icon_value
+            );
+        }
+
+        // Default to dashicons
+        return array(
+            'type' => 'dashicons',
+            'value' => 'dashicons-' . $icon_value
+        );
     }
 }
