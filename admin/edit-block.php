@@ -400,27 +400,51 @@ $config = $block['config'] ?: array(
                                                         <h3><?php _e('Icon auswählen', 'container-block-designer'); ?></h3>
                                                         <button type="button" class="cbd-close-icon-picker">&times;</button>
                                                     </div>
-                                                    
+
+                                                    <!-- Library Tabs -->
+                                                    <div class="cbd-icon-library-tabs">
+                                                        <button type="button" class="cbd-library-tab active" data-library="dashicons">
+                                                            <span class="dashicons dashicons-wordpress"></span>
+                                                            <?php _e('Dashicons', 'container-block-designer'); ?>
+                                                        </button>
+                                                        <button type="button" class="cbd-library-tab" data-library="fontawesome">
+                                                            <i class="fa-solid fa-font-awesome"></i>
+                                                            <?php _e('Font Awesome', 'container-block-designer'); ?>
+                                                        </button>
+                                                        <button type="button" class="cbd-library-tab" data-library="material">
+                                                            <span class="material-icons">star</span>
+                                                            <?php _e('Material Icons', 'container-block-designer'); ?>
+                                                        </button>
+                                                        <button type="button" class="cbd-library-tab" data-library="lucide">
+                                                            <i class="lucide lucide-zap"></i>
+                                                            <?php _e('Lucide', 'container-block-designer'); ?>
+                                                        </button>
+                                                        <button type="button" class="cbd-library-tab" data-library="emoji">
+                                                            <span style="font-size: 20px;">😀</span>
+                                                            <?php _e('Emojis', 'container-block-designer'); ?>
+                                                        </button>
+                                                    </div>
+
                                                     <!-- Search -->
                                                     <div class="cbd-icon-search">
                                                         <input type="text" placeholder="<?php _e('Icons durchsuchen...', 'container-block-designer'); ?>" class="cbd-icon-search-input">
                                                     </div>
-                                                    
-                                                    <!-- Icon Categories -->
+
+                                                    <!-- Icon Categories (for libraries with categories) -->
                                                     <div class="cbd-icon-categories">
-                                                        <button type="button" class="cbd-icon-category active" data-category="all"><?php _e('Alle', 'container-block-designer'); ?></button>
-                                                        <button type="button" class="cbd-icon-category" data-category="admin"><?php _e('Admin', 'container-block-designer'); ?></button>
-                                                        <button type="button" class="cbd-icon-category" data-category="post"><?php _e('Posts', 'container-block-designer'); ?></button>
-                                                        <button type="button" class="cbd-icon-category" data-category="media"><?php _e('Medien', 'container-block-designer'); ?></button>
-                                                        <button type="button" class="cbd-icon-category" data-category="misc"><?php _e('Verschiedenes', 'container-block-designer'); ?></button>
-                                                        <button type="button" class="cbd-icon-category" data-category="social"><?php _e('Social', 'container-block-designer'); ?></button>
+                                                        <!-- Categories will be populated by JavaScript based on active library -->
                                                     </div>
-                                                    
+
                                                     <!-- Icon Grid -->
                                                     <div class="cbd-icon-grid">
                                                         <!-- Icons will be populated by JavaScript -->
                                                     </div>
-                                                    
+
+                                                    <!-- Emoji Picker Container (only visible when emoji tab is active) -->
+                                                    <div class="cbd-emoji-picker-container" style="display: none;">
+                                                        <emoji-picker></emoji-picker>
+                                                    </div>
+
                                                     <div class="cbd-icon-picker-footer">
                                                         <button type="button" class="button button-secondary cbd-close-icon-picker"><?php _e('Abbrechen', 'container-block-designer'); ?></button>
                                                         <button type="button" class="button button-primary cbd-select-icon"><?php _e('Icon auswählen', 'container-block-designer'); ?></button>
