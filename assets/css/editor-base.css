@@ -54,7 +54,7 @@
 [class*="wp-block-container-block-designer"] .cbd-block-icon,
 [class*="wp-block-container-block-designer"] .cbd-block-number {
     position: absolute;
-    z-index: auto; /* Same level as outer block - consistent with frontend */
+    z-index: 0; /* Low level - behind other elements, consistent with frontend */
     pointer-events: none; /* Prevent interference with editor interactions */
 }
 

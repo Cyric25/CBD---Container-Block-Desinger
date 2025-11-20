@@ -38,14 +38,14 @@
 .cbd-container-block .cbd-block-icon {
     position: absolute;
     font-size: 1.2em;
-    z-index: auto; /* Same level as outer block - not in foreground */
+    z-index: 0; /* Low level - behind header and other elements */
 }
 
 /* Numbering positioning base */
 .cbd-container-block .cbd-block-number {
     position: absolute;
     font-weight: bold;
-    z-index: auto; /* Same level as outer block - not always in foreground */
+    z-index: 0; /* Low level - behind header and other elements */
     font-size: 0.9em;
 }
 
