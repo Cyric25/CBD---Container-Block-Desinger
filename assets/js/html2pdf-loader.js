@@ -127,15 +127,26 @@
                 containerBlocks = $(containerBlocks);
             }
 
+            console.log('CBD PDF: Starting PDF generation');
+            console.log('CBD PDF: html2pdf available:', typeof window.html2pdf !== 'undefined');
+            console.log('CBD PDF: Container blocks count:', containerBlocks.length);
+
             // Filter out nested containers to prevent duplication
             containerBlocks = containerBlocks.filter(function() {
                 var isNested = $(this).closest('.cbd-container-content').length > 0;
                 return !isNested;
             });
 
+            console.log('CBD PDF: After filtering nested, count:', containerBlocks.length);
+
             if (containerBlocks.length === 0) {
                 alert('Keine Container-Blöcke zum Exportieren gefunden.');
                 return false;
+            }
+
+            // Verify html2pdf is available
+            if (typeof window.html2pdf === 'undefined') {
+                throw new Error('html2pdf.js ist nicht geladen');
             }
 
             // Create wrapper for all blocks
@@ -144,10 +155,14 @@
             // Process each block
             containerBlocks.each(function(index) {
                 var $block = $(this);
+                console.log('CBD PDF: Processing block', index + 1, 'of', containerBlocks.length);
+
                 var $clone = $block.clone();
+                console.log('CBD PDF: Block', index + 1, 'cloned, HTML length:', $clone.html().length);
 
                 // Expand collapsed content
                 expandContent($clone);
+                console.log('CBD PDF: Block', index + 1, 'content expanded');
 
                 // Hide action buttons
                 $clone.find('.cbd-action-buttons').remove();
@@ -159,17 +174,28 @@
                 }
 
                 $wrapper.append($clone);
+                console.log('CBD PDF: Block', index + 1, 'appended to wrapper');
             });
 
-            // Add wrapper to body (hidden)
+            console.log('CBD PDF: Wrapper created with', $wrapper.children().length, 'blocks');
+            console.log('CBD PDF: Wrapper HTML length:', $wrapper.html().length);
+
+            // Add wrapper to body (positioned for rendering)
+            // Use fixed positioning on screen but hidden from view
             $wrapper.css({
-                position: 'absolute',
-                left: '-9999px',
+                position: 'fixed',
                 top: '0',
+                left: '0',
                 width: '794px', // A4 width in pixels (210mm)
-                backgroundColor: '#fff'
+                backgroundColor: '#fff',
+                zIndex: '-1', // Behind everything
+                opacity: '0.01', // Nearly invisible but renderable
+                pointerEvents: 'none', // No interaction
+                overflow: 'visible'
             });
             $('body').append($wrapper);
+
+            console.log('CBD PDF: Wrapper appended to body');
 
             // Configure html2pdf options
             var opt = {
@@ -191,20 +217,26 @@
             };
 
             // Generate PDF
+            console.log('CBD PDF: Starting html2pdf generation...');
+            console.log('CBD PDF: Wrapper element:', $wrapper[0]);
+            console.log('CBD PDF: Options:', opt);
+
             html2pdf()
                 .set(opt)
                 .from($wrapper[0])
                 .save()
                 .then(function() {
+                    console.log('CBD PDF: PDF generation successful');
                     // Remove wrapper
                     $wrapper.remove();
                 })
                 .catch(function(error) {
-                    console.error('CBD: PDF generation error:', error);
+                    console.error('CBD PDF: Generation error:', error);
                     $wrapper.remove();
                     alert('Fehler beim PDF erstellen: ' + error.message);
                 });
 
+            console.log('CBD PDF: html2pdf() called, waiting for completion...');
             return true;
 
         } catch (error) {
