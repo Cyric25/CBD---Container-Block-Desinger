@@ -180,36 +180,43 @@
             console.log('CBD PDF: Wrapper created with', $wrapper.children().length, 'blocks');
             console.log('CBD PDF: Wrapper HTML length:', $wrapper.html().length);
 
-            // Add wrapper to body (positioned for rendering)
-            // Must be fully visible (opacity: 1) for html2canvas to work
-            // Position on screen but behind everything with low z-index
+            // Add wrapper to body - VISIBLE during PDF generation
+            // html2canvas requires elements to be in viewport
             $wrapper.css({
                 position: 'fixed',
                 top: '0',
                 left: '0',
                 width: '794px', // A4 width in pixels (210mm)
+                maxHeight: '100vh',
                 backgroundColor: '#fff',
-                zIndex: '-9999', // Behind everything
-                opacity: '1', // MUST be 1 for html2canvas to render
-                pointerEvents: 'none', // No interaction
-                overflow: 'visible',
-                visibility: 'visible' // Explicitly visible
+                opacity: '1',
+                overflow: 'auto', // Allow scrolling for html2canvas
+                zIndex: '999999', // On top during generation
+                boxShadow: '0 0 0 9999px rgba(0,0,0,0.8)' // Dark overlay behind
             });
             $('body').append($wrapper);
 
             console.log('CBD PDF: Wrapper appended to body');
             console.log('CBD PDF: Wrapper dimensions:', $wrapper[0].offsetWidth, 'x', $wrapper[0].offsetHeight);
 
+            // Add loading message
+            var $loadingMsg = $('<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;padding:30px;border-radius:8px;z-index:9999999;box-shadow:0 4px 20px rgba(0,0,0,0.3);text-align:center;"><h3 style="margin:0 0 10px 0;">PDF wird erstellt...</h3><p style="margin:0;color:#666;">Bitte warten Sie einen Moment.</p></div>');
+            $('body').append($loadingMsg);
+
             // Configure html2pdf options
             var opt = {
-                margin: [10, 10, 10, 10], // [top, left, bottom, right] in mm
+                margin: [10, 10, 10, 10],
                 filename: 'container-blocks-' + new Date().toISOString().slice(0, 10) + '.pdf',
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: {
                     scale: quality,
                     useCORS: true,
                     logging: false,
-                    letterRendering: true
+                    letterRendering: true,
+                    scrollY: 0,
+                    scrollX: 0,
+                    windowWidth: 794,
+                    windowHeight: $wrapper[0].scrollHeight
                 },
                 jsPDF: {
                     unit: 'mm',
@@ -224,22 +231,27 @@
             console.log('CBD PDF: Wrapper element:', $wrapper[0]);
             console.log('CBD PDF: Options:', opt);
 
-            html2pdf()
-                .set(opt)
-                .from($wrapper[0])
-                .save()
-                .then(function() {
-                    console.log('CBD PDF: PDF generation successful');
-                    // Remove wrapper
-                    $wrapper.remove();
-                })
-                .catch(function(error) {
-                    console.error('CBD PDF: Generation error:', error);
-                    $wrapper.remove();
-                    alert('Fehler beim PDF erstellen: ' + error.message);
-                });
+            // Small delay to ensure rendering
+            setTimeout(function() {
+                html2pdf()
+                    .set(opt)
+                    .from($wrapper[0])
+                    .save()
+                    .then(function() {
+                        console.log('CBD PDF: PDF generation successful');
+                        // Remove wrapper and loading message
+                        $wrapper.remove();
+                        $loadingMsg.remove();
+                    })
+                    .catch(function(error) {
+                        console.error('CBD PDF: Generation error:', error);
+                        $wrapper.remove();
+                        $loadingMsg.remove();
+                        alert('Fehler beim PDF erstellen: ' + error.message);
+                    });
+            }, 100);
 
-            console.log('CBD PDF: html2pdf() called, waiting for completion...');
+            console.log('CBD PDF: html2pdf() will start after render delay...');
             return true;
 
         } catch (error) {
