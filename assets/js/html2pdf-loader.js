@@ -216,6 +216,41 @@
             var $loadingMsg = $('<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;padding:30px;border-radius:8px;z-index:9999999;box-shadow:0 4px 20px rgba(0,0,0,0.3);text-align:center;"><h3 style="margin:0 0 10px 0;">PDF wird erstellt...</h3><p style="margin:0;color:#666;">Bitte warten Sie einen Moment.</p></div>');
             $('body').append($loadingMsg);
 
+            // THIRD PASS: Expand after wrapper is in DOM (critical for proper rendering)
+            console.log('CBD PDF: Running THIRD expansion pass (after DOM insertion)...');
+
+            // Check which blocks are still collapsed
+            var collapsedBlocks = $wrapper.find('.cbd-collapsed');
+            console.log('CBD PDF: Found', collapsedBlocks.length, 'elements with .cbd-collapsed after DOM insertion');
+
+            var collapsedContainers = $wrapper.find('[data-wp-interactive="container-block-designer"]').filter(function() {
+                return $(this).hasClass('cbd-collapsed');
+            });
+            console.log('CBD PDF: Found', collapsedContainers.length, 'CBD containers still collapsed');
+
+            // Log details of collapsed containers
+            collapsedContainers.each(function(index) {
+                var $container = $(this);
+                console.log('CBD PDF: Collapsed container', index + 1, '- ID:', $container.attr('id'), 'Classes:', $container.attr('class'));
+
+                // Check if content is hidden
+                var $content = $container.find('.cbd-container-content, .cbd-content').first();
+                if ($content.length > 0) {
+                    var styles = $content.attr('style') || '';
+                    var display = $content.css('display');
+                    var visibility = $content.css('visibility');
+                    console.log('CBD PDF: - Content display:', display, 'visibility:', visibility, 'has style attr:', styles.length > 0);
+                }
+            });
+
+            // Run expansion again
+            expandContent($wrapper);
+
+            // Verify expansion worked
+            var stillCollapsed = $wrapper.find('.cbd-collapsed');
+            console.log('CBD PDF: After third pass,', stillCollapsed.length, 'elements still have .cbd-collapsed');
+            console.log('CBD PDF: Third expansion complete');
+
             // Configure html2pdf options
             var opt = {
                 margin: [10, 10, 10, 10],
@@ -382,10 +417,22 @@
         $.each(contentSelectors, function(i, selector) {
             $element.find(selector).each(function() {
                 var $content = $(this);
-                // Force with !important
-                $content.attr('style', function(idx, style) {
-                    return (style || '') + ';display:block !important;visibility:visible !important;opacity:1 !important;max-height:none !important;overflow:visible !important;height:auto !important;';
-                });
+
+                // Get current style and clean it
+                var currentStyle = $content.attr('style') || '';
+
+                // Remove problematic properties from inline styles
+                currentStyle = currentStyle
+                    .replace(/display\s*:\s*none\s*!?important?\s*;?/gi, '')
+                    .replace(/visibility\s*:\s*hidden\s*!?important?\s*;?/gi, '')
+                    .replace(/opacity\s*:\s*0\s*!?important?\s*;?/gi, '')
+                    .replace(/max-height\s*:\s*0\s*!?important?\s*;?/gi, '');
+
+                // Add our expansion styles with !important
+                var expansionStyles = 'display:block !important;visibility:visible !important;opacity:1 !important;max-height:none !important;overflow:visible !important;height:auto !important;';
+
+                $content.attr('style', currentStyle + ';' + expansionStyles);
+
                 // Also remove problematic attributes
                 $content.removeAttr('aria-hidden');
                 $content.removeClass('cbd-collapsed');
