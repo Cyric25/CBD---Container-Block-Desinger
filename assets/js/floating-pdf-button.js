@@ -79,29 +79,53 @@
                         });
                     });
 
-                    // Filter out empty Gutenberg containers and only include containers with actual content
-                    // PLUS: Filter out nested containers - only get top-level containers
+                    // Filter: Only get TOP-LEVEL containers (not nested)
+                    // IMPORTANT: We must get ALL top-level blocks, even if collapsed
                     var containerBlocks = $(".cbd-container:visible").filter(function() {
                         var $this = $(this);
 
-                        // First check: Is this a top-level container?
-                        // A container is nested if it's inside another container's CONTENT area
-                        var isNested = $this.closest('.cbd-container-content').length > 0;
-                        if (isNested) {
-                            console.log('[CBD PDF] Filtering out nested container:', this.id);
-                            return false; // Skip nested containers
+                        // Check 1: Is this nested inside another container's CONTENT?
+                        // We check for .cbd-container-content, .cbd-content, .cbd-collapsible-content
+                        var $parentContentArea = $this.parent().closest('.cbd-container-content, .cbd-content, .cbd-collapsible-content');
+
+                        if ($parentContentArea.length > 0) {
+                            // This container is inside a content area, so it's nested
+                            console.log('[CBD PDF] Filtering out nested container:', this.id || '(no id)');
+                            return false;
                         }
 
-                        // Second check: Does it have actual content?
-                        var hasTitle = $this.find('.cbd-block-title').text().trim().length > 0;
-                        var hasContent = $this.find('.cbd-container-content').text().trim().length > 0;
-                        var hasId = this.id && this.id.length > 0;
+                        // Check 2: Must be a real container with the interactive attribute
+                        var hasInteractiveAttr = $this.find('[data-wp-interactive="container-block-designer"]').length > 0 ||
+                                                 $this.is('[data-wp-interactive="container-block-designer"]');
 
-                        // Include only top-level containers that have either title, content, or a proper ID
-                        return hasTitle || hasContent || hasId;
+                        if (!hasInteractiveAttr) {
+                            console.log('[CBD PDF] Filtering out non-interactive container:', this.id || '(no id)');
+                            return false;
+                        }
+
+                        // Check 3: Must have actual content (even if collapsed)
+                        var hasContent = $this.find('.cbd-container-block, .cbd-container-content').length > 0;
+
+                        if (!hasContent) {
+                            console.log('[CBD PDF] Filtering out empty container:', this.id || '(no id)');
+                            return false;
+                        }
+
+                        // This is a valid top-level container
+                        console.log('[CBD PDF] INCLUDING top-level container:', this.id || '(no id)');
+                        return true;
                     });
 
                     console.log('[CBD PDF] After filtering, top-level containers:', containerBlocks.length);
+
+                    // DEBUG: Log which containers were selected
+                    containerBlocks.each(function(i) {
+                        console.log('[CBD PDF] Selected Block', i + 1, ':', {
+                            id: this.id || '(no id)',
+                            classes: this.className,
+                            hasCollapsedClass: $(this).hasClass('cbd-collapsed')
+                        });
+                    });
 
 
                     if (containerBlocks.length === 0) {
