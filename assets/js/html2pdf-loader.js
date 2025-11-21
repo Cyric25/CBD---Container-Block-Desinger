@@ -249,6 +249,36 @@
             // Verify expansion worked
             var stillCollapsed = $wrapper.find('.cbd-collapsed');
             console.log('CBD PDF: After third pass,', stillCollapsed.length, 'elements still have .cbd-collapsed');
+
+            // CRITICAL: Check actual computed styles of ALL content areas
+            console.log('CBD PDF: Checking computed styles of content areas...');
+            $wrapper.find('[data-wp-interactive="container-block-designer"]').each(function(index) {
+                var $container = $(this);
+                var $contentAreas = $container.find('.cbd-container-content, .cbd-content, .cbd-collapsible-content');
+
+                $contentAreas.each(function() {
+                    var $content = $(this);
+                    var computed = window.getComputedStyle(this);
+                    console.log('CBD PDF: Container', index + 1, 'content area:');
+                    console.log('  - display:', computed.display);
+                    console.log('  - visibility:', computed.visibility);
+                    console.log('  - opacity:', computed.opacity);
+                    console.log('  - height:', computed.height);
+                    console.log('  - max-height:', computed.maxHeight);
+                    console.log('  - overflow:', computed.overflow);
+
+                    // If hidden, force it visible with maximum priority
+                    if (computed.display === 'none' || computed.visibility === 'hidden' || computed.opacity === '0') {
+                        console.warn('CBD PDF: Container', index + 1, 'content is HIDDEN! Forcing visible...');
+                        this.style.setProperty('display', 'block', 'important');
+                        this.style.setProperty('visibility', 'visible', 'important');
+                        this.style.setProperty('opacity', '1', 'important');
+                        this.style.setProperty('max-height', 'none', 'important');
+                        this.style.setProperty('height', 'auto', 'important');
+                    }
+                });
+            });
+
             console.log('CBD PDF: Third expansion complete');
 
             // Configure html2pdf options
