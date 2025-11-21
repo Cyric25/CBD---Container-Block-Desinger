@@ -188,6 +188,11 @@
             console.log('CBD PDF: Wrapper created with', $wrapper.children().length, 'blocks');
             console.log('CBD PDF: Wrapper HTML length:', $wrapper.html().length);
 
+            // SECOND PASS: Expand everything again after all blocks are assembled
+            console.log('CBD PDF: Running second expansion pass on complete wrapper...');
+            expandContent($wrapper);
+            console.log('CBD PDF: Second expansion complete');
+
             // Add wrapper to body - VISIBLE during PDF generation
             // html2canvas requires elements to be in viewport
             $wrapper.css({
@@ -361,59 +366,78 @@
 
         console.log('CBD PDF: Expanding content for element');
 
-        // Remove ALL cbd-collapsed classes (for collapsed containers)
+        // STEP 1: Remove ALL collapsed classes
         $element.find('.cbd-collapsed').removeClass('cbd-collapsed');
-        $element.removeClass('cbd-collapsed'); // Also from root element
+        $element.removeClass('cbd-collapsed');
 
-        // Expand ALL CBD containers (both .cbd-container and nested)
-        $element.find('[data-wp-interactive="container-block-designer"]').each(function() {
-            var $container = $(this);
+        // STEP 2: Force expand ALL content areas using multiple approaches
+        // Approach A: By class selectors
+        var contentSelectors = [
+            '.cbd-container-content',
+            '.cbd-content',
+            '.cbd-collapsible-content',
+            '[data-wp-class--cbd-collapsed]'
+        ];
 
-            // Remove collapsed state
-            $container.removeClass('cbd-collapsed');
-
-            // Find content areas - try multiple selectors
-            var $contentAreas = $container.find('.cbd-container-content, .cbd-content, .cbd-collapsible-content');
-
-            $contentAreas.each(function() {
+        $.each(contentSelectors, function(i, selector) {
+            $element.find(selector).each(function() {
                 var $content = $(this);
-                // Force display with !important via attr
-                $content.attr('style', function(i, style) {
+                // Force with !important
+                $content.attr('style', function(idx, style) {
                     return (style || '') + ';display:block !important;visibility:visible !important;opacity:1 !important;max-height:none !important;overflow:visible !important;height:auto !important;';
                 });
+                // Also remove problematic attributes
+                $content.removeAttr('aria-hidden');
+                $content.removeClass('cbd-collapsed');
             });
         });
 
-        // Expand ALL nested .cbd-container elements
+        // STEP 3: Expand ALL containers by data attribute
+        $element.find('[data-wp-interactive="container-block-designer"]').each(function() {
+            var $container = $(this);
+            $container.removeClass('cbd-collapsed');
+
+            // Remove data attributes that might control collapsed state
+            if ($container.attr('data-wp-context')) {
+                try {
+                    var context = JSON.parse($container.attr('data-wp-context'));
+                    context.isCollapsed = false;
+                    $container.attr('data-wp-context', JSON.stringify(context));
+                } catch(e) {
+                    console.warn('CBD PDF: Could not parse wp-context:', e);
+                }
+            }
+        });
+
+        // STEP 4: Expand ALL .cbd-container elements (nested or not)
         $element.find('.cbd-container').each(function() {
             $(this).removeClass('cbd-collapsed');
         });
 
-        // Expand details elements
+        // STEP 5: Expand details elements
         $element.find('details').each(function() {
             this.open = true;
         });
 
-        // Show ALL hidden elements (except action buttons and menus)
-        $element.find('[style*="display: none"], [style*="visibility: hidden"]').each(function() {
+        // STEP 6: Show ALL hidden elements (except UI elements)
+        $element.find('[style*="display: none"], [style*="display:none"], [style*="visibility: hidden"], [style*="visibility:hidden"]').each(function() {
             var $elem = $(this);
             if (!$elem.hasClass('cbd-action-buttons') &&
                 !$elem.hasClass('cbd-action-btn') &&
                 !$elem.hasClass('cbd-header-menu') &&
                 !$elem.hasClass('cbd-container-number') &&
+                !$elem.hasClass('cbd-collapse-toggle') &&
                 !$elem.hasClass('dashicons')) {
-                $elem.css({
-                    'display': 'block',
-                    'visibility': 'visible',
-                    'opacity': '1'
+                $elem.attr('style', function(idx, style) {
+                    return (style || '') + ';display:block !important;visibility:visible !important;opacity:1 !important;';
                 });
             }
         });
 
-        // Force expand any aria-hidden elements
+        // STEP 7: Remove ALL aria-hidden
         $element.find('[aria-hidden="true"]').removeAttr('aria-hidden');
 
-        console.log('CBD PDF: Content expansion complete');
+        console.log('CBD PDF: Content expansion complete - all steps executed');
     }
 
     // Start loading
