@@ -256,9 +256,14 @@
                 // Use html2canvas directly and create PDF with jsPDF
                 // This bypasses html2pdf.js which seems to have issues
 
-                // Check for jsPDF (html2pdf bundles it)
-                var jsPDF = window.jspdf ? window.jspdf.jsPDF : (window.jsPDF || null);
-                console.log('CBD PDF: jsPDF available:', !!jsPDF);
+                // Check for jsPDF (try multiple locations)
+                var jsPDF = window.jspdf && window.jspdf.jsPDF ? window.jspdf.jsPDF :
+                            (window.jsPDF ? window.jsPDF : null);
+
+                console.log('CBD PDF: window.jspdf:', typeof window.jspdf);
+                console.log('CBD PDF: window.jspdf.jsPDF:', window.jspdf ? typeof window.jspdf.jsPDF : 'N/A');
+                console.log('CBD PDF: window.jsPDF:', typeof window.jsPDF);
+                console.log('CBD PDF: jsPDF resolved to:', !!jsPDF);
                 console.log('CBD PDF: html2canvas available:', typeof html2canvas !== 'undefined');
 
                 if (typeof html2canvas !== 'undefined' && jsPDF) {

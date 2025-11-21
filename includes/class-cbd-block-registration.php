@@ -362,12 +362,23 @@ class CBD_Block_Registration {
             true
         );
 
+        // PDF Export: Load jsPDF library separately (for direct canvas-to-PDF conversion)
+        if (!is_admin()) {
+            wp_enqueue_script(
+                'jspdf',
+                'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+                array(),
+                '2.5.1',
+                true
+            );
+        }
+
         // PDF Export: Load html2pdf.js with fallback mechanism (text-based PDFs)
         if (!is_admin()) {
             wp_enqueue_script(
                 'cbd-html2pdf-loader',
                 CBD_PLUGIN_URL . 'assets/js/html2pdf-loader.js',
-                array(),
+                array('html2canvas', 'jspdf'),
                 CBD_VERSION,
                 true
             );
