@@ -252,30 +252,61 @@
 
             // CRITICAL: Check actual computed styles of ALL content areas
             console.log('CBD PDF: Checking computed styles of content areas...');
-            $wrapper.find('[data-wp-interactive="container-block-designer"]').each(function(index) {
-                var $container = $(this);
-                var $contentAreas = $container.find('.cbd-container-content, .cbd-content, .cbd-collapsible-content');
 
-                $contentAreas.each(function() {
-                    var $content = $(this);
-                    var computed = window.getComputedStyle(this);
-                    console.log('CBD PDF: Container', index + 1, 'content area:');
-                    console.log('  - display:', computed.display);
-                    console.log('  - visibility:', computed.visibility);
-                    console.log('  - opacity:', computed.opacity);
-                    console.log('  - height:', computed.height);
-                    console.log('  - max-height:', computed.maxHeight);
-                    console.log('  - overflow:', computed.overflow);
+            // IMPORTANT: Iterate through TOP-LEVEL blocks only (direct children of wrapper)
+            $wrapper.children().each(function(blockIndex) {
+                var $topBlock = $(this);
+                console.log('CBD PDF: === Checking TOP-LEVEL Block', blockIndex + 1, '===');
+                console.log('CBD PDF: Block', blockIndex + 1, 'classes:', $topBlock.attr('class'));
 
-                    // If hidden, force it visible with maximum priority
-                    if (computed.display === 'none' || computed.visibility === 'hidden' || computed.opacity === '0') {
-                        console.warn('CBD PDF: Container', index + 1, 'content is HIDDEN! Forcing visible...');
-                        this.style.setProperty('display', 'block', 'important');
-                        this.style.setProperty('visibility', 'visible', 'important');
-                        this.style.setProperty('opacity', '1', 'important');
-                        this.style.setProperty('max-height', 'none', 'important');
-                        this.style.setProperty('height', 'auto', 'important');
-                    }
+                // Find ALL interactive containers in this block (including nested)
+                var $containers = $topBlock.find('[data-wp-interactive="container-block-designer"]');
+                // Also check if the top block itself is a container
+                if ($topBlock.is('[data-wp-interactive="container-block-designer"]')) {
+                    $containers = $containers.add($topBlock);
+                }
+
+                console.log('CBD PDF: Block', blockIndex + 1, 'contains', $containers.length, 'container(s)');
+
+                $containers.each(function(containerIndex) {
+                    var $container = $(this);
+                    console.log('CBD PDF: - Container', containerIndex + 1, 'in Block', blockIndex + 1);
+
+                    // Find content areas in THIS specific container (not nested ones)
+                    var $contentAreas = $container.children('.cbd-container-content, .cbd-content, .cbd-collapsible-content');
+
+                    console.log('CBD PDF:   Found', $contentAreas.length, 'direct content area(s)');
+
+                    $contentAreas.each(function(contentIndex) {
+                        var $content = $(this);
+                        var computed = window.getComputedStyle(this);
+
+                        console.log('CBD PDF:   Content area', contentIndex + 1, ':');
+                        console.log('CBD PDF:     - display:', computed.display);
+                        console.log('CBD PDF:     - visibility:', computed.visibility);
+                        console.log('CBD PDF:     - opacity:', computed.opacity);
+                        console.log('CBD PDF:     - height:', computed.height);
+                        console.log('CBD PDF:     - max-height:', computed.maxHeight);
+                        console.log('CBD PDF:     - overflow:', computed.overflow);
+                        console.log('CBD PDF:     - has inline style:', ($content.attr('style') || '').length > 0);
+
+                        // If hidden, force it visible with maximum priority
+                        if (computed.display === 'none' || computed.visibility === 'hidden' || computed.opacity === '0' || computed.maxHeight === '0px') {
+                            console.warn('CBD PDF:     ⚠️ HIDDEN! Forcing visible with setProperty...');
+                            this.style.setProperty('display', 'block', 'important');
+                            this.style.setProperty('visibility', 'visible', 'important');
+                            this.style.setProperty('opacity', '1', 'important');
+                            this.style.setProperty('max-height', 'none', 'important');
+                            this.style.setProperty('height', 'auto', 'important');
+                            this.style.setProperty('overflow', 'visible', 'important');
+
+                            // Verify the fix worked
+                            var newComputed = window.getComputedStyle(this);
+                            console.log('CBD PDF:     ✓ After fix - display:', newComputed.display, 'visibility:', newComputed.visibility);
+                        } else {
+                            console.log('CBD PDF:     ✓ Visible');
+                        }
+                    });
                 });
             });
 
