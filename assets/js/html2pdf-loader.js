@@ -131,13 +131,9 @@
             console.log('CBD PDF: html2pdf available:', typeof window.html2pdf !== 'undefined');
             console.log('CBD PDF: Container blocks count:', containerBlocks.length);
 
-            // Filter out nested containers to prevent duplication
-            containerBlocks = containerBlocks.filter(function() {
-                var isNested = $(this).closest('.cbd-container-content').length > 0;
-                return !isNested;
-            });
-
-            console.log('CBD PDF: After filtering nested, count:', containerBlocks.length);
+            // IMPORTANT: Do NOT filter nested containers - we want ALL blocks in PDF
+            // Users explicitly want nested blocks to appear in the export
+            console.log('CBD PDF: Including ALL blocks (nested and top-level):', containerBlocks.length);
 
             if (containerBlocks.length === 0) {
                 alert('Keine Container-Blöcke zum Exportieren gefunden.');
@@ -359,25 +355,38 @@
         }
     }
 
-    // Helper: Expand collapsed content
+    // Helper: Expand collapsed content - COMPREHENSIVE expansion
     function expandContent($element) {
         var $ = window.jQuery || window.$;
 
-        // Expand all collapsed CBD containers
+        console.log('CBD PDF: Expanding content for element');
+
+        // Remove ALL cbd-collapsed classes (for collapsed containers)
+        $element.find('.cbd-collapsed').removeClass('cbd-collapsed');
+        $element.removeClass('cbd-collapsed'); // Also from root element
+
+        // Expand ALL CBD containers (both .cbd-container and nested)
         $element.find('[data-wp-interactive="container-block-designer"]').each(function() {
             var $container = $(this);
-            var $content = $container.find('.cbd-container-content').first();
 
-            if ($content.length > 0) {
-                $content.css({
-                    'display': 'block',
-                    'visibility': 'visible',
-                    'opacity': '1',
-                    'max-height': 'none',
-                    'overflow': 'visible',
-                    'height': 'auto'
+            // Remove collapsed state
+            $container.removeClass('cbd-collapsed');
+
+            // Find content areas - try multiple selectors
+            var $contentAreas = $container.find('.cbd-container-content, .cbd-content, .cbd-collapsible-content');
+
+            $contentAreas.each(function() {
+                var $content = $(this);
+                // Force display with !important via attr
+                $content.attr('style', function(i, style) {
+                    return (style || '') + ';display:block !important;visibility:visible !important;opacity:1 !important;max-height:none !important;overflow:visible !important;height:auto !important;';
                 });
-            }
+            });
+        });
+
+        // Expand ALL nested .cbd-container elements
+        $element.find('.cbd-container').each(function() {
+            $(this).removeClass('cbd-collapsed');
         });
 
         // Expand details elements
@@ -385,18 +394,26 @@
             this.open = true;
         });
 
-        // Show hidden elements (except action buttons)
+        // Show ALL hidden elements (except action buttons and menus)
         $element.find('[style*="display: none"], [style*="visibility: hidden"]').each(function() {
             var $elem = $(this);
             if (!$elem.hasClass('cbd-action-buttons') &&
                 !$elem.hasClass('cbd-action-btn') &&
+                !$elem.hasClass('cbd-header-menu') &&
+                !$elem.hasClass('cbd-container-number') &&
                 !$elem.hasClass('dashicons')) {
                 $elem.css({
                     'display': 'block',
-                    'visibility': 'visible'
+                    'visibility': 'visible',
+                    'opacity': '1'
                 });
             }
         });
+
+        // Force expand any aria-hidden elements
+        $element.find('[aria-hidden="true"]').removeAttr('aria-hidden');
+
+        console.log('CBD PDF: Content expansion complete');
     }
 
     // Start loading
