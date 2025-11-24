@@ -156,6 +156,66 @@ composer analyze
    - Check error logs at: `wp-content/debug.log`
    - Block registration logs prefixed with `[CBD Block Registration]`
 
+### Plugin ZIP Creation
+
+**CRITICAL: Always run syntax check before creating plugin ZIP!**
+
+CDB-Designer uses pure PHP with vanilla JavaScript (no build process required), but syntax checking is mandatory.
+
+**Create distributable plugin ZIP:**
+
+```bash
+# ALWAYS run syntax check first!
+for file in *.php includes/*.php includes/Database/*.php; do php -l "$file" || exit 1; done && node create-plugin-zip.js
+```
+
+**Syntax Check (MANDATORY before ZIP creation):**
+
+```bash
+# Check all PHP files for syntax errors
+for file in *.php includes/*.php includes/Database/*.php; do
+  echo "Checking $file..."
+  php -l "$file" || exit 1
+done
+```
+
+**Complete workflow (recommended):**
+
+```bash
+# 1. Syntax check all PHP files
+for file in *.php includes/*.php includes/Database/*.php; do
+  php -l "$file" || exit 1
+done
+
+# 2. If no errors: Create plugin ZIP
+node create-plugin-zip.js
+
+# 3. Commit and push
+git add .
+git commit -m "Your commit message"
+git push origin main
+```
+
+**Why this matters:**
+- Prevents distributing broken PHP code
+- Catches syntax errors in main plugin file, includes, and Database classes
+- Ensures WordPress won't show fatal errors
+- Required before every ZIP creation
+
+**What gets checked:**
+- Plugin main file: `container-block-designer.php`
+- All files in `includes/` directory
+- All files in `includes/Database/` directory
+- Syntax validation via `php -l`
+- Exit immediately on first error (`|| exit 1`)
+
+**If syntax error found:**
+- Fix the error
+- Re-run syntax check
+- Only then create ZIP
+
+**ZIP output location:** `container-block-designer-v{version}.zip` (plugin root)
+
 ## Important Files
 
 ### Core PHP Files
