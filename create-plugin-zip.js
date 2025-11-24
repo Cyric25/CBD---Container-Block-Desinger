@@ -17,6 +17,7 @@ const includePaths = [
     'admin',
     'assets',
     'includes',
+    'vendor',  // IMPORTANT: Composer dependencies (TCPDF)
     'languages',
     'container-block-designer.php',
     'LICENSE',
