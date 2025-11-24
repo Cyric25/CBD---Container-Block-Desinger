@@ -1,16 +1,29 @@
 /**
  * ZIP Creator for Container Block Designer Plugin
- * Creates a WordPress-ready plugin ZIP file
+ * Creates a WordPress-ready plugin ZIP file with version number
+ * Keeps maximum 2 ZIP files (current + previous backup)
  */
 
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
+// Read version from main plugin file
+function getPluginVersion() {
+    const mainFile = path.join(__dirname, 'container-block-designer.php');
+    const content = fs.readFileSync(mainFile, 'utf8');
+    const versionMatch = content.match(/define\('CBD_VERSION',\s*'([^']+)'\)/);
+    if (versionMatch && versionMatch[1]) {
+        return versionMatch[1];
+    }
+    throw new Error('Could not find CBD_VERSION in container-block-designer.php');
+}
+
 // Configuration
 const pluginName = 'container-block-designer';
+const pluginVersion = getPluginVersion();
 const outputDir = path.join(__dirname, 'dist');
-const outputPath = path.join(outputDir, `${pluginName}.zip`);
+const outputPath = path.join(outputDir, `${pluginName}-${pluginVersion}.zip`);
 
 // Files and directories to include
 const includePaths = [
@@ -61,15 +74,33 @@ if (!fs.existsSync(outputDir)) {
     console.log(`✓ Created output directory: ${outputDir}`);
 }
 
-// Remove old ZIP if exists
+// Manage ZIP file versions (keep max 2: current + previous backup)
+const zipFiles = fs.readdirSync(outputDir)
+    .filter(file => file.startsWith(`${pluginName}-`) && file.endsWith('.zip'))
+    .map(file => ({
+        name: file,
+        path: path.join(outputDir, file),
+        mtime: fs.statSync(path.join(outputDir, file)).mtime
+    }))
+    .sort((a, b) => a.mtime - b.mtime); // Sort oldest first
+
+// If we already have 2 or more ZIPs, delete the oldest ones until only 1 remains
+while (zipFiles.length >= 2) {
+    const oldestZip = zipFiles.shift();
+    fs.unlinkSync(oldestZip.path);
+    console.log(`✓ Removed old backup: ${oldestZip.name}`);
+}
+
+// If the new version already exists, remove it (e.g., re-running script)
 if (fs.existsSync(outputPath)) {
     fs.unlinkSync(outputPath);
-    console.log(`✓ Removed old ZIP file`);
+    console.log(`✓ Removed existing ZIP for version ${pluginVersion}`);
 }
 
 // Create ZIP archive
 console.log(`\n📦 Creating WordPress Plugin ZIP...`);
 console.log(`Plugin: ${pluginName}`);
+console.log(`Version: ${pluginVersion}`);
 console.log(`Output: ${outputPath}\n`);
 
 const output = fs.createWriteStream(outputPath);
