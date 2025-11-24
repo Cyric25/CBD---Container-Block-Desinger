@@ -382,6 +382,25 @@ class CBD_Block_Registration {
                 CBD_VERSION,
                 true
             );
+
+            // PDF Export: Server-side generation (NEW - text-based searchable PDFs)
+            wp_enqueue_script(
+                'cbd-pdf-server-side',
+                CBD_PLUGIN_URL . 'assets/js/pdf-server-side.js',
+                array('jquery'),
+                CBD_VERSION,
+                true
+            );
+
+            // Localize script with AJAX URL and nonce
+            wp_localize_script(
+                'cbd-pdf-server-side',
+                'cbdPDFData',
+                array(
+                    'ajaxurl' => admin_url('admin-ajax.php'),
+                    'nonce' => wp_create_nonce('cbd-pdf-nonce')
+                )
+            );
         }
 
         // REMOVED: Old inline scripts (container-blocks-inline.js)

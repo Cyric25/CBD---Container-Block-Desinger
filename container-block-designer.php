@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://example.com/container-block-designer
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 2.8.0
+ * Version: 2.8.1
  * Author: Your Name
  * Author URI: https://example.com
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '2.8.0');
+define('CBD_VERSION', '2.8.1');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -105,6 +105,9 @@ class ContainerBlockDesigner {
 
         // LaTeX Parser für mathematische Formeln
         require_once CBD_PLUGIN_DIR . 'includes/class-latex-parser.php';
+
+        // PDF Generator für serverseitige PDF-Erstellung
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-pdf-generator.php';
 
         // Admin-Bereich nur im Backend laden
         if (is_admin()) {

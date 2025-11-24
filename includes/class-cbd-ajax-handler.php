@@ -32,11 +32,15 @@ class CBD_Ajax_Handler {
         // Block-Abruf für Editor
         add_action('wp_ajax_cbd_get_blocks', array($this, 'get_blocks'));
         add_action('wp_ajax_nopriv_cbd_get_blocks', array($this, 'get_blocks_nopriv'));
-        
+
         // Weitere Admin AJAX-Handler
         add_action('wp_ajax_cbd_save_block', array($this, 'save_block'));
         add_action('wp_ajax_cbd_delete_block', array($this, 'delete_block'));
         add_action('wp_ajax_cbd_duplicate_block', array($this, 'duplicate_block'));
+
+        // PDF-Generierung (für eingeloggte Benutzer und Frontend)
+        add_action('wp_ajax_cbd_generate_pdf', array($this, 'generate_pdf'));
+        add_action('wp_ajax_nopriv_cbd_generate_pdf', array($this, 'generate_pdf'));
     }
     
     /**
@@ -264,5 +268,54 @@ class CBD_Ajax_Handler {
         }
         
         wp_send_json_success(array('message' => 'Block dupliziert', 'id' => $wpdb->insert_id));
+    }
+
+    /**
+     * PDF generieren - AJAX Handler
+     */
+    public function generate_pdf() {
+        // Nonce-Überprüfung
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cbd-pdf-nonce')) {
+            wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
+            return;
+        }
+
+        // HTML-Blöcke empfangen
+        $blocks_html = isset($_POST['blocks']) ? $_POST['blocks'] : array();
+
+        if (empty($blocks_html) || !is_array($blocks_html)) {
+            wp_send_json_error(array('message' => 'Keine Blöcke zum Exportieren gefunden'));
+            return;
+        }
+
+        // Sanitize HTML (erlaubt HTML-Tags, entfernt nur gefährliche Scripts)
+        $sanitized_blocks = array();
+        foreach ($blocks_html as $block_html) {
+            // wp_kses_post erlaubt alle Post-Content HTML-Tags
+            $sanitized_blocks[] = wp_kses_post($block_html);
+        }
+
+        // PDF-Optionen
+        $options = array(
+            'filename' => isset($_POST['filename']) ? sanitize_file_name($_POST['filename']) : 'container-blocks-' . date('Y-m-d') . '.pdf'
+        );
+
+        // PDF Generator instanziieren
+        $pdf_generator = CBD_PDF_Generator::get_instance();
+
+        // PDF generieren
+        $result = $pdf_generator->generate_pdf($sanitized_blocks, $options);
+
+        if ($result['success']) {
+            wp_send_json_success(array(
+                'message' => 'PDF erfolgreich erstellt',
+                'url' => $result['url'],
+                'filename' => $result['filename']
+            ));
+        } else {
+            wp_send_json_error(array(
+                'message' => $result['error']
+            ));
+        }
     }
 }

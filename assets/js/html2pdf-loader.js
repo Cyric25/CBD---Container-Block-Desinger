@@ -148,42 +148,121 @@
             // Create wrapper for all blocks
             var $wrapper = $('<div class="cbd-pdf-export-wrapper"></div>');
 
-            // Process each block
-            containerBlocks.each(function(index) {
+            // CRITICAL: Expand ALL blocks IN-PLACE before cloning (like old working solution)
+            console.log('CBD PDF: Expanding ALL blocks in-place before cloning...');
+            var collapsedStates = [];
+
+            containerBlocks.each(function(blockIndex) {
                 var $block = $(this);
-                console.log('CBD PDF: Processing block', index + 1, 'of', containerBlocks.length);
-                console.log('CBD PDF: Block', index + 1, 'classes:', $block.attr('class'));
+                console.log('CBD PDF: Pre-expanding block', blockIndex + 1);
 
-                // Clone with deep copy
-                var $clone = $block.clone(true, true);
-                console.log('CBD PDF: Block', index + 1, 'cloned, HTML length:', $clone.html().length);
-
-                // Find the actual content block inside
-                var $contentBlock = $clone.find('.cbd-container-block').first();
-                if ($contentBlock.length === 0) {
-                    console.warn('CBD PDF: Block', index + 1, 'has no .cbd-container-block, using whole clone');
-                } else {
-                    console.log('CBD PDF: Block', index + 1, 'found .cbd-container-block');
+                // Find ALL container blocks (including nested ones!) like old solution
+                var allContainerBlocks = $block.find('[data-wp-interactive="container-block-designer"]');
+                if ($block.is('[data-wp-interactive="container-block-designer"]')) {
+                    allContainerBlocks = allContainerBlocks.add($block);
                 }
 
-                // Expand collapsed content
-                expandContent($clone);
-                console.log('CBD PDF: Block', index + 1, 'content expanded');
+                console.log('CBD PDF: Block', blockIndex + 1, 'has', allContainerBlocks.length, 'interactive container(s)');
 
-                // Hide action buttons and menus
-                $clone.find('.cbd-action-buttons').remove();
-                $clone.find('.cbd-collapse-toggle').remove();
-                $clone.find('.cbd-header-menu').remove();
-                $clone.find('.cbd-container-number').remove(); // Remove counter circles
+                // Expand EACH container block (including nested ones) - OLD WORKING METHOD
+                allContainerBlocks.each(function(containerIndex) {
+                    var $container = $(this);
+                    var content = $container.find('.cbd-container-content').first();
 
-                // Add page break after each block (except last)
-                if (index < containerBlocks.length - 1) {
-                    $clone.css('page-break-after', 'always');
-                }
+                    console.log('CBD PDF: - Expanding container', containerIndex + 1, 'in block', blockIndex + 1);
 
-                $wrapper.append($clone);
-                console.log('CBD PDF: Block', index + 1, 'appended to wrapper');
+                    // Check if this specific container's content is collapsed
+                    if (content.length > 0) {
+                        var computedDisplay = window.getComputedStyle(content[0]).display;
+                        var isHidden = computedDisplay === 'none' ||
+                                     !content.is(':visible') ||
+                                     content.css('display') === 'none';
+
+                        if (isHidden) {
+                            console.log('CBD PDF:   - Content was hidden, forcing visible');
+                            collapsedStates.push({
+                                element: content[0],
+                                wasHidden: true,
+                                originalDisplay: content[0].style.display,
+                                originalVisibility: content[0].style.visibility,
+                                originalMaxHeight: content[0].style.maxHeight,
+                                originalOverflow: content[0].style.overflow
+                            });
+
+                            // Force expand with !important to override all styles - OLD WORKING METHOD
+                            content[0].style.setProperty('display', 'block', 'important');
+                            content[0].style.setProperty('visibility', 'visible', 'important');
+                            content[0].style.setProperty('opacity', '1', 'important');
+                            content[0].style.setProperty('max-height', 'none', 'important');
+                            content[0].style.setProperty('overflow', 'visible', 'important');
+                            content[0].style.setProperty('height', 'auto', 'important');
+                        }
+                    }
+                });
+
+                // Handle details elements
+                var detailsElements = $block.find('details');
+                detailsElements.each(function() {
+                    if (!this.open) {
+                        collapsedStates.push({
+                            element: this,
+                            wasDetails: true,
+                            originalOpen: false
+                        });
+                        this.open = true;
+                    }
+                });
             });
+
+            console.log('CBD PDF: Pre-expansion complete, waiting 350ms for animation...');
+
+            // Wait 350ms for collapse animation to complete (like old working solution)
+            setTimeout(function() {
+                console.log('CBD PDF: Animation delay complete, now cloning blocks...');
+
+                // NOW clone the blocks after they're expanded
+                containerBlocks.each(function(index) {
+                    var $block = $(this);
+                    console.log('CBD PDF: Processing block', index + 1, 'of', containerBlocks.length);
+                    console.log('CBD PDF: Block', index + 1, 'classes:', $block.attr('class'));
+
+                    // Clone with deep copy
+                    var $clone = $block.clone(true, true);
+                    console.log('CBD PDF: Block', index + 1, 'cloned, HTML length:', $clone.html().length);
+
+                    // Find the actual content block inside
+                    var $contentBlock = $clone.find('.cbd-container-block').first();
+                    if ($contentBlock.length === 0) {
+                        console.warn('CBD PDF: Block', index + 1, 'has no .cbd-container-block, using whole clone');
+                    } else {
+                        console.log('CBD PDF: Block', index + 1, 'found .cbd-container-block');
+                    }
+
+                    // Hide action buttons and menus
+                    $clone.find('.cbd-action-buttons').remove();
+                    $clone.find('.cbd-collapse-toggle').remove();
+                    $clone.find('.cbd-header-menu').remove();
+                    $clone.find('.cbd-container-number').remove(); // Remove counter circles
+
+                    // Add page break after each block (except last)
+                    if (index < containerBlocks.length - 1) {
+                        $clone.css('page-break-after', 'always');
+                    }
+
+                    $wrapper.append($clone);
+                    console.log('CBD PDF: Block', index + 1, 'appended to wrapper');
+                });
+
+                console.log('CBD PDF: Wrapper created with', $wrapper.children().length, 'blocks');
+                console.log('CBD PDF: Wrapper HTML length:', $wrapper.html().length);
+
+                // Continue with PDF generation
+                continueWithPDFGeneration();
+
+            }, 350); // 350ms delay like old working solution
+
+            // Store the continuation function
+            function continueWithPDFGeneration() {
 
             console.log('CBD PDF: Wrapper created with', $wrapper.children().length, 'blocks');
             console.log('CBD PDF: Wrapper HTML length:', $wrapper.html().length);

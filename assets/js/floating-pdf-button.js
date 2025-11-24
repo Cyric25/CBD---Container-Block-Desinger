@@ -270,13 +270,28 @@
                 function tryCreatePDF(selectedBlocks, mode, quality, attempts) {
                     attempts = attempts || 0;
 
-                    console.log('[CBD PDF Button] window.cbdPDFExportWithOptions exists:', typeof window.cbdPDFExportWithOptions);
+                    console.log('[CBD PDF Button] Checking available PDF methods...');
+                    console.log('[CBD PDF Button] Server-side:', typeof window.cbdPDFExportServerSide);
+                    console.log('[CBD PDF Button] Client-side with options:', typeof window.cbdPDFExportWithOptions);
+                    console.log('[CBD PDF Button] Client-side basic:', typeof window.cbdPDFExport);
 
-                    if (typeof window.cbdPDFExportWithOptions === 'function') {
+                    // PRIORITY 1: Try server-side PDF generation (best quality, searchable text)
+                    if (typeof window.cbdPDFExportServerSide === 'function') {
+                        console.log('[CBD PDF Button] Using server-side PDF generation');
+                        window.cbdPDFExportServerSide(selectedBlocks);
+                    }
+                    // PRIORITY 2: Try client-side with options (fallback)
+                    else if (typeof window.cbdPDFExportWithOptions === 'function') {
+                        console.log('[CBD PDF Button] Using client-side PDF generation with options');
                         window.cbdPDFExportWithOptions(selectedBlocks, mode, quality);
-                    } else if (typeof window.cbdPDFExport === 'function') {
+                    }
+                    // PRIORITY 3: Try basic client-side (fallback)
+                    else if (typeof window.cbdPDFExport === 'function') {
+                        console.log('[CBD PDF Button] Using basic client-side PDF generation');
                         window.cbdPDFExport(selectedBlocks);
-                    } else if (attempts < 50) {
+                    }
+                    // Wait and retry
+                    else if (attempts < 50) {
                         // PDF functions not available yet, wait and retry
                         setTimeout(function() {
                             tryCreatePDF(selectedBlocks, mode, quality, attempts + 1);
