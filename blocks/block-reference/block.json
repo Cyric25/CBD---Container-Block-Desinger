@@ -1,0 +1,47 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "cbd/block-reference",
+	"version": "1.0.0",
+	"title": "Block-Referenz",
+	"category": "container",
+	"icon": "admin-links",
+	"description": "Erstelle einen Link zu einem anderen Container-Block auf dieser oder einer anderen Seite.",
+	"keywords": ["referenz", "link", "container", "cbd", "verweis"],
+	"supports": {
+		"html": false,
+		"anchor": true,
+		"align": ["wide", "full"]
+	},
+	"attributes": {
+		"targetBlockId": {
+			"type": "string",
+			"default": ""
+		},
+		"targetPostId": {
+			"type": "number",
+			"default": 0
+		},
+		"targetBlockTitle": {
+			"type": "string",
+			"default": ""
+		},
+		"targetPostTitle": {
+			"type": "string",
+			"default": ""
+		},
+		"linkText": {
+			"type": "string",
+			"default": ""
+		},
+		"showIcon": {
+			"type": "boolean",
+			"default": true
+		}
+	},
+	"textdomain": "container-block-designer",
+	"editorScript": "file:./index.js",
+	"editorStyle": "file:./editor.css",
+	"style": "file:./style.css",
+	"viewScript": "file:./view.js"
+}

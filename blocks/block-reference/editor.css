@@ -1,0 +1,63 @@
+/**
+ * CBD Block-Referenz Editor Styles
+ */
+
+.cbd-block-reference-editor .components-placeholder {
+	min-height: 150px;
+	padding: 2em;
+}
+
+.cbd-block-reference-preview {
+	border: 2px solid #007cba;
+	border-radius: 8px;
+	padding: 1.5em;
+	background: #f0f6fc;
+	margin: 1em 0;
+}
+
+.cbd-block-reference-preview-header {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	margin-bottom: 1em;
+	font-size: 16px;
+	color: #007cba;
+}
+
+.cbd-block-reference-preview-header .dashicons {
+	font-size: 20px;
+	width: 20px;
+	height: 20px;
+}
+
+.cbd-block-reference-preview-content {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5em;
+}
+
+.cbd-block-reference-preview-post,
+.cbd-block-reference-preview-block {
+	margin: 0;
+	font-size: 14px;
+	color: #1e1e1e;
+}
+
+.cbd-block-reference-preview-link {
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	margin-top: 0.5em;
+	padding: 0.75em 1em;
+	background: white;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	font-weight: 500;
+	color: #007cba;
+}
+
+.cbd-block-reference-preview-link .dashicons {
+	font-size: 18px;
+	width: 18px;
+	height: 18px;
+}

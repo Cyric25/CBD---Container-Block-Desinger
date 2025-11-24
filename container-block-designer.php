@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://example.com/container-block-designer
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 2.8.4
+ * Version: 2.8.5
  * Author: Your Name
  * Author URI: https://example.com
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '2.8.4');
+define('CBD_VERSION', '2.8.5');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -108,6 +108,10 @@ class ContainerBlockDesigner {
 
         // PDF Generator für serverseitige PDF-Erstellung
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-pdf-generator.php';
+
+        // Block Reference - Link to other CBD blocks
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-reference.php';
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-blocks-rest-api.php';
 
         // Admin-Bereich nur im Backend laden
         if (is_admin()) {
@@ -234,6 +238,16 @@ class ContainerBlockDesigner {
             // LaTeX Parser initialization
             if (class_exists('CBD_LaTeX_Parser')) {
                 CBD_LaTeX_Parser::get_instance();
+            }
+
+            // Block Reference initialization
+            if (class_exists('CBD_Block_Reference')) {
+                CBD_Block_Reference::init();
+            }
+
+            // REST API for Block Reference
+            if (class_exists('CBD_Blocks_REST_API')) {
+                CBD_Blocks_REST_API::init();
             }
 
             // Admin area - aktiviert für normale Funktionalität
