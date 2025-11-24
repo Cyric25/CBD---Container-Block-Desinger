@@ -529,6 +529,8 @@
             console.log('CBD PDF: html2pdf() will start after render delay...');
             return true;
 
+            } // End of continueWithPDFGeneration()
+
         } catch (error) {
             alert('Fehler beim PDF erstellen: ' + error.message);
             return false;

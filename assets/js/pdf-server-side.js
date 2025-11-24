@@ -15,6 +15,25 @@
 
     // Create global export function
     window.cbdPDFExportServerSide = function(containerBlocks) {
+        console.log('CBD PDF Server: Starting export');
+        console.log('CBD PDF Server: containerBlocks type:', typeof containerBlocks);
+        console.log('CBD PDF Server: containerBlocks.jquery:', containerBlocks.jquery);
+        console.log('CBD PDF Server: Is array?', Array.isArray(containerBlocks));
+
+        // Convert to jQuery object if it's an array of jQuery elements
+        if (Array.isArray(containerBlocks)) {
+            console.log('CBD PDF Server: Converting array to jQuery collection');
+            // containerBlocks is an array of jQuery objects - merge them into one collection
+            var $merged = $();
+            for (var i = 0; i < containerBlocks.length; i++) {
+                $merged = $merged.add(containerBlocks[i]);
+            }
+            containerBlocks = $merged;
+        } else if (!containerBlocks.jquery) {
+            // Not a jQuery object and not an array - try to wrap it
+            containerBlocks = $(containerBlocks);
+        }
+
         console.log('CBD PDF Server: Starting export with', containerBlocks.length, 'blocks');
 
         if (containerBlocks.length === 0) {
