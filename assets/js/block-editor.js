@@ -189,10 +189,10 @@
                             // Wrapper für Titel-Input mit Frontend-Styling
                             el('div', {
                                 style: {
-                                    // Frontend-ähnliches Styling für die Überschrift
-                                    fontSize: '24px',
+                                    // Frontend-ähnliches Styling für die Überschrift (wie in cbd-frontend-clean.css)
+                                    fontSize: '20px',
                                     fontWeight: '700',
-                                    lineHeight: '1.3',
+                                    lineHeight: '1.2',
                                     color: '#1e1e1e',
                                     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif'
                                 }
