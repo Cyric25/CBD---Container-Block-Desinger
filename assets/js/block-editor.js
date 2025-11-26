@@ -126,7 +126,11 @@
             };
             
             const blockProps = useBlockProps({
-                className: 'cbd-container cbd-editor-container ' + customClasses
+                className: 'cbd-container cbd-editor-container ' + customClasses,
+                style: {
+                    maxWidth: '100%',
+                    width: '100%'
+                }
             });
 
             return el(Fragment, {},
@@ -160,10 +164,12 @@
                         className: 'cbd-editor-controls',
                         style: {
                             background: '#f0f0f1',
-                            padding: '16px',
+                            padding: '12px 16px',
                             marginBottom: '16px',
                             borderRadius: '4px',
-                            border: '1px solid #dcdcde'
+                            border: '1px solid #dcdcde',
+                            maxWidth: '100%',
+                            boxSizing: 'border-box'
                         }
                     },
                         el('div', {
@@ -454,6 +460,18 @@
                     type: 'object',
                     default: {}
                 }
+            },
+            // Custom label for List View - shows block title instead of "Container Block"
+            __experimentalLabel: (attributes, { context }) => {
+                const { blockTitle } = attributes;
+
+                // If we have a block title, show it in the list view
+                if (blockTitle && blockTitle.trim()) {
+                    return blockTitle.trim();
+                }
+
+                // Fallback to default title
+                return blockData.i18n.blockTitle;
             },
             edit: ContainerBlockEdit,
             save: ContainerBlockSave
