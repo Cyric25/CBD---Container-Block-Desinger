@@ -186,28 +186,46 @@
                                     color: '#1e1e1e'
                                 }
                             }, 'Block-Titel'),
-                            el(TextControl, {
-                                value: attributes.blockTitle || '',
-                                onChange: (value) => setAttributes({ blockTitle: value }),
-                                placeholder: 'Titel eingeben...',
-                                __next40pxDefaultSize: true,
-                                __nextHasNoMarginBottom: true,
+                            // Wrapper für Titel-Input mit Frontend-Styling
+                            el('div', {
                                 style: {
-                                    fontSize: '16px'
+                                    // Frontend-ähnliches Styling für die Überschrift
+                                    fontSize: '24px',
+                                    fontWeight: '700',
+                                    lineHeight: '1.3',
+                                    color: '#1e1e1e',
+                                    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif'
                                 }
-                            })
+                            },
+                                el(TextControl, {
+                                    value: attributes.blockTitle || '',
+                                    onChange: (value) => setAttributes({ blockTitle: value }),
+                                    placeholder: 'Titel eingeben...',
+                                    __next40pxDefaultSize: true,
+                                    __nextHasNoMarginBottom: true
+                                })
+                            )
                         ),
 
-                        el('div', {},
+                        el('div', {
+                            style: {
+                                // Hellroter Hintergrund wenn kein Style gewählt
+                                background: !selectedBlock || selectedBlock === '' ? '#ffebee' : 'transparent',
+                                padding: !selectedBlock || selectedBlock === '' ? '8px' : '0',
+                                borderRadius: '4px',
+                                border: !selectedBlock || selectedBlock === '' ? '1px solid #ffcdd2' : 'none',
+                                transition: 'all 0.2s ease'
+                            }
+                        },
                             el('label', {
                                 style: {
                                     display: 'block',
                                     marginBottom: '8px',
                                     fontWeight: '600',
                                     fontSize: '13px',
-                                    color: '#1e1e1e'
+                                    color: !selectedBlock || selectedBlock === '' ? '#c62828' : '#1e1e1e'
                                 }
-                            }, 'Design-Style'),
+                            }, !selectedBlock || selectedBlock === '' ? '⚠️ Design-Style (Bitte auswählen!)' : 'Design-Style'),
                             isLoading ?
                                 el(Spinner) :
                                 el(SelectControl, {
