@@ -16,8 +16,8 @@
         }
         
         const { registerBlockType, registerBlockStyle } = wp.blocks;
-        const { InnerBlocks, useBlockProps, InspectorControls } = wp.blockEditor;
-        const { PanelBody, SelectControl, TextControl, Button, Spinner } = wp.components;
+        const { InnerBlocks, useBlockProps, InspectorControls, BlockControls } = wp.blockEditor;
+        const { PanelBody, SelectControl, TextControl, Button, Spinner, ToolbarGroup, ToolbarButton, Placeholder } = wp.components;
         const { Fragment, useState, useEffect, createElement: el } = wp.element;
         const { __ } = wp.i18n;
         
@@ -126,40 +126,16 @@
             };
             
             const blockProps = useBlockProps({
-                className: 'cbd-container ' + customClasses
+                className: 'cbd-container cbd-editor-container ' + customClasses
             });
-            
+
             return el(Fragment, {},
+                // Sidebar-Einstellungen (für erweiterte Optionen)
                 el(InspectorControls, {},
-                    el(PanelBody, { 
-                        title: 'Container-Einstellungen',
-                        initialOpen: true
+                    el(PanelBody, {
+                        title: 'Erweiterte Einstellungen',
+                        initialOpen: false
                     },
-                        el(SelectControl, {
-                            label: 'Design auswählen',
-                            value: selectedBlock,
-                            options: [
-                                { value: '', label: '-- Kein Design --' },
-                                ...availableBlocks.map(block => ({
-                                    value: block.slug || block.id,
-                                    label: block.name || 'Unbenannt'
-                                }))
-                            ],
-                            onChange: (value) => setAttributes({ selectedBlock: value }),
-                            __next40pxDefaultSize: true,
-                            __nextHasNoMarginBottom: true
-                        }),
-                        
-                        el(TextControl, {
-                            label: 'Block-Titel (Header)',
-                            value: attributes.blockTitle || '',
-                            onChange: (value) => setAttributes({ blockTitle: value }),
-                            placeholder: 'z.B. Wichtige Information',
-                            help: 'Wird im Header des Blocks angezeigt',
-                            __next40pxDefaultSize: true,
-                            __nextHasNoMarginBottom: true
-                        }),
-                        
                         el(TextControl, {
                             label: 'Zusätzliche CSS-Klassen',
                             value: customClasses,
@@ -167,7 +143,7 @@
                             __next40pxDefaultSize: true,
                             __nextHasNoMarginBottom: true
                         }),
-                        
+
                         el(Button, {
                             variant: 'secondary',
                             onClick: loadBlocks,
@@ -176,8 +152,75 @@
                         }, isLoading ? 'Lädt...' : 'Designs neu laden')
                     )
                 ),
-                
+
+                // Hauptbereich: Direkte Eingabefelder im Editor
                 el('div', blockProps,
+                    // Titel- und Style-Auswahl direkt im Editor
+                    el('div', {
+                        className: 'cbd-editor-controls',
+                        style: {
+                            background: '#f0f0f1',
+                            padding: '16px',
+                            marginBottom: '16px',
+                            borderRadius: '4px',
+                            border: '1px solid #dcdcde'
+                        }
+                    },
+                        el('div', {
+                            style: {
+                                marginBottom: '12px'
+                            }
+                        },
+                            el('label', {
+                                style: {
+                                    display: 'block',
+                                    marginBottom: '8px',
+                                    fontWeight: '600',
+                                    fontSize: '13px',
+                                    color: '#1e1e1e'
+                                }
+                            }, 'Block-Titel'),
+                            el(TextControl, {
+                                value: attributes.blockTitle || '',
+                                onChange: (value) => setAttributes({ blockTitle: value }),
+                                placeholder: 'Titel eingeben...',
+                                __next40pxDefaultSize: true,
+                                __nextHasNoMarginBottom: true,
+                                style: {
+                                    fontSize: '16px'
+                                }
+                            })
+                        ),
+
+                        el('div', {},
+                            el('label', {
+                                style: {
+                                    display: 'block',
+                                    marginBottom: '8px',
+                                    fontWeight: '600',
+                                    fontSize: '13px',
+                                    color: '#1e1e1e'
+                                }
+                            }, 'Design-Style'),
+                            isLoading ?
+                                el(Spinner) :
+                                el(SelectControl, {
+                                    value: selectedBlock,
+                                    options: [
+                                        { value: '', label: '-- Kein Design --' },
+                                        ...availableBlocks.map(block => ({
+                                            value: block.slug || block.id,
+                                            label: block.name || 'Unbenannt'
+                                        }))
+                                    ],
+                                    onChange: (value) => setAttributes({ selectedBlock: value }),
+                                    __next40pxDefaultSize: true,
+                                    __nextHasNoMarginBottom: true
+                                })
+                        )
+                    ),
+
+                    // InnerBlocks für Inhalt
                     el(InnerBlocks, {
                         templateLock: false,
                         renderAppender: isSelected ? InnerBlocks.ButtonBlockAppender : false
