@@ -339,6 +339,33 @@ class CBD_PDF_Generator {
             .cbd-selection-menu {
                 display: none !important;
             }
+
+            /* LaTeX formulas */
+            .cbd-latex-formula {
+                display: inline-block;
+                font-size: 1em;
+                color: #000000;
+            }
+
+            .cbd-latex-display {
+                display: block;
+                text-align: center;
+                margin: 15px 0;
+            }
+
+            .cbd-latex-inline {
+                display: inline;
+                margin: 0;
+            }
+
+            .katex {
+                font-size: 1.1em;
+                color: #000000;
+            }
+
+            .katex * {
+                color: #000000 !important;
+            }
         ';
 
         return $css;

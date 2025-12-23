@@ -337,8 +337,27 @@
 
                     // Wait for DOM to update after expansion (350ms for collapse animation)
                     setTimeout(function() {
-                        // Create canvas with SIMPLE options (like single block export)
-                        html2canvas(containerBlock, {
+                        // Prepare LaTeX formulas for PDF export
+                        if (typeof window.cbdPrepareFormulasForPDF === 'function') {
+                            window.cbdPrepareFormulasForPDF(containerBlock);
+                        }
+
+                        // Ensure all LaTeX formulas are visible and properly colored
+                        var formulas = containerBlock.querySelectorAll('.cbd-latex-formula');
+                        formulas.forEach(function(formula) {
+                            formula.style.setProperty('color', '#000000', 'important');
+                            formula.style.setProperty('visibility', 'visible', 'important');
+                            // Fix KaTeX elements color as well
+                            var katexElements = formula.querySelectorAll('.katex, .katex *');
+                            katexElements.forEach(function(el) {
+                                el.style.setProperty('color', '#000000', 'important');
+                            });
+                        });
+
+                        // Give KaTeX time to render formulas (500ms for complex formulas)
+                        setTimeout(function() {
+                            // Create canvas with SIMPLE options (like single block export)
+                            html2canvas(containerBlock, {
                             useCORS: true,
                             allowTaint: false,
                             scale: quality || 2,
@@ -406,6 +425,7 @@
                             processedBlocks++;
                             processNextBlock();
                         });
+                        }, 500); // 500ms delay for KaTeX rendering
                     }, 350); // 350ms delay for collapse animation to complete
                 }
 

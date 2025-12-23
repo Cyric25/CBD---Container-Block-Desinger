@@ -263,3 +263,18 @@ th .cbd-latex-formula {
     display: block !important;
     opacity: 1 !important;
 }
+
+/* KaTeX table environments (array, matrix, etc.) */
+.cbd-latex-formula .katex .mtable {
+    margin: 10px 0;
+}
+
+/* Better spacing for matrices */
+.cbd-latex-formula .katex .arraycolsep {
+    width: 0.5em;
+}
+
+/* Ensure table cells are properly aligned */
+.cbd-latex-formula .katex .mtd {
+    padding: 0.25em 0.5em;
+}

@@ -130,6 +130,11 @@
                 $clone.find('.cbd-container-number').remove();
                 $clone.find('.cbd-selection-menu').remove();
 
+                // Prepare LaTeX formulas for PDF export
+                if (typeof window.cbdPrepareFormulasForPDF === 'function') {
+                    window.cbdPrepareFormulasForPDF($clone[0]);
+                }
+
                 // Get the HTML
                 var html = $clone.html();
                 blocksHTML.push(html);

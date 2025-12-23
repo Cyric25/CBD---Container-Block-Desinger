@@ -247,6 +247,9 @@
                     // InnerBlocks für Inhalt
                     el(InnerBlocks, {
                         templateLock: false,
+                        template: [
+                            ['core/paragraph', { placeholder: 'Inhalt hier eingeben...' }]
+                        ],
                         renderAppender: isSelected ? InnerBlocks.ButtonBlockAppender : false
                     })
                 )
