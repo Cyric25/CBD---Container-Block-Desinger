@@ -1658,7 +1658,7 @@ class CBD_Admin {
 
                 <?php
                 // Prüfe auf fehlende Spalten
-                $required_columns = array('title', 'slug', 'styles', 'features', 'status');
+                $required_columns = array('title', 'slug', 'styles', 'features', 'status', 'is_default');
                 $missing_columns = array_diff($required_columns, $columns);
 
                 if (!empty($missing_columns) || !$table_exists): ?>
@@ -2024,11 +2024,13 @@ class CBD_Admin {
                     styles longtext DEFAULT NULL,
                     features longtext DEFAULT NULL,
                     status varchar(20) DEFAULT 'active',
+                    is_default tinyint(1) DEFAULT 0,
                     created_at datetime DEFAULT CURRENT_TIMESTAMP,
                     updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                     PRIMARY KEY (id),
                     UNIQUE KEY name (name),
                     KEY status (status),
+                    KEY is_default (is_default),
                     KEY slug (slug)
                 ) $charset_collate;";
 
@@ -2044,7 +2046,8 @@ class CBD_Admin {
                     'slug' => "ALTER TABLE $table_name ADD COLUMN `slug` varchar(100) NOT NULL DEFAULT '' AFTER `title`",
                     'styles' => "ALTER TABLE $table_name ADD COLUMN `styles` longtext DEFAULT NULL AFTER `config`",
                     'features' => "ALTER TABLE $table_name ADD COLUMN `features` longtext DEFAULT NULL AFTER `styles`",
-                    'status' => "ALTER TABLE $table_name ADD COLUMN `status` varchar(20) DEFAULT 'active' AFTER `features`"
+                    'status' => "ALTER TABLE $table_name ADD COLUMN `status` varchar(20) DEFAULT 'active' AFTER `features`",
+                    'is_default' => "ALTER TABLE $table_name ADD COLUMN `is_default` tinyint(1) DEFAULT 0 AFTER `status`"
                 );
 
                 foreach ($required_columns as $column => $sql) {
@@ -2052,6 +2055,12 @@ class CBD_Admin {
                         $result = $wpdb->query($sql);
                         if ($result !== false) {
                             $messages[] = sprintf(__('Spalte "%s" wurde hinzugefügt.', 'container-block-designer'), $column);
+
+                            // Index für is_default hinzufügen
+                            if ($column === 'is_default') {
+                                $wpdb->query("ALTER TABLE $table_name ADD KEY `is_default` (`is_default`)");
+                                $messages[] = __('Index für "is_default" wurde hinzugefügt.', 'container-block-designer');
+                            }
                         } else {
                             $errors[] = sprintf(__('Fehler beim Hinzufügen der Spalte "%s": %s', 'container-block-designer'), $column, $wpdb->last_error);
                         }
@@ -2065,6 +2074,10 @@ class CBD_Admin {
             $wpdb->query("UPDATE $table_name SET features = '{}' WHERE features IS NULL OR features = ''");
             $wpdb->query("UPDATE $table_name SET slug = name WHERE slug = '' OR slug IS NULL");
             $messages[] = __('Standard-Werte wurden gesetzt.', 'container-block-designer');
+
+            // Setze DB-Version auf 2.9.0
+            update_option('cbd_db_version', '2.9.0');
+            $messages[] = __('Datenbank-Version auf 2.9.0 aktualisiert.', 'container-block-designer');
 
             // Erstelle Standard-Blocks falls keine vorhanden
             $block_count = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
