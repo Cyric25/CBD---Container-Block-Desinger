@@ -1,0 +1,13 @@
+/**
+ * Container Block Designer - Admin Styles
+ * General admin interface styling
+ *
+ * @package ContainerBlockDesigner
+ * @since 2.9.0
+ */
+
+/* Import common admin styles */
+@import url('admin-common.css');
+@import url('admin-features.css');
+
+/* Additional admin-specific styles can be added here */
