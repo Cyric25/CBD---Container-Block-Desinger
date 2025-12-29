@@ -81,7 +81,20 @@
             useEffect(() => {
                 loadBlocks();
             }, []);
-            
+
+            // Automatisch Standard-Block laden, wenn kein Block ausgewählt ist
+            useEffect(() => {
+                if (!selectedBlock && availableBlocks.length > 0) {
+                    // Finde Standard-Block
+                    const defaultBlock = availableBlocks.find(block => block.is_default == 1 || block.is_default === true);
+
+                    if (defaultBlock) {
+                        console.log('CBD: Standard-Block gefunden, wird automatisch geladen:', defaultBlock.name);
+                        setAttributes({ selectedBlock: defaultBlock.name });
+                    }
+                }
+            }, [availableBlocks, selectedBlock]);
+
             const loadBlocks = () => {
                 setIsLoading(true);
                 

@@ -39,12 +39,13 @@ $blocks = CBD_Database::get_blocks();
             <thead>
                 <tr>
                     <th width="5%"><?php _e('ID', 'container-block-designer'); ?></th>
-                    <th width="20%"><?php _e('Name', 'container-block-designer'); ?></th>
-                    <th width="20%"><?php _e('Titel', 'container-block-designer'); ?></th>
-                    <th width="25%"><?php _e('Beschreibung', 'container-block-designer'); ?></th>
-                    <th width="10%"><?php _e('Status', 'container-block-designer'); ?></th>
+                    <th width="18%"><?php _e('Name', 'container-block-designer'); ?></th>
+                    <th width="17%"><?php _e('Titel', 'container-block-designer'); ?></th>
+                    <th width="22%"><?php _e('Beschreibung', 'container-block-designer'); ?></th>
+                    <th width="8%"><?php _e('Status', 'container-block-designer'); ?></th>
+                    <th width="8%"><?php _e('Standard', 'container-block-designer'); ?></th>
                     <th width="10%"><?php _e('Erstellt', 'container-block-designer'); ?></th>
-                    <th width="10%"><?php _e('Aktionen', 'container-block-designer'); ?></th>
+                    <th width="12%"><?php _e('Aktionen', 'container-block-designer'); ?></th>
                 </tr>
             </thead>
             <tbody>
@@ -81,6 +82,13 @@ $blocks = CBD_Database::get_blocks();
                                 </span>
                             <?php endif; ?>
                         </td>
+                        <td style="text-align: center;">
+                            <?php if (!empty($block['is_default']) && $block['is_default'] == 1): ?>
+                                <span class="dashicons dashicons-star-filled" style="color: #f39c12; font-size: 20px;" title="<?php esc_attr_e('Standard-Block', 'container-block-designer'); ?>"></span>
+                            <?php else: ?>
+                                <span class="dashicons dashicons-star-empty" style="color: #ccc; font-size: 20px;"></span>
+                            <?php endif; ?>
+                        </td>
                         <td><?php echo date_i18n(get_option('date_format'), strtotime($block['created'])); ?></td>
                         <td>
                             <div class="row-actions">
@@ -96,6 +104,15 @@ $blocks = CBD_Database::get_blocks();
                                     ); ?>">
                                         <?php _e('Duplizieren', 'container-block-designer'); ?>
                                     </a>
+                                </span> |
+                                <span class="set-default">
+                                    <?php if (!empty($block['is_default']) && $block['is_default'] == 1): ?>
+                                        <span style="color: #999;"><?php _e('Standard', 'container-block-designer'); ?></span>
+                                    <?php else: ?>
+                                        <a href="#" class="cbd-set-default" data-block-id="<?php echo esc_attr($block['id']); ?>">
+                                            <?php _e('Als Standard', 'container-block-designer'); ?>
+                                        </a>
+                                    <?php endif; ?>
                                 </span> |
                                 <span class="delete">
                                     <a href="<?php echo wp_nonce_url(
@@ -167,3 +184,38 @@ $blocks = CBD_Database::get_blocks();
     color: #dc3232 !important;
 }
 </style>
+
+<script>
+jQuery(document).ready(function($) {
+    // Als Standard setzen Handler
+    $('.cbd-set-default').on('click', function(e) {
+        e.preventDefault();
+
+        const blockId = $(this).data('block-id');
+        const $link = $(this);
+
+        if (confirm('<?php esc_attr_e('Möchten Sie diesen Block als Standard festlegen?', 'container-block-designer'); ?>')) {
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'cbd_set_default_block',
+                    block_id: blockId,
+                    nonce: '<?php echo wp_create_nonce('cbd_set_default_block'); ?>'
+                },
+                success: function(response) {
+                    if (response.success) {
+                        // Seite neu laden um die Änderungen anzuzeigen
+                        location.reload();
+                    } else {
+                        alert(response.data.message || '<?php esc_attr_e('Fehler beim Setzen des Standard-Blocks.', 'container-block-designer'); ?>');
+                    }
+                },
+                error: function() {
+                    alert('<?php esc_attr_e('AJAX-Fehler. Bitte versuchen Sie es erneut.', 'container-block-designer'); ?>');
+                }
+            });
+        }
+    });
+});
+</script>

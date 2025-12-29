@@ -37,6 +37,7 @@ class CBD_Ajax_Handler {
         add_action('wp_ajax_cbd_save_block', array($this, 'save_block'));
         add_action('wp_ajax_cbd_delete_block', array($this, 'delete_block'));
         add_action('wp_ajax_cbd_duplicate_block', array($this, 'duplicate_block'));
+        add_action('wp_ajax_cbd_set_default_block', array($this, 'set_default_block'));
 
         // PDF-Generierung (für eingeloggte Benutzer und Frontend)
         add_action('wp_ajax_cbd_generate_pdf', array($this, 'generate_pdf'));
@@ -315,6 +316,73 @@ class CBD_Ajax_Handler {
         } else {
             wp_send_json_error(array(
                 'message' => $result['error']
+            ));
+        }
+    }
+
+    /**
+     * Block als Standard setzen
+     */
+    public function set_default_block() {
+        // Nonce-Überprüfung
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cbd_set_default_block')) {
+            wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
+            return;
+        }
+
+        // Berechtigungsprüfung
+        if (!current_user_can('cbd_admin_blocks')) {
+            wp_send_json_error(array('message' => 'Keine Berechtigung'));
+            return;
+        }
+
+        // Block-ID erhalten
+        $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
+
+        if ($block_id <= 0) {
+            wp_send_json_error(array('message' => 'Ungültige Block-ID'));
+            return;
+        }
+
+        global $wpdb;
+        $table_name = CBD_TABLE_BLOCKS;
+
+        // Prüfen ob Block existiert
+        $block = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM $table_name WHERE id = %d",
+            $block_id
+        ));
+
+        if (!$block) {
+            wp_send_json_error(array('message' => 'Block nicht gefunden'));
+            return;
+        }
+
+        // Zuerst alle anderen Blocks auf is_default = 0 setzen
+        $wpdb->update(
+            $table_name,
+            array('is_default' => 0),
+            array(),
+            array('%d'),
+            array()
+        );
+
+        // Dann den ausgewählten Block als Standard setzen
+        $result = $wpdb->update(
+            $table_name,
+            array('is_default' => 1),
+            array('id' => $block_id),
+            array('%d'),
+            array('%d')
+        );
+
+        if ($result !== false) {
+            wp_send_json_success(array(
+                'message' => 'Block erfolgreich als Standard gesetzt'
+            ));
+        } else {
+            wp_send_json_error(array(
+                'message' => 'Fehler beim Setzen des Standard-Blocks'
             ));
         }
     }

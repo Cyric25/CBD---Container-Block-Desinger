@@ -21,7 +21,7 @@ class CBD_Schema_Manager {
     /**
      * Database version for tracking migrations
      */
-    const DB_VERSION = '2.6.0';
+    const DB_VERSION = '2.9.0';
     
     /**
      * Option key for storing database version
@@ -47,11 +47,13 @@ class CBD_Schema_Manager {
             styles longtext DEFAULT NULL,
             features longtext DEFAULT NULL,
             status varchar(20) DEFAULT 'active',
+            is_default tinyint(1) DEFAULT 0,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             UNIQUE KEY name (name),
             KEY status (status),
+            KEY is_default (is_default),
             KEY created_at (created_at),
             KEY updated_at (updated_at)
         ) $charset_collate;";
@@ -71,9 +73,13 @@ class CBD_Schema_Manager {
      */
     public static function run_migrations() {
         $current_version = get_option(self::DB_VERSION_KEY, '0');
-        
+
         if (version_compare($current_version, '2.6.0', '<')) {
             self::migrate_to_2_6_0();
+        }
+
+        if (version_compare($current_version, '2.9.0', '<')) {
+            self::migrate_to_2_9_0();
         }
     }
     
@@ -192,7 +198,30 @@ class CBD_Schema_Manager {
             $wpdb->query("UPDATE $table_name SET features = '{}' WHERE features IS NULL");
         }
     }
-    
+
+    /**
+     * Migration to version 2.9.0 - Add is_default field for default style
+     */
+    private static function migrate_to_2_9_0() {
+        global $wpdb;
+        $table_name = CBD_TABLE_BLOCKS;
+
+        // Get current columns
+        $columns = $wpdb->get_col("SHOW COLUMNS FROM $table_name");
+
+        if (empty($columns)) {
+            return; // Table doesn't exist yet
+        }
+
+        // Add is_default column if missing
+        if (!in_array('is_default', $columns)) {
+            $wpdb->query("ALTER TABLE $table_name ADD COLUMN `is_default` tinyint(1) DEFAULT 0 AFTER `status`");
+
+            // Add index for faster queries
+            $wpdb->query("ALTER TABLE $table_name ADD KEY `is_default` (`is_default`)");
+        }
+    }
+
     /**
      * Check if string is valid JSON
      */
