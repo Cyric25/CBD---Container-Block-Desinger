@@ -84,15 +84,16 @@ class CBD_Ajax_Handler {
         }
         
         // SQL-Query für aktive Blocks
-        $sql = "SELECT 
+        $sql = "SELECT
                 id,
                 COALESCE(title, name) as name,
                 slug,
                 description,
                 config,
                 features,
-                status
-            FROM $table_name 
+                status,
+                COALESCE(is_default, 0) as is_default
+            FROM $table_name
             WHERE status = 'active' OR status IS NULL
             ORDER BY COALESCE(title, name) ASC";
         
@@ -120,7 +121,8 @@ class CBD_Ajax_Handler {
                     'slug' => sanitize_title($block['slug']),
                     'description' => esc_html($block['description'] ?: ''),
                     'config' => $config ?: array(),
-                    'features' => $features ?: array()
+                    'features' => $features ?: array(),
+                    'is_default' => intval($block['is_default'] ?? 0)
                 );
             }
         }
