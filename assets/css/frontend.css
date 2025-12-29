@@ -12,8 +12,21 @@
     /* All visual styling should be on .cbd-container-block instead */
 }
 
-.cbd-container * {
+/* Apply box-sizing only to direct children and CBD elements, excluding nested WP blocks */
+.cbd-container > *:not(.wp-block):not(.block-editor-inner-blocks):not(.block-editor-block-list__layout),
+.cbd-container .cbd-container-block > *,
+.cbd-container .cbd-feature-buttons *,
+.cbd-container .cbd-block-icon,
+.cbd-container .cbd-block-number {
     box-sizing: border-box;
+}
+
+/* Ensure nested WordPress blocks inherit their own box-sizing */
+.cbd-container .wp-block,
+.cbd-container .wp-block *,
+.cbd-container .block-editor-inner-blocks,
+.cbd-container .block-editor-inner-blocks * {
+    box-sizing: inherit;
 }
 
 /* Container Alignments */

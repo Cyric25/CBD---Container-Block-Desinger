@@ -176,11 +176,23 @@
     }
 }
 
-/* Performance optimizations */
-.cbd-container-block * {
+/* Performance optimizations - only for CBD elements, not nested blocks */
+.cbd-container-block > *:not(.wp-block):not(.block-editor-inner-blocks),
+.cbd-container-block .cbd-block-content > *,
+.cbd-container-block .cbd-block-header *,
+.cbd-container-block .cbd-feature-buttons * {
     will-change: auto;
 }
 
-.cbd-container-block.cbd-animated * {
+.cbd-container-block.cbd-animated > *:not(.wp-block):not(.block-editor-inner-blocks),
+.cbd-container-block.cbd-animated .cbd-block-content > *,
+.cbd-container-block.cbd-animated .cbd-block-header *,
+.cbd-container-block.cbd-animated .cbd-feature-buttons * {
     will-change: transform, opacity;
+}
+
+/* Ensure nested blocks keep their own will-change */
+.cbd-container-block .wp-block,
+.cbd-container-block .wp-block * {
+    will-change: inherit;
 }

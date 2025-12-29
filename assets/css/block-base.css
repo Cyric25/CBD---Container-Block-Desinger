@@ -16,8 +16,22 @@
     /* This is where all visual styling should be applied */
 }
 
-.cbd-container-block * {
+/* Apply box-sizing only to CBD elements, excluding InnerBlocks */
+.cbd-container-block > *,
+.cbd-container-block .cbd-block-content > *,
+.cbd-container-block .cbd-block-header *,
+.cbd-container-block .cbd-feature-buttons *,
+.cbd-container-block .cbd-block-icon,
+.cbd-container-block .cbd-block-number {
     box-sizing: border-box;
+}
+
+/* Ensure InnerBlocks are not affected */
+.cbd-container-block .block-editor-inner-blocks,
+.cbd-container-block .block-editor-inner-blocks *,
+.cbd-container-block .block-editor-block-list__layout,
+.cbd-container-block .block-editor-block-list__layout * {
+    box-sizing: inherit;
 }
 
 .cbd-container-block .cbd-block-content {

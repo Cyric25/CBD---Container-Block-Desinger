@@ -51,8 +51,8 @@
     backdrop-filter: none !important;
 }
 
-/* Ensure wrapper children that should be outside remain outside */
-.cbd-container > * {
+/* Ensure wrapper children that should be outside remain outside, but exclude InnerBlocks */
+.cbd-container > *:not(.block-editor-inner-blocks):not(.block-editor-block-list__layout) {
     position: relative;
     z-index: 1;
 }
@@ -115,8 +115,24 @@
     margin-top: 15px !important;
 }
 
-.cbd-container-block * {
+/* Apply box-sizing only to CBD elements, excluding InnerBlocks */
+.cbd-container-block > *:not(.block-editor-inner-blocks):not(.block-editor-block-list__layout),
+.cbd-container-block .cbd-block-content > *,
+.cbd-container-block .cbd-block-header *,
+.cbd-container-block .cbd-feature-buttons *,
+.cbd-container-block .cbd-block-icon,
+.cbd-container-block .cbd-block-number {
     box-sizing: border-box;
+}
+
+/* Ensure InnerBlocks and nested blocks inherit their own box-sizing */
+.cbd-container-block .block-editor-inner-blocks,
+.cbd-container-block .block-editor-inner-blocks *,
+.cbd-container-block .block-editor-block-list__layout,
+.cbd-container-block .block-editor-block-list__layout *,
+.cbd-container-block .wp-block,
+.cbd-container-block .wp-block * {
+    box-sizing: inherit;
 }
 
 /* ============================================
