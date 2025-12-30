@@ -96,8 +96,9 @@
                     });
 
                     if (defaultBlock) {
-                        console.log('CBD: Standard-Block gefunden, wird automatisch geladen:', defaultBlock.name);
-                        setAttributes({ selectedBlock: defaultBlock.name });
+                        const blockValue = defaultBlock.slug || defaultBlock.id;
+                        console.log('CBD: Standard-Block gefunden, wird automatisch geladen:', defaultBlock.name, 'Value:', blockValue);
+                        setAttributes({ selectedBlock: blockValue });
                         setDefaultLoaded(true);
                     } else {
                         console.log('CBD: Kein Standard-Block gefunden');
