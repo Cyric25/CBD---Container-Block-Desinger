@@ -76,7 +76,8 @@
             
             const [availableBlocks, setAvailableBlocks] = useState([]);
             const [isLoading, setIsLoading] = useState(false);
-            
+            const [defaultLoaded, setDefaultLoaded] = useState(false);
+
             // Lade Blocks beim ersten Rendern
             useEffect(() => {
                 loadBlocks();
@@ -84,16 +85,26 @@
 
             // Automatisch Standard-Block laden, wenn kein Block ausgewählt ist
             useEffect(() => {
-                if (!selectedBlock && availableBlocks.length > 0) {
+                // Nur beim ersten Laden und wenn noch kein Block ausgewählt ist
+                if (!defaultLoaded && !selectedBlock && availableBlocks.length > 0) {
+                    console.log('CBD: Prüfe auf Standard-Block...', availableBlocks);
+
                     // Finde Standard-Block
-                    const defaultBlock = availableBlocks.find(block => block.is_default == 1 || block.is_default === true);
+                    const defaultBlock = availableBlocks.find(block => {
+                        console.log('CBD: Block:', block.name, 'is_default:', block.is_default);
+                        return block.is_default == 1 || block.is_default === true;
+                    });
 
                     if (defaultBlock) {
                         console.log('CBD: Standard-Block gefunden, wird automatisch geladen:', defaultBlock.name);
                         setAttributes({ selectedBlock: defaultBlock.name });
+                        setDefaultLoaded(true);
+                    } else {
+                        console.log('CBD: Kein Standard-Block gefunden');
+                        setDefaultLoaded(true); // Trotzdem als "geladen" markieren
                     }
                 }
-            }, [availableBlocks, selectedBlock]);
+            }, [availableBlocks, selectedBlock, defaultLoaded]);
 
             const loadBlocks = () => {
                 setIsLoading(true);
