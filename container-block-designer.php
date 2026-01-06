@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://example.com/container-block-designer
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 2.8.5
+ * Version: 2.9.0
  * Author: Your Name
  * Author URI: https://example.com
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '2.8.5');
+define('CBD_VERSION', '2.9.0');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -105,6 +105,9 @@ class ContainerBlockDesigner {
 
         // LaTeX Parser für mathematische Formeln
         require_once CBD_PLUGIN_DIR . 'includes/class-latex-parser.php';
+
+        // LaTeX Bulk Cleanup für beschädigte Formeln
+        require_once CBD_PLUGIN_DIR . 'includes/class-latex-bulk-cleanup.php';
 
         // PDF Generator für serverseitige PDF-Erstellung
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-pdf-generator.php';
@@ -238,6 +241,11 @@ class ContainerBlockDesigner {
             // LaTeX Parser initialization
             if (class_exists('CBD_LaTeX_Parser')) {
                 CBD_LaTeX_Parser::get_instance();
+            }
+
+            // LaTeX Bulk Cleanup initialization
+            if (class_exists('CBD_LaTeX_Bulk_Cleanup')) {
+                CBD_LaTeX_Bulk_Cleanup::get_instance();
             }
 
             // Block Reference initialization

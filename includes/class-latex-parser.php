@@ -49,10 +49,12 @@ class CBD_LaTeX_Parser {
 
         // GLOBAL BLOCK FILTER:Parse LaTeX in ALL WordPress blocks
         // This filter runs for every block before rendering (Gutenberg blocks)
-        add_filter('render_block', array($this, 'parse_latex_in_blocks'), 10, 2);
+        // Priority 5: Run BEFORE wpautop and other text formatting filters
+        add_filter('render_block', array($this, 'parse_latex_in_blocks'), 5, 2);
 
         // Legacy filter for classic editor content and non-block content
-        add_filter('the_content', array($this, 'parse_latex'), 999);
+        // Priority 5: Run BEFORE wpautop (priority 10)
+        add_filter('the_content', array($this, 'parse_latex'), 5);
     }
 
     /**
@@ -144,6 +146,26 @@ class CBD_LaTeX_Parser {
         if (strpos($content, 'cbd-latex-formula') !== false) {
             return $content;
         }
+
+        // CONSERVATIVE: Only decode specific HTML entities, NOT all
+        // Be careful with backslashes - WordPress might strip them
+        $content = str_replace('&bsol;', '\\', $content);
+        $content = str_replace('&#92;', '\\', $content);
+
+        // Fix corrupted LaTeX formulas where underscores were converted to <em> tags
+        // ONLY within existing dollar signs - don't auto-wrap
+
+        // Pattern 1: Remove <em> tags within dollar signs
+        $content = preg_replace_callback(
+            '/(\$[^$]*?)<em>([^<]+?)<\/em>([^$]*?\$)/i',
+            function($matches) {
+                return $matches[1] . '_' . $matches[2] . '_' . $matches[3];
+            },
+            $content
+        );
+
+        // Pattern 2: REMOVED - too aggressive, don't auto-wrap
+        // Let user wrap their own formulas in $ signs
 
         // Reset counter for each content block
         $this->formula_counter = 0;
