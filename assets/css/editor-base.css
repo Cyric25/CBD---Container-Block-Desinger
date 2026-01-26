@@ -6,6 +6,25 @@
 /* Note: cbd-frontend-clean.css is loaded separately by WordPress */
 /* No @import needed - prevents 404 errors in admin context */
 
+/* ============================================
+   INNERBLOCKS ISOLATION
+   Ensure nested blocks (like modular-blocks) maintain their own styles
+   ============================================ */
+[data-type*="container-block-designer"] .cbd-block-content [class*="wp-block-modular-blocks"],
+[data-type*="container-block-designer"] .cbd-block-content [class*="wp-block-modular-blocks"] * {
+    /* Reset inherited styles from CBD container */
+    all: revert;
+    box-sizing: border-box;
+}
+
+/* Ensure modular-blocks editor containers are not affected by CBD styles */
+[data-type*="container-block-designer"] [class*="modular-blocks"][class*="editor"] {
+    all: revert;
+    display: block !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+}
+
 /* Editor-specific wrapper - Universal selectors for all container blocks */
 .wp-block[data-type*="container-block-designer"],
 [class*="wp-block-container-block-designer"] {
