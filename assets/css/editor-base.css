@@ -9,20 +9,31 @@
 /* ============================================
    INNERBLOCKS ISOLATION
    Ensure nested blocks (like modular-blocks) maintain their own styles
+   Do NOT use 'all: revert' as it breaks WordPress components
    ============================================ */
-[data-type*="container-block-designer"] .cbd-block-content [class*="wp-block-modular-blocks"],
-[data-type*="container-block-designer"] .cbd-block-content [class*="wp-block-modular-blocks"] * {
-    /* Reset inherited styles from CBD container */
-    all: revert;
-    box-sizing: border-box;
-}
 
-/* Ensure modular-blocks editor containers are not affected by CBD styles */
-[data-type*="container-block-designer"] [class*="modular-blocks"][class*="editor"] {
-    all: revert;
+/* Reset only layout-affecting properties for modular-blocks inside CBD */
+[data-type*="container-block-designer"] .cbd-block-content .wp-block-modular-blocks-drag-and-drop-editor {
+    /* Ensure the block displays correctly */
     display: block !important;
     position: relative !important;
+    background: #ffffff !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 8px !important;
+    padding: 20px !important;
+    margin: 16px 0 !important;
     box-sizing: border-box !important;
+    opacity: 1 !important;
+    transform: none !important;
+    z-index: auto !important;
+    min-height: auto !important;
+    pointer-events: auto !important;
+}
+
+/* Ensure child elements inside modular-blocks are not affected by CBD styles */
+[data-type*="container-block-designer"] .cbd-block-content .wp-block-modular-blocks-drag-and-drop-editor * {
+    opacity: 1 !important;
+    pointer-events: auto !important;
 }
 
 /* Editor-specific wrapper - Universal selectors for all container blocks */
