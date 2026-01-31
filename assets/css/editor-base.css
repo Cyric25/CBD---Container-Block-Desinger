@@ -7,6 +7,28 @@
 /* No @import needed - prevents 404 errors in admin context */
 
 /* ============================================
+   EDITOR BLOCK CENTERING
+   Center the CDB block in the editor like other WordPress blocks
+   ============================================ */
+
+/* Main block wrapper - center in editor */
+[data-type="container-block-designer/container"] {
+    max-width: 650px;
+    margin-left: auto !important;
+    margin-right: auto !important;
+}
+
+/* Wide alignment */
+[data-type="container-block-designer/container"][data-align="wide"] {
+    max-width: 1100px;
+}
+
+/* Full width alignment */
+[data-type="container-block-designer/container"][data-align="full"] {
+    max-width: none;
+}
+
+/* ============================================
    INNERBLOCKS ISOLATION
    Ensure nested blocks (like modular-blocks) maintain their own styles
    Modular blocks use inline styles for critical properties
