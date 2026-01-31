@@ -594,15 +594,26 @@
 }
 
 /* Additional protection against theme interference */
-.cbd-container,
-.cbd-container *:not(.cbd-container-block):not(.cbd-container-block *) {
-    /* Remove any possible theme styles from wrapper and its direct children (but not from content block) */
+/* FIXED: Use direct child combinator to avoid affecting InnerBlocks content */
+.cbd-container {
     background: none !important;
     background-color: transparent !important;
     border: none !important;
     box-shadow: none !important;
     outline: none !important;
 }
+
+/* Only reset direct children that are NOT the content block or UI elements */
+.cbd-container > :not(.cbd-container-block):not(.cbd-selection-menu):not(.cbd-action-buttons):not(.cbd-container-number):not(.cbd-header):not(.cbd-icon):not(.cbd-block-icon):not(.cbd-block-number) {
+    background: none !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* IMPORTANT: Do NOT use wildcard descendant selectors like .cbd-container *
+   as they will break InnerBlocks styling */
 
 /* Content block styling remains as default - inline styles will naturally override */
 

@@ -9,31 +9,919 @@
 /* ============================================
    INNERBLOCKS ISOLATION
    Ensure nested blocks (like modular-blocks) maintain their own styles
+   Modular blocks use inline styles for critical properties
    Do NOT use 'all: revert' as it breaks WordPress components
    ============================================ */
 
-/* Reset only layout-affecting properties for modular-blocks inside CBD */
+/* Modular blocks inside CBD - the block uses inline styles for critical props */
+/* This just ensures the wrapper doesn't interfere */
+/* Target both editor path (.block-editor-inner-blocks) and potential frontend path (.cbd-block-content) */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .wp-block-modular-blocks-drag-and-drop-editor,
 [data-type*="container-block-designer"] .cbd-block-content .wp-block-modular-blocks-drag-and-drop-editor {
-    /* Ensure the block displays correctly */
-    display: block !important;
-    position: relative !important;
+    isolation: isolate;
+}
+
+/* ============================================
+   UNIVERSAL INNERBLOCKS PROTECTION
+   Ensure ALL blocks nested inside CDB containers work correctly
+   Individual blocks should NOT need CDB-specific CSS overrides
+   ============================================ */
+
+/* Reset any inherited destructive styles for nested WordPress blocks */
+[data-type*="container-block-designer"] .block-editor-inner-blocks [class*="wp-block-modular-blocks"],
+[data-type*="container-block-designer"] .cbd-block-content [class*="wp-block-modular-blocks"],
+.cbd-container-block [class*="wp-block-modular-blocks"],
+.cbd-block-content [class*="wp-block-modular-blocks"] {
+    /* Allow block's own styles to take effect */
+    background: unset;
+    background-color: unset;
+    border: unset;
+    box-shadow: unset;
+    outline: unset;
+}
+
+/* ============================================
+   DRAG-AND-DROP BLOCK SPECIFIC FIXES
+   Ensure custom elements in this block display correctly
+   ============================================ */
+
+/* Zone checkboxes - ensure labels are visible */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .zone-checkbox,
+[data-type*="container-block-designer"] .cbd-block-content .zone-checkbox {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    color: #1e1e1e !important;
     background: #ffffff !important;
     border: 1px solid #e0e0e0 !important;
-    border-radius: 8px !important;
-    padding: 20px !important;
-    margin: 16px 0 !important;
-    box-sizing: border-box !important;
+    padding: 8px 10px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    font-size: 14px !important;
     opacity: 1 !important;
-    transform: none !important;
-    z-index: auto !important;
-    min-height: auto !important;
+    visibility: visible !important;
+}
+
+/* Zone label indicator (color square) */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .zone-label-indicator,
+[data-type*="container-block-designer"] .cbd-block-content .zone-label-indicator {
+    display: inline-block !important;
+    width: 14px !important;
+    height: 14px !important;
+    border-radius: 3px !important;
+    flex-shrink: 0 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    /* Don't set background - let inline style work */
+}
+
+/* Correct zones section */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .correct-zones-section,
+[data-type*="container-block-designer"] .cbd-block-content .correct-zones-section {
+    background: #f0f9ff !important;
+    border: 1px solid #bae6fd !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    margin: 16px 0 !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .section-label,
+[data-type*="container-block-designer"] .cbd-block-content .section-label {
+    display: block !important;
+    font-weight: 600 !important;
+    font-size: 12px !important;
+    color: #0369a1 !important;
+    margin-bottom: 12px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .zone-checkboxes,
+[data-type*="container-block-designer"] .cbd-block-content .zone-checkboxes {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+}
+
+/* Item color indicator in headers */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .item-color-indicator,
+[data-type*="container-block-designer"] .cbd-block-content .item-color-indicator {
+    display: inline-block !important;
+    width: 20px !important;
+    height: 20px !important;
+    border-radius: 4px !important;
+    flex-shrink: 0 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    /* Don't set background - let inline style work */
+}
+
+/* ============================================
+   WordPress ColorPalette Component Fix
+   The checkered pattern is a transparency indicator.
+   We need to ensure the actual color background shows.
+
+   IMPORTANT: In the editor, InnerBlocks uses .block-editor-inner-blocks
+   NOT .cbd-block-content - so we target both paths
+   ============================================ */
+
+/* ColorPalette wrapper - target both editor and frontend paths */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-color-palette__custom-color-wrapper,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-color-palette,
+[data-type*="container-block-designer"] .cbd-block-content .components-color-palette__custom-color-wrapper,
+[data-type*="container-block-designer"] .cbd-block-content .components-color-palette {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Custom color button - the circle that shows selected color */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-color-palette__custom-color-button,
+[data-type*="container-block-designer"] .cbd-block-content .components-color-palette__custom-color-button {
+    display: inline-block !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    border-radius: 50% !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 4px !important;
+    cursor: pointer !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2) !important;
+}
+
+/* Color swatches container */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-circular-option-picker__swatches,
+[data-type*="container-block-designer"] .cbd-block-content .components-circular-option-picker__swatches {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Individual color swatch wrapper - transparent background, no pseudo-elements */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-circular-option-picker__option-wrapper,
+[data-type*="container-block-designer"] .cbd-block-content .components-circular-option-picker__option-wrapper {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    margin: 0 4px 4px 0 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    position: relative !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+}
+
+/* Hide ALL pseudo-elements (::before AND ::after) on wrapper */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-circular-option-picker__option-wrapper::before,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-circular-option-picker__option-wrapper::after,
+[data-type*="container-block-designer"] .cbd-block-content .components-circular-option-picker__option-wrapper::before,
+[data-type*="container-block-designer"] .cbd-block-content .components-circular-option-picker__option-wrapper::after {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    content: none !important;
+}
+
+/* Individual color swatch button - CRITICAL: use 'unset' to allow inline background-color to work */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-circular-option-picker__option,
+[data-type*="container-block-designer"] .cbd-block-content .components-circular-option-picker__option {
+    display: block !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    border-radius: 50% !important;
+    padding: 0 !important;
+    cursor: pointer !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 1 !important;
+    border: none !important;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2) !important;
+}
+
+/* Hide pseudo-elements on the button itself too */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-circular-option-picker__option::before,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-circular-option-picker__option::after,
+[data-type*="container-block-designer"] .cbd-block-content .components-circular-option-picker__option::before,
+[data-type*="container-block-designer"] .cbd-block-content .components-circular-option-picker__option::after {
+    display: none !important;
+    content: none !important;
+}
+
+/* WordPress 6.x uses button elements directly - ensure they show their background */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-circular-option-picker__option[style*="background"],
+[data-type*="container-block-designer"] .cbd-block-content .components-circular-option-picker__option[style*="background"] {
+    /* These buttons have inline background-color - don't override */
+}
+
+/* Dropdown button for custom color - the "Individuell" button */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-color-palette__custom-color-button,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-dropdown button[style*="background"],
+[data-type*="container-block-designer"] .cbd-block-content .components-color-palette__custom-color-button,
+[data-type*="container-block-designer"] .cbd-block-content .components-dropdown button[style*="background"] {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    border-radius: 50% !important;
+    border: none !important;
+    padding: 0 !important;
+    cursor: pointer !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2) !important;
+    /* Don't set background - let inline style work */
+}
+
+/* The color indicator inside buttons */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-color-indicator,
+[data-type*="container-block-designer"] .cbd-block-content .components-color-indicator {
+    display: inline-block !important;
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 50% !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    /* Don't set background - let inline style work */
+}
+
+/* ColorPalette item (WordPress 6.x structure) - transparent wrapper, no pseudo-elements */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-color-palette__item-wrapper,
+[data-type*="container-block-designer"] .cbd-block-content .components-color-palette__item-wrapper {
+    display: inline-flex !important;
+    margin: 0 4px 4px 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+}
+
+/* Hide ALL pseudo-elements on item wrapper */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-color-palette__item-wrapper::before,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-color-palette__item-wrapper::after,
+[data-type*="container-block-designer"] .cbd-block-content .components-color-palette__item-wrapper::before,
+[data-type*="container-block-designer"] .cbd-block-content .components-color-palette__item-wrapper::after {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    content: none !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-color-palette__item,
+[data-type*="container-block-designer"] .cbd-block-content .components-color-palette__item {
+    display: block !important;
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    border-radius: 50% !important;
+    padding: 0 !important;
+    cursor: pointer !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    position: relative !important;
+    z-index: 1 !important;
+    border: none !important;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2) !important;
+    /* Don't set any background properties - let inline styles work */
+}
+
+/* Hide ALL pseudo-elements on item */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-color-palette__item::before,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-color-palette__item::after,
+[data-type*="container-block-designer"] .cbd-block-content .components-color-palette__item::before,
+[data-type*="container-block-designer"] .cbd-block-content .components-color-palette__item::after {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    content: none !important;
+}
+
+/* Swatch buttons inside ColorPalette - target the actual button elements */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-circular-option-picker button[style],
+[data-type*="container-block-designer"] .cbd-block-content .components-circular-option-picker button[style] {
+    opacity: 1 !important;
+    visibility: visible !important;
+    /* Don't override background - inline style has the color */
+}
+
+/* ============================================
+   CUSTOM COLOR PICKER FIX (Drag-and-Drop Block)
+   The drag-and-drop block uses a custom div-based color picker
+   because WordPress ColorPalette doesn't work reliably inside CDB
+   ============================================ */
+
+/* Custom color picker container */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .custom-color-picker,
+[data-type*="container-block-designer"] .cbd-block-content .custom-color-picker {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Individual color swatch div */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .color-swatch-item,
+[data-type*="container-block-designer"] .cbd-block-content .color-swatch-item {
+    display: flex !important;
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    cursor: pointer !important;
+    position: relative !important;
+    overflow: hidden !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    /* Outer div should be transparent - inner span has color */
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
+/* CRITICAL: Inner span that shows the actual color
+   Uses ref callback with style.setProperty() for !important backgrounds */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .color-swatch-item > span,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .color-swatch-color,
+[data-type*="container-block-designer"] .cbd-block-content .color-swatch-item > span,
+[data-type*="container-block-designer"] .cbd-block-content .color-swatch-color {
+    position: absolute !important;
+    top: 2px !important;
+    left: 2px !important;
+    right: 2px !important;
+    bottom: 2px !important;
+    border-radius: 50% !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    display: block !important;
+    /* Background is set via JavaScript ref callback with !important */
+}
+
+/* Ensure no pseudo-elements cover the color */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .color-swatch-item::before,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .color-swatch-item::after,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .color-swatch-item > span::before,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .color-swatch-item > span::after,
+[data-type*="container-block-designer"] .cbd-block-content .color-swatch-item::before,
+[data-type*="container-block-designer"] .cbd-block-content .color-swatch-item::after,
+[data-type*="container-block-designer"] .cbd-block-content .color-swatch-item > span::before,
+[data-type*="container-block-designer"] .cbd-block-content .color-swatch-item > span::after {
+    display: none !important;
+    content: none !important;
+}
+
+/* SVG checkmark visibility */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .color-swatch-item svg,
+[data-type*="container-block-designer"] .cbd-block-content .color-swatch-item svg {
+    position: relative !important;
+    z-index: 2 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* ============================================
+   VISUAL EDITOR - Drop Zones Fix (Drag-and-Drop Block)
+   Ensure zone borders and backgrounds are visible
+   ============================================ */
+
+/* Visual editor container */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .visual-editor-container,
+[data-type*="container-block-designer"] .cbd-block-content .visual-editor-container {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Visual editor area (contains image and zones) */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .visual-editor-area,
+[data-type*="container-block-designer"] .cbd-block-content .visual-editor-area {
+    position: relative !important;
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    border: none !important;
+    overflow: hidden !important;
+}
+
+/* Zones overlay */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .visual-editor-zones-overlay,
+[data-type*="container-block-designer"] .cbd-block-content .visual-editor-zones-overlay {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Individual drop zones - ensure borders are visible */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .visual-zone,
+[data-type*="container-block-designer"] .cbd-block-content .visual-zone {
+    position: absolute !important;
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    /* Default border - shows as dashed gray */
+    border-style: dashed !important;
+    border-width: 2px !important;
+    border-color: #888888 !important;
+    border-radius: 4px !important;
+    background-color: rgba(128, 128, 128, 0.15) !important;
+    box-sizing: border-box !important;
+}
+
+/* Selected zone - solid border */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .visual-zone.selected,
+[data-type*="container-block-designer"] .cbd-block-content .visual-zone.selected {
+    border-style: solid !important;
+    border-color: #555555 !important;
+    background-color: rgba(128, 128, 128, 0.25) !important;
+    box-shadow: 0 0 0 2px #555555 !important;
+    z-index: 10 !important;
+}
+
+/* Zone labels */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .visual-zone-label,
+[data-type*="container-block-designer"] .cbd-block-content .visual-zone-label {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    color: #333333 !important;
+}
+
+/* Resize handles */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .resize-handle,
+[data-type*="container-block-designer"] .cbd-block-content .resize-handle {
+    display: block !important;
+    opacity: 0.8 !important;
+    visibility: visible !important;
+    background-color: #555555 !important;
+}
+
+/* Zone delete button */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .zone-delete-btn,
+[data-type*="container-block-designer"] .cbd-block-content .zone-delete-btn {
+    display: flex !important;
+    visibility: visible !important;
+    background-color: #dc2626 !important;
+    color: white !important;
+    border: 2px solid white !important;
+}
+
+/* ============================================
+   PREVIEW TAB - Drop Zones and Draggables
+   Ensure preview elements are visible inside CDB containers
+   ============================================ */
+
+/* Preview container */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .drag-drop-preview,
+[data-type*="container-block-designer"] .cbd-block-content .drag-drop-preview {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Preview area (contains image and zones) */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .preview-area,
+[data-type*="container-block-designer"] .cbd-block-content .preview-area {
+    position: relative !important;
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    min-height: 200px !important;
+    overflow: hidden !important;
+}
+
+/* Preview zones - gray dashed borders */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .preview-zone,
+[data-type*="container-block-designer"] .cbd-block-content .preview-zone {
+    position: absolute !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    border: 2px dashed #888888 !important;
+    border-radius: 6px !important;
+    background-color: rgba(128, 128, 128, 0.15) !important;
+    color: #333333 !important;
+    font-size: 12px !important;
+}
+
+/* Preview draggables container */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .preview-draggables,
+[data-type*="container-block-designer"] .cbd-block-content .preview-draggables {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    background: #ffffff !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 6px !important;
+    padding: 12px 16px !important;
+}
+
+/* Preview draggables list */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .draggables-list,
+[data-type*="container-block-designer"] .cbd-block-content .draggables-list {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Individual preview draggable */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .preview-draggable,
+[data-type*="container-block-designer"] .cbd-block-content .preview-draggable {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    border-radius: 6px !important;
+    padding: 8px 12px !important;
+    color: #ffffff !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+}
+
+/* Prevent block dragging */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .drag-drop-editor,
+[data-type*="container-block-designer"] .cbd-block-content .drag-drop-editor {
+    user-select: text !important;
+}
+
+/* ============================================
+   COMPREHENSIVE WordPress Component Fixes
+   Target both .block-editor-inner-blocks (editor) and .cbd-block-content (fallback)
+   These rules ensure ALL WordPress components work inside CDB containers
+   ============================================ */
+
+/* ============================================
+   TOGGLE CONTROL - Complete fix
+   ============================================ */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-toggle-control,
+[data-type*="container-block-designer"] .cbd-block-content .components-toggle-control {
+    display: flex !important;
+    opacity: 1 !important;
+    visibility: visible !important;
     pointer-events: auto !important;
 }
 
-/* Ensure child elements inside modular-blocks are not affected by CBD styles */
-[data-type*="container-block-designer"] .cbd-block-content .wp-block-modular-blocks-drag-and-drop-editor * {
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-toggle-control .components-base-control__field,
+[data-type*="container-block-designer"] .cbd-block-content .components-toggle-control .components-base-control__field {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+}
+
+/* The actual toggle switch container */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-form-toggle,
+[data-type*="container-block-designer"] .cbd-block-content .components-form-toggle {
+    display: inline-block !important;
+    position: relative !important;
+    width: 36px !important;
+    height: 18px !important;
     opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Toggle track (background) */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-form-toggle__track,
+[data-type*="container-block-designer"] .cbd-block-content .components-form-toggle__track {
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 36px !important;
+    height: 18px !important;
+    border-radius: 9px !important;
+    background: #949494 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    transition: background 0.2s ease !important;
+}
+
+/* Toggle thumb (circle) */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-form-toggle__thumb,
+[data-type*="container-block-designer"] .cbd-block-content .components-form-toggle__thumb {
+    display: block !important;
+    position: absolute !important;
+    top: 3px !important;
+    left: 3px !important;
+    width: 12px !important;
+    height: 12px !important;
+    border-radius: 50% !important;
+    background: #ffffff !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    transition: transform 0.2s ease !important;
+}
+
+/* Toggle checked state */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-form-toggle.is-checked .components-form-toggle__track,
+[data-type*="container-block-designer"] .cbd-block-content .components-form-toggle.is-checked .components-form-toggle__track {
+    background: #007cba !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-form-toggle.is-checked .components-form-toggle__thumb,
+[data-type*="container-block-designer"] .cbd-block-content .components-form-toggle.is-checked .components-form-toggle__thumb {
+    transform: translateX(18px) !important;
+}
+
+/* Toggle input (hidden but functional) */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-form-toggle__input,
+[data-type*="container-block-designer"] .cbd-block-content .components-form-toggle__input {
+    position: absolute !important;
+    width: 100% !important;
+    height: 100% !important;
+    opacity: 0 !important;
+    cursor: pointer !important;
+    z-index: 1 !important;
+}
+
+/* ============================================
+   RANGE CONTROL - Complete fix
+   ============================================ */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-range-control,
+[data-type*="container-block-designer"] .cbd-block-content .components-range-control {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-range-control__wrapper,
+[data-type*="container-block-designer"] .cbd-block-content .components-range-control__wrapper {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Range slider container */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-range-control__slider,
+[data-type*="container-block-designer"] .cbd-block-content .components-range-control__slider {
+    display: block !important;
+    flex: 1 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    height: 4px !important;
+    background: #ddd !important;
+    border-radius: 2px !important;
+    outline: none !important;
+    cursor: pointer !important;
+}
+
+/* Range slider thumb - webkit */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-range-control__slider::-webkit-slider-thumb,
+[data-type*="container-block-designer"] .cbd-block-content .components-range-control__slider::-webkit-slider-thumb {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    width: 16px !important;
+    height: 16px !important;
+    border-radius: 50% !important;
+    background: #007cba !important;
+    cursor: pointer !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+}
+
+/* Range slider thumb - moz */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-range-control__slider::-moz-range-thumb,
+[data-type*="container-block-designer"] .cbd-block-content .components-range-control__slider::-moz-range-thumb {
+    width: 16px !important;
+    height: 16px !important;
+    border-radius: 50% !important;
+    background: #007cba !important;
+    cursor: pointer !important;
+    border: 2px solid #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+}
+
+/* Range slider track - moz */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-range-control__slider::-moz-range-track,
+[data-type*="container-block-designer"] .cbd-block-content .components-range-control__slider::-moz-range-track {
+    height: 4px !important;
+    background: #ddd !important;
+    border-radius: 2px !important;
+}
+
+/* Range number input */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-range-control__number,
+[data-type*="container-block-designer"] .cbd-block-content .components-range-control__number {
+    display: block !important;
+    width: 60px !important;
+    padding: 4px 8px !important;
+    border: 1px solid #ddd !important;
+    border-radius: 4px !important;
+    text-align: center !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* ============================================
+   CHECKBOX CONTROL - Complete fix
+   ============================================ */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-checkbox-control,
+[data-type*="container-block-designer"] .cbd-block-content .components-checkbox-control {
+    display: flex !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-checkbox-control__input-container,
+[data-type*="container-block-designer"] .cbd-block-content .components-checkbox-control__input-container {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 20px !important;
+    height: 20px !important;
+    position: relative !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-checkbox-control__input,
+[data-type*="container-block-designer"] .cbd-block-content .components-checkbox-control__input {
+    display: block !important;
+    width: 18px !important;
+    height: 18px !important;
+    border: 1px solid #949494 !important;
+    border-radius: 3px !important;
+    background: #ffffff !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    cursor: pointer !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-checkbox-control__input:checked,
+[data-type*="container-block-designer"] .cbd-block-content .components-checkbox-control__input:checked {
+    background: #007cba !important;
+    border-color: #007cba !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-checkbox-control__checked,
+[data-type*="container-block-designer"] .cbd-block-content .components-checkbox-control__checked {
+    display: none !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-checkbox-control__input:checked + .components-checkbox-control__checked,
+[data-type*="container-block-designer"] .cbd-block-content .components-checkbox-control__input:checked + .components-checkbox-control__checked {
+    display: block !important;
+    position: absolute !important;
+    color: #ffffff !important;
+    pointer-events: none !important;
+}
+
+/* Native checkbox inputs */
+[data-type*="container-block-designer"] .block-editor-inner-blocks input[type="checkbox"],
+[data-type*="container-block-designer"] .cbd-block-content input[type="checkbox"] {
+    display: inline-block !important;
+    width: 16px !important;
+    height: 16px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    cursor: pointer !important;
+}
+
+/* ============================================
+   BUTTONS - Complete fix
+   ============================================ */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-button,
+[data-type*="container-block-designer"] .cbd-block-content .components-button {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 1 !important;
+    visibility: visible !important;
     pointer-events: auto !important;
+    cursor: pointer !important;
+}
+
+/* Primary button style */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-button.is-primary,
+[data-type*="container-block-designer"] .cbd-block-content .components-button.is-primary {
+    background: #007cba !important;
+    color: #ffffff !important;
+    border: none !important;
+    padding: 6px 12px !important;
+    border-radius: 3px !important;
+}
+
+/* Secondary button style */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-button.is-secondary,
+[data-type*="container-block-designer"] .cbd-block-content .components-button.is-secondary {
+    background: transparent !important;
+    color: #007cba !important;
+    border: 1px solid #007cba !important;
+    padding: 6px 12px !important;
+    border-radius: 3px !important;
+}
+
+/* Tertiary/link button style */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-button.is-tertiary,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-button.is-link,
+[data-type*="container-block-designer"] .cbd-block-content .components-button.is-tertiary,
+[data-type*="container-block-designer"] .cbd-block-content .components-button.is-link {
+    background: transparent !important;
+    color: #007cba !important;
+    border: none !important;
+    text-decoration: underline !important;
+}
+
+/* Destructive button style */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-button.is-destructive,
+[data-type*="container-block-designer"] .cbd-block-content .components-button.is-destructive {
+    color: #cc1818 !important;
+}
+
+/* ============================================
+   FORM CONTROLS - Complete fix
+   ============================================ */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-base-control,
+[data-type*="container-block-designer"] .cbd-block-content .components-base-control {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-base-control__field,
+[data-type*="container-block-designer"] .cbd-block-content .components-base-control__field {
+    display: flex !important;
+    flex-direction: column !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-base-control__label,
+[data-type*="container-block-designer"] .cbd-block-content .components-base-control__label {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    margin-bottom: 4px !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-text-control__input,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-select-control__input,
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-textarea-control__input,
+[data-type*="container-block-designer"] .cbd-block-content .components-text-control__input,
+[data-type*="container-block-designer"] .cbd-block-content .components-select-control__input,
+[data-type*="container-block-designer"] .cbd-block-content .components-textarea-control__input {
+    display: block !important;
+    width: 100% !important;
+    padding: 8px !important;
+    border: 1px solid #949494 !important;
+    border-radius: 4px !important;
+    background: #ffffff !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+}
+
+/* SelectControl dropdown */
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-select-control,
+[data-type*="container-block-designer"] .cbd-block-content .components-select-control {
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+[data-type*="container-block-designer"] .block-editor-inner-blocks .components-select-control select,
+[data-type*="container-block-designer"] .cbd-block-content .components-select-control select {
+    display: block !important;
+    width: 100% !important;
+    padding: 8px !important;
+    border: 1px solid #949494 !important;
+    border-radius: 4px !important;
+    background: #ffffff !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    cursor: pointer !important;
+    -webkit-appearance: menulist !important;
+    appearance: menulist !important;
 }
 
 /* Editor-specific wrapper - Universal selectors for all container blocks */
