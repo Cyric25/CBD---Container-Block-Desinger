@@ -300,9 +300,14 @@ class CBD_Content_Importer {
         $html = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $html);
         $html = preg_replace('/__(.+?)__/', '<strong>$1</strong>', $html);
 
-        // Kursiv: *text* oder _text_
+        // Kursiv: *text* oder _text_ (ABER NICHT in LaTeX-Formeln oder Tabellen)
         $html = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $html);
-        $html = preg_replace('/_(.+?)_/', '<em>$1</em>', $html);
+        // Achtung: _ in Tabellen oder LaTeX sollte nicht kursiv werden
+        // Deaktiviert für jetzt, da _ häufig in chemischen Formeln vorkommt
+        // $html = preg_replace('/_(.+?)_/', '<em>$1</em>', $html);
+
+        // Tabellen-Verarbeitung (Markdown-Tables)
+        $html = $this->convert_markdown_tables($html);
 
         // Listen-Verarbeitung (mit Unterstützung für mehrzeilige Items)
         $lines_array = explode("\n", $html);
@@ -397,8 +402,8 @@ class CBD_Content_Importer {
         foreach ($lines as $line) {
             $trimmed = trim($line);
 
-            // Überspringe HTML-Tags (inkl. schließende Tags)
-            if (preg_match('/^<(h[1-6]|ul|ol|li|\/ul|\/ol|\/li)/', $trimmed)) {
+            // Überspringe HTML-Tags (inkl. schließende Tags und Tabellen)
+            if (preg_match('/^<(h[1-6]|ul|ol|li|table|thead|tbody|tr|th|td|\/ul|\/ol|\/li|\/table|\/thead|\/tbody|\/tr|\/th|\/td)/', $trimmed)) {
                 if (!empty($current_p)) {
                     $paragraphs[] = '<p>' . implode(' ', $current_p) . '</p>';
                     $current_p = array();
@@ -424,6 +429,109 @@ class CBD_Content_Importer {
         // KaTeX wird später im Frontend gerendert
 
         return $html;
+    }
+
+    /**
+     * Konvertiert Markdown-Tabellen zu HTML
+     */
+    private function convert_markdown_tables($content) {
+        $lines = explode("\n", $content);
+        $result = array();
+        $in_table = false;
+        $table_lines = array();
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+
+            // Erkenne Tabellen-Zeilen (beginnen mit |)
+            if (preg_match('/^\|(.+)\|$/', $trimmed)) {
+                $in_table = true;
+                $table_lines[] = $line;
+            } else {
+                // Nicht-Tabellen-Zeile
+                if ($in_table) {
+                    // Konvertiere gesammelte Tabelle
+                    $result[] = $this->build_html_table($table_lines);
+                    $table_lines = array();
+                    $in_table = false;
+                }
+                $result[] = $line;
+            }
+        }
+
+        // Letzte Tabelle, falls am Ende
+        if ($in_table && !empty($table_lines)) {
+            $result[] = $this->build_html_table($table_lines);
+        }
+
+        return implode("\n", $result);
+    }
+
+    /**
+     * Baut HTML-Tabelle aus Markdown-Zeilen
+     */
+    private function build_html_table($lines) {
+        if (empty($lines)) {
+            return '';
+        }
+
+        $html = array();
+        $html[] = '<table class="cbd-markdown-table">';
+
+        $is_first_row = true;
+        $in_header = true;
+
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+
+            // Überspringe Separator-Zeile (|---|---|)
+            if (preg_match('/^\|[\s\-:|]+\|$/', $trimmed)) {
+                if ($is_first_row) {
+                    $html[] = '</thead>';
+                    $html[] = '<tbody>';
+                    $in_header = false;
+                }
+                continue;
+            }
+
+            // Parse Zellen
+            $cells = explode('|', $trimmed);
+            // Entferne erstes und letztes leeres Element
+            array_shift($cells); // Erstes |
+            array_pop($cells);   // Letztes |
+
+            // Trim Zellen
+            $cells = array_map('trim', $cells);
+
+            // Erste Zeile ist Header
+            if ($is_first_row) {
+                $html[] = '<thead>';
+                $html[] = '<tr>';
+                foreach ($cells as $cell) {
+                    $html[] = '<th>' . $cell . '</th>';
+                }
+                $html[] = '</tr>';
+                $is_first_row = false;
+            } else {
+                $html[] = '<tr>';
+                foreach ($cells as $cell) {
+                    $html[] = '<td>' . $cell . '</td>';
+                }
+                $html[] = '</tr>';
+            }
+        }
+
+        // Schließe tbody falls geöffnet
+        if (!$in_header) {
+            $html[] = '</tbody>';
+        } else {
+            // Falls keine Separator-Zeile, schließe thead
+            $html[] = '</thead>';
+        }
+
+        $html[] = '</table>';
+
+        return implode("\n", $html);
     }
 }
 
