@@ -179,7 +179,14 @@ class CBD_Content_Importer {
 
                 $heading = trim($matches[1]);
                 $current_competence = $this->detect_competence_level($heading);
-                $current_block_title = null;
+
+                // SPECIAL: Für Quellenverzeichnis ist H2 der Block-Titel (kein H3 erforderlich)
+                if ($current_competence === 'sources') {
+                    $current_block_title = $heading;
+                } else {
+                    $current_block_title = null;
+                }
+
                 $current_content = array();
                 continue;
             }
