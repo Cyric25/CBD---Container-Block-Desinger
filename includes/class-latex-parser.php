@@ -122,6 +122,19 @@ class CBD_LaTeX_Parser {
             return $block_content;
         }
 
+        // Performance: Skip if no $ or [latex] markers present
+        if (strpos($block_content, '$') === false && strpos($block_content, '[latex]') === false) {
+            return $block_content;
+        }
+
+        // Performance: Skip very large blocks (>100KB) to prevent regex timeout
+        if (strlen($block_content) > 102400) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD LaTeX Parser] Skipping large block (>100KB) to prevent timeout');
+            }
+            return $block_content;
+        }
+
         // Parse LaTeX in this block's content
         return $this->parse_latex($block_content);
     }
@@ -147,10 +160,16 @@ class CBD_LaTeX_Parser {
             return $content;
         }
 
-        // CONSERVATIVE: Only decode specific HTML entities, NOT all
-        // Be careful with backslashes - WordPress might strip them
-        $content = str_replace('&bsol;', '\\', $content);
-        $content = str_replace('&#92;', '\\', $content);
+        // Set PCRE limits to prevent catastrophic backtracking
+        @ini_set('pcre.backtrack_limit', '1000000');
+        @ini_set('pcre.recursion_limit', '100000');
+
+        // Error handling: Catch preg_replace_callback failures
+        try {
+            // CONSERVATIVE: Only decode specific HTML entities, NOT all
+            // Be careful with backslashes - WordPress might strip them
+            $content = str_replace('&bsol;', '\\', $content);
+            $content = str_replace('&#92;', '\\', $content);
 
         // Fix corrupted LaTeX formulas where underscores were converted to <em> tags
         // ONLY within existing dollar signs - don't auto-wrap
@@ -176,40 +195,77 @@ class CBD_LaTeX_Parser {
         $display_formulas = array();
         $display_counter = 0;
 
+        // OPTIMIZED: Use [^\$] instead of . to prevent catastrophic backtracking
+        // Match anything except $ sign, up to 10000 chars per formula
         $content = preg_replace_callback(
-            '/\$\$(.+?)\$\$/s',
+            '/\$\$([^\$]{1,10000}?)\$\$/s',
             function($matches) use (&$display_formulas, &$display_counter) {
                 $placeholder = '___CBD_DISPLAY_FORMULA_' . $display_counter . '___';
                 $display_formulas[$placeholder] = $this->render_display_formula($matches);
                 $display_counter++;
                 return $placeholder;
             },
-            $content
+            $content,
+            -1,
+            $count,
+            PREG_UNMATCHED_AS_NULL
         );
 
         // Parse [latex]formula[/latex] shortcode syntax (display math)
+        // OPTIMIZED: Limit length and use atomic grouping
         $content = preg_replace_callback(
-            '/\[latex\](.+?)\[\/latex\]/si',
+            '/\[latex\]([^\]]{1,10000}?)\[\/latex\]/si',
             function($matches) use (&$display_formulas, &$display_counter) {
                 $placeholder = '___CBD_DISPLAY_FORMULA_' . $display_counter . '___';
                 $display_formulas[$placeholder] = $this->render_display_formula($matches);
                 $display_counter++;
                 return $placeholder;
             },
-            $content
+            $content,
+            -1,
+            $count,
+            PREG_UNMATCHED_AS_NULL
         );
 
         // Parse $formula$ syntax (inline math) - nun ohne $$ Konflikte
-        // Einfacher Regex: einzelnes $ gefolgt von non-$ content, gefolgt von einzelnem $
+        // OPTIMIZED: Limit to reasonable formula length (5000 chars) and prevent backtracking
         $content = preg_replace_callback(
-            '/\$([^\$]+?)\$/s',
+            '/\$([^\$]{1,5000}?)\$/s',
             array($this, 'render_inline_formula'),
-            $content
+            $content,
+            -1,
+            $count,
+            PREG_UNMATCHED_AS_NULL
         );
 
-        // Platzhalter zurück durch gerenderte Display-Formeln ersetzen
-        foreach ($display_formulas as $placeholder => $formula_html) {
-            $content = str_replace($placeholder, $formula_html, $content);
+            // Platzhalter zurück durch gerenderte Display-Formeln ersetzen
+            foreach ($display_formulas as $placeholder => $formula_html) {
+                $content = str_replace($placeholder, $formula_html, $content);
+            }
+
+        } catch (Exception $e) {
+            // Log error and return original content
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD LaTeX Parser] Error parsing LaTeX: ' . $e->getMessage());
+            }
+            // Return original content if parsing fails
+            return $content;
+        }
+
+        // Check for PREG errors
+        $preg_error = preg_last_error();
+        if ($preg_error !== PREG_NO_ERROR) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                $error_messages = array(
+                    PREG_INTERNAL_ERROR => 'Internal PCRE error',
+                    PREG_BACKTRACK_LIMIT_ERROR => 'Backtrack limit exhausted',
+                    PREG_RECURSION_LIMIT_ERROR => 'Recursion limit exhausted',
+                    PREG_BAD_UTF8_ERROR => 'Bad UTF8 data',
+                    PREG_BAD_UTF8_OFFSET_ERROR => 'Bad UTF8 offset'
+                );
+                $error_msg = isset($error_messages[$preg_error]) ? $error_messages[$preg_error] : 'Unknown PREG error';
+                error_log('[CBD LaTeX Parser] PREG Error: ' . $error_msg);
+            }
         }
 
         return $content;
