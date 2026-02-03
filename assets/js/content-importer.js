@@ -150,6 +150,46 @@
                         ordered: true
                     }));
                 }
+                // Tabellen
+                else if (tagName === 'table') {
+                    const thead = element.querySelector('thead');
+                    const tbody = element.querySelector('tbody');
+
+                    const head = [];
+                    const body = [];
+
+                    // Parse Header
+                    if (thead) {
+                        const headerRow = thead.querySelector('tr');
+                        if (headerRow) {
+                            const headerCells = Array.from(headerRow.querySelectorAll('th')).map(function(th) {
+                                return { content: th.innerHTML, tag: 'th' };
+                            });
+                            if (headerCells.length > 0) {
+                                head.push({ cells: headerCells });
+                            }
+                        }
+                    }
+
+                    // Parse Body
+                    if (tbody) {
+                        Array.from(tbody.querySelectorAll('tr')).forEach(function(tr) {
+                            const rowCells = Array.from(tr.querySelectorAll('td')).map(function(td) {
+                                return { content: td.innerHTML, tag: 'td' };
+                            });
+                            if (rowCells.length > 0) {
+                                body.push({ cells: rowCells });
+                            }
+                        });
+                    }
+
+                    // Erstelle Gutenberg Table Block
+                    blocks.push(wp.blocks.createBlock('core/table', {
+                        head: head,
+                        body: body,
+                        hasFixedLayout: false
+                    }));
+                }
                 // Fallback: Als Paragraph einfügen
                 else {
                     const content = element.innerHTML.trim();
