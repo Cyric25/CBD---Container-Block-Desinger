@@ -616,52 +616,65 @@ class CBD_Block_Registration {
      */
     // Track nesting level for counter
     private static $render_depth = 0;
+    private static $block_cache = array(); // Performance: Cache DB results
 
     public function render_block($attributes, $content) {
         // Track rendering depth to detect nested blocks
         self::$render_depth++;
 
-        // DEBUG: Add HTML comment to verify this renderer is active
-        $html = '<!-- ========================================= -->';
-        $html .= '<!-- CBD DEBUG: BLOCK REGISTRATION IS ACTIVE -->';
-        $html .= '<!-- TIME: ' . date('Y-m-d H:i:s') . ' -->';
-        $html .= '<!-- RENDER DEPTH START: ' . self::$render_depth . ' -->';
-        $html .= '<!-- IS TOP LEVEL: ' . (self::$render_depth == 1 ? 'YES' : 'NO') . ' -->';
-        $html .= '<!-- ========================================= -->';
-        
+        // DEBUG: Only add comments if WP_DEBUG is enabled
+        $html = '';
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            $html .= '<!-- CBD DEBUG: BLOCK REGISTRATION ACTIVE | DEPTH: ' . self::$render_depth . ' -->';
+        }
+
         $selected_block = isset($attributes['selectedBlock']) ? $attributes['selectedBlock'] : '';
         $custom_classes = isset($attributes['customClasses']) ? $attributes['customClasses'] : '';
         $align = isset($attributes['align']) ? $attributes['align'] : '';
         $anchor = isset($attributes['anchor']) ? $attributes['anchor'] : '';
-        
+
         if (empty($selected_block)) {
+            self::$render_depth--;
             return '<!-- Container Block: No block selected -->';
         }
-        
-        // Block-Daten aus der Datenbank holen
-        global $wpdb;
-        
-        // Suche zuerst nach dem sanitized Namen
-        $block = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE name = %s AND status = 'active'",
-            $selected_block
-        ));
-        
-        // Falls nicht gefunden, suche nach Blocks deren sanitized Name dem selected_block entspricht
-        if (!$block) {
-            $all_blocks = $wpdb->get_results("SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active'");
-            
-            foreach ($all_blocks as $test_block) {
-                $sanitized_name = $this->sanitize_block_name($test_block->name);
-                
-                if ($sanitized_name === $selected_block) {
-                    $block = $test_block;
-                    break;
+
+        // Performance: Check cache first
+        if (isset(self::$block_cache[$selected_block])) {
+            $block = self::$block_cache[$selected_block];
+        } else {
+            // Block-Daten aus der Datenbank holen
+            global $wpdb;
+
+            // Optimized: Use indexed WHERE with OR instead of getting all blocks
+            $block = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE (name = %s OR slug = %s) AND status = 'active' LIMIT 1",
+                $selected_block,
+                $selected_block
+            ));
+
+            // Falls nicht gefunden, suche nach Blocks deren sanitized Name dem selected_block entspricht
+            if (!$block) {
+                // Optimized: Only get blocks once per request
+                if (empty(self::$block_cache)) {
+                    $all_blocks = $wpdb->get_results("SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active'");
+
+                    foreach ($all_blocks as $test_block) {
+                        $sanitized_name = $this->sanitize_block_name($test_block->name);
+                        self::$block_cache[$sanitized_name] = $test_block;
+                    }
                 }
+
+                $block = isset(self::$block_cache[$selected_block]) ? self::$block_cache[$selected_block] : null;
+            }
+
+            // Cache the result
+            if ($block) {
+                self::$block_cache[$selected_block] = $block;
             }
         }
-        
+
         if (!$block) {
+            self::$render_depth--;
             return '<!-- Container Block: Block "' . esc_html($selected_block) . '" not found -->';
         }
         
@@ -921,19 +934,29 @@ class CBD_Block_Registration {
         // Actual content
         // NOTE: LaTeX parsing is now handled globally via render_block filter in CBD_LaTeX_Parser
         // No need to parse LaTeX here anymore - it's automatic for all blocks!
-        $parsed_content = $content;
 
-        // ========================================
-        // FIX: JavaScript in HTML-Blocks isolieren
-        // ========================================
-        // Problem: Wenn mehrere "Individuelles HTML" Blöcke mit <script> Tags
-        // verwendet werden, funktioniert nur der letzte.
-        //
-        // Lösung: Wrap Scripts in sofort ausgeführte Funktionen (IIFE)
-        // und füge unique Identifier hinzu
-        $parsed_content = $this->isolate_inline_scripts($parsed_content, $container_id);
+        // Performance & Error Handling: Wrap content processing in try-catch
+        try {
+            $parsed_content = $content;
 
-        $html .= $parsed_content;
+            // ========================================
+            // FIX: JavaScript in HTML-Blocks isolieren
+            // ========================================
+            // Problem: Wenn mehrere "Individuelles HTML" Blöcke mit <script> Tags
+            // verwendet werden, funktioniert nur der letzte.
+            //
+            // Lösung: Wrap Scripts in sofort ausgeführte Funktionen (IIFE)
+            // und füge unique Identifier hinzu
+            $parsed_content = $this->isolate_inline_scripts($parsed_content, $container_id);
+
+            $html .= $parsed_content;
+        } catch (Exception $e) {
+            // Log error and continue rendering
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD Renderer] Error processing content for block ' . $container_id . ': ' . $e->getMessage());
+            }
+            $html .= '<!-- CBD Renderer Error: ' . esc_html($e->getMessage()) . ' -->';
+        }
 
         $html .= '</div>'; // Close .cbd-container-content
         $html .= '</div>'; // Close .cbd-container-block
@@ -1448,9 +1471,18 @@ class CBD_Block_Registration {
      * @return string Modified content with isolated scripts
      */
     private function isolate_inline_scripts($content, $container_id) {
-        // Check if content contains script tags
+        // Performance: Early return if no scripts
         if (stripos($content, '<script') === false) {
             return $content; // No scripts, return as-is
+        }
+
+        // Performance: Skip processing for very large content (> 1MB)
+        // LaTeX-rich content might be large but usually doesn't have scripts
+        if (strlen($content) > 1048576) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD Renderer] Skipping script isolation for large content (>1MB) in block ' . $container_id);
+            }
+            return $content;
         }
 
         // Counter for multiple scripts in same content
