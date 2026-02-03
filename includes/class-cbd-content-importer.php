@@ -302,17 +302,26 @@ class CBD_Content_Importer {
         $html = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $html);
         $html = preg_replace('/_(.+?)_/', '<em>$1</em>', $html);
 
-        // Listen-Verarbeitung (zeilenweise für korrekte Gruppierung)
+        // Listen-Verarbeitung (mit Unterstützung für mehrzeilige Items)
         $lines_array = explode("\n", $html);
         $processed_lines = array();
         $in_ul = false;
         $in_ol = false;
+        $current_li_content = null;
 
         foreach ($lines_array as $line) {
+            $trimmed = trim($line);
             $is_ul_item = preg_match('/^[\*\-]\s+(.+)$/', $line, $ul_matches);
             $is_ol_item = preg_match('/^\d+\.\s+(.+)$/', $line, $ol_matches);
+            $is_empty = empty($trimmed);
 
             if ($is_ul_item) {
+                // Schließe vorheriges Listen-Item
+                if ($current_li_content !== null) {
+                    $processed_lines[] = '<li>' . $current_li_content . '</li>';
+                    $current_li_content = null;
+                }
+                // Öffne/wechsle Liste
                 if (!$in_ul) {
                     $processed_lines[] = '<ul>';
                     $in_ul = true;
@@ -321,8 +330,14 @@ class CBD_Content_Importer {
                     $processed_lines[] = '</ol>';
                     $in_ol = false;
                 }
-                $processed_lines[] = '<li>' . $ul_matches[1] . '</li>';
+                $current_li_content = $ul_matches[1];
             } elseif ($is_ol_item) {
+                // Schließe vorheriges Listen-Item
+                if ($current_li_content !== null) {
+                    $processed_lines[] = '<li>' . $current_li_content . '</li>';
+                    $current_li_content = null;
+                }
+                // Öffne/wechsle Liste
                 if (!$in_ol) {
                     $processed_lines[] = '<ol>';
                     $in_ol = true;
@@ -331,22 +346,38 @@ class CBD_Content_Importer {
                     $processed_lines[] = '</ul>';
                     $in_ul = false;
                 }
-                $processed_lines[] = '<li>' . $ol_matches[1] . '</li>';
+                $current_li_content = $ol_matches[1];
+            } elseif ($is_empty) {
+                // Leere Zeile: Schließe Listen-Item aber NICHT die Liste
+                if ($current_li_content !== null) {
+                    $processed_lines[] = '<li>' . $current_li_content . '</li>';
+                    $current_li_content = null;
+                }
+                // Liste bleibt offen für nächstes Item
             } else {
-                // Nicht-Listen-Zeile: Schließe offene Listen
-                if ($in_ul) {
-                    $processed_lines[] = '</ul>';
-                    $in_ul = false;
+                // Nicht-Listen-Zeile
+                if ($current_li_content !== null) {
+                    // Füge zu aktuellem Listen-Item hinzu (mehrzeiliger Content)
+                    $current_li_content .= ' ' . $trimmed;
+                } else {
+                    // Schließe offene Listen
+                    if ($in_ul) {
+                        $processed_lines[] = '</ul>';
+                        $in_ul = false;
+                    }
+                    if ($in_ol) {
+                        $processed_lines[] = '</ol>';
+                        $in_ol = false;
+                    }
+                    $processed_lines[] = $line;
                 }
-                if ($in_ol) {
-                    $processed_lines[] = '</ol>';
-                    $in_ol = false;
-                }
-                $processed_lines[] = $line;
             }
         }
 
-        // Schließe Listen am Ende, falls noch offen
+        // Schließe letztes Listen-Item und Listen am Ende
+        if ($current_li_content !== null) {
+            $processed_lines[] = '<li>' . $current_li_content . '</li>';
+        }
         if ($in_ul) {
             $processed_lines[] = '</ul>';
         }
@@ -364,8 +395,8 @@ class CBD_Content_Importer {
         foreach ($lines as $line) {
             $trimmed = trim($line);
 
-            // Überspringe HTML-Tags
-            if (preg_match('/^<(h[1-6]|ul|ol|li|\/ul|\/ol)/', $trimmed)) {
+            // Überspringe HTML-Tags (inkl. schließende Tags)
+            if (preg_match('/^<(h[1-6]|ul|ol|li|\/ul|\/ol|\/li)/', $trimmed)) {
                 if (!empty($current_p)) {
                     $paragraphs[] = '<p>' . implode(' ', $current_p) . '</p>';
                     $current_p = array();
