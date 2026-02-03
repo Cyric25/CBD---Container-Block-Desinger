@@ -101,31 +101,65 @@ class CBD_Content_Importer {
         );
 
         $style_options = array();
-        $suggestions = array('k1' => null, 'k2' => null, 'k3' => null, 'sources' => null);
 
+        // Standard-Voreinstellungen (User-Request: Immer Infotext K1/K2/K3)
+        $suggestions = array(
+            'k1' => 'infotext_k1',
+            'k2' => 'infotext_k2',
+            'k3' => 'infotext_k3',
+            'sources' => null
+        );
+
+        // Validiere, ob die Standard-Styles existieren
+        $available_slugs = array();
         foreach ($blocks as $block) {
+            $available_slugs[] = $block->slug;
             $style_options[] = array(
                 'value' => $block->slug,
                 'label' => $block->name
             );
+        }
 
-            // Auto-Suggest: Suche nach k1, k2, k3, quellen in Slug oder Name
+        // Fallback: Wenn Standard-Styles nicht existieren, suche Alternativen
+        if (!in_array('infotext_k1', $available_slugs)) {
+            foreach ($blocks as $block) {
+                $search_text = strtolower($block->name . ' ' . $block->slug);
+                if (strpos($search_text, 'k1') !== false && !$suggestions['k1']) {
+                    $suggestions['k1'] = $block->slug;
+                    break;
+                }
+            }
+        }
+
+        if (!in_array('infotext_k2', $available_slugs)) {
+            foreach ($blocks as $block) {
+                $search_text = strtolower($block->name . ' ' . $block->slug);
+                if (strpos($search_text, 'k2') !== false && !$suggestions['k2']) {
+                    $suggestions['k2'] = $block->slug;
+                    break;
+                }
+            }
+        }
+
+        if (!in_array('infotext_k3', $available_slugs)) {
+            foreach ($blocks as $block) {
+                $search_text = strtolower($block->name . ' ' . $block->slug);
+                if (strpos($search_text, 'k3') !== false && !$suggestions['k3']) {
+                    $suggestions['k3'] = $block->slug;
+                    break;
+                }
+            }
+        }
+
+        // Suche nach Quellen/Literatur Keywords für sources
+        foreach ($blocks as $block) {
             $search_text = strtolower($block->name . ' ' . $block->slug);
-            if (strpos($search_text, 'k1') !== false && !$suggestions['k1']) {
-                $suggestions['k1'] = $block->slug;
-            }
-            if (strpos($search_text, 'k2') !== false && !$suggestions['k2']) {
-                $suggestions['k2'] = $block->slug;
-            }
-            if (strpos($search_text, 'k3') !== false && !$suggestions['k3']) {
-                $suggestions['k3'] = $block->slug;
-            }
-            // Suche nach Quellen/Literatur Keywords
             if ((strpos($search_text, 'quellen') !== false ||
                  strpos($search_text, 'literatur') !== false ||
                  strpos($search_text, 'referenz') !== false ||
                  strpos($search_text, 'bibliographie') !== false) && !$suggestions['sources']) {
                 $suggestions['sources'] = $block->slug;
+                break;
             }
         }
 
