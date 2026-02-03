@@ -302,19 +302,59 @@ class CBD_Content_Importer {
         $html = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $html);
         $html = preg_replace('/_(.+?)_/', '<em>$1</em>', $html);
 
-        // Ungeordnete Listen
-        $html = preg_replace_callback('/^[\*\-]\s+(.+)$/m', function($matches) {
-            return '<li>' . $matches[1] . '</li>';
-        }, $html);
-        $html = preg_replace('/<li>/', '<ul><li>', $html, 1);
-        $html = preg_replace('/(<li>.*<\/li>)\n(?!<li>)/s', '$1</ul>', $html);
+        // Listen-Verarbeitung (zeilenweise für korrekte Gruppierung)
+        $lines_array = explode("\n", $html);
+        $processed_lines = array();
+        $in_ul = false;
+        $in_ol = false;
 
-        // Geordnete Listen
-        $html = preg_replace_callback('/^\d+\.\s+(.+)$/m', function($matches) {
-            return '<li>' . $matches[1] . '</li>';
-        }, $html);
-        $html = preg_replace('/<li>/', '<ol><li>', $html, 1);
-        $html = preg_replace('/(<li>.*<\/li>)\n(?!<li>)/s', '$1</ol>', $html);
+        foreach ($lines_array as $line) {
+            $is_ul_item = preg_match('/^[\*\-]\s+(.+)$/', $line, $ul_matches);
+            $is_ol_item = preg_match('/^\d+\.\s+(.+)$/', $line, $ol_matches);
+
+            if ($is_ul_item) {
+                if (!$in_ul) {
+                    $processed_lines[] = '<ul>';
+                    $in_ul = true;
+                }
+                if ($in_ol) {
+                    $processed_lines[] = '</ol>';
+                    $in_ol = false;
+                }
+                $processed_lines[] = '<li>' . $ul_matches[1] . '</li>';
+            } elseif ($is_ol_item) {
+                if (!$in_ol) {
+                    $processed_lines[] = '<ol>';
+                    $in_ol = true;
+                }
+                if ($in_ul) {
+                    $processed_lines[] = '</ul>';
+                    $in_ul = false;
+                }
+                $processed_lines[] = '<li>' . $ol_matches[1] . '</li>';
+            } else {
+                // Nicht-Listen-Zeile: Schließe offene Listen
+                if ($in_ul) {
+                    $processed_lines[] = '</ul>';
+                    $in_ul = false;
+                }
+                if ($in_ol) {
+                    $processed_lines[] = '</ol>';
+                    $in_ol = false;
+                }
+                $processed_lines[] = $line;
+            }
+        }
+
+        // Schließe Listen am Ende, falls noch offen
+        if ($in_ul) {
+            $processed_lines[] = '</ul>';
+        }
+        if ($in_ol) {
+            $processed_lines[] = '</ol>';
+        }
+
+        $html = implode("\n", $processed_lines);
 
         // Paragraphen
         $lines = explode("\n", $html);
