@@ -24,7 +24,7 @@
         const [parsedData, setParsedData] = useState(null);
         const [loading, setLoading] = useState(false);
         const [error, setError] = useState(null);
-        const [styleMappings, setStyleMappings] = useState({ k1: '', k2: '', k3: '' });
+        const [styleMappings, setStyleMappings] = useState({ k1: '', k2: '', k3: '', sources: '' });
         const [availableStyles, setAvailableStyles] = useState([]);
         const [isDragging, setIsDragging] = useState(false);
 
@@ -56,7 +56,8 @@
                     setStyleMappings({
                         k1: suggestions.k1 || (response.data.styles[0] ? response.data.styles[0].value : ''),
                         k2: suggestions.k2 || (response.data.styles[0] ? response.data.styles[0].value : ''),
-                        k3: suggestions.k3 || (response.data.styles[0] ? response.data.styles[0].value : '')
+                        k3: suggestions.k3 || (response.data.styles[0] ? response.data.styles[0].value : ''),
+                        sources: suggestions.sources || (response.data.styles[0] ? response.data.styles[0].value : '')
                     });
                 }
                 setLoading(false);
@@ -336,6 +337,10 @@
                         el('li', { className: 'cbd-importer-stat-k3' },
                             el('span', { className: 'cbd-importer-stat-badge' }, 'K3'),
                             stats.k3 + ' ' + __('Blöcke', 'container-block-designer')
+                        ),
+                        stats.sources > 0 && el('li', { className: 'cbd-importer-stat-sources' },
+                            el('span', { className: 'cbd-importer-stat-badge' }, '📚'),
+                            stats.sources + ' ' + __('Quellenangaben', 'container-block-designer')
                         )
                     )
                 ),
@@ -368,6 +373,16 @@
                             value: styleMappings.k3,
                             options: availableStyles,
                             onChange: function(value) { setStyleMappings(Object.assign({}, styleMappings, { k3: value })); }
+                        })
+                    ),
+
+                    stats.sources > 0 && el('div', { className: 'cbd-importer-mapping-row cbd-importer-mapping-sources' },
+                        el('span', { className: 'cbd-importer-mapping-badge' }, '📚'),
+                        el(SelectControl, {
+                            label: __('Style für Quellenangaben', 'container-block-designer'),
+                            value: styleMappings.sources,
+                            options: availableStyles,
+                            onChange: function(value) { setStyleMappings(Object.assign({}, styleMappings, { sources: value })); }
                         })
                     )
                 ),

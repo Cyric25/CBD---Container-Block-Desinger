@@ -29,7 +29,8 @@ class CBD_Content_Importer {
     private $section_keywords = array(
         'k1' => array('basiswissen', 'basis', 'k1', 'grundwissen'),
         'k2' => array('erweitertes wissen', 'erweitertes', 'k2', 'erweitert'),
-        'k3' => array('vertiefendes wissen', 'vertiefendes', 'k3', 'vertieft')
+        'k3' => array('vertiefendes wissen', 'vertiefendes', 'k3', 'vertieft'),
+        'sources' => array('quellenverzeichnis', 'quellen', 'literatur', 'literaturverzeichnis', 'referenzen', 'bibliographie')
     );
 
     /**
@@ -98,7 +99,7 @@ class CBD_Content_Importer {
         );
 
         $style_options = array();
-        $suggestions = array('k1' => null, 'k2' => null, 'k3' => null);
+        $suggestions = array('k1' => null, 'k2' => null, 'k3' => null, 'sources' => null);
 
         foreach ($blocks as $block) {
             $style_options[] = array(
@@ -106,7 +107,7 @@ class CBD_Content_Importer {
                 'label' => $block->name
             );
 
-            // Auto-Suggest: Suche nach k1, k2, k3 in Slug oder Name
+            // Auto-Suggest: Suche nach k1, k2, k3, quellen in Slug oder Name
             $search_text = strtolower($block->name . ' ' . $block->slug);
             if (strpos($search_text, 'k1') !== false && !$suggestions['k1']) {
                 $suggestions['k1'] = $block->slug;
@@ -116,6 +117,13 @@ class CBD_Content_Importer {
             }
             if (strpos($search_text, 'k3') !== false && !$suggestions['k3']) {
                 $suggestions['k3'] = $block->slug;
+            }
+            // Suche nach Quellen/Literatur Keywords
+            if ((strpos($search_text, 'quellen') !== false ||
+                 strpos($search_text, 'literatur') !== false ||
+                 strpos($search_text, 'referenz') !== false ||
+                 strpos($search_text, 'bibliographie') !== false) && !$suggestions['sources']) {
+                $suggestions['sources'] = $block->slug;
             }
         }
 
@@ -205,7 +213,8 @@ class CBD_Content_Importer {
         $grouped = array(
             'k1' => array(),
             'k2' => array(),
-            'k3' => array()
+            'k3' => array(),
+            'sources' => array()
         );
 
         foreach ($sections as $section) {
@@ -219,7 +228,8 @@ class CBD_Content_Importer {
                 'total' => count($sections),
                 'k1' => count($grouped['k1']),
                 'k2' => count($grouped['k2']),
-                'k3' => count($grouped['k3'])
+                'k3' => count($grouped['k3']),
+                'sources' => count($grouped['sources'])
             )
         );
     }
@@ -235,10 +245,13 @@ class CBD_Content_Importer {
         $content_text = implode("\n", $content);
         $html_content = $this->markdown_to_html($content_text);
 
+        // Für Quellenverzeichnis: Verwende H2-Titel statt H1-Thema
+        $final_block_title = ($competence === 'sources') ? $block_title : $topic;
+
         $sections[] = array(
             'topic' => $topic,
             'competence' => $competence,
-            'blockTitle' => $topic, // H1 wird Block-Titel
+            'blockTitle' => $final_block_title,
             'content' => $html_content
         );
     }

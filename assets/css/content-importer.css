@@ -164,6 +164,11 @@
     background: #f44336;
 }
 
+.cbd-importer-stat-sources .cbd-importer-stat-badge {
+    background: #2196f3;
+    font-size: 14px;
+}
+
 /* Mapping Rows */
 .cbd-importer-mappings {
     margin-bottom: 20px;
@@ -194,6 +199,11 @@
     border-color: rgba(244, 67, 54, 0.3);
 }
 
+.cbd-importer-mapping-sources {
+    background: rgba(33, 150, 243, 0.08);
+    border-color: rgba(33, 150, 243, 0.3);
+}
+
 .cbd-importer-mapping-badge {
     display: inline-flex;
     align-items: center;
@@ -218,6 +228,11 @@
 
 .cbd-importer-mapping-k3 .cbd-importer-mapping-badge {
     background: #f44336;
+}
+
+.cbd-importer-mapping-sources .cbd-importer-mapping-badge {
+    background: #2196f3;
+    font-size: 18px;
 }
 
 .cbd-importer-mapping-row .components-base-control {
