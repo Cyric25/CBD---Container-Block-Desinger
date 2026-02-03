@@ -503,70 +503,99 @@ class CBD_Content_Importer {
     }
 
     /**
-     * Baut HTML-Tabelle aus Markdown-Zeilen
+     * Baut LaTeX-Tabelle aus Markdown-Zeilen (für KaTeX-Rendering)
      */
     private function build_html_table($lines) {
         if (empty($lines)) {
             return '';
         }
 
-        $html = array();
-        $html[] = '<table class="cbd-markdown-table">';
-
-        $is_first_row = true;
-        $in_header = true;
+        $rows = array();
+        $header_row = null;
+        $separator_found = false;
 
         foreach ($lines as $line) {
             $trimmed = trim($line);
 
             // Überspringe Separator-Zeile (|---|---|)
             if (preg_match('/^\|[\s\-:|]+\|$/', $trimmed)) {
-                if ($is_first_row) {
-                    $html[] = '</thead>';
-                    $html[] = '<tbody>';
-                    $in_header = false;
-                }
+                $separator_found = true;
                 continue;
             }
 
             // Parse Zellen
             $cells = explode('|', $trimmed);
-            // Entferne erstes und letztes leeres Element
             array_shift($cells); // Erstes |
             array_pop($cells);   // Letztes |
-
-            // Trim Zellen
             $cells = array_map('trim', $cells);
 
-            // Erste Zeile ist Header
-            if ($is_first_row) {
-                $html[] = '<thead>';
-                $html[] = '<tr>';
-                foreach ($cells as $cell) {
-                    $html[] = '<th>' . $cell . '</th>';
-                }
-                $html[] = '</tr>';
-                $is_first_row = false;
+            if ($header_row === null) {
+                $header_row = $cells;
             } else {
-                $html[] = '<tr>';
-                foreach ($cells as $cell) {
-                    $html[] = '<td>' . $cell . '</td>';
-                }
-                $html[] = '</tr>';
+                $rows[] = $cells;
             }
         }
 
-        // Schließe tbody falls geöffnet
-        if (!$in_header) {
-            $html[] = '</tbody>';
-        } else {
-            // Falls keine Separator-Zeile, schließe thead
-            $html[] = '</thead>';
+        // Erstelle LaTeX-Tabelle
+        $col_count = count($header_row);
+        $col_alignment = str_repeat('l|', $col_count);
+        $col_alignment = '|' . rtrim($col_alignment, '|') . '|';
+
+        $latex = array();
+        $latex[] = '$$';
+        $latex[] = '\begin{array}{' . $col_alignment . '}';
+        $latex[] = '\hline';
+
+        // Header
+        $header_cells = array_map(array($this, 'latex_escape_cell'), $header_row);
+        $latex[] = implode(' & ', $header_cells) . ' \\\\';
+        $latex[] = '\hline';
+
+        // Body-Zeilen
+        foreach ($rows as $row) {
+            $escaped_cells = array_map(array($this, 'latex_escape_cell'), $row);
+            $latex[] = implode(' & ', $escaped_cells) . ' \\\\';
         }
 
-        $html[] = '</table>';
+        $latex[] = '\hline';
+        $latex[] = '\end{array}';
+        $latex[] = '$$';
 
-        return implode("\n", $html);
+        return implode("\n", $latex);
+    }
+
+    /**
+     * Escaped Tabellen-Zelle für LaTeX
+     */
+    private function latex_escape_cell($cell) {
+        // Schütze LaTeX-Formeln ($...$) temporär
+        $formulas = array();
+        $cell = preg_replace_callback('/\$([^$]+)\$/', function($matches) use (&$formulas) {
+            $placeholder = '___FORMULA_' . count($formulas) . '___';
+            $formulas[$placeholder] = $matches[1]; // Ohne $
+            return $placeholder;
+        }, $cell);
+
+        // LaTeX-Sonderzeichen escapen (außer in Formeln)
+        $cell = str_replace('\\', '\\\\', $cell);
+        $cell = str_replace('&', '\\&', $cell);
+        $cell = str_replace('%', '\\%', $cell);
+        $cell = str_replace('#', '\\#', $cell);
+        $cell = str_replace('_', '\\_', $cell);
+        $cell = str_replace('{', '\\{', $cell);
+        $cell = str_replace('}', '\\}', $cell);
+        $cell = str_replace('~', '\\~', $cell);
+        $cell = str_replace('^', '\\^', $cell);
+
+        // Wrap Text in \text{}, außer Formeln
+        $cell = '\text{' . $cell . '}';
+
+        // Formeln zurück einsetzen (außerhalb von \text{})
+        foreach ($formulas as $placeholder => $formula) {
+            $cell = str_replace('\text{' . $placeholder . '}', $formula, $cell);
+        }
+
+        return $cell;
     }
 }
 
