@@ -135,6 +135,16 @@ class CBD_LaTeX_Parser {
             return $block_content;
         }
 
+        // Validation: Check for balanced $ signs
+        $dollar_count = substr_count($block_content, '$');
+        if ($dollar_count > 0 && $dollar_count % 2 !== 0) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD LaTeX Parser] Unbalanced $ signs detected in block (' . $dollar_count . ' total). Skipping LaTeX parsing to prevent regex issues.');
+            }
+            // Skip LaTeX parsing for this block - unbalanced $ signs would cause regex problems
+            return $block_content;
+        }
+
         // Parse LaTeX in this block's content
         return $this->parse_latex($block_content);
     }
@@ -228,9 +238,11 @@ class CBD_LaTeX_Parser {
         );
 
         // Parse $formula$ syntax (inline math) - nun ohne $$ Konflikte
-        // OPTIMIZED: Limit to reasonable formula length (5000 chars) and prevent backtracking
+        // OPTIMIZED: Limit to reasonable formula length (500 chars for inline) and prevent backtracking
+        // ROBUST: Inline formulas should be SHORT - most are < 100 chars. 500 is very generous.
+        // This prevents matching across large text sections when $ is unbalanced
         $content = preg_replace_callback(
-            '/\$([^\$]{1,5000}?)\$/s',
+            '/\$([^\$]{1,500}?)\$/s',
             array($this, 'render_inline_formula'),
             $content,
             -1,
