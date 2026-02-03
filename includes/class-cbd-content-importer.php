@@ -192,6 +192,12 @@ class CBD_Content_Importer {
         foreach ($lines as $line) {
             $trimmed = trim($line);
 
+            // Überspringe horizontale Linien (---, ***, ___)
+            // Diese werden oft als Separator verwendet und sollen nicht im Content erscheinen
+            if (preg_match('/^([-*_]){3,}$/', $trimmed)) {
+                continue;
+            }
+
             // H1: Neues Thema
             if (preg_match('/^#\s+(.+)$/', $trimmed, $matches)) {
                 // Speichere vorherigen Block
