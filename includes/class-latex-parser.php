@@ -141,8 +141,23 @@ class CBD_LaTeX_Parser {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('[CBD LaTeX Parser] Unbalanced $ signs detected in block (' . $dollar_count . ' total). Skipping LaTeX parsing to prevent regex issues.');
             }
-            // Skip LaTeX parsing for this block - unbalanced $ signs would cause regex problems
-            return $block_content;
+            // Add visual warning for incomplete formulas (red box)
+            $warning = '<div class="cbd-latex-warning" style="background: #fee; border-left: 4px solid #dc3545; padding: 12px; margin: 10px 0; color: #721c24;">'
+                     . '<strong>⚠️ Unvollständige LaTeX-Formel erkannt</strong><br>'
+                     . 'Dieser Block enthält ' . $dollar_count . ' $ Zeichen (muss gerade Anzahl sein). '
+                     . 'Bitte prüfen Sie, ob alle Formeln korrekt mit $ oder $$ umschlossen sind.'
+                     . '</div>';
+
+            // Highlight incomplete $ signs in red
+            // Find $ that are not part of $$
+            $highlighted_content = preg_replace(
+                '/(?<!\$)\$(?!\$)/',
+                '<span style="background: #dc3545; color: white; padding: 2px 4px; font-weight: bold; border-radius: 2px;">$</span>',
+                $block_content
+            );
+
+            // Return block content with warning at the top and highlighted $ signs
+            return $warning . $highlighted_content;
         }
 
         // Parse LaTeX in this block's content
