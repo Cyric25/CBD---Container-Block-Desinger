@@ -477,10 +477,11 @@ class CBD_Content_Importer {
         foreach ($lines as $line) {
             $trimmed = trim($line);
 
-            // Erkenne Tabellen-Zeilen (beginnen mit |)
-            if (preg_match('/^\|(.+)\|$/', $trimmed)) {
+            // Erkenne Tabellen-Zeilen (beginnen mit | und enthalten mindestens ein weiteres |)
+            // Robuster: Akzeptiert auch Zeilen ohne trailing | und mit Whitespace
+            if (preg_match('/^\|.+\|/', $trimmed)) {
                 $in_table = true;
-                $table_lines[] = $line;
+                $table_lines[] = $trimmed; // Verwende trimmed statt line
             } else {
                 // Nicht-Tabellen-Zeile
                 if ($in_table) {
