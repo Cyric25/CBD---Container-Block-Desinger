@@ -184,7 +184,7 @@ class CBD_Content_Importer {
                 continue;
             }
 
-            // H3: Block-Titel (wird im Inhalt als <h3> angezeigt)
+            // H3: Block-Titel (wird NUR als Block-Titel verwendet, nicht im Inhalt)
             if (preg_match('/^###\s+(.+)$/', $trimmed, $matches)) {
                 // Speichere vorherigen Block
                 if ($current_topic && $current_competence && $current_block_title) {
@@ -193,8 +193,7 @@ class CBD_Content_Importer {
 
                 $current_block_title = trim($matches[1]);
                 $current_content = array();
-                // Füge H3 als ersten Content-Teil hinzu
-                $current_content[] = '### ' . $current_block_title;
+                // H3 wird NICHT mehr zum Content hinzugefügt - nur als Block-Titel verwendet
                 continue;
             }
 
@@ -245,8 +244,9 @@ class CBD_Content_Importer {
         $content_text = implode("\n", $content);
         $html_content = $this->markdown_to_html($content_text);
 
-        // Für Quellenverzeichnis: Verwende H2-Titel statt H1-Thema
-        $final_block_title = ($competence === 'sources') ? $block_title : $topic;
+        // NEU: Block-Titel ist immer die H3-Überschrift (oder H2 bei Quellenverzeichnis)
+        // H1-Thema wird nicht mehr als Block-Titel verwendet
+        $final_block_title = $block_title;
 
         $sections[] = array(
             'topic' => $topic,
