@@ -261,6 +261,29 @@ class CBD_Block_Registration {
             array('wp-edit-blocks'),
             CBD_VERSION
         );
+
+        // Content Importer JavaScript
+        wp_enqueue_script(
+            'cbd-content-importer',
+            CBD_PLUGIN_URL . 'assets/js/content-importer.js',
+            array('wp-plugins', 'wp-editor', 'wp-element', 'wp-components', 'wp-i18n', 'wp-data', 'wp-blocks'),
+            CBD_VERSION,
+            true
+        );
+
+        // Lokalisierung für Content Importer
+        wp_localize_script('cbd-content-importer', 'cbdContentImporter', array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('cbd_content_import')
+        ));
+
+        // Content Importer CSS
+        wp_enqueue_style(
+            'cbd-content-importer',
+            CBD_PLUGIN_URL . 'assets/css/content-importer.css',
+            array(),
+            CBD_VERSION
+        );
     }
     
     /**

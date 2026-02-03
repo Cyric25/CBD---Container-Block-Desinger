@@ -1,7 +1,7 @@
 /**
  * ZIP Creator for Container Block Designer Plugin
- * Creates a WordPress-ready plugin ZIP file with version number
- * Keeps maximum 2 ZIP files (current + previous backup)
+ * Creates a WordPress-ready plugin ZIP file with auto-incremented version number
+ * Keeps maximum 4 ZIP files (3 old backups + current version)
  */
 
 const fs = require('fs');
@@ -19,11 +19,48 @@ function getPluginVersion() {
     throw new Error('Could not find CBD_VERSION in container-block-designer.php');
 }
 
+// Increment patch version (e.g., 2.9.3 -> 2.9.4)
+function incrementVersion(version) {
+    const parts = version.split('.');
+    if (parts.length !== 3) {
+        throw new Error(`Invalid version format: ${version}`);
+    }
+    const major = parseInt(parts[0]);
+    const minor = parseInt(parts[1]);
+    const patch = parseInt(parts[2]);
+    return `${major}.${minor}.${patch + 1}`;
+}
+
+// Update version in main plugin file
+function updatePluginVersion(newVersion) {
+    const mainFile = path.join(__dirname, 'container-block-designer.php');
+    let content = fs.readFileSync(mainFile, 'utf8');
+
+    // Update Version in plugin header
+    content = content.replace(
+        /(\* Version:\s*)[\d.]+/,
+        `$1${newVersion}`
+    );
+
+    // Update CBD_VERSION constant
+    content = content.replace(
+        /define\('CBD_VERSION',\s*'[\d.]+'\)/,
+        `define('CBD_VERSION', '${newVersion}')`
+    );
+
+    fs.writeFileSync(mainFile, content, 'utf8');
+    console.log(`✓ Updated version to ${newVersion} in container-block-designer.php`);
+}
+
 // Configuration
 const pluginName = 'container-block-designer';
-const pluginVersion = getPluginVersion();
+const currentVersion = getPluginVersion();
+const newVersion = incrementVersion(currentVersion);
 const outputDir = path.join(__dirname, 'dist');
-const outputPath = path.join(outputDir, `${pluginName}-${pluginVersion}.zip`);
+const outputPath = path.join(outputDir, `${pluginName}-${newVersion}.zip`);
+
+// Update version in plugin file
+updatePluginVersion(newVersion);
 
 // Files and directories to include
 const includePaths = [
@@ -65,7 +102,8 @@ const excludePatterns = [
     '*.log',
     '*.tmp',
     'syntax-check.js',
-    'Ordnerstruktur.txt'
+    'Ordnerstruktur.txt',
+    'example-import.md'
 ];
 
 // Create output directory if it doesn't exist
@@ -74,7 +112,7 @@ if (!fs.existsSync(outputDir)) {
     console.log(`✓ Created output directory: ${outputDir}`);
 }
 
-// Manage ZIP file versions (keep max 2: current + previous backup)
+// Manage ZIP file versions (keep max 4: 3 old backups + current)
 const zipFiles = fs.readdirSync(outputDir)
     .filter(file => file.startsWith(`${pluginName}-`) && file.endsWith('.zip'))
     .map(file => ({
@@ -84,8 +122,8 @@ const zipFiles = fs.readdirSync(outputDir)
     }))
     .sort((a, b) => a.mtime - b.mtime); // Sort oldest first
 
-// If we already have 2 or more ZIPs, delete the oldest ones until only 1 remains
-while (zipFiles.length >= 2) {
+// If we already have 4 or more ZIPs, delete the oldest ones until only 3 remain
+while (zipFiles.length >= 4) {
     const oldestZip = zipFiles.shift();
     fs.unlinkSync(oldestZip.path);
     console.log(`✓ Removed old backup: ${oldestZip.name}`);
@@ -94,13 +132,14 @@ while (zipFiles.length >= 2) {
 // If the new version already exists, remove it (e.g., re-running script)
 if (fs.existsSync(outputPath)) {
     fs.unlinkSync(outputPath);
-    console.log(`✓ Removed existing ZIP for version ${pluginVersion}`);
+    console.log(`✓ Removed existing ZIP for version ${newVersion}`);
 }
 
 // Create ZIP archive
 console.log(`\n📦 Creating WordPress Plugin ZIP...`);
 console.log(`Plugin: ${pluginName}`);
-console.log(`Version: ${pluginVersion}`);
+console.log(`Previous Version: ${currentVersion}`);
+console.log(`New Version: ${newVersion}`);
 console.log(`Output: ${outputPath}\n`);
 
 const output = fs.createWriteStream(outputPath);
@@ -125,6 +164,14 @@ output.on('close', function() {
     console.log(`   ZIP size: ${zipSizeMB} MB`);
     console.log(`   Compression: ${compressionRatio}%`);
     console.log(`\n📁 Location: ${outputPath}`);
+
+    // List remaining ZIP files
+    const remainingZips = fs.readdirSync(outputDir)
+        .filter(file => file.startsWith(`${pluginName}-`) && file.endsWith('.zip'))
+        .sort();
+    console.log(`\n📚 Available ZIP versions (${remainingZips.length}):`);
+    remainingZips.forEach(zip => console.log(`   - ${zip}`));
+
     console.log(`\n✨ Ready for WordPress upload!`);
 });
 

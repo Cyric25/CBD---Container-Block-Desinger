@@ -1,0 +1,292 @@
+/**
+ * Container Block Designer - Content Importer Styles
+ *
+ * @package ContainerBlockDesigner
+ * @since 2.9.3
+ */
+
+/* Modal */
+.cbd-importer-modal {
+    max-width: 700px !important;
+}
+
+.cbd-importer-modal .components-modal__content {
+    padding-bottom: 20px;
+}
+
+/* Step Container */
+.cbd-importer-step {
+    padding: 20px 0;
+}
+
+.cbd-importer-step h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    font-size: 1.3em;
+    font-weight: 600;
+}
+
+/* Dropzone */
+.cbd-importer-dropzone {
+    position: relative;
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    background: #f9f9f9;
+    transition: all 0.3s ease;
+    margin-bottom: 20px;
+}
+
+.cbd-importer-dropzone.is-dragging {
+    border-color: #0073aa;
+    background: #e5f5fa;
+}
+
+.cbd-importer-dropzone-content {
+    pointer-events: none;
+}
+
+.cbd-importer-dropzone-icon {
+    font-size: 48px;
+    margin: 0 0 10px;
+}
+
+.cbd-importer-dropzone-text {
+    font-size: 16px;
+    color: #555;
+    margin: 0 0 10px;
+}
+
+.cbd-importer-dropzone-or {
+    font-size: 14px;
+    color: #999;
+    margin: 10px 0;
+}
+
+.cbd-importer-file-button {
+    display: inline-block;
+    padding: 10px 20px;
+    background: #0073aa;
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    pointer-events: auto;
+    transition: background 0.2s ease;
+}
+
+.cbd-importer-file-button:hover {
+    background: #005a87;
+}
+
+/* Textarea Section */
+.cbd-importer-textarea-section {
+    margin-bottom: 20px;
+}
+
+.cbd-importer-textarea-section label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #333;
+}
+
+.cbd-importer-textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.cbd-importer-textarea:focus {
+    outline: none;
+    border-color: #0073aa;
+    box-shadow: 0 0 0 1px #0073aa;
+}
+
+/* Stats */
+.cbd-importer-stats {
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 15px 20px;
+    margin-bottom: 20px;
+}
+
+.cbd-importer-stats p {
+    margin: 0 0 10px;
+    font-size: 15px;
+}
+
+.cbd-importer-stats ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.cbd-importer-stats li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+/* Stat Badges */
+.cbd-importer-stat-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 24px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+}
+
+.cbd-importer-stat-k1 .cbd-importer-stat-badge {
+    background: #4caf50;
+}
+
+.cbd-importer-stat-k2 .cbd-importer-stat-badge {
+    background: #ff9800;
+}
+
+.cbd-importer-stat-k3 .cbd-importer-stat-badge {
+    background: #f44336;
+}
+
+/* Mapping Rows */
+.cbd-importer-mappings {
+    margin-bottom: 20px;
+}
+
+.cbd-importer-mapping-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 15px;
+    border-radius: 6px;
+    border: 2px solid transparent;
+}
+
+.cbd-importer-mapping-k1 {
+    background: rgba(76, 175, 80, 0.08);
+    border-color: rgba(76, 175, 80, 0.3);
+}
+
+.cbd-importer-mapping-k2 {
+    background: rgba(255, 152, 0, 0.08);
+    border-color: rgba(255, 152, 0, 0.3);
+}
+
+.cbd-importer-mapping-k3 {
+    background: rgba(244, 67, 54, 0.08);
+    border-color: rgba(244, 67, 54, 0.3);
+}
+
+.cbd-importer-mapping-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    margin-top: 24px; /* Align with SelectControl label */
+}
+
+.cbd-importer-mapping-k1 .cbd-importer-mapping-badge {
+    background: #4caf50;
+}
+
+.cbd-importer-mapping-k2 .cbd-importer-mapping-badge {
+    background: #ff9800;
+}
+
+.cbd-importer-mapping-k3 .cbd-importer-mapping-badge {
+    background: #f44336;
+}
+
+.cbd-importer-mapping-row .components-base-control {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.cbd-importer-mapping-row .components-base-control__label {
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+/* Actions */
+.cbd-importer-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #ddd;
+}
+
+.cbd-importer-actions .components-button {
+    height: auto;
+    padding: 10px 20px;
+}
+
+/* Spinner */
+.cbd-importer-actions .components-spinner {
+    float: none;
+    margin: 0;
+}
+
+/* Notice */
+.cbd-importer-step .components-notice {
+    margin: 0 0 20px;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+    .cbd-importer-modal {
+        max-width: 100% !important;
+    }
+
+    .cbd-importer-dropzone {
+        padding: 30px 15px;
+    }
+
+    .cbd-importer-stats ul {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .cbd-importer-mapping-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .cbd-importer-mapping-badge {
+        margin-top: 0;
+        width: 100%;
+        height: 36px;
+    }
+
+    .cbd-importer-actions {
+        flex-direction: column;
+    }
+
+    .cbd-importer-actions .components-button {
+        width: 100%;
+    }
+}
