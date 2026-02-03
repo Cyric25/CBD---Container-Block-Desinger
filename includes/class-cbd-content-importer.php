@@ -64,7 +64,9 @@ class CBD_Content_Importer {
             return;
         }
 
-        $content = isset($_POST['content']) ? wp_kses_post($_POST['content']) : '';
+        // Markdown-Content: Verwende wp_unslash statt wp_kses_post
+        // wp_kses_post würde Backslashes escapen (LaTeX-Formeln werden zerstört)
+        $content = isset($_POST['content']) ? wp_unslash($_POST['content']) : '';
 
         if (empty($content)) {
             wp_send_json_error(array('message' => __('Kein Inhalt gefunden', 'container-block-designer')));
