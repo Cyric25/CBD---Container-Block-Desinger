@@ -129,9 +129,13 @@ if (isset($_POST['cbd_save_block']) && isset($_POST['cbd_nonce']) && wp_verify_n
         'screenshot' => array(
             'enabled' => isset($_POST['features']['screenshot']['enabled']) ? true : false,
             'buttonText' => sanitize_text_field($_POST['features']['screenshot']['buttonText'] ?? 'Screenshot')
+        ),
+        'boardMode' => array(
+            'enabled' => isset($_POST['features']['boardMode']['enabled']) ? true : false,
+            'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#1a472a') ?: '#1a472a'
         )
     );
-    
+
     // Config sammeln
     $config = array(
         'allowInnerBlocks' => isset($_POST['allow_inner_blocks']) ? true : false,
@@ -950,9 +954,21 @@ if ($block_id > 0) {
                                 <input type="text" id="screenshot_button" name="features[screenshot][buttonText]" value="<?php echo esc_attr($block['features']['screenshot']['buttonText'] ?? 'Screenshot'); ?>" placeholder="Screenshot" class="regular-text">
                             </div>
                         </div>
+
+                        <div class="cbd-feature-item">
+                            <label>
+                                <input type="checkbox" name="features[boardMode][enabled]" value="1" <?php checked($block['features']['boardMode']['enabled'] ?? false); ?> class="cbd-feature-toggle">
+                                <strong><?php _e('Tafel-Modus', 'container-block-designer'); ?></strong>
+                            </label>
+                            <div class="cbd-feature-options" <?php echo !($block['features']['boardMode']['enabled'] ?? false) ? 'style="display:none;"' : ''; ?>>
+                                <label for="board_color"><?php _e('Tafel-Hintergrundfarbe:', 'container-block-designer'); ?></label>
+                                <input type="color" id="board_color" name="features[boardMode][boardColor]" value="<?php echo esc_attr($block['features']['boardMode']['boardColor'] ?? '#1a472a'); ?>">
+                                <p class="description"><?php _e('Hintergrundfarbe der Zeichenfläche (Standard: Dunkelgrün)', 'container-block-designer'); ?></p>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                
+
                 <div class="postbox">
                     <h2 class="hndle"><?php _e('Aktionen', 'container-block-designer'); ?></h2>
                     <div class="inside">

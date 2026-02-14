@@ -58,7 +58,8 @@ $features = $block['features'] ?: array(
     'collapse' => array('enabled' => false, 'defaultState' => 'expanded'),
     'numbering' => array('enabled' => false, 'format' => 'numeric'),
     'copyText' => array('enabled' => false, 'buttonText' => 'Text kopieren'),
-    'screenshot' => array('enabled' => false, 'buttonText' => 'Screenshot')
+    'screenshot' => array('enabled' => false, 'buttonText' => 'Screenshot'),
+    'boardMode' => array('enabled' => false, 'boardColor' => '#1a472a')
 );
 
 $config = $block['config'] ?: array(
@@ -612,16 +613,33 @@ $config = $block['config'] ?: array(
                                 <th scope="row"><?php _e('Screenshot', 'container-block-designer'); ?></th>
                                 <td>
                                     <label>
-                                        <input type="checkbox" name="features[screenshot][enabled]" value="1" 
+                                        <input type="checkbox" name="features[screenshot][enabled]" value="1"
                                                <?php checked($features['screenshot']['enabled'] ?? false, true); ?>>
                                         <?php _e('Screenshot Button anzeigen', 'container-block-designer'); ?>
                                     </label>
                                     <br><br>
-                                    <input type="text" name="features[screenshot][buttonText]" 
-                                           value="<?php echo esc_attr($features['screenshot']['buttonText'] ?? 'Screenshot'); ?>" 
-                                           class="regular-text" 
+                                    <input type="text" name="features[screenshot][buttonText]"
+                                           value="<?php echo esc_attr($features['screenshot']['buttonText'] ?? 'Screenshot'); ?>"
+                                           class="regular-text"
                                            placeholder="Screenshot">
                                     <p class="description"><?php _e('Text für den Button', 'container-block-designer'); ?></p>
+                                </td>
+                            </tr>
+
+                            <!-- Tafel-Modus -->
+                            <tr>
+                                <th scope="row"><?php _e('Tafel-Modus', 'container-block-designer'); ?></th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="features[boardMode][enabled]" value="1"
+                                               <?php checked($features['boardMode']['enabled'] ?? false, true); ?>>
+                                        <?php _e('Tafel-Modus Button anzeigen', 'container-block-designer'); ?>
+                                    </label>
+                                    <br><br>
+                                    <label><?php _e('Tafel-Hintergrundfarbe:', 'container-block-designer'); ?></label><br>
+                                    <input type="color" name="features[boardMode][boardColor]"
+                                           value="<?php echo esc_attr($features['boardMode']['boardColor'] ?? '#1a472a'); ?>">
+                                    <p class="description"><?php _e('Hintergrundfarbe der Zeichenfläche (Standard: Dunkelgrün)', 'container-block-designer'); ?></p>
                                 </td>
                             </tr>
                         </table>

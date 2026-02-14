@@ -728,8 +728,10 @@ class CBD_Block_Registration {
             'copyText' => !empty($features['copyText']['enabled']),
             'screenshot' => !empty($features['screenshot']['enabled']),
             'icon' => !empty($features['icon']['enabled']),
-            'numbering' => !empty($features['numbering']['enabled'])
+            'numbering' => !empty($features['numbering']['enabled']),
+            'boardMode' => !empty($features['boardMode']['enabled'])
         );
+        $local_context['boardModeActive'] = false;
 
         // Encode wp-context as JSON
         $wrapper_attributes['data-wp-context'] = esc_attr(wp_json_encode($local_context));
@@ -758,6 +760,10 @@ class CBD_Block_Registration {
             if (($features['collapse']['defaultState'] ?? 'expanded') === 'collapsed') {
                 $wrapper_classes[] = 'cbd-collapsed';
             }
+        }
+
+        if (!empty($features['boardMode']['enabled'])) {
+            $wrapper_classes[] = 'cbd-has-board-mode';
         }
 
         // Legacy data attributes (keep for backward compatibility during transition)
@@ -879,6 +885,19 @@ class CBD_Block_Registration {
         $html .= 'data-wp-class--dashicons-yes-alt="context.pdfSuccess">';
         $html .= '</span>';
         $html .= '</button>';
+
+        // Button 5: Board Mode (Tafel-Modus) - nur wenn Feature aktiviert
+        if (!empty($features['boardMode']['enabled'])) {
+            $board_color = esc_attr($features['boardMode']['boardColor'] ?? '#1a472a');
+            $html .= '<button type="button" ';
+            $html .= 'class="cbd-board-mode-toggle" ';
+            $html .= 'data-wp-on--click="actions.toggleBoardMode" ';
+            $html .= 'data-board-color="' . $board_color . '" ';
+            $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+            $html .= 'title="' . esc_attr__('Tafel-Modus', 'container-block-designer') . '">';
+            $html .= '<span class="dashicons dashicons-welcome-write-blog"></span>';
+            $html .= '</button>';
+        }
 
         $html .= '</div>'; // Close buttons
         

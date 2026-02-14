@@ -396,6 +396,33 @@ store('container-block-designer', {
 					context.pdfError = false;
 				}, 2000);
 			}
+		},
+
+		/**
+		 * Tafel-Modus oeffnen - Fullscreen-Overlay mit Canvas-Zeichenflaeche
+		 */
+		*toggleBoardMode() {
+			const context = getContext();
+			const element = getElement();
+
+			const mainContainer = element.ref.closest('[data-wp-interactive="container-block-designer"]');
+			if (!mainContainer) return;
+
+			const containerBlock = mainContainer.querySelector('.cbd-container-block');
+			if (!containerBlock) return;
+
+			// Board-Farbe aus Button-Attribut lesen
+			const boardButton = mainContainer.querySelector('.cbd-board-mode-toggle');
+			const boardColor = boardButton?.getAttribute('data-board-color') || '#1a472a';
+
+			// Board Mode oeffnen via globales Modul
+			if (window.CBDBoardMode) {
+				window.CBDBoardMode.open(
+					context.containerId,
+					containerBlock.innerHTML,
+					boardColor
+				);
+			}
 		}
 	},
 

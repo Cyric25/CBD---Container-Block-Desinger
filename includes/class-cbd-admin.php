@@ -590,9 +590,13 @@ class CBD_Admin {
                 'screenshot' => array(
                     'enabled' => isset($_POST['features']['screenshot']['enabled']) ? true : false,
                     'buttonText' => sanitize_text_field($_POST['features']['screenshot']['buttonText'] ?? 'Screenshot')
+                ),
+                'boardMode' => array(
+                    'enabled' => isset($_POST['features']['boardMode']['enabled']) ? true : false,
+                    'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#1a472a') ?: '#1a472a'
                 )
             );
-            
+
             // Config sammeln
             $config = array(
                 'allowInnerBlocks' => isset($_POST['allow_inner_blocks']) ? true : false,
@@ -2244,9 +2248,13 @@ class CBD_Admin {
             'screenshot' => array(
                 'enabled' => isset($_POST['features']['screenshot']['enabled']) ? true : false,
                 'buttonText' => sanitize_text_field($_POST['features']['screenshot']['buttonText'] ?? 'Screenshot')
+            ),
+            'boardMode' => array(
+                'enabled' => isset($_POST['features']['boardMode']['enabled']) ? true : false,
+                'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#1a472a') ?: '#1a472a'
             )
         );
-        
+
         // Config sammeln (falls vorhanden)
         $config = array(
             'allowInnerBlocks' => isset($_POST['allow_inner_blocks']) ? true : false,
@@ -2543,9 +2551,13 @@ class CBD_Admin {
             'screenshot' => array(
                 'enabled' => isset($_POST['features']['screenshot']['enabled']) ? true : false,
                 'buttonText' => sanitize_text_field($_POST['features']['screenshot']['buttonText'] ?? 'Screenshot')
+            ),
+            'boardMode' => array(
+                'enabled' => isset($_POST['features']['boardMode']['enabled']) ? true : false,
+                'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#1a472a') ?: '#1a472a'
             )
         );
-        
+
         // Config sammeln
         $config = array(
             'allowInnerBlocks' => isset($_POST['allow_inner_blocks']) ? true : false,

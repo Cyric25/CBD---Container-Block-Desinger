@@ -503,6 +503,35 @@
         // Initialisiere Touch-Support
         initTouchSupport();
 
+        /**
+         * Board Mode (Tafel-Modus) Action
+         */
+        $(document).on('click', '[data-wp-on--click="actions.toggleBoardMode"]', function(e) {
+            // WICHTIG: Sofort stoppen damit Event nicht zu Parent-Containern bubblet
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Runtime check: Skip if Interactivity API is now active
+            if (interactivityAPIActive || checkInteractivityAPI()) {
+                return;
+            }
+
+            var $button = $(this);
+            var $container = $button.closest('[data-wp-interactive="container-block-designer"]');
+            var context = $container.data('cbd-context') || {};
+            var $containerBlock = $container.children('.cbd-container-block');
+
+            var boardColor = $button.attr('data-board-color') || '#1a472a';
+
+            if (window.CBDBoardMode) {
+                window.CBDBoardMode.open(
+                    context.containerId,
+                    $containerBlock.html(),
+                    boardColor
+                );
+            }
+        });
+
     });
 
 })(jQuery);

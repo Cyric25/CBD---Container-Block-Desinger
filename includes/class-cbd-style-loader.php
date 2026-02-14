@@ -175,6 +175,23 @@ class CBD_Style_Loader {
                 CBD_VERSION
             );
         }
+
+        // Board Mode (Tafel-Modus)
+        if (in_array('boardMode', $active_features)) {
+            wp_enqueue_style(
+                'cbd-board-mode',
+                CBD_PLUGIN_URL . 'assets/css/board-mode.css',
+                array('dashicons'),
+                CBD_VERSION
+            );
+            wp_enqueue_script(
+                'cbd-board-mode',
+                CBD_PLUGIN_URL . 'assets/js/board-mode.js',
+                array(),
+                CBD_VERSION,
+                true
+            );
+        }
     }
     
     /**
