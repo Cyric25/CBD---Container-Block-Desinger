@@ -467,6 +467,201 @@
     outline-offset: 2px;
 }
 
+/* =============================================
+   CLASSROOM: Header Actions + Class Badge
+   ============================================= */
+
+.cbd-board-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.cbd-board-class-badge {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 400;
+    margin-left: 8px;
+}
+
+.cbd-board-save-status {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    font-style: italic;
+}
+
+/* =============================================
+   CLASSROOM: Class Selector Dialog
+   ============================================= */
+
+.cbd-class-selector-dialog {
+    max-width: 420px;
+}
+
+.cbd-class-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.cbd-class-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    transition: all 0.15s ease;
+    text-align: left;
+}
+
+.cbd-class-option:hover {
+    border-color: #007cba;
+    background: #f0f7fc;
+}
+
+.cbd-class-option-server {
+    border-color: #c8e6c9;
+}
+
+.cbd-class-option-server:hover {
+    border-color: #4caf50;
+    background: #f1f8e9;
+}
+
+.cbd-class-option .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    color: #666;
+}
+
+.cbd-class-option-server .dashicons {
+    color: #4caf50;
+}
+
+/* =============================================
+   BEHANDELT DIALOG - Klassen-Auswahl fuer Behandelt-Markierung
+   ============================================= */
+
+.cbd-behandelt-selector-dialog {
+    position: fixed;
+    inset: 0;
+    z-index: 1000000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cbd-behandelt-selector-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+.cbd-behandelt-selector-content {
+    position: relative;
+    background: #fff;
+    padding: 32px;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    max-width: 400px;
+    width: 90%;
+    animation: cbdBehandeltDialogFadeIn 0.2s ease-out;
+}
+
+@keyframes cbdBehandeltDialogFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.cbd-behandelt-selector-content h3 {
+    margin: 0 0 12px;
+    font-size: 20px;
+    font-weight: 600;
+    color: #1a1a1a;
+}
+
+.cbd-behandelt-selector-content p {
+    margin: 0 0 24px;
+    font-size: 14px;
+    color: #666;
+}
+
+.cbd-behandelt-class-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.cbd-behandelt-class-option {
+    padding: 14px 18px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    color: #333;
+    transition: all 0.2s ease;
+    text-align: left;
+}
+
+.cbd-behandelt-class-option:hover {
+    border-color: #4caf50;
+    background: #f1f8f4;
+    transform: translateX(4px);
+}
+
+.cbd-behandelt-class-option:active {
+    transform: translateX(4px) scale(0.98);
+}
+
+.cbd-behandelt-cancel {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #666;
+    transition: all 0.2s ease;
+}
+
+.cbd-behandelt-cancel:hover {
+    border-color: #999;
+    background: #f5f5f5;
+    color: #333;
+}
+
+/* Behandelt Button Status */
+.cbd-behandelt-toggle .dashicons-yes-alt {
+    color: #4caf50;
+}
+
+.cbd-behandelt-toggle .dashicons-marker {
+    color: #999;
+}
+
 /* High Contrast Mode */
 @media (prefers-contrast: high) {
     .cbd-board-tool {

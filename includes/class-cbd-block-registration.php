@@ -426,6 +426,21 @@ class CBD_Block_Registration {
             );
         }
 
+        // Classroom data for board-mode integration
+        if (class_exists('CBD_Classroom') && CBD_Classroom::is_enabled() && is_user_logged_in() && current_user_can('cbd_edit_blocks')) {
+            $classroom_data = array(
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'nonce'   => wp_create_nonce('cbd_classroom_nonce'),
+                'pageId'  => get_the_ID() ?: 0,
+                'classes' => CBD_Classroom::get_teacher_classes(),
+            );
+            wp_localize_script(
+                'cbd-interactivity-fallback',
+                'cbdClassroomData',
+                $classroom_data
+            );
+        }
+
         // REMOVED: Old inline scripts (container-blocks-inline.js)
         // Now handled by interactivity-fallback.js and interactivity-store.js
         /*
@@ -690,6 +705,18 @@ class CBD_Block_Registration {
         // Generate unique container ID using WordPress native function
         $container_id = 'cbd-container-' . wp_unique_id();
 
+        // Stable container ID for server-side drawing persistence
+        // Try to extract from saved block HTML (data-stable-id attribute)
+        $stable_id = '';
+        if (preg_match('/data-stable-id="([^"]+)"/', $content, $matches)) {
+            $stable_id = $matches[1];
+        }
+        // Fallback for blocks without stableId: generate deterministic ID
+        if (empty($stable_id)) {
+            $page_id = get_the_ID() ?: 0;
+            $stable_id = 'cbd-legacy-' . md5($page_id . '|' . $selected_block . '|' . substr(md5($content), 0, 8));
+        }
+
         // Build wrapper classes (.cbd-container - transparent wrapper)
         $wrapper_classes = array('cbd-container');
         $wrapper_attributes = array('id' => $container_id);
@@ -732,6 +759,9 @@ class CBD_Block_Registration {
             'boardMode' => !empty($features['boardMode']['enabled'])
         );
         $local_context['boardModeActive'] = false;
+        $local_context['stableContainerId'] = $stable_id;
+        $local_context['pageId'] = get_the_ID() ?: 0;
+        $local_context['isBehandelt'] = false; // Classroom: Initial behandelt status
 
         // Encode wp-context as JSON
         $wrapper_attributes['data-wp-context'] = esc_attr(wp_json_encode($local_context));
@@ -773,6 +803,7 @@ class CBD_Block_Registration {
         
         $wrapper_attributes['data-block-id'] = esc_attr($block->id);
         $wrapper_attributes['data-block-name'] = esc_attr($selected_block);
+        $wrapper_attributes['data-stable-id'] = esc_attr($stable_id);
         
         if (!empty($anchor)) {
             $wrapper_attributes['id'] = $anchor;
@@ -896,6 +927,20 @@ class CBD_Block_Registration {
             $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
             $html .= 'title="' . esc_attr__('Tafel-Modus', 'container-block-designer') . '">';
             $html .= '<span class="dashicons dashicons-welcome-write-blog"></span>';
+            $html .= '</button>';
+        }
+
+        // Button 6: Behandelt Toggle - nur wenn Classroom aktiviert und User ist Lehrer
+        if (class_exists('CBD_Classroom') && CBD_Classroom::is_enabled() && is_user_logged_in() && current_user_can('cbd_edit_blocks')) {
+            $html .= '<button type="button" ';
+            $html .= 'class="cbd-behandelt-toggle" ';
+            $html .= 'data-wp-on--click="actions.toggleBehandelt" ';
+            $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+            $html .= 'title="' . esc_attr__('Als behandelt markieren', 'container-block-designer') . '">';
+            $html .= '<span class="dashicons dashicons-yes-alt" ';
+            $html .= 'data-wp-class--dashicons-yes-alt="context.isBehandelt" ';
+            $html .= 'data-wp-class--dashicons-marker="!context.isBehandelt">';
+            $html .= '</span>';
             $html .= '</button>';
         }
 

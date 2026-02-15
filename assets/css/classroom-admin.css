@@ -1,0 +1,164 @@
+/**
+ * Container Block Designer - Classroom Admin Styles
+ *
+ * @package ContainerBlockDesigner
+ * @since 3.0.0
+ */
+
+/* =============================================
+   LAYOUT
+   ============================================= */
+
+.cbd-classroom-admin .cbd-classroom-wrapper {
+    max-width: 1000px;
+}
+
+.cbd-classroom-form-section {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.cbd-classroom-form-section h2 {
+    margin-top: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.cbd-classroom-list-section {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    padding: 20px;
+    border-radius: 4px;
+}
+
+.cbd-classroom-list-section h2 {
+    margin-top: 0;
+}
+
+/* =============================================
+   PAGE SELECTOR
+   ============================================= */
+
+.cbd-class-pages {
+    margin-bottom: 10px;
+}
+
+.cbd-page-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.cbd-page-selector select {
+    flex: 1;
+    max-width: 400px;
+}
+
+.cbd-page-selector .cbd-remove-page {
+    color: #cc4444;
+    border-color: #e0c0c0;
+    min-width: 30px;
+    padding: 0 8px;
+    line-height: 28px;
+    font-size: 16px;
+}
+
+.cbd-page-selector .cbd-remove-page:hover {
+    color: #aa0000;
+    border-color: #cc4444;
+    background: #fff5f5;
+}
+
+/* =============================================
+   LOADING STATE
+   ============================================= */
+
+.cbd-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 20px 0;
+    color: #666;
+}
+
+.cbd-loading .spinner {
+    float: none;
+    margin: 0;
+}
+
+/* =============================================
+   TABLE ADJUSTMENTS
+   ============================================= */
+
+#cbd-classes-table .column-name {
+    width: 25%;
+    font-weight: 600;
+}
+
+#cbd-classes-table .column-pages {
+    width: 30%;
+}
+
+#cbd-classes-table .column-status {
+    width: 10%;
+}
+
+#cbd-classes-table .column-created {
+    width: 15%;
+}
+
+#cbd-classes-table .column-actions {
+    width: 20%;
+}
+
+.cbd-class-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.cbd-class-actions .button-link-delete {
+    color: #b32d2e;
+}
+
+.cbd-class-actions .button-link-delete:hover {
+    color: #a00;
+}
+
+/* Status badge */
+.cbd-status-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.cbd-status-badge.active {
+    background: #d4edda;
+    color: #155724;
+}
+
+.cbd-status-badge.inactive {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+/* Page tags */
+.cbd-page-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.cbd-page-tag {
+    display: inline-block;
+    background: #f0f0f1;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #50575e;
+}

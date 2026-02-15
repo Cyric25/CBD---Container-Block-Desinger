@@ -33,6 +33,9 @@ define('CBD_PLUGIN_BASENAME', plugin_basename(__FILE__));
 // Datenbank-Tabellennamen
 global $wpdb;
 define('CBD_TABLE_BLOCKS', $wpdb->prefix . 'cbd_blocks');
+define('CBD_TABLE_CLASSES', $wpdb->prefix . 'cbd_classes');
+define('CBD_TABLE_CLASS_PAGES', $wpdb->prefix . 'cbd_class_pages');
+define('CBD_TABLE_DRAWINGS', $wpdb->prefix . 'cbd_drawings');
 
 // Load WordPress PHP 8.x compatibility layer early
 require_once CBD_PLUGIN_DIR . 'includes/php8-wordpress-compatibility.php';
@@ -118,6 +121,9 @@ class ContainerBlockDesigner {
 
         // Content Importer - Markdown to CDB blocks
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-content-importer.php';
+
+        // Classroom System (Klassen-System) - optionales Feature
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-classroom.php';
 
         // Admin-Bereich nur im Backend laden
         if (is_admin()) {

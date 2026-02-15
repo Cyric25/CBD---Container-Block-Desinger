@@ -73,10 +73,18 @@
             const selectedBlock = attributes.selectedBlock || '';
             const customClasses = attributes.customClasses || '';
             const blockFeatures = attributes.blockFeatures || {};
-            
+
             const [availableBlocks, setAvailableBlocks] = useState([]);
             const [isLoading, setIsLoading] = useState(false);
             const [defaultLoaded, setDefaultLoaded] = useState(false);
+
+            // Generate stableId on first insert (persisted in post content)
+            useEffect(() => {
+                if (!attributes.stableId) {
+                    const id = 'cbd-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8);
+                    setAttributes({ stableId: id });
+                }
+            }, []);
 
             // Lade Blocks beim ersten Rendern
             useEffect(() => {
@@ -287,24 +295,29 @@
             const selectedBlock = attributes.selectedBlock || '';
             const customClasses = attributes.customClasses || '';
             const blockFeatures = attributes.blockFeatures || {};
-            
+            const stableId = attributes.stableId || '';
+
             let className = 'wp-block-container-block-designer-container cbd-container';
             if (customClasses) {
                 className += ' ' + customClasses;
             }
-            
+
             const blockProps = useBlockProps.save({
                 className: className.trim()
             });
-            
+
             if (selectedBlock) {
                 blockProps['data-block'] = selectedBlock;
             }
-            
+
             if (blockFeatures && Object.keys(blockFeatures).length > 0) {
                 blockProps['data-features'] = JSON.stringify(blockFeatures);
             }
-            
+
+            if (stableId) {
+                blockProps['data-stable-id'] = stableId;
+            }
+
             return el('div', blockProps,
                 el(InnerBlocks.Content)
             );
@@ -505,6 +518,10 @@
                 blockFeatures: {
                     type: 'object',
                     default: {}
+                },
+                stableId: {
+                    type: 'string',
+                    default: ''
                 }
             },
             // Custom label for List View - shows block title instead of "Container Block"

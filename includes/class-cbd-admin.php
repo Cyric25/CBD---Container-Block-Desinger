@@ -217,6 +217,18 @@ class CBD_Admin {
                 'cbd-roles-repair',
                 array($this, 'render_roles_repair_page')
             );
+
+            // Untermenü: Klassen-Verwaltung
+            if (get_option('cbd_classroom_enabled', false) || current_user_can('manage_options')) {
+                add_submenu_page(
+                    'container-block-designer',
+                    __('Klassen', 'container-block-designer'),
+                    __('Klassen', 'container-block-designer'),
+                    'cbd_edit_blocks',
+                    'cbd-classroom',
+                    array($this, 'render_classroom_page')
+                );
+            }
         }
 
         // Versteckte Seite: Block bearbeiten - nicht im Menü sichtbar
@@ -422,6 +434,26 @@ class CBD_Admin {
                     CBD_VERSION,
                     true
                 );
+                break;
+
+            case 'cbd-classroom':
+                wp_enqueue_style(
+                    'cbd-classroom-admin',
+                    CBD_PLUGIN_URL . 'assets/css/classroom-admin.css',
+                    array('cbd-admin-common'),
+                    CBD_VERSION
+                );
+                wp_enqueue_script(
+                    'cbd-classroom-admin',
+                    CBD_PLUGIN_URL . 'assets/js/classroom-admin.js',
+                    array('jquery'),
+                    CBD_VERSION,
+                    true
+                );
+                wp_localize_script('cbd-classroom-admin', 'cbdClassroomAdmin', array(
+                    'ajaxUrl' => admin_url('admin-ajax.php'),
+                    'nonce' => wp_create_nonce('cbd_classroom_nonce')
+                ));
                 break;
         }
         
@@ -980,6 +1012,21 @@ class CBD_Admin {
         } else {
             echo '<div class="wrap"><h1>' . __('Import/Export', 'container-block-designer') . '</h1>';
             echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/import-export.php', 'container-block-designer') . '</p></div>';
+            echo '</div>';
+        }
+    }
+
+    /**
+     * Klassen-Verwaltungsseite rendern
+     */
+    public function render_classroom_page() {
+        $file_path = CBD_PLUGIN_DIR . 'admin/classroom.php';
+
+        if (file_exists($file_path)) {
+            include $file_path;
+        } else {
+            echo '<div class="wrap"><h1>' . __('Klassen', 'container-block-designer') . '</h1>';
+            echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/classroom.php', 'container-block-designer') . '</p></div>';
             echo '</div>';
         }
     }

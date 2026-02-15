@@ -50,6 +50,7 @@ if (isset($_POST['cbd_save_settings']) && wp_verify_nonce($_POST['cbd_settings_n
     update_option('cbd_enable_debug_mode', isset($_POST['enable_debug_mode']) ? 1 : 0);
     update_option('cbd_default_block_status', sanitize_text_field($_POST['default_block_status']));
     update_option('cbd_enable_block_caching', isset($_POST['enable_block_caching']) ? 1 : 0);
+    update_option('cbd_classroom_enabled', isset($_POST['classroom_enabled']) ? 1 : 0);
 
     echo '<div class="notice notice-success is-dismissible"><p>' . __('Einstellungen gespeichert.', 'container-block-designer') . '</p></div>';
 }
@@ -78,6 +79,7 @@ $remove_data = get_option('cbd_remove_data_on_uninstall', 0);
 $debug_mode = get_option('cbd_enable_debug_mode', 0);
 $default_status = get_option('cbd_default_block_status', 'draft');
 $enable_caching = get_option('cbd_enable_block_caching', 1);
+$classroom_enabled = get_option('cbd_classroom_enabled', 0);
 
 // Datenbank-Status prüfen
 global $wpdb;
@@ -172,6 +174,17 @@ $db_version = get_option('cbd_db_version', '0');
                             <?php _e('Debug-Modus aktivieren', 'container-block-designer'); ?>
                         </label>
                         <p class="description"><?php _e('Zeigt zusätzliche Debug-Informationen in der Browser-Konsole', 'container-block-designer'); ?></p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row"><?php _e('Klassen-System', 'container-block-designer'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="classroom_enabled" value="1" <?php checked($classroom_enabled, 1); ?>>
+                            <?php _e('Klassen-System aktivieren', 'container-block-designer'); ?>
+                        </label>
+                        <p class="description"><?php _e('Ermöglicht Lehrern, Klassen zu erstellen, Notizen zu speichern und behandelte Themen zu markieren', 'container-block-designer'); ?></p>
                     </td>
                 </tr>
 

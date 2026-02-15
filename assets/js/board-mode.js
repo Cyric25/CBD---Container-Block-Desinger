@@ -1,9 +1,11 @@
 /**
  * Container Block Designer - Board Mode (Tafel-Modus)
- * Fullscreen-Overlay mit Canvas-Zeichenflaeche und localStorage-Persistenz
+ * Fullscreen-Overlay mit Canvas-Zeichenflaeche
+ * Unterstuetzt localStorage-Persistenz und serverseitige Speicherung (Klassen-System)
  *
  * @package ContainerBlockDesigner
  * @since 2.9.1
+ * @updated 3.0.0 - Klassen-System Integration
  */
 
 (function() {
@@ -26,13 +28,28 @@
         resizeObserver: null,
         boundHandlers: {},
 
+        // Classroom System state
+        classId: null,
+        pageId: null,
+        stableContainerId: null,
+        ajaxUrl: null,
+        nonce: null,
+        isSaving: false,
+        classes: [],
+
         /**
          * Tafel-Modus oeffnen
-         * @param {string} containerId - Eindeutige Block-ID
+         * @param {string} containerId - Eindeutige Block-ID (runtime)
          * @param {string} contentHtml - HTML-Inhalt des Blocks
          * @param {string} boardColor - Hintergrundfarbe der Zeichenflaeche
+         * @param {Object} options - Classroom-Optionen (optional)
+         * @param {string} options.stableContainerId - Stabiler Container-Identifier
+         * @param {number} options.pageId - WordPress Page ID
+         * @param {Array}  options.classes - Klassen des Lehrers [{id, name}]
+         * @param {string} options.ajaxUrl - admin-ajax.php URL
+         * @param {string} options.nonce - AJAX Nonce
          */
-        open: function(containerId, contentHtml, boardColor) {
+        open: function(containerId, contentHtml, boardColor, options) {
             // Verhindere doppeltes Oeffnen
             if (this.overlay) {
                 return;
@@ -41,6 +58,32 @@
             this.containerId = containerId;
             this.boardColor = boardColor || '#1a472a';
 
+            // Classroom-Optionen setzen
+            options = options || {};
+            this.stableContainerId = options.stableContainerId || null;
+            this.pageId = options.pageId || null;
+            this.ajaxUrl = options.ajaxUrl || null;
+            this.nonce = options.nonce || null;
+            this.classes = options.classes || [];
+            this.classId = null;
+            this.isSaving = false;
+
+            // Wenn Klassen vorhanden: Selektor zeigen, sonst direkt oeffnen
+            if (this.classes.length > 0 && this.ajaxUrl) {
+                var self = this;
+                this.showClassSelector(function(selectedClassId) {
+                    self.classId = selectedClassId;
+                    self._openOverlay(contentHtml);
+                });
+            } else {
+                this._openOverlay(contentHtml);
+            }
+        },
+
+        /**
+         * Internes Oeffnen des Overlays (nach optionaler Klassenauswahl)
+         */
+        _openOverlay: function(contentHtml) {
             // Overlay-DOM erstellen
             this.createOverlayDOM(contentHtml);
 
@@ -55,8 +98,8 @@
             this.ctx = this.canvas.getContext('2d');
             this.resizeCanvas();
 
-            // Gespeicherte Zeichnung laden
-            this.loadFromCache();
+            // Zeichnung laden
+            this.loadDrawing();
 
             // Events binden
             this.bindEvents();
@@ -69,7 +112,7 @@
             if (!this.overlay) return;
 
             // Zeichnung speichern
-            this.saveToCache();
+            this.saveDrawing();
 
             // Closing-Animation
             this.overlay.classList.add('cbd-board-closing');
@@ -107,6 +150,10 @@
             this.ctx = null;
             this.isDrawing = false;
             this.containerId = null;
+            this.classId = null;
+            this.pageId = null;
+            this.stableContainerId = null;
+            this.isSaving = false;
         },
 
         /**
@@ -118,13 +165,25 @@
             overlay.className = 'cbd-board-overlay';
             overlay.id = 'cbd-board-overlay';
 
+            // Header-Titel: Klassenname anzeigen wenn Klasse gewaehlt
+            var titleExtra = '';
+            if (this.classId) {
+                var cls = this.classes.find(function(c) { return c.id == this.classId; }.bind(this));
+                if (cls) {
+                    titleExtra = ' <span class="cbd-board-class-badge">' + this._escHtml(cls.name) + '</span>';
+                }
+            }
+
             overlay.innerHTML =
                 '<div class="cbd-board-header">' +
                     '<span class="cbd-board-title">' +
                         '<span class="dashicons dashicons-welcome-write-blog"></span>' +
-                        'Tafel-Modus' +
+                        'Tafel-Modus' + titleExtra +
                     '</span>' +
-                    '<button class="cbd-board-close" title="Tafel-Modus beenden">&times;</button>' +
+                    '<div class="cbd-board-header-actions">' +
+                        '<span class="cbd-board-save-status" id="cbd-board-save-status"></span>' +
+                        '<button class="cbd-board-close" title="Tafel-Modus beenden">&times;</button>' +
+                    '</div>' +
                 '</div>' +
                 '<div class="cbd-board-split">' +
                     '<div class="cbd-board-content"></div>' +
@@ -292,6 +351,64 @@
             }
 
             this.boundHandlers = {};
+        },
+
+        // =============================================
+        // Klassen-Selektor
+        // =============================================
+
+        /**
+         * Klassen-Auswahl-Dialog anzeigen
+         * @param {Function} callback - Wird mit der ausgewaehlten classId aufgerufen (null = persoenlich)
+         */
+        showClassSelector: function(callback) {
+            var self = this;
+
+            var selectorOverlay = document.createElement('div');
+            selectorOverlay.className = 'cbd-board-confirm-overlay';
+
+            var optionsHtml = '<button class="cbd-class-option" data-class-id="0">' +
+                '<span class="dashicons dashicons-admin-users"></span> Pers\u00F6nlich (lokal)' +
+                '</button>';
+
+            this.classes.forEach(function(cls) {
+                optionsHtml += '<button class="cbd-class-option cbd-class-option-server" data-class-id="' + cls.id + '">' +
+                    '<span class="dashicons dashicons-groups"></span> ' + self._escHtml(cls.name) +
+                    '</button>';
+            });
+
+            selectorOverlay.innerHTML =
+                '<div class="cbd-board-confirm-dialog cbd-class-selector-dialog">' +
+                    '<h4>Klasse w\u00E4hlen</h4>' +
+                    '<p>W\u00E4hlen Sie, wo die Zeichnung gespeichert werden soll:</p>' +
+                    '<div class="cbd-class-options">' + optionsHtml + '</div>' +
+                    '<div class="cbd-board-confirm-actions">' +
+                        '<button class="cbd-board-confirm-cancel">Abbrechen</button>' +
+                    '</div>' +
+                '</div>';
+
+            document.body.appendChild(selectorOverlay);
+
+            // Class option buttons
+            selectorOverlay.querySelectorAll('.cbd-class-option').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var classId = parseInt(this.getAttribute('data-class-id')) || null;
+                    document.body.removeChild(selectorOverlay);
+                    callback(classId === 0 ? null : classId);
+                });
+            });
+
+            // Cancel
+            selectorOverlay.querySelector('.cbd-board-confirm-cancel').addEventListener('click', function() {
+                document.body.removeChild(selectorOverlay);
+            });
+
+            // Backdrop click = cancel
+            selectorOverlay.addEventListener('click', function(e) {
+                if (e.target === selectorOverlay) {
+                    document.body.removeChild(selectorOverlay);
+                }
+            });
         },
 
         // =============================================
@@ -467,7 +584,144 @@
         },
 
         // =============================================
-        // localStorage Persistenz
+        // Zeichnungs-Persistenz (Dispatcher)
+        // =============================================
+
+        /**
+         * Zeichnung laden (Server oder Cache)
+         */
+        loadDrawing: function() {
+            if (this.classId && this.ajaxUrl) {
+                this.loadFromServer();
+            } else {
+                this.loadFromCache();
+            }
+        },
+
+        /**
+         * Zeichnung speichern (Server oder Cache)
+         */
+        saveDrawing: function() {
+            if (this.classId && this.ajaxUrl) {
+                this.saveToServer();
+            } else {
+                this.saveToCache();
+            }
+        },
+
+        // =============================================
+        // Server-Persistenz (Klassen-System)
+        // =============================================
+
+        /**
+         * Zeichnung vom Server laden
+         */
+        loadFromServer: function() {
+            if (!this.classId || !this.ajaxUrl || !this.stableContainerId) {
+                this.loadFromCache();
+                return;
+            }
+
+            var self = this;
+            this._setSaveStatus('Lade...');
+
+            var formData = new FormData();
+            formData.append('action', 'cbd_load_drawing');
+            formData.append('nonce', this.nonce);
+            formData.append('class_id', this.classId);
+            formData.append('page_id', this.pageId);
+            formData.append('container_id', this.stableContainerId);
+
+            fetch(this.ajaxUrl, {
+                method: 'POST',
+                body: formData
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (data.success && data.data.drawing_data) {
+                    var img = new Image();
+                    img.onload = function() {
+                        self.ctx.fillStyle = self.boardColor;
+                        self.ctx.fillRect(0, 0, self.canvas.width, self.canvas.height);
+                        self.ctx.drawImage(img, 0, 0);
+                        self._setSaveStatus('Geladen');
+                        setTimeout(function() { self._setSaveStatus(''); }, 2000);
+                    };
+                    img.src = data.data.drawing_data;
+                } else {
+                    // Keine Zeichnung auf Server - leere Tafel
+                    self.ctx.fillStyle = self.boardColor;
+                    self.ctx.fillRect(0, 0, self.canvas.width, self.canvas.height);
+                    self._setSaveStatus('');
+                }
+            })
+            .catch(function(err) {
+                console.warn('[CBD Board Mode] Server-Laden fehlgeschlagen:', err);
+                self._setSaveStatus('Fehler');
+                // Fallback auf Cache
+                self.loadFromCache();
+            });
+        },
+
+        /**
+         * Zeichnung auf Server speichern
+         */
+        saveToServer: function() {
+            if (this.isSaving || !this.classId || !this.ajaxUrl || !this.stableContainerId) {
+                this.saveToCache();
+                return;
+            }
+
+            this.isSaving = true;
+            this._setSaveStatus('Speichert...');
+
+            var self = this;
+            var dataUrl = this.canvas.toDataURL('image/png');
+
+            var formData = new FormData();
+            formData.append('action', 'cbd_save_drawing');
+            formData.append('nonce', this.nonce);
+            formData.append('class_id', this.classId);
+            formData.append('page_id', this.pageId);
+            formData.append('container_id', this.stableContainerId);
+            formData.append('drawing_data', dataUrl);
+
+            fetch(this.ajaxUrl, {
+                method: 'POST',
+                body: formData
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                self.isSaving = false;
+                if (data.success) {
+                    self._setSaveStatus('Gespeichert');
+                } else {
+                    console.warn('[CBD Board Mode] Server-Speichern fehlgeschlagen:', data);
+                    self._setSaveStatus('Fehler');
+                    // Fallback: auch lokal speichern
+                    self.saveToCache();
+                }
+            })
+            .catch(function(err) {
+                self.isSaving = false;
+                console.warn('[CBD Board Mode] Server-Speichern fehlgeschlagen:', err);
+                self._setSaveStatus('Fehler');
+                self.saveToCache();
+            });
+        },
+
+        /**
+         * Speicher-Status im Header anzeigen
+         */
+        _setSaveStatus: function(text) {
+            var el = document.getElementById('cbd-board-save-status');
+            if (el) {
+                el.textContent = text;
+            }
+        },
+
+        // =============================================
+        // localStorage Persistenz (Fallback / Persoenlich)
         // =============================================
 
         /**
@@ -533,6 +787,20 @@
             } catch (e) {
                 // Ignorieren
             }
+        },
+
+        // =============================================
+        // Hilfsfunktionen
+        // =============================================
+
+        /**
+         * HTML escapen
+         */
+        _escHtml: function(str) {
+            if (!str) return '';
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
         }
     };
 

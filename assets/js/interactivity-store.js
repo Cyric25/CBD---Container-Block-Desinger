@@ -415,14 +415,140 @@ store('container-block-designer', {
 			const boardButton = mainContainer.querySelector('.cbd-board-mode-toggle');
 			const boardColor = boardButton?.getAttribute('data-board-color') || '#1a472a';
 
+			// Classroom-Optionen zusammenstellen
+			const classroomData = window.cbdClassroomData || {};
+			const options = {
+				stableContainerId: context.stableContainerId || mainContainer.getAttribute('data-stable-id') || null,
+				pageId: context.pageId || classroomData.pageId || null,
+				classes: classroomData.classes || [],
+				ajaxUrl: classroomData.ajaxUrl || null,
+				nonce: classroomData.nonce || null
+			};
+
 			// Board Mode oeffnen via globales Modul
 			if (window.CBDBoardMode) {
 				window.CBDBoardMode.open(
 					context.containerId,
 					containerBlock.innerHTML,
-					boardColor
+					boardColor,
+					options
 				);
 			}
+		},
+
+		/**
+		 * Behandelt-Status togglen - Klassen-System
+		 */
+		*toggleBehandelt() {
+			const context = getContext();
+			const element = getElement();
+
+			const classroomData = window.cbdClassroomData || {};
+			if (!classroomData.classes || classroomData.classes.length === 0) {
+				alert('Keine Klassen vorhanden. Bitte erstellen Sie zuerst eine Klasse.');
+				return;
+			}
+
+			// Klassen-Auswahl Dialog erstellen
+			const mainContainer = element.ref.closest('[data-wp-interactive="container-block-designer"]');
+			const classId = yield this.showClassSelectorForBehandelt(classroomData.classes);
+
+			if (!classId) return; // User cancelled
+
+			try {
+				// Toggle behandelt status
+				const newStatus = !context.isBehandelt;
+
+				// AJAX request to save status
+				const formData = new FormData();
+				formData.append('action', 'cbd_toggle_behandelt');
+				formData.append('nonce', classroomData.nonce);
+				formData.append('class_id', classId);
+				formData.append('page_id', context.pageId || classroomData.pageId);
+				formData.append('container_id', context.stableContainerId || mainContainer?.getAttribute('data-stable-id'));
+				formData.append('behandelt', newStatus ? '1' : '0');
+
+				const response = yield fetch(classroomData.ajaxUrl, {
+					method: 'POST',
+					body: formData
+				});
+
+				const data = yield response.json();
+
+				if (data.success) {
+					context.isBehandelt = newStatus;
+
+					// Visual feedback
+					const icon = element.ref.querySelector('.dashicons');
+					if (icon && newStatus) {
+						// Kurz grün blinken bei Erfolg
+						icon.style.color = '#4caf50';
+						setTimeout(() => {
+							icon.style.color = '';
+						}, 1000);
+					}
+				} else {
+					throw new Error(data.data || 'Fehler beim Speichern');
+				}
+			} catch (error) {
+				alert('Fehler beim Speichern des Behandelt-Status: ' + error.message);
+			}
+		},
+
+		/**
+		 * Helper: Zeige Klassen-Auswahl Dialog fuer Behandelt-Markierung
+		 */
+		*showClassSelectorForBehandelt(classes) {
+			return yield new Promise((resolve) => {
+				// Erstelle Dialog
+				const dialog = document.createElement('div');
+				dialog.className = 'cbd-behandelt-selector-dialog';
+				dialog.innerHTML = `
+					<div class="cbd-behandelt-selector-overlay"></div>
+					<div class="cbd-behandelt-selector-content">
+						<h3>Klasse wählen</h3>
+						<p>Für welche Klasse möchten Sie den Status ändern?</p>
+						<div class="cbd-behandelt-class-options">
+							${classes.map(cls => `
+								<button class="cbd-behandelt-class-option" data-class-id="${cls.id}">
+									${this.escHtml(cls.name)}
+								</button>
+							`).join('')}
+						</div>
+						<button class="cbd-behandelt-cancel">Abbrechen</button>
+					</div>
+				`;
+
+				document.body.appendChild(dialog);
+
+				// Event listeners
+				dialog.querySelectorAll('.cbd-behandelt-class-option').forEach(btn => {
+					btn.addEventListener('click', () => {
+						const classId = btn.getAttribute('data-class-id');
+						document.body.removeChild(dialog);
+						resolve(classId);
+					});
+				});
+
+				dialog.querySelector('.cbd-behandelt-cancel').addEventListener('click', () => {
+					document.body.removeChild(dialog);
+					resolve(null);
+				});
+
+				dialog.querySelector('.cbd-behandelt-selector-overlay').addEventListener('click', () => {
+					document.body.removeChild(dialog);
+					resolve(null);
+				});
+			});
+		},
+
+		/**
+		 * Helper: HTML escaping
+		 */
+		escHtml(text) {
+			const div = document.createElement('div');
+			div.textContent = text;
+			return div.innerHTML;
 		}
 	},
 

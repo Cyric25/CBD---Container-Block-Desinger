@@ -524,12 +524,125 @@
             var boardColor = $button.attr('data-board-color') || '#1a472a';
 
             if (window.CBDBoardMode) {
+                var classroomData = window.cbdClassroomData || {};
+                var options = {
+                    stableContainerId: context.stableContainerId || $container.attr('data-stable-id') || null,
+                    pageId: context.pageId || classroomData.pageId || null,
+                    classes: classroomData.classes || [],
+                    ajaxUrl: classroomData.ajaxUrl || null,
+                    nonce: classroomData.nonce || null
+                };
                 window.CBDBoardMode.open(
                     context.containerId,
                     $containerBlock.html(),
-                    boardColor
+                    boardColor,
+                    options
                 );
             }
+        });
+
+        /**
+         * Behandelt Toggle Action (Classroom System)
+         */
+        $(document).on('click', '[data-wp-on--click="actions.toggleBehandelt"]', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Runtime check: Skip if Interactivity API is now active
+            if (interactivityAPIActive || checkInteractivityAPI()) {
+                return;
+            }
+
+            var $button = $(this);
+            var $container = $button.closest('[data-wp-interactive="container-block-designer"]');
+            var context = $container.data('cbd-context') || {};
+            var classroomData = window.cbdClassroomData || {};
+
+            if (!classroomData.classes || classroomData.classes.length === 0) {
+                alert('Keine Klassen vorhanden. Bitte erstellen Sie zuerst eine Klasse.');
+                return;
+            }
+
+            // Klassen-Auswahl Dialog erstellen
+            var dialog = $('<div class="cbd-behandelt-selector-dialog"></div>');
+            var overlay = $('<div class="cbd-behandelt-selector-overlay"></div>');
+            var content = $('<div class="cbd-behandelt-selector-content"></div>');
+
+            content.append('<h3>Klasse wählen</h3>');
+            content.append('<p>Für welche Klasse möchten Sie den Status ändern?</p>');
+
+            var optionsContainer = $('<div class="cbd-behandelt-class-options"></div>');
+            classroomData.classes.forEach(function(cls) {
+                var btn = $('<button class="cbd-behandelt-class-option"></button>')
+                    .attr('data-class-id', cls.id)
+                    .text(cls.name);
+                optionsContainer.append(btn);
+            });
+            content.append(optionsContainer);
+
+            var cancelBtn = $('<button class="cbd-behandelt-cancel">Abbrechen</button>');
+            content.append(cancelBtn);
+
+            dialog.append(overlay);
+            dialog.append(content);
+            $('body').append(dialog);
+
+            // Event: Klasse gewählt
+            dialog.find('.cbd-behandelt-class-option').on('click', function() {
+                var classId = $(this).attr('data-class-id');
+                dialog.remove();
+
+                // Toggle behandelt status
+                var currentStatus = context.isBehandelt || false;
+                var newStatus = !currentStatus;
+
+                // AJAX request
+                $.ajax({
+                    url: classroomData.ajaxUrl,
+                    type: 'POST',
+                    data: {
+                        action: 'cbd_toggle_behandelt',
+                        nonce: classroomData.nonce,
+                        class_id: classId,
+                        page_id: context.pageId || classroomData.pageId,
+                        container_id: context.stableContainerId || $container.attr('data-stable-id'),
+                        behandelt: newStatus ? '1' : '0'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            context.isBehandelt = newStatus;
+                            $container.data('cbd-context', context);
+
+                            // Icon Update
+                            var $icon = $button.find('.dashicons');
+                            if (newStatus) {
+                                $icon.removeClass('dashicons-marker').addClass('dashicons-yes-alt');
+                                // Grün blinken
+                                $icon.css('color', '#4caf50');
+                                setTimeout(function() {
+                                    $icon.css('color', '');
+                                }, 1000);
+                            } else {
+                                $icon.removeClass('dashicons-yes-alt').addClass('dashicons-marker');
+                            }
+                        } else {
+                            alert('Fehler beim Speichern: ' + (response.data || 'Unbekannter Fehler'));
+                        }
+                    },
+                    error: function() {
+                        alert('Fehler beim Speichern des Behandelt-Status.');
+                    }
+                });
+            });
+
+            // Event: Abbrechen
+            cancelBtn.on('click', function() {
+                dialog.remove();
+            });
+
+            overlay.on('click', function() {
+                dialog.remove();
+            });
         });
 
     });

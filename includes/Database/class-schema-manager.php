@@ -21,7 +21,7 @@ class CBD_Schema_Manager {
     /**
      * Database version for tracking migrations
      */
-    const DB_VERSION = '2.9.0';
+    const DB_VERSION = '3.0.0';
     
     /**
      * Option key for storing database version
@@ -60,7 +60,58 @@ class CBD_Schema_Manager {
         
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql);
-        
+
+        // Classroom System tables
+        $classes_table = $wpdb->prefix . 'cbd_classes';
+        $class_pages_table = $wpdb->prefix . 'cbd_class_pages';
+        $drawings_table = $wpdb->prefix . 'cbd_drawings';
+
+        $sql_classes = "CREATE TABLE IF NOT EXISTS $classes_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            name varchar(200) NOT NULL,
+            password varchar(255) NOT NULL,
+            teacher_id bigint(20) unsigned NOT NULL,
+            status varchar(20) DEFAULT 'active',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY teacher_id (teacher_id),
+            KEY status (status)
+        ) $charset_collate;";
+
+        $sql_class_pages = "CREATE TABLE IF NOT EXISTS $class_pages_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            class_id int(11) NOT NULL,
+            page_id bigint(20) unsigned NOT NULL,
+            sort_order int(11) DEFAULT 0,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY class_page (class_id, page_id),
+            KEY class_id (class_id),
+            KEY page_id (page_id)
+        ) $charset_collate;";
+
+        $sql_drawings = "CREATE TABLE IF NOT EXISTS $drawings_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            class_id int(11) NOT NULL,
+            teacher_id bigint(20) unsigned NOT NULL,
+            page_id bigint(20) unsigned NOT NULL,
+            container_id varchar(200) NOT NULL,
+            drawing_data longtext DEFAULT NULL,
+            is_behandelt tinyint(1) DEFAULT 0,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            UNIQUE KEY class_page_container (class_id, page_id, container_id),
+            KEY class_id (class_id),
+            KEY teacher_id (teacher_id),
+            KEY page_id (page_id)
+        ) $charset_collate;";
+
+        dbDelta($sql_classes);
+        dbDelta($sql_class_pages);
+        dbDelta($sql_drawings);
+
         // Run migrations if needed
         self::run_migrations();
         
@@ -81,6 +132,18 @@ class CBD_Schema_Manager {
         if (version_compare($current_version, '2.9.0', '<')) {
             self::migrate_to_2_9_0();
         }
+
+        if (version_compare($current_version, '3.0.0', '<')) {
+            self::migrate_to_3_0_0();
+        }
+    }
+
+    /**
+     * Migration to version 3.0.0 - Add Classroom System tables
+     */
+    private static function migrate_to_3_0_0() {
+        // Tables are created in create_tables() via dbDelta
+        // This migration handles any additional setup if needed
     }
     
     /**
