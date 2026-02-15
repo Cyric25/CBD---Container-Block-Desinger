@@ -14,33 +14,40 @@ if (!defined('ABSPATH')) {
 // Datenbank-Migration durchführen
 $migration_result = null;
 if (isset($_POST['cbd_run_migration']) && wp_verify_nonce($_POST['cbd_migration_nonce'], 'cbd_run_migration')) {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'cbd_blocks';
     $migration_result = array('success' => true, 'messages' => array());
 
-    // Prüfe ob Feld bereits existiert
-    $columns = $wpdb->get_col("SHOW COLUMNS FROM $table_name");
+    try {
+        // Verwende Schema Manager für alle Migrationen
+        if (class_exists('CBD_Schema_Manager')) {
+            $schema = CBD_Schema_Manager::get_instance();
+            $schema->run_migrations();
 
-    if (!in_array('is_default', $columns)) {
-        // Feld hinzufügen
-        $result = $wpdb->query("ALTER TABLE $table_name ADD COLUMN `is_default` tinyint(1) DEFAULT 0 AFTER `status`");
+            $new_version = get_option('cbd_db_version', '0');
+            $migration_result['messages'][] = __('Alle Migrationen erfolgreich durchgeführt', 'container-block-designer');
+            $migration_result['messages'][] = __('Datenbank-Version:', 'container-block-designer') . ' ' . $new_version;
 
-        if ($result === false) {
-            $migration_result['success'] = false;
-            $migration_result['messages'][] = __('Fehler beim Hinzufügen des is_default Feldes:', 'container-block-designer') . ' ' . $wpdb->last_error;
+            // Prüfe welche Tabellen erstellt wurden
+            global $wpdb;
+            $tables_check = array(
+                'cbd_blocks' => $wpdb->prefix . 'cbd_blocks',
+                'cbd_classes' => $wpdb->prefix . 'cbd_classes',
+                'cbd_class_pages' => $wpdb->prefix . 'cbd_class_pages',
+                'cbd_drawings' => $wpdb->prefix . 'cbd_drawings'
+            );
+
+            foreach ($tables_check as $name => $table) {
+                $exists = $wpdb->get_var("SHOW TABLES LIKE '$table'");
+                if ($exists) {
+                    $migration_result['messages'][] = '✓ Tabelle ' . $name . ' vorhanden';
+                }
+            }
         } else {
-            $migration_result['messages'][] = __('Feld "is_default" erfolgreich hinzugefügt', 'container-block-designer');
-
-            // Index hinzufügen
-            $wpdb->query("ALTER TABLE $table_name ADD KEY `is_default` (`is_default`)");
-            $migration_result['messages'][] = __('Index hinzugefügt', 'container-block-designer');
-
-            // DB-Version aktualisieren
-            update_option('cbd_db_version', '2.9.0');
-            $migration_result['messages'][] = __('Datenbank-Version auf 2.9.0 aktualisiert', 'container-block-designer');
+            $migration_result['success'] = false;
+            $migration_result['messages'][] = __('CBD_Schema_Manager Klasse nicht gefunden', 'container-block-designer');
         }
-    } else {
-        $migration_result['messages'][] = __('Migration bereits durchgeführt - Feld existiert bereits', 'container-block-designer');
+    } catch (Exception $e) {
+        $migration_result['success'] = false;
+        $migration_result['messages'][] = __('Fehler:', 'container-block-designer') . ' ' . $e->getMessage();
     }
 }
 
@@ -87,6 +94,25 @@ $table_name = $wpdb->prefix . 'cbd_blocks';
 $columns = $wpdb->get_col("SHOW COLUMNS FROM $table_name");
 $is_default_exists = in_array('is_default', $columns);
 $db_version = get_option('cbd_db_version', '0');
+
+// Prüfe Klassen-Tabellen (Version 3.0.0)
+$classroom_tables_exist = true;
+$classroom_tables_status = array();
+$classroom_tables = array(
+    'cbd_classes' => $wpdb->prefix . 'cbd_classes',
+    'cbd_class_pages' => $wpdb->prefix . 'cbd_class_pages',
+    'cbd_drawings' => $wpdb->prefix . 'cbd_drawings'
+);
+
+foreach ($classroom_tables as $name => $table) {
+    $exists = $wpdb->get_var("SHOW TABLES LIKE '$table'");
+    $classroom_tables_status[$name] = (bool)$exists;
+    if (!$exists) {
+        $classroom_tables_exist = false;
+    }
+}
+
+$needs_migration = !$is_default_exists || !$classroom_tables_exist || version_compare($db_version, '3.0.0', '<');
 ?>
 
 <div class="wrap">
@@ -117,18 +143,37 @@ $db_version = get_option('cbd_db_version', '0');
                 </td>
             </tr>
             <tr>
+                <th scope="row"><?php _e('Klassen-Tabellen (v3.0.0)', 'container-block-designer'); ?></th>
+                <td>
+                    <?php foreach ($classroom_tables_status as $name => $exists): ?>
+                        <?php if ($exists): ?>
+                            <span style="color: green;">✅ <?php echo esc_html($name); ?></span><br>
+                        <?php else: ?>
+                            <span style="color: red;">❌ <?php echo esc_html($name); ?></span><br>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                    <p class="description">
+                        <?php if ($classroom_tables_exist): ?>
+                            <?php _e('Alle Tabellen für das Klassen-System sind vorhanden.', 'container-block-designer'); ?>
+                        <?php else: ?>
+                            <?php _e('Einige Tabellen fehlen. Migration erforderlich.', 'container-block-designer'); ?>
+                        <?php endif; ?>
+                    </p>
+                </td>
+            </tr>
+            <tr>
                 <th scope="row"><?php _e('Migration', 'container-block-designer'); ?></th>
                 <td>
-                    <?php if (!$is_default_exists): ?>
+                    <?php if ($needs_migration): ?>
                         <form method="post" action="">
                             <?php wp_nonce_field('cbd_run_migration', 'cbd_migration_nonce'); ?>
-                            <input type="submit" name="cbd_run_migration" class="button button-primary" value="<?php esc_attr_e('Datenbank auf Version 2.9.0 aktualisieren', 'container-block-designer'); ?>">
+                            <input type="submit" name="cbd_run_migration" class="button button-primary" value="<?php esc_attr_e('Alle Migrationen durchführen', 'container-block-designer'); ?>">
                         </form>
                         <p class="description">
-                            <?php _e('Fügt das "is_default" Feld zur Datenbank hinzu, damit die Standard-Block-Auswahl funktioniert.', 'container-block-designer'); ?>
+                            <?php _e('Führt alle fehlenden Datenbank-Migrationen durch (v2.9.0 + v3.0.0 Klassen-System).', 'container-block-designer'); ?>
                         </p>
                     <?php else: ?>
-                        <span style="color: green;">✅ <?php _e('Keine Migration erforderlich', 'container-block-designer'); ?></span>
+                        <span style="color: green;">✅ <?php _e('Alle Migrationen abgeschlossen', 'container-block-designer'); ?></span>
                     <?php endif; ?>
                 </td>
             </tr>
