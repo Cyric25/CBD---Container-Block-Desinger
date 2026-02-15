@@ -47,6 +47,18 @@
                 self.addPageSelector();
             });
 
+            // Add all pages button
+            $('#cbd-add-all-pages').on('click', function() {
+                self.addAllPages();
+            });
+
+            // Auto-add child pages when a page is selected
+            $(document).on('change', '.cbd-page-select', function() {
+                if ($('#cbd-include-children').is(':checked')) {
+                    self.addChildPages($(this));
+                }
+            });
+
             // Remove page (delegated)
             $(document).on('click', '.cbd-remove-page', function() {
                 var $selector = $(this).closest('.cbd-page-selector');
@@ -297,6 +309,89 @@
             setTimeout(function() {
                 $notice.fadeOut(300, function() { $(this).remove(); });
             }, 5000);
+        },
+
+        /**
+         * Add all available pages
+         */
+        addAllPages: function() {
+            var self = this;
+            var $pagesContainer = $('#cbd-class-pages');
+            $pagesContainer.empty();
+
+            // Get all page options
+            var $firstSelect = self.pageTemplate.find('select');
+            var includeChildren = $('#cbd-include-children').is(':checked');
+            var addedPages = {};
+
+            $firstSelect.find('option').each(function() {
+                var pageId = parseInt($(this).val());
+                if (pageId > 0 && !addedPages[pageId]) {
+                    var $clone = self.pageTemplate.clone();
+                    $clone.find('select').val(pageId);
+                    $pagesContainer.append($clone);
+                    addedPages[pageId] = true;
+                }
+            });
+
+            self.showNotice('Alle Seiten wurden hinzugefuegt.', 'success');
+        },
+
+        /**
+         * Add child pages when a parent page is selected
+         */
+        addChildPages: function($select) {
+            var self = this;
+            var selectedPageId = parseInt($select.val());
+            if (!selectedPageId) return;
+
+            // Get currently selected page IDs to avoid duplicates
+            var currentPageIds = {};
+            $('.cbd-page-select').each(function() {
+                var id = parseInt($(this).val());
+                if (id > 0) currentPageIds[id] = true;
+            });
+
+            // Find child pages
+            var childPages = this.getChildPages(selectedPageId);
+
+            if (childPages.length > 0) {
+                childPages.forEach(function(childId) {
+                    if (!currentPageIds[childId]) {
+                        var $clone = self.pageTemplate.clone();
+                        $clone.find('select').val(childId);
+                        $('#cbd-class-pages').append($clone);
+                        currentPageIds[childId] = true;
+                    }
+                });
+
+                self.showNotice(childPages.length + ' Unterseite(n) automatisch hinzugefuegt.', 'info');
+            }
+        },
+
+        /**
+         * Get all child page IDs for a given parent page ID
+         */
+        getChildPages: function(parentId) {
+            var children = [];
+            var self = this;
+
+            // Get all options from the first select
+            this.pageTemplate.find('select option').each(function() {
+                var $option = $(this);
+                var pageId = parseInt($option.val());
+                var pageParent = parseInt($option.data('parent'));
+
+                if (pageParent === parentId && pageId > 0) {
+                    children.push(pageId);
+
+                    // Recursively get children of this child
+                    var grandchildren = self.getChildPages(pageId);
+                    children = children.concat(grandchildren);
+                }
+            });
+
+            return children;
         },
 
         /**

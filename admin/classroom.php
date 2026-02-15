@@ -60,18 +60,35 @@ $classroom_enabled = get_option('cbd_classroom_enabled', false);
                                     <select class="cbd-page-select">
                                         <option value=""><?php _e('-- Seite waehlen --', 'container-block-designer'); ?></option>
                                         <?php
-                                        $pages = get_pages(array('sort_column' => 'post_title', 'post_status' => 'publish'));
+                                        $pages = get_pages(array(
+                                            'sort_column' => 'menu_order, post_title',
+                                            'post_status' => 'publish',
+                                            'hierarchical' => true
+                                        ));
                                         foreach ($pages as $page) {
-                                            echo '<option value="' . esc_attr($page->ID) . '">' . esc_html($page->post_title) . '</option>';
+                                            $indent = str_repeat('&nbsp;&nbsp;&nbsp;', count(get_post_ancestors($page)));
+                                            $has_children = get_pages(array('child_of' => $page->ID, 'post_status' => 'publish'));
+                                            $marker = !empty($has_children) ? ' ▼' : '';
+                                            echo '<option value="' . esc_attr($page->ID) . '" data-parent="' . esc_attr($page->post_parent) . '">';
+                                            echo $indent . esc_html($page->post_title) . $marker . '</option>';
                                         }
                                         ?>
                                     </select>
                                     <button type="button" class="button cbd-remove-page" title="<?php esc_attr_e('Entfernen', 'container-block-designer'); ?>">&times;</button>
                                 </div>
                             </div>
-                            <button type="button" id="cbd-add-page" class="button">
-                                + <?php _e('Seite hinzufuegen', 'container-block-designer'); ?>
-                            </button>
+                            <div class="cbd-page-actions">
+                                <button type="button" id="cbd-add-page" class="button">
+                                    + <?php _e('Seite hinzufuegen', 'container-block-designer'); ?>
+                                </button>
+                                <button type="button" id="cbd-add-all-pages" class="button">
+                                    <?php _e('Alle Seiten auswaehlen', 'container-block-designer'); ?>
+                                </button>
+                                <label style="margin-left: 10px;">
+                                    <input type="checkbox" id="cbd-include-children" checked>
+                                    <?php _e('Unterseiten automatisch einbeziehen', 'container-block-designer'); ?>
+                                </label>
+                            </div>
                         </td>
                     </tr>
                 </table>

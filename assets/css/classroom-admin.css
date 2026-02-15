@@ -73,6 +73,28 @@
     background: #fff5f5;
 }
 
+.cbd-page-actions {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cbd-page-actions label {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: #666;
+}
+
+.cbd-page-actions input[type="checkbox"] {
+    margin: 0;
+}
+
 /* =============================================
    LOADING STATE
    ============================================= */
