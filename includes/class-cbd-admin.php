@@ -198,6 +198,16 @@ class CBD_Admin {
                 array($this, 'render_import_export_page')
             );
 
+            // Untermenü: Migration - nur Admins
+            add_submenu_page(
+                'container-block-designer',
+                __('Stable ID Migration', 'container-block-designer'),
+                __('Migration', 'container-block-designer'),
+                'manage_options',
+                'cbd-migration',
+                array($this, 'render_migration_page')
+            );
+
             // Untermenü: Datenbank reparieren - nur Admins
             add_submenu_page(
                 'container-block-designer',
@@ -1033,6 +1043,21 @@ class CBD_Admin {
     /**
      * Klassen-Verwaltungsseite rendern
      */
+    /**
+     * Migration-Seite rendern
+     */
+    public function render_migration_page() {
+        $file_path = CBD_PLUGIN_DIR . 'admin/migration.php';
+
+        if (file_exists($file_path)) {
+            include $file_path;
+        } else {
+            echo '<div class="wrap"><h1>' . __('Stable ID Migration', 'container-block-designer') . '</h1>';
+            echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/migration.php', 'container-block-designer') . '</p></div>';
+            echo '</div>';
+        }
+    }
+
     /**
      * Einstellungen-Seite rendern
      */

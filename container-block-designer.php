@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://example.com/container-block-designer
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 2.9.72
+ * Version: 2.9.73
  * Author: Your Name
  * Author URI: https://example.com
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '2.9.72');
+define('CBD_VERSION', '2.9.73');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -124,6 +124,9 @@ class ContainerBlockDesigner {
 
         // Classroom System (Klassen-System) - optionales Feature
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-classroom.php';
+
+        // Migration Tool - Stable ID Migration
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-migration.php';
 
         // Admin-Bereich nur im Backend laden
         if (is_admin()) {
@@ -265,6 +268,11 @@ class ContainerBlockDesigner {
             // REST API for Block Reference
             if (class_exists('CBD_Blocks_REST_API')) {
                 CBD_Blocks_REST_API::init();
+            }
+
+            // Migration Tool initialization (Admin only)
+            if (is_admin() && class_exists('CBD_Migration')) {
+                CBD_Migration::get_instance();
             }
 
             // Admin area - aktiviert für normale Funktionalität
