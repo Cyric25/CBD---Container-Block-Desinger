@@ -8,6 +8,99 @@
 
 import { store, getContext, getElement } from '@wordpress/interactivity';
 
+/**
+ * Helper: Show class selector dialog for "Behandelt" feature
+ * (Defined outside store to avoid 'this' context issues)
+ */
+function showClassSelectorDialog(classes) {
+	return new Promise((resolve) => {
+		// Remove any existing dialogs first (synchronously)
+		const existingDialogs = document.querySelectorAll('.cbd-behandelt-selector-dialog');
+		existingDialogs.forEach(d => {
+			d.remove();
+		});
+
+		const dialog = document.createElement('div');
+		dialog.className = 'cbd-behandelt-selector-dialog';
+		dialog.setAttribute('data-dialog-id', Date.now()); // Unique ID for debugging
+
+		const escapeHtml = (text) => {
+			const div = document.createElement('div');
+			div.textContent = text;
+			return div.innerHTML;
+		};
+
+		dialog.innerHTML = `
+			<div class="cbd-behandelt-selector-overlay"></div>
+			<div class="cbd-behandelt-selector-content">
+				<h3>Klasse wählen</h3>
+				<p>Für welche Klasse möchten Sie den Status ändern?</p>
+				<div class="cbd-behandelt-class-options">
+					${classes.map(cls => `
+						<button class="cbd-behandelt-class-option ${cls.is_behandelt ? 'is-behandelt' : ''}" data-class-id="${cls.id}">
+							<span class="cbd-class-name">${escapeHtml(cls.name)}</span>
+							<span class="cbd-class-status">
+								${cls.is_behandelt ? '<span class="dashicons dashicons-yes-alt"></span> Behandelt' : '<span class="dashicons dashicons-marker"></span> Nicht behandelt'}
+							</span>
+						</button>
+					`).join('')}
+				</div>
+				<button class="cbd-behandelt-cancel">Abbrechen</button>
+			</div>
+		`;
+
+		// Cleanup function
+		const cleanup = () => {
+			console.log('[CBD Dialog] Cleanup started');
+			dialog.removeEventListener('click', handleClick);
+			// Remove immediately
+			if (dialog && dialog.parentNode) {
+				console.log('[CBD Dialog] Removing dialog from DOM');
+				dialog.parentNode.removeChild(dialog);
+			}
+		};
+
+		// Use event delegation on the dialog container
+		const handleClick = (e) => {
+			const classOption = e.target.closest('.cbd-behandelt-class-option');
+			const cancelBtn = e.target.closest('.cbd-behandelt-cancel');
+			const overlay = e.target.classList.contains('cbd-behandelt-selector-overlay');
+
+			if (classOption) {
+				e.preventDefault();
+				e.stopPropagation();
+				e.stopImmediatePropagation(); // Prevent any other handlers
+				const classId = classOption.getAttribute('data-class-id');
+				console.log('[CBD Dialog] Class selected:', classId);
+				cleanup();
+				resolve(classId);
+				return false;
+			} else if (cancelBtn || overlay) {
+				e.preventDefault();
+				e.stopPropagation();
+				e.stopImmediatePropagation();
+				console.log('[CBD Dialog] Cancelled');
+				cleanup();
+				resolve(null);
+				return false;
+			}
+		};
+
+		// Add event listener to the dialog container (event delegation)
+		dialog.addEventListener('click', handleClick, { once: false });
+
+		document.body.appendChild(dialog);
+
+		// Focus the first button for keyboard accessibility
+		setTimeout(() => {
+			const firstButton = dialog.querySelector('.cbd-behandelt-class-option');
+			if (firstButton) {
+				firstButton.focus();
+			}
+		}, 50);
+	});
+}
+
 store('container-block-designer', {
 	state: {
 		/**
@@ -440,24 +533,55 @@ store('container-block-designer', {
 		 * Behandelt-Status togglen - Klassen-System
 		 */
 		*toggleBehandelt() {
+			console.log('[CBD] toggleBehandelt started');
 			const context = getContext();
 			const element = getElement();
 
 			const classroomData = window.cbdClassroomData || {};
+			console.log('[CBD] classroomData:', classroomData);
+
 			if (!classroomData.classes || classroomData.classes.length === 0) {
 				alert('Keine Klassen vorhanden. Bitte erstellen Sie zuerst eine Klasse.');
 				return;
 			}
 
-			// Klassen-Auswahl Dialog erstellen
 			const mainContainer = element.ref.closest('[data-wp-interactive="container-block-designer"]');
-			const classId = yield this.showClassSelectorForBehandelt(classroomData.classes);
 
-			if (!classId) return; // User cancelled
+			// First, load status for all classes
+			console.log('[CBD] Loading status for all classes...');
+			const formData = new FormData();
+			formData.append('action', 'cbd_get_block_status');
+			formData.append('nonce', classroomData.nonce);
+			formData.append('page_id', context.pageId || classroomData.pageId);
+			formData.append('container_id', context.stableContainerId || mainContainer?.getAttribute('data-stable-id'));
+
+			const statusResponse = yield fetch(classroomData.ajaxUrl, {
+				method: 'POST',
+				body: formData
+			});
+
+			const statusData = yield statusResponse.json();
+			console.log('[CBD] Status data received:', statusData);
+
+			if (!statusData.success) {
+				alert('Fehler beim Laden des Status.');
+				return;
+			}
+
+			// Klassen-Auswahl Dialog mit Status erstellen
+			console.log('[CBD] Opening class selector dialog with status...');
+			const classId = yield showClassSelectorDialog(statusData.data.classes);
+			console.log('[CBD] Selected class ID:', classId);
+
+			if (!classId) {
+				console.log('[CBD] User cancelled');
+				return; // User cancelled
+			}
 
 			try {
 				// Toggle behandelt status
 				const newStatus = !context.isBehandelt;
+				console.log('[CBD] Current status:', context.isBehandelt, '-> New status:', newStatus);
 
 				// AJAX request to save status
 				const formData = new FormData();
@@ -468,29 +592,77 @@ store('container-block-designer', {
 				formData.append('container_id', context.stableContainerId || mainContainer?.getAttribute('data-stable-id'));
 				formData.append('behandelt', newStatus ? '1' : '0');
 
+				console.log('[CBD] Sending AJAX request...');
+				console.log('[CBD] Parameters:', {
+					action: 'cbd_toggle_behandelt',
+					class_id: classId,
+					page_id: context.pageId || classroomData.pageId,
+					container_id: context.stableContainerId || mainContainer?.getAttribute('data-stable-id'),
+					behandelt: newStatus ? '1' : '0'
+				});
+
 				const response = yield fetch(classroomData.ajaxUrl, {
 					method: 'POST',
 					body: formData
 				});
 
+				console.log('[CBD] Response received:', response.status);
 				const data = yield response.json();
+				console.log('[CBD] Response data:', data);
+
+				// DEBUG: Log debug info explicitly
+				if (data.data && data.data.debug) {
+					console.log('=== DEBUG INFO ===');
+					console.log('Drawing ID:', data.data.debug.drawing_id);
+					console.log('Drawing Status:', data.data.debug.drawing_status);
+					console.log('DB Insert Result:', data.data.debug.db_insert_result);
+					console.log('DB Last Error:', data.data.debug.db_last_error);
+					console.log('Insert ID:', data.data.debug.insert_id);
+
+					if (!data.data.debug.drawing_id) {
+						console.error('❌ PROBLEM: Drawing was NOT created in database!');
+						if (data.data.debug.db_last_error) {
+							console.error('Error:', data.data.debug.db_last_error);
+						}
+					} else {
+						console.log('✅ Drawing created/updated successfully!');
+					}
+				}
 
 				if (data.success) {
+					console.log('[CBD] Success! Updating context...');
 					context.isBehandelt = newStatus;
 
-					// Visual feedback
+					// Visual feedback - Update icon manually
 					const icon = element.ref.querySelector('.dashicons');
-					if (icon && newStatus) {
+					if (icon) {
+						console.log('[CBD] Updating icon, newStatus:', newStatus);
+						// Remove both classes first
+						icon.classList.remove('dashicons-yes-alt', 'dashicons-marker');
+
+						// Add correct class based on status
+						if (newStatus) {
+							icon.classList.add('dashicons-yes-alt');
+							console.log('[CBD] Added dashicons-yes-alt');
+						} else {
+							icon.classList.add('dashicons-marker');
+							console.log('[CBD] Added dashicons-marker');
+						}
+
 						// Kurz grün blinken bei Erfolg
 						icon.style.color = '#4caf50';
 						setTimeout(() => {
 							icon.style.color = '';
 						}, 1000);
 					}
+
+					console.log('[CBD] Context updated, isBehandelt is now:', context.isBehandelt);
 				} else {
+					console.error('[CBD] Error response:', data);
 					throw new Error(data.data || 'Fehler beim Speichern');
 				}
 			} catch (error) {
+				console.error('[CBD] Exception caught:', error);
 				alert('Fehler beim Speichern des Behandelt-Status: ' + error.message);
 			}
 		},
@@ -503,6 +675,14 @@ store('container-block-designer', {
 				// Erstelle Dialog
 				const dialog = document.createElement('div');
 				dialog.className = 'cbd-behandelt-selector-dialog';
+
+				// Helper function for escaping HTML
+				const escapeHtml = (text) => {
+					const div = document.createElement('div');
+					div.textContent = text;
+					return div.innerHTML;
+				};
+
 				dialog.innerHTML = `
 					<div class="cbd-behandelt-selector-overlay"></div>
 					<div class="cbd-behandelt-selector-content">
@@ -511,7 +691,7 @@ store('container-block-designer', {
 						<div class="cbd-behandelt-class-options">
 							${classes.map(cls => `
 								<button class="cbd-behandelt-class-option" data-class-id="${cls.id}">
-									${this.escHtml(cls.name)}
+									${escapeHtml(cls.name)}
 								</button>
 							`).join('')}
 						</div>

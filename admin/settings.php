@@ -19,8 +19,9 @@ if (isset($_POST['cbd_run_migration']) && wp_verify_nonce($_POST['cbd_migration_
     try {
         // Verwende Schema Manager für alle Migrationen
         if (class_exists('CBD_Schema_Manager')) {
-            $schema = CBD_Schema_Manager::get_instance();
-            $schema->run_migrations();
+            // Schema Manager verwendet statische Methoden
+            // create_tables() ruft intern auch run_migrations() auf
+            CBD_Schema_Manager::create_tables();
 
             $new_version = get_option('cbd_db_version', '0');
             $migration_result['messages'][] = __('Alle Migrationen erfolgreich durchgeführt', 'container-block-designer');

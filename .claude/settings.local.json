@@ -17,7 +17,16 @@
       "Bash(wp core:*)",
       "Bash(cat:*)",
       "Bash(git checkout:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(for file in includes/class-cbd-block-registration.php includes/class-cbd-style-loader.php includes/class-cbd-admin.php admin/new-block.php admin/edit-block.php)",
+      "Bash(do echo \"Checking $file...\")",
+      "Bash(exit:*)",
+      "Bash(done)",
+      "Bash(git push:*)",
+      "Bash(node create-plugin-zip.js:*)",
+      "Bash(for file in *.php includes/*.php includes/Database/*.php admin/*.php)",
+      "Bash(for file in *.php includes/*.php includes/Database/*.php)",
+      "Bash(do php:*)"
     ],
     "deny": [],
     "ask": []

@@ -12,13 +12,46 @@
         token: null,
 
         init: function() {
+            this.loadClasses();
             this.bindEvents();
             this.checkExistingAuth();
         },
 
+        /**
+         * Load available classes into dropdown
+         */
+        loadClasses: function() {
+            var self = this;
+
+            $.post(cbdClassroomFrontend.ajaxUrl, {
+                action: 'cbd_get_public_classes'
+            }, function(response) {
+                if (response.success && response.data.length > 0) {
+                    var $select = $('#cbd-class-select');
+                    $select.empty();
+                    $select.append('<option value="">-- Klasse wählen --</option>');
+
+                    response.data.forEach(function(cls) {
+                        $select.append('<option value="' + cls.id + '">' + self.escapeHtml(cls.name) + '</option>');
+                    });
+                }
+            });
+        },
+
         bindEvents: function() {
-            $(document).on('submit', '#cbd-classroom-auth-form', this.handleAuth.bind(this));
-            $(document).on('click', '.cbd-classroom-logout', this.handleLogout.bind(this));
+            var self = this;
+            $('#cbd-class-login').on('click', function() {
+                self.handleAuth();
+            });
+            $('#cbd-class-logout').on('click', function() {
+                self.handleLogout();
+            });
+            // Enter key on password field
+            $('#cbd-class-password').on('keypress', function(e) {
+                if (e.which === 13) {
+                    self.handleAuth();
+                }
+            });
         },
 
         /**
@@ -36,238 +69,201 @@
         },
 
         /**
-         * Handle Auth Form Submit
+         * Handle Auth (Login)
          */
-        handleAuth: function(e) {
-            e.preventDefault();
-
-            var $form = $(e.target);
-            var $classSelect = $form.find('select[name="class_id"]');
-            var $passwordInput = $form.find('input[name="password"]');
-            var $submitBtn = $form.find('button[type="submit"]');
-            var $error = $form.find('.cbd-classroom-error');
-
-            var classId = $classSelect.val();
-            var password = $passwordInput.val();
+        handleAuth: function() {
+            var self = this;
+            var classId = $('#cbd-class-select').val();
+            var password = $('#cbd-class-password').val();
+            var $error = $('#cbd-classroom-error');
+            var $btn = $('#cbd-class-login');
 
             if (!classId || !password) {
                 $error.text('Bitte wählen Sie eine Klasse und geben Sie das Passwort ein.').show();
                 return;
             }
 
-            $submitBtn.prop('disabled', true).text('Wird geprüft...');
+            $btn.prop('disabled', true).text('Wird geprüft...');
             $error.hide();
 
-            $.ajax({
-                url: cbdClassroomFrontend.ajaxUrl,
-                type: 'POST',
-                data: {
-                    action: 'cbd_student_auth',
-                    class_id: classId,
-                    password: password
-                },
-                success: function(response) {
-                    if (response.success && response.data.token) {
-                        // Speichere Token und Klassen-ID
-                        ClassroomFrontend.setStoredToken(response.data.token);
-                        ClassroomFrontend.setStoredClassId(classId);
-                        ClassroomFrontend.token = response.data.token;
-                        ClassroomFrontend.classId = classId;
+            $.post(cbdClassroomFrontend.ajaxUrl, {
+                action: 'cbd_student_auth',
+                class_id: classId,
+                password: password
+            }, function(response) {
+                $btn.prop('disabled', false).text('Einloggen');
 
-                        // Lade Klassendaten
-                        ClassroomFrontend.loadClassroomData();
-                    } else {
-                        $error.text(response.data || 'Falsches Passwort.').show();
-                        $submitBtn.prop('disabled', false).text('Anmelden');
-                    }
-                },
-                error: function() {
-                    $error.text('Verbindungsfehler. Bitte versuchen Sie es erneut.').show();
-                    $submitBtn.prop('disabled', false).text('Anmelden');
+                if (response.success) {
+                    self.token = response.data.token;
+                    self.classId = classId;
+                    self.storeToken(response.data.token);
+                    self.storeClassId(classId);
+                    self.loadClassroomData();
+                } else {
+                    $error.text(response.data.message || 'Falsches Passwort.').show();
                 }
+            }).fail(function() {
+                $btn.prop('disabled', false).text('Einloggen');
+                $error.text('Netzwerk-Fehler. Bitte versuchen Sie es erneut.').show();
             });
         },
 
         /**
-         * Lade Klassendaten (Zeichnungen, behandelte Bloecke)
+         * Load classroom data (pages, drawings)
          */
         loadClassroomData: function() {
             var self = this;
 
-            $.ajax({
-                url: cbdClassroomFrontend.ajaxUrl,
-                type: 'POST',
-                data: {
-                    action: 'cbd_student_get_data',
-                    token: this.token,
-                    page_id: cbdClassroomFrontend.pageId
-                },
-                success: function(response) {
-                    if (response.success && response.data) {
-                        self.renderClassroomContent(response.data);
-                    } else {
-                        // Token expired oder ungueltig
-                        self.handleLogout();
-                        $('.cbd-classroom-error').text('Sitzung abgelaufen. Bitte melden Sie sich erneut an.').show();
-                    }
-                },
-                error: function() {
-                    $('.cbd-classroom-error').text('Fehler beim Laden der Daten.').show();
+            console.log('[CBD Classroom] Loading classroom data...');
+
+            $.post(cbdClassroomFrontend.ajaxUrl, {
+                action: 'cbd_student_get_data',
+                token: this.token
+            }, function(response) {
+                console.log('[CBD Classroom] Response received:', response);
+
+                if (response.success) {
+                    console.log('[CBD Classroom] Pages data:', response.data.pages);
+                    console.log('[CBD Classroom] Number of items:', response.data.pages ? response.data.pages.length : 0);
+                    self.renderClassroomContent(response.data);
+                } else {
+                    console.error('[CBD Classroom] Error response:', response.data);
+                    $('#cbd-classroom-error').text(response.data.message || 'Fehler beim Laden.').show();
+                    self.clearAuth();
                 }
+            }).fail(function() {
+                console.error('[CBD Classroom] Network error');
+                $('#cbd-classroom-error').text('Netzwerk-Fehler.').show();
             });
         },
 
-        /**
-         * Rendere Classroom Content (Zeichnungen + Behandelt-Status)
-         */
         renderClassroomContent: function(data) {
-            // Verstecke Auth-Form
-            $('#cbd-classroom-auth-form').hide();
+            // Hide auth, show content
+            $('#cbd-classroom-auth').hide();
+            $('#cbd-classroom-content').show();
 
-            // Zeige Content Area
-            var $content = $('#cbd-classroom-content');
-            $content.show();
+            // Set class name
+            $('#cbd-classroom-class-name').text(data.class_name);
 
-            // Klassen-Name anzeigen
-            $content.find('.cbd-classroom-class-name').text(data.className || 'Klasse');
+            // Render table of contents
+            var $pagesContainer = $('#cbd-classroom-pages');
+            $pagesContainer.empty();
 
-            // Zeichnungen anzeigen
-            if (data.drawings && data.drawings.length > 0) {
-                this.renderDrawings(data.drawings);
-            } else {
-                $('#cbd-classroom-drawings').html('<p class="cbd-no-drawings">Keine Notizen verfügbar.</p>');
-            }
+            console.log('[CBD Classroom] Rendering content, pages:', data.pages);
+            console.log('[CBD Classroom] Pages length:', data.pages ? data.pages.length : 'undefined');
 
-            // Behandelt-Status aktualisieren (grüne Badges)
-            this.updateBehandeltStatus(data.behandelt || []);
-        },
+            if (data.pages && data.pages.length > 0) {
+                console.log('[CBD Classroom] Rendering', data.pages.length, 'items');
+                data.pages.forEach(function(item, index) {
+                    console.log('[CBD Classroom] Item', index, ':', item);
+                    if (item.type === 'page' && item.page) {
+                        var page = item.page;
+                        var level = page.level || 0;
 
-        /**
-         * Rendere Zeichnungen als Canvas-Previews
-         */
-        renderDrawings: function(drawings) {
-            var $container = $('#cbd-classroom-drawings');
-            $container.empty();
+                        console.log('[CBD Classroom] Rendering page:', page.title, 'Level:', level);
 
-            drawings.forEach(function(drawing) {
-                var $item = $('<div class="cbd-drawing-item"></div>');
+                        // Create page item with indentation based on level
+                        var $pageItem = $('<div class="cbd-classroom-page-item">');
+                        $pageItem.css('margin-left', (level * 24) + 'px');
 
-                // Titel (Container-ID als Fallback)
-                var title = drawing.containerTitle || 'Notiz ' + drawing.containerId.substring(0, 8);
-                $item.append('<h4>' + ClassroomFrontend.escHtml(title) + '</h4>');
+                        // Add level class for styling
+                        $pageItem.addClass('cbd-level-' + level);
 
-                // Canvas Preview
-                var $canvas = $('<canvas class="cbd-drawing-canvas" width="400" height="300"></canvas>');
-                $item.append($canvas);
+                        if (page.url) {
+                            // Page has URL - clickable (treated page)
+                            var $pageLink = $('<a>')
+                                .attr('href', page.url)
+                                .addClass('cbd-classroom-page-link')
+                                .text(page.title);
 
-                // Zeichnung laden
-                ClassroomFrontend.loadDrawingOnCanvas($canvas[0], drawing.drawingData);
+                            var $badge = $('<span>')
+                                .addClass('cbd-treated-count-badge')
+                                .text(page.treated_count + ' behandelt');
 
-                // Timestamp
-                var date = new Date(drawing.updatedAt);
-                var dateStr = date.toLocaleDateString('de-DE') + ' ' + date.toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
-                $item.append('<p class="cbd-drawing-date">Zuletzt aktualisiert: ' + dateStr + '</p>');
+                            $pageItem.append($pageLink).append($badge);
+                        } else {
+                            // No URL - grayed out parent page
+                            var $pageTitle = $('<div class="cbd-classroom-page-grayed">')
+                                .text(page.title);
 
-                $container.append($item);
-            });
-        },
+                            // For level 0 parents, make them look like headers
+                            if (level === 0) {
+                                $pageTitle.addClass('cbd-parent-header-grayed');
+                            }
 
-        /**
-         * Lade Zeichnung auf Canvas
-         */
-        loadDrawingOnCanvas: function(canvas, dataUrl) {
-            if (!dataUrl) return;
+                            $pageItem.append($pageTitle);
+                        }
 
-            var ctx = canvas.getContext('2d');
-            var img = new Image();
-
-            img.onload = function() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            };
-
-            img.src = dataUrl;
-        },
-
-        /**
-         * Update behandelt status auf den Container-Bloecken
-         */
-        updateBehandeltStatus: function(behandeltIds) {
-            if (!behandeltIds || behandeltIds.length === 0) return;
-
-            // Finde alle Container-Bloecke auf der Seite
-            behandeltIds.forEach(function(containerId) {
-                var $container = $('[data-stable-id="' + containerId + '"]');
-                if ($container.length > 0) {
-                    // Fuege Badge hinzu
-                    if (!$container.find('.cbd-behandelt-badge').length) {
-                        var $badge = $('<div class="cbd-behandelt-badge">✓ Behandelt</div>');
-                        $container.find('.cbd-action-buttons').before($badge);
+                        $pagesContainer.append($pageItem);
                     }
-                }
-            });
+                }.bind(this));
+            } else {
+                $pagesContainer.append('<p class="cbd-no-pages">Keine behandelten Blöcke vorhanden.</p>');
+            }
         },
 
-        /**
-         * Logout Handler
-         */
-        handleLogout: function(e) {
-            if (e) e.preventDefault();
-
-            this.clearStoredToken();
-            this.clearStoredClassId();
-            this.token = null;
-            this.classId = null;
-
-            // Zeige Auth-Form wieder
-            $('#cbd-classroom-auth-form').show();
+        handleLogout: function() {
+            this.clearAuth();
             $('#cbd-classroom-content').hide();
-
-            // Reset Form
-            $('#cbd-classroom-auth-form')[0].reset();
-            $('#cbd-classroom-auth-form button[type="submit"]').prop('disabled', false).text('Anmelden');
+            $('#cbd-classroom-auth').show();
+            $('#cbd-class-select').val('');
+            $('#cbd-class-password').val('');
         },
 
-        /**
-         * LocalStorage Helpers
-         */
+        // Token storage
+        storeToken: function(token) {
+            try {
+                localStorage.setItem('cbd_classroom_token', token);
+            } catch (e) {
+                // Fallback if localStorage not available
+            }
+        },
+
         getStoredToken: function() {
-            return localStorage.getItem('cbd_classroom_token');
+            try {
+                return localStorage.getItem('cbd_classroom_token');
+            } catch (e) {
+                return null;
+            }
         },
 
-        setStoredToken: function(token) {
-            localStorage.setItem('cbd_classroom_token', token);
-        },
-
-        clearStoredToken: function() {
-            localStorage.removeItem('cbd_classroom_token');
+        storeClassId: function(classId) {
+            try {
+                localStorage.setItem('cbd_classroom_class_id', classId);
+            } catch (e) {
+                // Fallback
+            }
         },
 
         getStoredClassId: function() {
-            return localStorage.getItem('cbd_classroom_class_id');
+            try {
+                return localStorage.getItem('cbd_classroom_class_id');
+            } catch (e) {
+                return null;
+            }
         },
 
-        setStoredClassId: function(classId) {
-            localStorage.setItem('cbd_classroom_class_id', classId);
+        clearAuth: function() {
+            this.token = null;
+            this.classId = null;
+            try {
+                localStorage.removeItem('cbd_classroom_token');
+                localStorage.removeItem('cbd_classroom_class_id');
+            } catch (e) {
+                // Ignore
+            }
         },
 
-        clearStoredClassId: function() {
-            localStorage.removeItem('cbd_classroom_class_id');
-        },
-
-        /**
-         * HTML Escaping
-         */
-        escHtml: function(text) {
+        escapeHtml: function(text) {
             var div = document.createElement('div');
-            div.textContent = text;
+            div.appendChild(document.createTextNode(text));
             return div.innerHTML;
         }
     };
 
-    // Init on DOM ready
+    // Initialize on DOM ready
     $(document).ready(function() {
-        if (typeof cbdClassroomFrontend !== 'undefined') {
+        if ($('#cbd-classroom-app').length > 0) {
             ClassroomFrontend.init();
         }
     });

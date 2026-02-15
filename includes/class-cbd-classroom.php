@@ -64,15 +64,24 @@ class CBD_Classroom {
         add_action('wp_ajax_cbd_save_drawing', array($this, 'ajax_save_drawing'));
         add_action('wp_ajax_cbd_load_drawing', array($this, 'ajax_load_drawing'));
         add_action('wp_ajax_cbd_toggle_behandelt', array($this, 'ajax_toggle_behandelt'));
+        add_action('wp_ajax_cbd_get_block_status', array($this, 'ajax_get_block_status'));
 
         // AJAX handlers for students (no login required)
         add_action('wp_ajax_nopriv_cbd_student_auth', array($this, 'ajax_student_auth'));
         add_action('wp_ajax_nopriv_cbd_student_get_data', array($this, 'ajax_student_get_data'));
         add_action('wp_ajax_nopriv_cbd_get_public_classes', array($this, 'ajax_get_public_classes'));
+        add_action('wp_ajax_nopriv_cbd_get_page_classroom_data', array($this, 'ajax_get_page_classroom_data'));
+        add_action('wp_ajax_nopriv_cbd_cleanup_invalid_containers', array($this, 'ajax_cleanup_invalid_containers'));
         // Also allow logged-in users to use student endpoints
         add_action('wp_ajax_cbd_student_auth', array($this, 'ajax_student_auth'));
         add_action('wp_ajax_cbd_student_get_data', array($this, 'ajax_student_get_data'));
         add_action('wp_ajax_cbd_get_public_classes', array($this, 'ajax_get_public_classes'));
+        add_action('wp_ajax_cbd_get_page_classroom_data', array($this, 'ajax_get_page_classroom_data'));
+        add_action('wp_ajax_cbd_cleanup_invalid_containers', array($this, 'ajax_cleanup_invalid_containers'));
+
+        // Debug endpoint
+        add_action('wp_ajax_cbd_debug_page_status', array($this, 'ajax_debug_page_status'));
+        add_action('wp_ajax_nopriv_cbd_debug_page_status', array($this, 'ajax_debug_page_status'));
 
         // Shortcode for student access
         add_shortcode('cbd_classroom', array($this, 'render_classroom_shortcode'));
@@ -372,32 +381,151 @@ class CBD_Classroom {
         }
 
         // Get or create drawing record
+        error_log('[CBD Classroom] toggle_behandelt - Parameters: class_id=' . $class_id . ', page_id=' . $page_id . ', container_id=' . $container_id);
+
         $existing = $wpdb->get_row($wpdb->prepare(
             "SELECT id, is_behandelt FROM $table WHERE class_id = %d AND page_id = %d AND container_id = %s",
             $class_id, $page_id, $container_id
         ));
 
+        error_log('[CBD Classroom] Existing drawing: ' . ($existing ? 'YES (id=' . $existing->id . ', is_behandelt=' . $existing->is_behandelt . ')' : 'NO'));
+
         if ($existing) {
             $new_status = $existing->is_behandelt ? 0 : 1;
-            $wpdb->update($table, array(
+            error_log('[CBD Classroom] UPDATING existing drawing to status: ' . $new_status);
+
+            $result = $wpdb->update($table, array(
                 'is_behandelt' => $new_status,
                 'updated_at' => current_time('mysql')
             ), array('id' => $existing->id));
+
+            if ($result === false) {
+                error_log('[CBD Classroom] UPDATE FAILED! Error: ' . $wpdb->last_error);
+            } else {
+                error_log('[CBD Classroom] UPDATE successful. Rows affected: ' . $result);
+            }
         } else {
             $new_status = 1;
-            $wpdb->insert($table, array(
+            error_log('[CBD Classroom] INSERTING new drawing with status: ' . $new_status);
+            error_log('[CBD Classroom] Insert data: ' . print_r(array(
+                'class_id' => $class_id,
+                'teacher_id' => get_current_user_id(),
+                'page_id' => $page_id,
+                'container_id' => $container_id,
+                'is_behandelt' => 1
+            ), true));
+
+            $result = $wpdb->insert($table, array(
                 'class_id' => $class_id,
                 'teacher_id' => get_current_user_id(),
                 'page_id' => $page_id,
                 'container_id' => $container_id,
                 'is_behandelt' => 1
             ));
+
+            if ($result === false) {
+                error_log('[CBD Classroom] INSERT FAILED! Error: ' . $wpdb->last_error);
+                error_log('[CBD Classroom] Last query: ' . $wpdb->last_query);
+            } else {
+                error_log('[CBD Classroom] INSERT successful. Insert ID: ' . $wpdb->insert_id);
+            }
         }
+
+        // Auto-assign page to class when first block is marked as behandelt
+        if ($new_status == 1) {
+            error_log('[CBD Classroom] toggle_behandelt - New status is 1, checking if page should be auto-added');
+            $page_exists = $wpdb->get_var($wpdb->prepare(
+                "SELECT id FROM " . CBD_TABLE_CLASS_PAGES . " WHERE class_id = %d AND page_id = %d",
+                $class_id, $page_id
+            ));
+
+            error_log('[CBD Classroom] Page exists in class_pages: ' . ($page_exists ? 'YES (ID: ' . $page_exists . ')' : 'NO'));
+
+            if (!$page_exists) {
+                // Get max sort_order for this class
+                $max_order = $wpdb->get_var($wpdb->prepare(
+                    "SELECT MAX(sort_order) FROM " . CBD_TABLE_CLASS_PAGES . " WHERE class_id = %d",
+                    $class_id
+                ));
+
+                $result = $wpdb->insert(CBD_TABLE_CLASS_PAGES, array(
+                    'class_id' => $class_id,
+                    'page_id' => $page_id,
+                    'sort_order' => ($max_order !== null) ? ($max_order + 1) : 0
+                ));
+
+                if ($result) {
+                    error_log('[CBD Classroom] Successfully added page ' . $page_id . ' to class_pages for class ' . $class_id);
+                } else {
+                    error_log('[CBD Classroom] FAILED to add page to class_pages. Error: ' . $wpdb->last_error);
+                }
+            }
+        }
+
+        // Verify the drawing was created/updated
+        $verify = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, is_behandelt FROM " . CBD_TABLE_DRAWINGS . " WHERE class_id = %d AND page_id = %d AND container_id = %s",
+            $class_id, $page_id, $container_id
+        ));
 
         wp_send_json_success(array(
             'is_behandelt' => (bool) $new_status,
-            'message' => $new_status ? 'Als behandelt markiert.' : 'Markierung entfernt.'
+            'message' => $new_status ? 'Als behandelt markiert.' : 'Markierung entfernt.',
+            'debug' => array(
+                'drawing_id' => $verify ? $verify->id : null,
+                'drawing_status' => $verify ? (bool) $verify->is_behandelt : null,
+                'db_insert_result' => isset($result) ? $result : null,
+                'db_last_error' => $wpdb->last_error ? $wpdb->last_error : null,
+                'insert_id' => $wpdb->insert_id > 0 ? $wpdb->insert_id : null
+            )
         ));
+    }
+
+    /**
+     * AJAX: Get behandelt status for a block across all teacher's classes
+     */
+    public function ajax_get_block_status() {
+        check_ajax_referer('cbd_classroom_nonce', 'nonce');
+
+        if (!current_user_can('cbd_edit_blocks')) {
+            wp_send_json_error(array('message' => 'Keine Berechtigung.'));
+        }
+
+        global $wpdb;
+
+        $page_id = intval($_POST['page_id'] ?? 0);
+        $container_id = sanitize_text_field($_POST['container_id'] ?? '');
+
+        if ($page_id <= 0 || empty($container_id)) {
+            wp_send_json_error(array('message' => 'Fehlende Parameter.'));
+        }
+
+        // Get all classes for this teacher
+        $classes = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, name FROM " . CBD_TABLE_CLASSES . "
+             WHERE teacher_id = %d AND status = 'active'
+             ORDER BY name ASC",
+            get_current_user_id()
+        ));
+
+        $status_data = array();
+
+        foreach ($classes as $class) {
+            // Check if this block is marked as behandelt for this class
+            $is_behandelt = $wpdb->get_var($wpdb->prepare(
+                "SELECT is_behandelt FROM " . CBD_TABLE_DRAWINGS . "
+                 WHERE class_id = %d AND page_id = %d AND container_id = %s",
+                $class->id, $page_id, $container_id
+            ));
+
+            $status_data[] = array(
+                'id' => $class->id,
+                'name' => $class->name,
+                'is_behandelt' => (bool) $is_behandelt
+            );
+        }
+
+        wp_send_json_success(array('classes' => $status_data));
     }
 
     // =========================================================================
@@ -438,7 +566,7 @@ class CBD_Classroom {
 
         // Generate session token
         $token = wp_generate_password(64, false);
-        $token_key = 'cbd_student_token_' . md5($token);
+        $token_key = 'cbd_classroom_' . $token;
 
         // Store token as transient (24 hours)
         set_transient($token_key, array(
@@ -464,7 +592,7 @@ class CBD_Classroom {
             wp_send_json_error(array('message' => 'Nicht authentifiziert.'));
         }
 
-        $token_key = 'cbd_student_token_' . md5($token);
+        $token_key = 'cbd_classroom_' . $token;
         $session = get_transient($token_key);
 
         if (!$session) {
@@ -474,51 +602,134 @@ class CBD_Classroom {
         global $wpdb;
         $class_id = $session['class_id'];
 
-        // Get pages for this class
-        $pages = $wpdb->get_results($wpdb->prepare(
-            "SELECT cp.page_id, cp.sort_order, p.post_title, p.post_content
+        // NEW APPROACH: Return page list instead of rendering full content
+        // Pages will be loaded individually when user clicks on them
+
+        // STEP 1: Get ALL pages assigned to this class
+        error_log('[CBD Classroom] ajax_student_get_data - Class ID: ' . $class_id);
+
+        $all_pages = $wpdb->get_results($wpdb->prepare(
+            "SELECT cp.page_id, p.post_title, p.post_parent
              FROM " . CBD_TABLE_CLASS_PAGES . " cp
-             LEFT JOIN {$wpdb->posts} p ON cp.page_id = p.ID
+             INNER JOIN {$wpdb->posts} p ON cp.page_id = p.ID
              WHERE cp.class_id = %d AND p.post_status = 'publish'
              ORDER BY cp.sort_order ASC",
             $class_id
         ));
 
-        // Get drawings and behandelt status for this class
-        $drawings = $wpdb->get_results($wpdb->prepare(
-            "SELECT page_id, container_id, drawing_data, is_behandelt
-             FROM " . CBD_TABLE_DRAWINGS . "
-             WHERE class_id = %d",
+        error_log('[CBD Classroom] Found ' . count($all_pages) . ' total pages in class');
+
+        // STEP 2: Get list of page IDs that have behandelt blocks
+        $treated_page_ids = $wpdb->get_col($wpdb->prepare(
+            "SELECT DISTINCT page_id FROM " . CBD_TABLE_DRAWINGS . "
+             WHERE class_id = %d AND is_behandelt = 1",
             $class_id
         ));
 
-        // Organize drawings by page_id -> container_id
-        $drawings_map = array();
-        foreach ($drawings as $drawing) {
-            if (!isset($drawings_map[$drawing->page_id])) {
-                $drawings_map[$drawing->page_id] = array();
+        error_log('[CBD Classroom] Found ' . count($treated_page_ids) . ' pages with behandelt blocks');
+
+        // STEP 3: Build hierarchy and determine which pages to show
+        $pages_to_show = array();
+        $parent_ids_to_show = array(); // Parents of treated pages
+
+        foreach ($all_pages as $page) {
+            $is_treated = in_array($page->page_id, $treated_page_ids);
+
+            if ($is_treated) {
+                // This page has behandelt blocks - show it with link
+                $pages_to_show[$page->page_id] = array(
+                    'page_id' => $page->page_id,
+                    'title' => $page->post_title,
+                    'parent_id' => (int) $page->post_parent,
+                    'is_treated' => true,
+                    'treated_count' => $wpdb->get_var($wpdb->prepare(
+                        "SELECT COUNT(*) FROM " . CBD_TABLE_DRAWINGS . "
+                         WHERE class_id = %d AND page_id = %d AND is_behandelt = 1",
+                        $class_id, $page->page_id
+                    )),
+                    'url' => add_query_arg(array(
+                        'classroom' => $class_id,
+                        'token' => $token
+                    ), get_permalink($page->page_id))
+                );
+
+                // Mark parent chain to show (grayed out)
+                $current_parent_id = $page->post_parent;
+                while ($current_parent_id > 0) {
+                    $parent_ids_to_show[$current_parent_id] = true;
+                    $parent_post = get_post($current_parent_id);
+                    $current_parent_id = $parent_post ? $parent_post->post_parent : 0;
+                }
             }
-            $drawings_map[$drawing->page_id][$drawing->container_id] = array(
-                'drawing_data' => $drawing->drawing_data,
-                'is_behandelt' => (bool) $drawing->is_behandelt
-            );
         }
 
-        // Render page content through WordPress filters
-        $rendered_pages = array();
-        foreach ($pages as $page) {
-            $rendered_content = apply_filters('the_content', $page->post_content);
-            $rendered_pages[] = array(
-                'page_id' => $page->page_id,
-                'title' => $page->post_title,
-                'content' => $rendered_content,
-                'drawings' => $drawings_map[$page->page_id] ?? array()
+        // Add parent pages (grayed out, no link)
+        foreach ($parent_ids_to_show as $parent_id => $value) {
+            if (!isset($pages_to_show[$parent_id])) {
+                $parent_post = get_post($parent_id);
+                if ($parent_post) {
+                    $pages_to_show[$parent_id] = array(
+                        'page_id' => $parent_id,
+                        'title' => $parent_post->post_title,
+                        'parent_id' => (int) $parent_post->post_parent,
+                        'is_treated' => false,
+                        'treated_count' => 0,
+                        'url' => null, // No URL = grayed out
+                        'is_parent_only' => true
+                    );
+                }
+            }
+        }
+
+        // STEP 4: Build hierarchical structure with unlimited depth
+        // First, organize pages by parent_id for quick lookup
+        $children_by_parent = array();
+        foreach ($pages_to_show as $page_data) {
+            $parent_id = $page_data['parent_id'];
+            if (!isset($children_by_parent[$parent_id])) {
+                $children_by_parent[$parent_id] = array();
+            }
+            $children_by_parent[$parent_id][] = $page_data;
+        }
+
+        // Recursive function to build tree
+        $build_tree = function($parent_id, $level = 0) use (&$build_tree, $children_by_parent, $pages_to_show) {
+            $result = array();
+
+            if (!isset($children_by_parent[$parent_id])) {
+                return $result;
+            }
+
+            foreach ($children_by_parent[$parent_id] as $page) {
+                // Add current page with level info
+                $page['level'] = $level;
+                $result[] = $page;
+
+                // Recursively add children
+                $children = $build_tree($page['page_id'], $level + 1);
+                $result = array_merge($result, $children);
+            }
+
+            return $result;
+        };
+
+        // Build flat list starting from top-level pages (parent_id = 0)
+        $flat_pages = $build_tree(0, 0);
+
+        error_log('[CBD Classroom] Built flat list with ' . count($flat_pages) . ' pages');
+
+        // Convert flat list to format expected by frontend
+        $grouped_pages = array();
+        foreach ($flat_pages as $page) {
+            $grouped_pages[] = array(
+                'type' => 'page',
+                'page' => $page
             );
         }
 
         wp_send_json_success(array(
             'class_name' => $session['class_name'],
-            'pages' => $rendered_pages
+            'pages' => $grouped_pages
         ));
     }
 
@@ -620,12 +831,175 @@ class CBD_Classroom {
     public function enqueue_frontend_assets() {
         global $post;
 
-        // Only enqueue if shortcode is present on the page
-        if (!is_a($post, 'WP_Post') || !has_shortcode($post->post_content, 'cbd_classroom')) {
+        // Check if we're in classroom mode via URL parameter
+        $classroom_id = isset($_GET['classroom']) ? intval($_GET['classroom']) : 0;
+        $is_classroom_page = $classroom_id > 0 && is_singular();
+
+        // Check if shortcode is present
+        $has_shortcode = is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'cbd_classroom');
+
+        // If neither shortcode nor classroom parameter, do nothing
+        if (!$has_shortcode && !$is_classroom_page) {
             return;
         }
 
-        // Enqueue CSS
+        // If this is a normal page in classroom filter mode (not the shortcode page)
+        if ($is_classroom_page && !$has_shortcode) {
+            // Enqueue ONLY the classroom page filter script
+            wp_enqueue_script(
+                'cbd-classroom-page-filter',
+                CBD_PLUGIN_URL . 'assets/js/classroom-page-filter.js',
+                array('jquery'),
+                CBD_VERSION,
+                true
+            );
+
+            // Localize with page data
+            wp_localize_script(
+                'cbd-classroom-page-filter',
+                'cbdClassroomPageData',
+                array(
+                    'ajaxUrl' => admin_url('admin-ajax.php'),
+                    'pageId' => get_the_ID()
+                )
+            );
+
+            // Enqueue classroom CSS for badges and overlays
+            wp_enqueue_style(
+                'cbd-classroom-frontend',
+                CBD_PLUGIN_URL . 'assets/css/classroom-frontend.css',
+                array(),
+                CBD_VERSION
+            );
+
+            return; // Don't load all the other assets
+        }
+
+        // If we get here, we have the shortcode - enqueue all assets
+
+        // ========================================================================
+        // CORE CBD SCRIPTS (needed for container block features)
+        // ========================================================================
+
+        // Interactivity API Store (ESM Module) - WordPress 6.5+
+        if (function_exists('wp_register_script_module')) {
+            wp_register_script_module(
+                'cbd-interactivity-store',
+                CBD_PLUGIN_URL . 'assets/js/interactivity-store.js',
+                array('@wordpress/interactivity'),
+                CBD_VERSION
+            );
+            wp_enqueue_script_module('cbd-interactivity-store');
+        }
+
+        // jQuery-based fallback (ALWAYS enqueue for reliability)
+        wp_enqueue_script(
+            'cbd-interactivity-fallback',
+            CBD_PLUGIN_URL . 'assets/js/interactivity-fallback.js',
+            array('jquery'),
+            CBD_VERSION,
+            true
+        );
+
+        // Frontend CSS
+        wp_enqueue_style(
+            'cbd-frontend-clean',
+            CBD_PLUGIN_URL . 'assets/css/cbd-frontend-clean.css',
+            array(),
+            CBD_VERSION
+        );
+
+        wp_enqueue_style(
+            'cbd-interactivity-api',
+            CBD_PLUGIN_URL . 'assets/css/interactivity-api.css',
+            array('cbd-frontend-clean'),
+            CBD_VERSION
+        );
+
+        // Dashicons for frontend icons
+        wp_enqueue_style('dashicons');
+
+        // Icon Libraries (Font Awesome, Material Icons, Lucide)
+        wp_enqueue_style(
+            'font-awesome',
+            'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
+            array(),
+            '6.5.1'
+        );
+
+        wp_enqueue_style(
+            'material-icons',
+            'https://fonts.googleapis.com/icon?family=Material+Icons',
+            array(),
+            null
+        );
+
+        wp_enqueue_style(
+            'lucide-icons',
+            'https://unpkg.com/lucide-static@latest/font/lucide.css',
+            array(),
+            null
+        );
+
+        // html2canvas for screenshot functionality
+        wp_enqueue_script(
+            'html2canvas',
+            CBD_PLUGIN_URL . 'assets/lib/html2canvas.min.js',
+            array(),
+            '1.4.1',
+            true
+        );
+
+        // jsPDF library
+        wp_enqueue_script(
+            'jspdf',
+            'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+            array(),
+            '2.5.1',
+            true
+        );
+
+        // html2pdf.js loader
+        wp_enqueue_script(
+            'cbd-html2pdf-loader',
+            CBD_PLUGIN_URL . 'assets/js/html2pdf-loader.js',
+            array('html2canvas', 'jspdf'),
+            CBD_VERSION,
+            true
+        );
+
+        // PDF server-side generation
+        wp_enqueue_script(
+            'cbd-pdf-server-side',
+            CBD_PLUGIN_URL . 'assets/js/pdf-server-side.js',
+            array('jquery'),
+            CBD_VERSION,
+            true
+        );
+
+        wp_localize_script(
+            'cbd-pdf-server-side',
+            'cbdPDFData',
+            array(
+                'ajaxurl' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('cbd-pdf-nonce')
+            )
+        );
+
+        // Floating PDF Export Button
+        wp_enqueue_script(
+            'cbd-floating-pdf-button',
+            CBD_PLUGIN_URL . 'assets/js/floating-pdf-button.js',
+            array('jquery', 'cbd-html2pdf-loader'),
+            CBD_VERSION,
+            true
+        );
+
+        // ========================================================================
+        // CLASSROOM-SPECIFIC SCRIPTS
+        // ========================================================================
+
+        // Classroom frontend CSS
         wp_enqueue_style(
             'cbd-classroom-frontend',
             CBD_PLUGIN_URL . 'assets/css/classroom-frontend.css',
@@ -633,7 +1007,7 @@ class CBD_Classroom {
             CBD_VERSION
         );
 
-        // Enqueue JS
+        // Classroom frontend JS
         wp_enqueue_script(
             'cbd-classroom-frontend',
             CBD_PLUGIN_URL . 'assets/js/classroom-frontend.js',
@@ -642,7 +1016,7 @@ class CBD_Classroom {
             true
         );
 
-        // Localize script with data
+        // Localize classroom script with data
         wp_localize_script(
             'cbd-classroom-frontend',
             'cbdClassroomFrontend',
@@ -666,6 +1040,204 @@ class CBD_Classroom {
         return $wpdb->get_results($wpdb->prepare(
             "SELECT id, name FROM " . CBD_TABLE_CLASSES . " WHERE teacher_id = %d AND status = 'active' ORDER BY name ASC",
             get_current_user_id()
+        ));
+    }
+
+    // =========================================================================
+    // NEW: AJAX endpoint for individual page classroom data
+    // =========================================================================
+
+    /**
+     * AJAX: Get classroom data for a specific page
+     * Used when loading normal WordPress pages with ?classroom parameter
+     */
+    public function ajax_get_page_classroom_data() {
+        $token = sanitize_text_field($_POST['token'] ?? '');
+        $page_id = intval($_POST['page_id'] ?? 0);
+
+        if (empty($token) || $page_id <= 0) {
+            wp_send_json_error(array('message' => 'Fehlende Parameter.'));
+        }
+
+        // Verify token
+        $transient_key = 'cbd_classroom_' . $token;
+        $session = get_transient($transient_key);
+
+        // Debug logging
+        error_log('[CBD Classroom] ajax_get_page_classroom_data called');
+        error_log('[CBD Classroom] Token: ' . substr($token, 0, 20) . '...');
+        error_log('[CBD Classroom] Transient key: ' . $transient_key);
+        error_log('[CBD Classroom] Session found: ' . ($session ? 'YES' : 'NO'));
+        if ($session) {
+            error_log('[CBD Classroom] Session data: ' . print_r($session, true));
+        }
+
+        if (!$session || !isset($session['class_id'])) {
+            wp_send_json_error(array(
+                'message' => 'Ungültiger oder abgelaufener Token. Bitte loggen Sie sich erneut ein.',
+                'debug' => array(
+                    'token_length' => strlen($token),
+                    'session_exists' => $session ? true : false
+                )
+            ));
+        }
+
+        global $wpdb;
+        $class_id = $session['class_id'];
+
+        // Get class name
+        $class = $wpdb->get_row($wpdb->prepare(
+            "SELECT name FROM " . CBD_TABLE_CLASSES . " WHERE id = %d",
+            $class_id
+        ));
+
+        // Get drawings and behandelt status for this page
+        error_log('[CBD Classroom] ajax_get_page_classroom_data - Querying page_id: ' . $page_id . ', class_id: ' . $class_id);
+
+        $drawings = $wpdb->get_results($wpdb->prepare(
+            "SELECT container_id, drawing_data, is_behandelt
+             FROM " . CBD_TABLE_DRAWINGS . "
+             WHERE class_id = %d AND page_id = %d",
+            $class_id, $page_id
+        ));
+
+        error_log('[CBD Classroom] ajax_get_page_classroom_data - Found ' . count($drawings) . ' drawings');
+        if (count($drawings) > 0) {
+            foreach ($drawings as $d) {
+                error_log('[CBD Classroom] Drawing: container_id=' . $d->container_id . ', is_behandelt=' . $d->is_behandelt);
+            }
+        }
+
+        // Organize drawings by container_id
+        $drawings_map = array();
+        $treated_containers = array();
+
+        foreach ($drawings as $drawing) {
+            $drawings_map[$drawing->container_id] = array(
+                'drawing_data' => $drawing->drawing_data,
+                'is_behandelt' => (bool) $drawing->is_behandelt
+            );
+
+            if ($drawing->is_behandelt) {
+                $treated_containers[] = $drawing->container_id;
+            }
+        }
+
+        error_log('[CBD Classroom] ajax_get_page_classroom_data - Treated containers: ' . implode(', ', $treated_containers));
+
+        wp_send_json_success(array(
+            'class_name' => $class ? $class->name : '',
+            'treated_containers' => $treated_containers,
+            'drawings' => $drawings_map
+        ));
+    }
+
+    /**
+     * AJAX: Cleanup invalid container references (containers that no longer exist on page)
+     */
+    public function ajax_cleanup_invalid_containers() {
+        $token = sanitize_text_field($_POST['token'] ?? '');
+        $page_id = intval($_POST['page_id'] ?? 0);
+        $invalid_containers = isset($_POST['invalid_containers']) ? (array) $_POST['invalid_containers'] : array();
+
+        if (empty($token) || $page_id <= 0 || empty($invalid_containers)) {
+            wp_send_json_error(array('message' => 'Fehlende Parameter.'));
+        }
+
+        // This endpoint should ONLY be accessible to teachers, not students
+        // Require proper WordPress capabilities
+        if (!current_user_can('cbd_edit_blocks') && !current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Keine Berechtigung für diese Aktion.'));
+        }
+
+        // Verify token (for context, but not for authorization)
+        $transient_key = 'cbd_classroom_' . $token;
+        $session = get_transient($transient_key);
+
+        if (!$session || !isset($session['class_id'])) {
+            wp_send_json_error(array('message' => 'Ungültiger oder abgelaufener Token.'));
+        }
+
+        global $wpdb;
+        $class_id = $session['class_id'];
+
+        // Sanitize container IDs
+        $invalid_containers = array_map('sanitize_text_field', $invalid_containers);
+
+        error_log('[CBD Classroom] ajax_cleanup_invalid_containers - Removing ' . count($invalid_containers) . ' invalid containers from page ' . $page_id);
+
+        // Delete invalid container references
+        $deleted_count = 0;
+        foreach ($invalid_containers as $container_id) {
+            $result = $wpdb->delete(
+                CBD_TABLE_DRAWINGS,
+                array(
+                    'class_id' => $class_id,
+                    'page_id' => $page_id,
+                    'container_id' => $container_id
+                ),
+                array('%d', '%d', '%s')
+            );
+
+            if ($result !== false) {
+                $deleted_count += $result;
+                error_log('[CBD Classroom] Deleted drawing: class_id=' . $class_id . ', page_id=' . $page_id . ', container_id=' . $container_id);
+            }
+        }
+
+        error_log('[CBD Classroom] Cleanup complete - Deleted ' . $deleted_count . ' entries');
+
+        // Check if any treated containers remain for this page
+        $remaining_count = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM " . CBD_TABLE_DRAWINGS . "
+             WHERE class_id = %d AND page_id = %d AND is_behandelt = 1",
+            $class_id, $page_id
+        ));
+
+        error_log('[CBD Classroom] Remaining treated containers: ' . $remaining_count);
+
+        wp_send_json_success(array(
+            'deleted_count' => $deleted_count,
+            'remaining_count' => intval($remaining_count),
+            'message' => $deleted_count . ' veraltete Container-Referenz(en) entfernt.'
+        ));
+    }
+
+    /**
+     * AJAX: Debug endpoint to check database status for a page
+     */
+    public function ajax_debug_page_status() {
+        $page_id = intval($_POST['page_id'] ?? 0);
+        $class_id = intval($_POST['class_id'] ?? 0);
+
+        if ($page_id <= 0 || $class_id <= 0) {
+            wp_send_json_error(array('message' => 'page_id and class_id required'));
+        }
+
+        global $wpdb;
+
+        // Check class_pages
+        $in_class_pages = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM " . CBD_TABLE_CLASS_PAGES . " WHERE class_id = %d AND page_id = %d",
+            $class_id, $page_id
+        ));
+
+        // Check drawings
+        $drawings = $wpdb->get_results($wpdb->prepare(
+            "SELECT container_id, is_behandelt FROM " . CBD_TABLE_DRAWINGS . " WHERE class_id = %d AND page_id = %d",
+            $class_id, $page_id
+        ));
+
+        // Check if page is published
+        $page_status = get_post_status($page_id);
+
+        wp_send_json_success(array(
+            'page_id' => $page_id,
+            'class_id' => $class_id,
+            'in_class_pages' => (bool) $in_class_pages,
+            'page_status' => $page_status,
+            'drawings_count' => count($drawings),
+            'drawings' => $drawings
         ));
     }
 }

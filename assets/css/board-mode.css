@@ -612,6 +612,9 @@
 }
 
 .cbd-behandelt-class-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 14px 18px;
     border: 2px solid #e0e0e0;
     border-radius: 8px;
@@ -624,6 +627,11 @@
     text-align: left;
 }
 
+.cbd-behandelt-class-option.is-behandelt {
+    border-color: #4caf50;
+    background: #f1f8f4;
+}
+
 .cbd-behandelt-class-option:hover {
     border-color: #4caf50;
     background: #f1f8f4;
@@ -632,6 +640,33 @@
 
 .cbd-behandelt-class-option:active {
     transform: translateX(4px) scale(0.98);
+}
+
+.cbd-class-name {
+    flex: 1;
+    font-weight: 600;
+}
+
+.cbd-class-status {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.cbd-behandelt-class-option.is-behandelt .cbd-class-status {
+    color: #4caf50;
+}
+
+.cbd-behandelt-class-option:not(.is-behandelt) .cbd-class-status {
+    color: #999;
+}
+
+.cbd-class-status .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
 }
 
 .cbd-behandelt-cancel {

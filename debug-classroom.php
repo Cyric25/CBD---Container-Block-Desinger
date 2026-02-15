@@ -94,11 +94,11 @@ if ($db_version !== '3.0.0') {
     echo "<p class='info'>Führe Migration zu Version 3.0.0 aus...</p>";
 
     if (class_exists('CBD_Schema_Manager')) {
-        $schema = CBD_Schema_Manager::get_instance();
         try {
-            // Force migration
+            // Force migration - Schema Manager verwendet statische Methoden
+            // create_tables() ruft intern auch run_migrations() auf
             delete_option('cbd_db_version');
-            $schema->run_migrations();
+            CBD_Schema_Manager::create_tables();
 
             $new_version = get_option('cbd_db_version');
             echo "<p class='success'>✓ Migration abgeschlossen. Neue Version: $new_version</p>";

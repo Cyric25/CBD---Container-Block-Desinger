@@ -136,6 +136,9 @@ class CBD_Schema_Manager {
         if (version_compare($current_version, '3.0.0', '<')) {
             self::migrate_to_3_0_0();
         }
+
+        // Update database version to current version
+        update_option(self::DB_VERSION_KEY, self::DB_VERSION);
     }
 
     /**

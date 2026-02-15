@@ -121,6 +121,7 @@
          * Render classes into the table
          */
         renderClassesTable: function(classes) {
+            var self = this;
             var $tbody = $('#cbd-classes-body');
             $tbody.empty();
 
@@ -154,9 +155,6 @@
 
                 $tbody.append(row);
             });
-
-            // Fix: use self reference
-            var self = this;
         },
 
         /**
