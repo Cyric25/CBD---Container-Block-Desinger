@@ -218,6 +218,16 @@ class CBD_Admin {
                 array($this, 'render_roles_repair_page')
             );
 
+            // Untermenü: Einstellungen - nur Admins
+            add_submenu_page(
+                'container-block-designer',
+                __('Einstellungen', 'container-block-designer'),
+                __('Einstellungen', 'container-block-designer'),
+                'manage_options',
+                'cbd-settings',
+                array($this, 'render_settings_page')
+            );
+
             // Untermenü: Klassen-Verwaltung
             if (get_option('cbd_classroom_enabled', false) || current_user_can('manage_options')) {
                 add_submenu_page(
@@ -434,6 +444,10 @@ class CBD_Admin {
                     CBD_VERSION,
                     true
                 );
+                break;
+
+            case 'cbd-settings':
+                // Settings page uses common admin styles only
                 break;
 
             case 'cbd-classroom':
@@ -1018,6 +1032,24 @@ class CBD_Admin {
 
     /**
      * Klassen-Verwaltungsseite rendern
+     */
+    /**
+     * Einstellungen-Seite rendern
+     */
+    public function render_settings_page() {
+        $file_path = CBD_PLUGIN_DIR . 'admin/settings.php';
+
+        if (file_exists($file_path)) {
+            include $file_path;
+        } else {
+            echo '<div class="wrap"><h1>' . __('Einstellungen', 'container-block-designer') . '</h1>';
+            echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/settings.php', 'container-block-designer') . '</p></div>';
+            echo '</div>';
+        }
+    }
+
+    /**
+     * Klassen-Seite rendern
      */
     public function render_classroom_page() {
         $file_path = CBD_PLUGIN_DIR . 'admin/classroom.php';
