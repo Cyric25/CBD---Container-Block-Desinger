@@ -34,8 +34,11 @@
         resizeObserver: null,
         boundHandlers: {},
 
-        // Grid state
-        showGrid: false,
+        // Grid state: 'off', 'horizontal', 'vertical'
+        gridMode: 'off',
+        gridSize: 30, // Hexagon-Radius in Pixeln
+        gridOffsetX: 0, // Horizontaler Offset in Pixeln
+        gridOffsetY: 0, // Vertikaler Offset in Pixeln
 
         // Eraser mode: 'stroke' or 'point'
         eraserMode: 'stroke',
@@ -253,6 +256,15 @@
                             '<button class="cbd-board-grid-toggle" title="Hexagon-Gitter ein/aus">' +
                                 '<span class="dashicons dashicons-grid-view"></span>' +
                             '</button>' +
+                            '<label class="cbd-board-grid-label">Größe:</label>' +
+                            '<input type="range" class="cbd-board-grid-size" min="15" max="60" value="30" title="Gitter-Größe">' +
+                            '<span class="cbd-board-grid-size-display">30</span>' +
+                            '<label class="cbd-board-grid-label">X:</label>' +
+                            '<input type="range" class="cbd-board-grid-offset-x" min="-100" max="100" value="0" title="Horizontale Position">' +
+                            '<span class="cbd-board-grid-offset-x-display">0</span>' +
+                            '<label class="cbd-board-grid-label">Y:</label>' +
+                            '<input type="range" class="cbd-board-grid-offset-y" min="-100" max="100" value="0" title="Vertikale Position">' +
+                            '<span class="cbd-board-grid-offset-y-display">0</span>' +
                             '<span class="cbd-board-separator"></span>' +
                             // Clear button
                             '<button class="cbd-board-clear" title="Alles löschen">' +
@@ -343,7 +355,7 @@
         },
 
         /**
-         * Hexagon-Gitter zeichnen
+         * Hexagon-Gitter zeichnen (horizontal oder vertical)
          */
         redrawGrid: function() {
             if (!this.gridCtx || !this.gridCanvas) return;
@@ -351,42 +363,95 @@
             // Grid canvas leeren
             this.gridCtx.clearRect(0, 0, this.gridCanvas.width, this.gridCanvas.height);
 
-            if (!this.showGrid) return;
+            if (this.gridMode === 'off') return;
 
             var width = this.gridCanvas.width;
             var height = this.gridCanvas.height;
-
-            // Hexagon-Parameter
-            var hexSize = 30; // Radius des Hexagons
-            var hexHeight = hexSize * 2;
-            var hexWidth = Math.sqrt(3) * hexSize;
-            var hexVertDist = hexHeight * 3 / 4;
-            var hexHorizDist = hexWidth;
 
             // Grid-Style (hellgrau, auf allen Hintergründen sichtbar)
             this.gridCtx.strokeStyle = 'rgba(150, 150, 150, 0.3)';
             this.gridCtx.lineWidth = 1;
 
-            // Hexagons zeichnen
+            if (this.gridMode === 'horizontal') {
+                // Horizontal: flache Kante seitlich (pointy-top)
+                this.drawHorizontalGrid(width, height, this.gridSize);
+            } else if (this.gridMode === 'vertical') {
+                // Vertical: flache Kante unten (flat-top)
+                this.drawVerticalGrid(width, height, this.gridSize);
+            }
+        },
+
+        /**
+         * Horizontal Grid: flache Kante seitlich (pointy-top)
+         */
+        drawHorizontalGrid: function(width, height, hexSize) {
+            var hexWidth = hexSize * 2;
+            var hexHeight = Math.sqrt(3) * hexSize;
+            var hexHorizDist = hexWidth * 3 / 4;
+            var hexVertDist = hexHeight;
+
             for (var row = -1; row < Math.ceil(height / hexVertDist) + 1; row++) {
                 for (var col = -1; col < Math.ceil(width / hexHorizDist) + 1; col++) {
-                    var x = col * hexHorizDist;
-                    var y = row * hexVertDist;
+                    var x = col * hexHorizDist + this.gridOffsetX;
+                    var y = row * hexVertDist + this.gridOffsetY;
+
+                    // Jede zweite Spalte versetzt
+                    if (col % 2 === 1) {
+                        y += hexVertDist / 2;
+                    }
+
+                    this.drawHexagonPointyTop(x, y, hexSize);
+                }
+            }
+        },
+
+        /**
+         * Vertical Grid: flache Kante unten (flat-top)
+         */
+        drawVerticalGrid: function(width, height, hexSize) {
+            var hexHeight = hexSize * 2;
+            var hexWidth = Math.sqrt(3) * hexSize;
+            var hexVertDist = hexHeight * 3 / 4;
+            var hexHorizDist = hexWidth;
+
+            for (var row = -1; row < Math.ceil(height / hexVertDist) + 1; row++) {
+                for (var col = -1; col < Math.ceil(width / hexHorizDist) + 1; col++) {
+                    var x = col * hexHorizDist + this.gridOffsetX;
+                    var y = row * hexVertDist + this.gridOffsetY;
 
                     // Jede zweite Reihe versetzt
                     if (row % 2 === 1) {
                         x += hexHorizDist / 2;
                     }
 
-                    this.drawHexagon(x, y, hexSize);
+                    this.drawHexagonFlatTop(x, y, hexSize);
                 }
             }
         },
 
         /**
-         * Ein einzelnes Hexagon zeichnen (flat-top für Chemie)
+         * Hexagon mit Spitze oben (pointy-top) - für Horizontal-Grid
          */
-        drawHexagon: function(centerX, centerY, radius) {
+        drawHexagonPointyTop: function(centerX, centerY, radius) {
+            this.gridCtx.beginPath();
+            for (var i = 0; i < 6; i++) {
+                var angle = (Math.PI / 3) * i;
+                var x = centerX + radius * Math.cos(angle);
+                var y = centerY + radius * Math.sin(angle);
+                if (i === 0) {
+                    this.gridCtx.moveTo(x, y);
+                } else {
+                    this.gridCtx.lineTo(x, y);
+                }
+            }
+            this.gridCtx.closePath();
+            this.gridCtx.stroke();
+        },
+
+        /**
+         * Hexagon mit flacher Kante oben (flat-top) - für Vertical-Grid
+         */
+        drawHexagonFlatTop: function(centerX, centerY, radius) {
             this.gridCtx.beginPath();
             for (var i = 0; i < 6; i++) {
                 // +Math.PI/6 dreht das Hexagon um 30° für flat-top Orientierung
@@ -404,19 +469,31 @@
         },
 
         /**
-         * Grid ein/ausschalten
+         * Grid-Modus wechseln: off -> horizontal -> vertical -> off
          */
         toggleGrid: function() {
-            this.showGrid = !this.showGrid;
+            if (this.gridMode === 'off') {
+                this.gridMode = 'horizontal';
+            } else if (this.gridMode === 'horizontal') {
+                this.gridMode = 'vertical';
+            } else {
+                this.gridMode = 'off';
+            }
+
             this.redrawGrid();
 
-            // Button-Status aktualisieren
+            // Button-Status und Text aktualisieren
             var btn = this.overlay.querySelector('.cbd-board-grid-toggle');
             if (btn) {
-                if (this.showGrid) {
-                    btn.classList.add('active');
-                } else {
+                if (this.gridMode === 'off') {
                     btn.classList.remove('active');
+                    btn.title = 'Hexagon-Gitter ein/aus';
+                } else if (this.gridMode === 'horizontal') {
+                    btn.classList.add('active');
+                    btn.title = 'Horizontal (flache Kante seitlich)';
+                } else if (this.gridMode === 'vertical') {
+                    btn.classList.add('active');
+                    btn.title = 'Vertical (flache Kante unten)';
                 }
             }
         },
@@ -517,6 +594,48 @@
             if (gridToggle) {
                 gridToggle.addEventListener('click', function() {
                     self.toggleGrid();
+                });
+            }
+
+            // Grid Size
+            var gridSizeInput = this.overlay.querySelector('.cbd-board-grid-size');
+            var gridSizeDisplay = this.overlay.querySelector('.cbd-board-grid-size-display');
+            if (gridSizeInput) {
+                gridSizeInput.addEventListener('input', function() {
+                    var size = parseInt(this.value, 10);
+                    self.gridSize = size;
+                    self.redrawGrid();
+                    if (gridSizeDisplay) {
+                        gridSizeDisplay.textContent = size;
+                    }
+                });
+            }
+
+            // Grid Offset X
+            var gridOffsetXInput = this.overlay.querySelector('.cbd-board-grid-offset-x');
+            var gridOffsetXDisplay = this.overlay.querySelector('.cbd-board-grid-offset-x-display');
+            if (gridOffsetXInput) {
+                gridOffsetXInput.addEventListener('input', function() {
+                    var offset = parseInt(this.value, 10);
+                    self.gridOffsetX = offset;
+                    self.redrawGrid();
+                    if (gridOffsetXDisplay) {
+                        gridOffsetXDisplay.textContent = offset;
+                    }
+                });
+            }
+
+            // Grid Offset Y
+            var gridOffsetYInput = this.overlay.querySelector('.cbd-board-grid-offset-y');
+            var gridOffsetYDisplay = this.overlay.querySelector('.cbd-board-grid-offset-y-display');
+            if (gridOffsetYInput) {
+                gridOffsetYInput.addEventListener('input', function() {
+                    var offset = parseInt(this.value, 10);
+                    self.gridOffsetY = offset;
+                    self.redrawGrid();
+                    if (gridOffsetYDisplay) {
+                        gridOffsetYDisplay.textContent = offset;
+                    }
                 });
             }
 

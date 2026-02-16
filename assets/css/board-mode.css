@@ -347,6 +347,35 @@
     font-family: monospace;
 }
 
+/* Grid Controls */
+.cbd-board-grid-label {
+    font-size: 11px;
+    color: #666;
+    font-weight: 600;
+    white-space: nowrap;
+    margin: 0 4px;
+}
+
+.cbd-board-grid-size,
+.cbd-board-grid-offset-x,
+.cbd-board-grid-offset-y {
+    width: 80px;
+    height: 6px;
+    cursor: pointer;
+    accent-color: #4caf50;
+}
+
+.cbd-board-grid-size-display,
+.cbd-board-grid-offset-x-display,
+.cbd-board-grid-offset-y-display {
+    font-size: 11px;
+    color: #666;
+    min-width: 25px;
+    text-align: center;
+    font-weight: 600;
+    font-family: monospace;
+}
+
 /* Loeschen-Button */
 .cbd-board-clear {
     display: flex;
