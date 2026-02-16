@@ -706,12 +706,15 @@ class CBD_Block_Registration {
         $container_id = 'cbd-container-' . wp_unique_id();
 
         // Stable container ID for server-side drawing persistence
-        // Try to extract from saved block HTML (data-stable-id attribute)
-        $stable_id = '';
-        if (preg_match('/data-stable-id="([^"]+)"/', $content, $matches)) {
+        // PRIORITY 1: Check block attributes (from migration or new blocks)
+        $stable_id = isset($attributes['stableId']) ? $attributes['stableId'] : '';
+
+        // PRIORITY 2: Try to extract from saved block HTML (legacy compatibility)
+        if (empty($stable_id) && preg_match('/data-stable-id="([^"]+)"/', $content, $matches)) {
             $stable_id = $matches[1];
         }
-        // Fallback for blocks without stableId: generate deterministic ID
+
+        // PRIORITY 3: Fallback for blocks without stableId (legacy system)
         if (empty($stable_id)) {
             $page_id = get_the_ID() ?: 0;
             $stable_id = 'cbd-legacy-' . md5($page_id . '|' . $selected_block . '|' . substr(md5($content), 0, 8));
