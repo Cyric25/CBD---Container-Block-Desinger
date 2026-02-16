@@ -40,6 +40,7 @@ class CBD_Migration {
         // Register AJAX handlers
         add_action('wp_ajax_cbd_scan_blocks', array($this, 'ajax_scan_blocks'));
         add_action('wp_ajax_cbd_migrate_blocks', array($this, 'ajax_migrate_blocks'));
+        add_action('wp_ajax_cbd_cleanup_legacy_markings', array($this, 'ajax_cleanup_legacy_markings'));
     }
 
     /**
@@ -307,6 +308,72 @@ class CBD_Migration {
             'blocks_updated' => $blocks_updated,
             'markings_updated' => $markings_updated
         );
+    }
+
+    /**
+     * AJAX: Cleanup legacy markings
+     * Deletes all markings with cbd-legacy- IDs from cbd_drawings table
+     */
+    public function ajax_cleanup_legacy_markings() {
+        // Check permissions
+        if (!current_user_can('cbd_admin_blocks') && !current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Keine Berechtigung.'));
+        }
+
+        check_ajax_referer('cbd-migration-nonce', 'nonce');
+
+        global $wpdb;
+
+        // Find all legacy markings
+        $legacy_markings = $wpdb->get_results(
+            "SELECT id, page_id, container_id, class_id
+             FROM " . CBD_TABLE_DRAWINGS . "
+             WHERE container_id LIKE 'cbd-legacy-%'",
+            ARRAY_A
+        );
+
+        $total_found = count($legacy_markings);
+
+        if ($total_found === 0) {
+            wp_send_json_success(array(
+                'deleted_count' => 0,
+                'message' => 'Keine Legacy-Markierungen gefunden.',
+                'markings' => array()
+            ));
+        }
+
+        // Group by page for display
+        $pages_affected = array();
+        foreach ($legacy_markings as $marking) {
+            $page_id = $marking['page_id'];
+            if (!isset($pages_affected[$page_id])) {
+                $post = get_post($page_id);
+                $pages_affected[$page_id] = array(
+                    'page_id' => $page_id,
+                    'page_title' => $post ? $post->post_title : 'Unbekannt',
+                    'count' => 0,
+                    'containers' => array()
+                );
+            }
+            $pages_affected[$page_id]['count']++;
+            $pages_affected[$page_id]['containers'][] = array(
+                'container_id' => $marking['container_id'],
+                'class_id' => $marking['class_id']
+            );
+        }
+
+        // Delete all legacy markings
+        $deleted = $wpdb->query(
+            "DELETE FROM " . CBD_TABLE_DRAWINGS . "
+             WHERE container_id LIKE 'cbd-legacy-%'"
+        );
+
+        wp_send_json_success(array(
+            'deleted_count' => $deleted !== false ? $deleted : 0,
+            'total_found' => $total_found,
+            'pages_affected' => array_values($pages_affected),
+            'message' => $deleted . ' Legacy-Markierung(en) erfolgreich gelöscht.'
+        ));
     }
 
     /**

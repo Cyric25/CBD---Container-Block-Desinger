@@ -144,6 +144,55 @@ $nonce = wp_create_nonce('cbd-migration-nonce');
             </div>
         </div>
 
+        <!-- Cleanup Section -->
+        <div class="cbd-migration-section">
+            <h2>Schritt 3: Alte Markierungen aufräumen (Optional)</h2>
+            <p>Nach der Migration können noch alte Markierungen mit Legacy-IDs in der Datenbank vorhanden sein.</p>
+            <p>Diese veralteten Markierungen verhindern, dass die neu migrierten Blöcke korrekt angezeigt werden.</p>
+
+            <div class="cbd-warning">
+                <strong>⚠️ Hinweis:</strong> Dieser Schritt löscht alle Markierungen mit <code>cbd-legacy-</code> IDs.
+                Nach dem Aufräumen müssen betroffene Blöcke neu markiert werden.
+            </div>
+
+            <button type="button" class="button button-secondary button-hero" id="cbd-cleanup-btn">
+                <span class="dashicons dashicons-trash"></span>
+                Legacy-Markierungen aufräumen
+            </button>
+
+            <div id="cbd-cleanup-results" class="cbd-results-box" style="display: none;">
+                <h3>Aufräum-Ergebnis:</h3>
+                <div class="cbd-stats">
+                    <div class="cbd-stat-item cbd-stat-warning">
+                        <span class="cbd-stat-number" id="cbd-cleanup-deleted">0</span>
+                        <span class="cbd-stat-label">Legacy-Markierungen gelöscht</span>
+                    </div>
+                    <div class="cbd-stat-item">
+                        <span class="cbd-stat-number" id="cbd-cleanup-pages">0</span>
+                        <span class="cbd-stat-label">Betroffene Seiten</span>
+                    </div>
+                </div>
+
+                <div id="cbd-cleanup-pages-list" style="display: none;">
+                    <h4>Betroffene Seiten (Blöcke müssen neu markiert werden):</h4>
+                    <table class="wp-list-table widefat fixed striped">
+                        <thead>
+                            <tr>
+                                <th>Seite</th>
+                                <th>Anzahl gelöschter Markierungen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cbd-cleanup-pages-tbody">
+                        </tbody>
+                    </table>
+                </div>
+
+                <p class="cbd-success-message">
+                    ✅ Aufräumen abgeschlossen. Sie können jetzt die Blöcke mit ihren neuen stabilen IDs neu markieren.
+                </p>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -421,6 +470,54 @@ jQuery(document).ready(function($) {
         }
 
         $('#cbd-migrate-results').slideDown();
+    }
+
+    // Cleanup button
+    $('#cbd-cleanup-btn').on('click', function() {
+        if (!confirm('Sind Sie sicher, dass Sie alle Legacy-Markierungen löschen möchten?\n\nDie betroffenen Blöcke müssen danach neu markiert werden.')) {
+            return;
+        }
+
+        const $btn = $(this);
+        $btn.prop('disabled', true).html('<span class="dashicons dashicons-update spin"></span> Räume auf...');
+        $('#cbd-cleanup-results').hide();
+
+        $.post(ajaxurl, {
+            action: 'cbd_cleanup_legacy_markings',
+            nonce: nonce
+        }, function(response) {
+            if (response.success) {
+                displayCleanupResults(response.data);
+            } else {
+                alert('Fehler beim Aufräumen: ' + (response.data.message || 'Unbekannter Fehler'));
+            }
+        }).fail(function() {
+            alert('Netzwerkfehler beim Aufräumen.');
+        }).always(function() {
+            $btn.prop('disabled', false).html('<span class="dashicons dashicons-trash"></span> Legacy-Markierungen aufräumen');
+        });
+    });
+
+    function displayCleanupResults(data) {
+        $('#cbd-cleanup-deleted').text(data.deleted_count);
+        $('#cbd-cleanup-pages').text(data.pages_affected ? data.pages_affected.length : 0);
+
+        // Show affected pages
+        if (data.pages_affected && data.pages_affected.length > 0) {
+            let html = '';
+            data.pages_affected.forEach(function(page) {
+                html += '<tr>' +
+                    '<td><strong>' + escapeHtml(page.page_title) + '</strong> (ID: ' + page.page_id + ')</td>' +
+                    '<td>' + page.count + '</td>' +
+                    '</tr>';
+            });
+            $('#cbd-cleanup-pages-tbody').html(html);
+            $('#cbd-cleanup-pages-list').show();
+        } else {
+            $('#cbd-cleanup-pages-list').hide();
+        }
+
+        $('#cbd-cleanup-results').slideDown();
     }
 
     function escapeHtml(text) {
