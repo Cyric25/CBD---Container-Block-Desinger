@@ -25,10 +25,10 @@
 
         isDrawing: false,
         currentTool: 'pen',
-        currentColor: '#ffffff',
+        currentColor: '#000000',
         lineWidth: 3,
         containerId: null,
-        boardColor: '#1a472a',
+        boardColor: '#ffffff',
         lastX: 0,
         lastY: 0,
         resizeObserver: null,
@@ -36,6 +36,9 @@
 
         // Grid state
         showGrid: false,
+
+        // Eraser mode: 'stroke' or 'point'
+        eraserMode: 'stroke',
 
         // Classroom System state
         classId: null,
@@ -46,14 +49,21 @@
         isSaving: false,
         classes: [],
 
-        // Preset colors
+        // Preset board colors (for background)
+        boardPresetColors: [
+            '#ffffff', // Weiß (default)
+            '#1a472a', // Grün
+            '#1c1c1c'  // Schwarz
+        ],
+
+        // Preset pen colors
         presetColors: [
-            '#1a472a', // Dunkelgrün (default)
-            '#2c3e50', // Dunkelblau
-            '#1c1c1c', // Fast Schwarz
-            '#4a1e1e', // Dunkelbraun
-            '#2c4a3a', // Waldgrün
-            '#3d3d5c'  // Dunkel-Lila
+            '#000000', // Schwarz
+            '#ffffff', // Weiß
+            '#ff0000', // Rot
+            '#0000ff', // Blau
+            '#ffff00', // Gelb
+            '#00ff00'  // Grün
         ],
 
         /**
@@ -187,10 +197,19 @@
                 }
             }
 
-            // Preset Color Buttons HTML
+            // Preset Pen Color Buttons HTML
             var presetColorsHtml = '';
             this.presetColors.forEach(function(color) {
-                presetColorsHtml += '<button class="cbd-board-preset-color" data-color="' + color + '" style="background-color: ' + color + ';" title="' + color + '"></button>';
+                var borderColor = color === '#ffffff' ? '#ccc' : 'rgba(255, 255, 255, 0.5)';
+                presetColorsHtml += '<button class="cbd-board-preset-color" data-color="' + color + '" style="background-color: ' + color + '; border-color: ' + borderColor + ';" title="' + color + '"></button>';
+            });
+
+            // Board Background Preset Buttons (for canvas overlay)
+            var boardPresetHtml = '';
+            this.boardPresetColors.forEach(function(color) {
+                var label = color === '#ffffff' ? 'Weiß' : (color === '#1a472a' ? 'Grün' : 'Schwarz');
+                var borderColor = color === '#ffffff' ? '#999' : 'rgba(255, 255, 255, 0.8)';
+                boardPresetHtml += '<button class="cbd-board-bg-preset-btn" data-color="' + color + '" style="background-color: ' + color + '; border-color: ' + borderColor + ';" title="' + label + '">' + label + '</button>';
             });
 
             overlay.innerHTML =
@@ -215,22 +234,20 @@
                             '<button class="cbd-board-tool" data-tool="highlighter" title="Textmarkierer">' +
                                 '<span class="dashicons dashicons-marker"></span>' +
                             '</button>' +
-                            '<button class="cbd-board-tool" data-tool="eraser" title="Radierer">' +
+                            '<button class="cbd-board-tool" data-tool="eraser-stroke" title="Strich-Radierer">' +
                                 '<span class="dashicons dashicons-editor-removeformatting"></span>' +
+                            '</button>' +
+                            '<button class="cbd-board-tool" data-tool="eraser-point" title="Punkt-Radierer">' +
+                                '<span class="dashicons dashicons-dismiss"></span>' +
                             '</button>' +
                             '<span class="cbd-board-separator"></span>' +
                             // Colors
-                            '<input type="color" class="cbd-board-color" value="#ffffff" title="Stiftfarbe">' +
+                            '<input type="color" class="cbd-board-color" value="#000000" title="Stiftfarbe">' +
                             '<div class="cbd-board-preset-colors">' + presetColorsHtml + '</div>' +
                             '<span class="cbd-board-separator"></span>' +
                             // Line width
                             '<input type="range" class="cbd-board-width" min="1" max="20" value="3" title="Stiftdicke">' +
                             '<span class="cbd-board-width-display">3px</span>' +
-                            '<span class="cbd-board-separator"></span>' +
-                            // Background color picker
-                            '<label class="cbd-board-bg-label">Hintergrund:</label>' +
-                            '<input type="color" class="cbd-board-bg-color" value="' + this.boardColor + '" title="Hintergrundfarbe">' +
-                            '<div class="cbd-board-bg-preset-colors">' + presetColorsHtml + '</div>' +
                             '<span class="cbd-board-separator"></span>' +
                             // Grid toggle
                             '<button class="cbd-board-grid-toggle" title="Hexagon-Gitter ein/aus">' +
@@ -246,6 +263,10 @@
                             '<canvas class="cbd-board-canvas cbd-board-canvas-background"></canvas>' +
                             '<canvas class="cbd-board-canvas cbd-board-canvas-grid"></canvas>' +
                             '<canvas class="cbd-board-canvas cbd-board-canvas-drawing"></canvas>' +
+                            '<div class="cbd-board-color-picker-overlay">' +
+                                '<div class="cbd-board-color-picker-label">Tafelfarbe:</div>' +
+                                '<div class="cbd-board-bg-preset-btns">' + boardPresetHtml + '</div>' +
+                            '</div>' +
                         '</div>' +
                     '</div>' +
                 '</div>';
@@ -405,12 +426,6 @@
         setBoardColor: function(color) {
             this.boardColor = color;
             this.redrawBackground();
-
-            // Color input aktualisieren
-            var input = this.overlay.querySelector('.cbd-board-bg-color');
-            if (input) {
-                input.value = color;
-            }
         },
 
         /**
@@ -474,17 +489,9 @@
                 });
             });
 
-            // Background Color
-            var bgColorInput = this.overlay.querySelector('.cbd-board-bg-color');
-            if (bgColorInput) {
-                bgColorInput.addEventListener('input', function() {
-                    self.setBoardColor(this.value);
-                });
-            }
-
-            // Background Color Presets
-            var bgPresetButtons = this.overlay.querySelectorAll('.cbd-board-bg-preset-colors .cbd-board-preset-color');
-            bgPresetButtons.forEach(function(btn) {
+            // Board Background Color Preset Buttons (on canvas overlay)
+            var bgPresetBtns = this.overlay.querySelectorAll('.cbd-board-bg-preset-btn');
+            bgPresetBtns.forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var color = this.getAttribute('data-color');
                     self.setBoardColor(color);
@@ -608,8 +615,15 @@
         setTool: function(tool) {
             this.currentTool = tool;
 
+            // Set eraser mode
+            if (tool === 'eraser-stroke') {
+                this.eraserMode = 'stroke';
+            } else if (tool === 'eraser-point') {
+                this.eraserMode = 'point';
+            }
+
             if (this.drawingCanvas) {
-                if (tool === 'eraser') {
+                if (tool === 'eraser-stroke' || tool === 'eraser-point') {
                     this.drawingCanvas.classList.add('eraser-active');
                 } else {
                     this.drawingCanvas.classList.remove('eraser-active');
@@ -675,24 +689,35 @@
         // =============================================
 
         onPointerDown: function(e) {
-            this.isDrawing = true;
-
             var rect = this.drawingCanvas.getBoundingClientRect();
             this.lastX = e.clientX - rect.left;
             this.lastY = e.clientY - rect.top;
+
+            // Punkt-Radierer: Nur Click, kein Drag
+            if (this.currentTool === 'eraser-point') {
+                this.drawingCtx.beginPath();
+                this.drawingCtx.arc(this.lastX, this.lastY, this.lineWidth * 3, 0, Math.PI * 2);
+                this.drawingCtx.globalCompositeOperation = 'destination-out';
+                this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
+                this.drawingCtx.fill();
+                this.drawingCtx.globalCompositeOperation = 'source-over';
+                return; // Kein isDrawing für Punkt-Radierer
+            }
+
+            this.isDrawing = true;
 
             // Einzelnen Punkt zeichnen
             this.drawingCtx.beginPath();
             this.drawingCtx.arc(this.lastX, this.lastY, this.lineWidth / 2, 0, Math.PI * 2);
 
-            if (this.currentTool === 'eraser') {
-                // Radierer: Loescht nur auf Drawing Layer
+            if (this.currentTool === 'eraser-stroke') {
+                // Strich-Radierer: Loescht nur auf Drawing Layer
                 this.drawingCtx.globalCompositeOperation = 'destination-out';
                 this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
             } else if (this.currentTool === 'highlighter') {
-                // Textmarkierer: Semi-transparent
-                this.drawingCtx.globalCompositeOperation = 'source-over';
-                this.drawingCtx.fillStyle = this.hexToRgba(this.currentColor, 0.3);
+                // Textmarkierer: Mit 'lighten' bleibt es gleich hell beim Übermalen
+                this.drawingCtx.globalCompositeOperation = 'lighten';
+                this.drawingCtx.fillStyle = this.hexToRgba(this.currentColor, 0.4);
             } else {
                 // Normal pen
                 this.drawingCtx.globalCompositeOperation = 'source-over';
@@ -720,12 +745,12 @@
             this.drawingCtx.lineCap = 'round';
             this.drawingCtx.lineJoin = 'round';
 
-            if (this.currentTool === 'eraser') {
+            if (this.currentTool === 'eraser-stroke') {
                 this.drawingCtx.globalCompositeOperation = 'destination-out';
                 this.drawingCtx.strokeStyle = 'rgba(0,0,0,1)';
             } else if (this.currentTool === 'highlighter') {
-                this.drawingCtx.globalCompositeOperation = 'source-over';
-                this.drawingCtx.strokeStyle = this.hexToRgba(this.currentColor, 0.3);
+                this.drawingCtx.globalCompositeOperation = 'lighten';
+                this.drawingCtx.strokeStyle = this.hexToRgba(this.currentColor, 0.4);
             } else {
                 this.drawingCtx.globalCompositeOperation = 'source-over';
                 this.drawingCtx.strokeStyle = this.currentColor;

@@ -254,7 +254,7 @@
 .cbd-board-preset-color {
     width: 24px;
     height: 24px;
-    border: 2px solid rgba(255, 255, 255, 0.5);
+    border: 2px solid;
     border-radius: 6px;
     cursor: pointer;
     padding: 0;
@@ -263,7 +263,6 @@
 }
 
 .cbd-board-preset-color:hover {
-    border-color: rgba(255, 255, 255, 0.9);
     transform: scale(1.15);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
@@ -401,19 +400,102 @@
     z-index: 1;
 }
 
-.cbd-board-canvas-grid {
+.cbd-board-canvas-drawing {
     z-index: 2;
-    pointer-events: none;
+    cursor: crosshair;
 }
 
-.cbd-board-canvas-drawing {
+.cbd-board-canvas-grid {
     z-index: 3;
-    cursor: crosshair;
+    pointer-events: none;
 }
 
 /* Cursor fuer Radierer */
 .cbd-board-canvas-drawing.eraser-active {
     cursor: cell;
+}
+
+/* Board Color Picker Overlay (on canvas) */
+.cbd-board-color-picker-overlay {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    backdrop-filter: blur(8px);
+}
+
+.cbd-board-color-picker-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #333;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.cbd-board-bg-preset-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.cbd-board-bg-preset-btn {
+    padding: 8px 16px;
+    border: 2px solid;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    text-align: center;
+    min-width: 80px;
+}
+
+.cbd-board-bg-preset-btn[data-color="#ffffff"] {
+    color: #333;
+    background-color: #ffffff;
+    border-color: #999;
+}
+
+.cbd-board-bg-preset-btn[data-color="#ffffff"]:hover {
+    border-color: #666;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
+.cbd-board-bg-preset-btn[data-color="#1a472a"] {
+    color: #ffffff;
+    background-color: #1a472a;
+    border-color: rgba(255, 255, 255, 0.8);
+}
+
+.cbd-board-bg-preset-btn[data-color="#1a472a"]:hover {
+    border-color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transform: translateY(-2px);
+}
+
+.cbd-board-bg-preset-btn[data-color="#1c1c1c"] {
+    color: #ffffff;
+    background-color: #1c1c1c;
+    border-color: rgba(255, 255, 255, 0.8);
+}
+
+.cbd-board-bg-preset-btn[data-color="#1c1c1c"]:hover {
+    border-color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transform: translateY(-2px);
+}
+
+.cbd-board-bg-preset-btn:active {
+    transform: translateY(0);
 }
 
 /* =============================================
