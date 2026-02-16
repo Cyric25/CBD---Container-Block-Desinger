@@ -145,14 +145,30 @@
                             }
                         }
 
-                        // Add drawing overlay if exists
+                        // Add collapsible drawing section if exists
                         if (drawing.drawing_data) {
                             var $content = $container.find('.cbd-container-content').first();
-                            if ($content.length > 0 && $content.find('.cbd-drawing-overlay').length === 0) {
-                                var $overlay = $('<div class="cbd-drawing-overlay">');
+                            if ($content.length > 0 && $content.find('.cbd-drawing-section').length === 0) {
+                                // Create collapsible drawing section
+                                var $section = $('<div class="cbd-drawing-section">');
+                                var $toggle = $('<button class="cbd-drawing-toggle">📋 Tafelbild anzeigen</button>');
+                                var $overlay = $('<div class="cbd-drawing-overlay" style="display: none;">');
                                 $overlay.append('<img src="' + drawing.drawing_data + '" alt="Tafel-Zeichnung">');
-                                $content.prepend($overlay);
-                                console.log('CBD Classroom Page Filter: Added drawing overlay to', stableId);
+
+                                $section.append($toggle);
+                                $section.append($overlay);
+                                $content.append($section); // Append at bottom instead of prepend
+
+                                // Toggle functionality
+                                $toggle.on('click', function(e) {
+                                    e.preventDefault();
+                                    $overlay.slideToggle(300);
+                                    var isVisible = $overlay.is(':visible');
+                                    $toggle.text(isVisible ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen');
+                                    $toggle.toggleClass('cbd-drawing-toggle-active', isVisible);
+                                });
+
+                                console.log('CBD Classroom Page Filter: Added collapsible drawing to', stableId);
                             }
                         }
                     }

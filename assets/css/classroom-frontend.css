@@ -421,3 +421,64 @@
         align-items: flex-start;
     }
 }
+
+/* Collapsible Drawing Section (Classroom Page Filter) */
+.cbd-drawing-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 2px solid #e0e0e0;
+}
+
+.cbd-drawing-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.cbd-drawing-toggle:hover {
+    background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+    transform: translateY(-2px);
+}
+
+.cbd-drawing-toggle:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3);
+}
+
+.cbd-drawing-toggle.cbd-drawing-toggle-active {
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.cbd-drawing-toggle.cbd-drawing-toggle-active:hover {
+    background: linear-gradient(135deg, #f57c00 0%, #e65100 100%);
+    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+}
+
+.cbd-drawing-overlay {
+    margin-top: 16px;
+    padding: 20px;
+    background: #f8f9fa;
+    border: 2px solid #4caf50;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.cbd-drawing-overlay img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
