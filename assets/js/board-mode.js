@@ -384,12 +384,13 @@
         },
 
         /**
-         * Ein einzelnes Hexagon zeichnen
+         * Ein einzelnes Hexagon zeichnen (flat-top für Chemie)
          */
         drawHexagon: function(centerX, centerY, radius) {
             this.gridCtx.beginPath();
             for (var i = 0; i < 6; i++) {
-                var angle = (Math.PI / 3) * i;
+                // +Math.PI/6 dreht das Hexagon um 30° für flat-top Orientierung
+                var angle = (Math.PI / 3) * i + Math.PI / 6;
                 var x = centerX + radius * Math.cos(angle);
                 var y = centerY + radius * Math.sin(angle);
                 if (i === 0) {
