@@ -363,8 +363,8 @@
             var hexVertDist = hexHeight * 3 / 4;
             var hexHorizDist = hexWidth;
 
-            // Grid-Style
-            this.gridCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; // Sehr leicht
+            // Grid-Style (hellgrau, auf allen Hintergründen sichtbar)
+            this.gridCtx.strokeStyle = 'rgba(150, 150, 150, 0.3)';
             this.gridCtx.lineWidth = 1;
 
             // Hexagons zeichnen
