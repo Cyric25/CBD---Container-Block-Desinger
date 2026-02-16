@@ -1,11 +1,10 @@
 /**
- * Container Block Designer - Board Mode (Tafel-Modus)
- * Fullscreen-Overlay mit Canvas-Zeichenflaeche
- * Unterstuetzt localStorage-Persistenz und serverseitige Speicherung (Klassen-System)
+ * Container Block Designer - Board Mode (Tafel-Modus) v3.0
+ * Multi-Layer Canvas System with Background Picker, Hexagon Grid, and Advanced Tools
  *
  * @package ContainerBlockDesigner
  * @since 2.9.1
- * @updated 3.0.0 - Klassen-System Integration
+ * @updated 3.0.0 - Complete rewrite with multi-layer canvas system
  */
 
 (function() {
@@ -15,8 +14,15 @@
 
         // State
         overlay: null,
-        canvas: null,
-        ctx: null,
+
+        // Multi-layer canvases
+        backgroundCanvas: null,
+        backgroundCtx: null,
+        gridCanvas: null,
+        gridCtx: null,
+        drawingCanvas: null,
+        drawingCtx: null,
+
         isDrawing: false,
         currentTool: 'pen',
         currentColor: '#ffffff',
@@ -28,6 +34,9 @@
         resizeObserver: null,
         boundHandlers: {},
 
+        // Grid state
+        showGrid: false,
+
         // Classroom System state
         classId: null,
         pageId: null,
@@ -37,17 +46,18 @@
         isSaving: false,
         classes: [],
 
+        // Preset colors
+        presetColors: [
+            '#1a472a', // Dunkelgrün (default)
+            '#2c3e50', // Dunkelblau
+            '#1c1c1c', // Fast Schwarz
+            '#4a1e1e', // Dunkelbraun
+            '#2c4a3a', // Waldgrün
+            '#3d3d5c'  // Dunkel-Lila
+        ],
+
         /**
          * Tafel-Modus oeffnen
-         * @param {string} containerId - Eindeutige Block-ID (runtime)
-         * @param {string} contentHtml - HTML-Inhalt des Blocks
-         * @param {string} boardColor - Hintergrundfarbe der Zeichenflaeche
-         * @param {Object} options - Classroom-Optionen (optional)
-         * @param {string} options.stableContainerId - Stabiler Container-Identifier
-         * @param {number} options.pageId - WordPress Page ID
-         * @param {Array}  options.classes - Klassen des Lehrers [{id, name}]
-         * @param {string} options.ajaxUrl - admin-ajax.php URL
-         * @param {string} options.nonce - AJAX Nonce
          */
         open: function(containerId, contentHtml, boardColor, options) {
             // Verhindere doppeltes Oeffnen
@@ -81,7 +91,7 @@
         },
 
         /**
-         * Internes Oeffnen des Overlays (nach optionaler Klassenauswahl)
+         * Internes Oeffnen des Overlays
          */
         _openOverlay: function(contentHtml) {
             // Overlay-DOM erstellen
@@ -93,10 +103,9 @@
             // Scroll sperren
             document.body.style.overflow = 'hidden';
 
-            // Canvas initialisieren
-            this.canvas = this.overlay.querySelector('.cbd-board-canvas');
-            this.ctx = this.canvas.getContext('2d');
-            this.resizeCanvas();
+            // Canvas-Elemente initialisieren
+            this.initCanvases();
+            this.resizeAllCanvases();
 
             // Zeichnung laden
             this.loadDrawing();
@@ -146,26 +155,30 @@
 
             // State zuruecksetzen
             this.overlay = null;
-            this.canvas = null;
-            this.ctx = null;
+            this.backgroundCanvas = null;
+            this.backgroundCtx = null;
+            this.gridCanvas = null;
+            this.gridCtx = null;
+            this.drawingCanvas = null;
+            this.drawingCtx = null;
             this.isDrawing = false;
             this.containerId = null;
             this.classId = null;
             this.pageId = null;
             this.stableContainerId = null;
             this.isSaving = false;
+            this.showGrid = false;
         },
 
         /**
-         * Overlay-DOM erstellen
-         * @param {string} contentHtml - HTML-Inhalt fuer die linke Seite
+         * Overlay-DOM erstellen mit Multi-Layer-Canvas
          */
         createOverlayDOM: function(contentHtml) {
             var overlay = document.createElement('div');
             overlay.className = 'cbd-board-overlay';
             overlay.id = 'cbd-board-overlay';
 
-            // Header-Titel: Klassenname anzeigen wenn Klasse gewaehlt
+            // Header-Titel
             var titleExtra = '';
             if (this.classId) {
                 var cls = this.classes.find(function(c) { return c.id == this.classId; }.bind(this));
@@ -173,6 +186,12 @@
                     titleExtra = ' <span class="cbd-board-class-badge">' + this._escHtml(cls.name) + '</span>';
                 }
             }
+
+            // Preset Color Buttons HTML
+            var presetColorsHtml = '';
+            this.presetColors.forEach(function(color) {
+                presetColorsHtml += '<button class="cbd-board-preset-color" data-color="' + color + '" style="background-color: ' + color + ';" title="' + color + '"></button>';
+            });
 
             overlay.innerHTML =
                 '<div class="cbd-board-header">' +
@@ -189,26 +208,49 @@
                     '<div class="cbd-board-content"></div>' +
                     '<div class="cbd-board-canvas-area">' +
                         '<div class="cbd-board-toolbar">' +
+                            // Tools
                             '<button class="cbd-board-tool active" data-tool="pen" title="Stift">' +
                                 '<span class="dashicons dashicons-edit"></span>' +
+                            '</button>' +
+                            '<button class="cbd-board-tool" data-tool="highlighter" title="Textmarkierer">' +
+                                '<span class="dashicons dashicons-marker"></span>' +
                             '</button>' +
                             '<button class="cbd-board-tool" data-tool="eraser" title="Radierer">' +
                                 '<span class="dashicons dashicons-editor-removeformatting"></span>' +
                             '</button>' +
                             '<span class="cbd-board-separator"></span>' +
+                            // Colors
                             '<input type="color" class="cbd-board-color" value="#ffffff" title="Stiftfarbe">' +
+                            '<div class="cbd-board-preset-colors">' + presetColorsHtml + '</div>' +
+                            '<span class="cbd-board-separator"></span>' +
+                            // Line width
                             '<input type="range" class="cbd-board-width" min="1" max="20" value="3" title="Stiftdicke">' +
                             '<span class="cbd-board-width-display">3px</span>' +
                             '<span class="cbd-board-separator"></span>' +
-                            '<button class="cbd-board-clear" title="Alles l\u00F6schen">' +
+                            // Background color picker
+                            '<label class="cbd-board-bg-label">Hintergrund:</label>' +
+                            '<input type="color" class="cbd-board-bg-color" value="' + this.boardColor + '" title="Hintergrundfarbe">' +
+                            '<div class="cbd-board-bg-preset-colors">' + presetColorsHtml + '</div>' +
+                            '<span class="cbd-board-separator"></span>' +
+                            // Grid toggle
+                            '<button class="cbd-board-grid-toggle" title="Hexagon-Gitter ein/aus">' +
+                                '<span class="dashicons dashicons-grid-view"></span>' +
+                            '</button>' +
+                            '<span class="cbd-board-separator"></span>' +
+                            // Clear button
+                            '<button class="cbd-board-clear" title="Alles löschen">' +
                                 '<span class="dashicons dashicons-trash"></span>' +
                             '</button>' +
                         '</div>' +
-                        '<canvas class="cbd-board-canvas"></canvas>' +
+                        '<div class="cbd-board-canvas-container">' +
+                            '<canvas class="cbd-board-canvas cbd-board-canvas-background"></canvas>' +
+                            '<canvas class="cbd-board-canvas cbd-board-canvas-grid"></canvas>' +
+                            '<canvas class="cbd-board-canvas cbd-board-canvas-drawing"></canvas>' +
+                        '</div>' +
                     '</div>' +
                 '</div>';
 
-            // Block-Inhalt einfuegen (sicher, da es kopierter HTML-Inhalt aus dem eigenen Block ist)
+            // Block-Inhalt einfuegen
             var contentArea = overlay.querySelector('.cbd-board-content');
             contentArea.innerHTML = contentHtml;
 
@@ -216,40 +258,158 @@
         },
 
         /**
-         * Canvas-Groesse an Container anpassen
+         * Canvas-Elemente initialisieren
          */
-        resizeCanvas: function() {
-            if (!this.canvas) return;
+        initCanvases: function() {
+            var canvases = this.overlay.querySelectorAll('.cbd-board-canvas');
+            this.backgroundCanvas = canvases[0];
+            this.gridCanvas = canvases[1];
+            this.drawingCanvas = canvases[2];
 
-            var parent = this.canvas.parentElement;
-            var toolbar = parent.querySelector('.cbd-board-toolbar');
-            var toolbarHeight = toolbar ? toolbar.offsetHeight : 0;
+            this.backgroundCtx = this.backgroundCanvas.getContext('2d');
+            this.gridCtx = this.gridCanvas.getContext('2d');
+            this.drawingCtx = this.drawingCanvas.getContext('2d');
+        },
 
-            // Canvas-Groesse = Parent minus Toolbar
-            var width = parent.clientWidth;
-            var height = parent.clientHeight - toolbarHeight;
+        /**
+         * Alle Canvas-Groessen anpassen
+         */
+        resizeAllCanvases: function() {
+            if (!this.backgroundCanvas) return;
 
-            // Bestehende Zeichnung sichern
+            var container = this.backgroundCanvas.parentElement;
+            var width = container.clientWidth;
+            var height = container.clientHeight;
+
+            // Zeichnung vom Drawing Canvas sichern
             var imageData = null;
-            if (this.canvas.width > 0 && this.canvas.height > 0) {
+            if (this.drawingCanvas.width > 0 && this.drawingCanvas.height > 0) {
                 try {
-                    imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                    imageData = this.drawingCtx.getImageData(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
                 } catch (e) {
                     // Canvas war leer
                 }
             }
 
-            // Groesse setzen
-            this.canvas.width = width;
-            this.canvas.height = height;
+            // Alle Canvas-Groessen setzen
+            [this.backgroundCanvas, this.gridCanvas, this.drawingCanvas].forEach(function(canvas) {
+                canvas.width = width;
+                canvas.height = height;
+            });
 
-            // Hintergrundfarbe
-            this.ctx.fillStyle = this.boardColor;
-            this.ctx.fillRect(0, 0, width, height);
+            // Background neu zeichnen
+            this.redrawBackground();
+
+            // Grid neu zeichnen (falls aktiv)
+            if (this.showGrid) {
+                this.redrawGrid();
+            }
 
             // Zeichnung wiederherstellen
             if (imageData) {
-                this.ctx.putImageData(imageData, 0, 0);
+                this.drawingCtx.putImageData(imageData, 0, 0);
+            }
+        },
+
+        /**
+         * Hintergrund neu zeichnen
+         */
+        redrawBackground: function() {
+            if (!this.backgroundCtx || !this.backgroundCanvas) return;
+
+            this.backgroundCtx.fillStyle = this.boardColor;
+            this.backgroundCtx.fillRect(0, 0, this.backgroundCanvas.width, this.backgroundCanvas.height);
+        },
+
+        /**
+         * Hexagon-Gitter zeichnen
+         */
+        redrawGrid: function() {
+            if (!this.gridCtx || !this.gridCanvas) return;
+
+            // Grid canvas leeren
+            this.gridCtx.clearRect(0, 0, this.gridCanvas.width, this.gridCanvas.height);
+
+            if (!this.showGrid) return;
+
+            var width = this.gridCanvas.width;
+            var height = this.gridCanvas.height;
+
+            // Hexagon-Parameter
+            var hexSize = 30; // Radius des Hexagons
+            var hexHeight = hexSize * 2;
+            var hexWidth = Math.sqrt(3) * hexSize;
+            var hexVertDist = hexHeight * 3 / 4;
+            var hexHorizDist = hexWidth;
+
+            // Grid-Style
+            this.gridCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; // Sehr leicht
+            this.gridCtx.lineWidth = 1;
+
+            // Hexagons zeichnen
+            for (var row = -1; row < Math.ceil(height / hexVertDist) + 1; row++) {
+                for (var col = -1; col < Math.ceil(width / hexHorizDist) + 1; col++) {
+                    var x = col * hexHorizDist;
+                    var y = row * hexVertDist;
+
+                    // Jede zweite Reihe versetzt
+                    if (row % 2 === 1) {
+                        x += hexHorizDist / 2;
+                    }
+
+                    this.drawHexagon(x, y, hexSize);
+                }
+            }
+        },
+
+        /**
+         * Ein einzelnes Hexagon zeichnen
+         */
+        drawHexagon: function(centerX, centerY, radius) {
+            this.gridCtx.beginPath();
+            for (var i = 0; i < 6; i++) {
+                var angle = (Math.PI / 3) * i;
+                var x = centerX + radius * Math.cos(angle);
+                var y = centerY + radius * Math.sin(angle);
+                if (i === 0) {
+                    this.gridCtx.moveTo(x, y);
+                } else {
+                    this.gridCtx.lineTo(x, y);
+                }
+            }
+            this.gridCtx.closePath();
+            this.gridCtx.stroke();
+        },
+
+        /**
+         * Grid ein/ausschalten
+         */
+        toggleGrid: function() {
+            this.showGrid = !this.showGrid;
+            this.redrawGrid();
+
+            // Button-Status aktualisieren
+            var btn = this.overlay.querySelector('.cbd-board-grid-toggle');
+            if (btn) {
+                if (this.showGrid) {
+                    btn.classList.add('active');
+                } else {
+                    btn.classList.remove('active');
+                }
+            }
+        },
+
+        /**
+         * Hintergrundfarbe aendern
+         */
+        setBoardColor: function(color) {
+            this.boardColor = color;
+            this.redrawBackground();
+
+            // Color input aktualisieren
+            var input = this.overlay.querySelector('.cbd-board-bg-color');
+            if (input) {
+                input.value = color;
             }
         },
 
@@ -259,7 +419,7 @@
         bindEvents: function() {
             var self = this;
 
-            // Gebundene Handler speichern fuer spaeteres Entfernen
+            // Gebundene Handler speichern
             this.boundHandlers = {
                 pointerDown: function(e) { self.onPointerDown(e); },
                 pointerMove: function(e) { self.onPointerMove(e); },
@@ -267,13 +427,13 @@
                 keyDown: function(e) { self.onKeyDown(e); }
             };
 
-            // Canvas Events
-            this.canvas.addEventListener('pointerdown', this.boundHandlers.pointerDown);
-            this.canvas.addEventListener('pointermove', this.boundHandlers.pointerMove);
-            this.canvas.addEventListener('pointerup', this.boundHandlers.pointerUp);
-            this.canvas.addEventListener('pointerleave', this.boundHandlers.pointerUp);
+            // Drawing Canvas Events (nur auf dem obersten Layer)
+            this.drawingCanvas.addEventListener('pointerdown', this.boundHandlers.pointerDown);
+            this.drawingCanvas.addEventListener('pointermove', this.boundHandlers.pointerMove);
+            this.drawingCanvas.addEventListener('pointerup', this.boundHandlers.pointerUp);
+            this.drawingCanvas.addEventListener('pointerleave', this.boundHandlers.pointerUp);
 
-            // ESC-Taste zum Schliessen
+            // ESC-Taste
             document.addEventListener('keydown', this.boundHandlers.keyDown);
 
             // Close-Button
@@ -291,13 +451,12 @@
                     var tool = this.getAttribute('data-tool');
                     self.setTool(tool);
 
-                    // Active-Klasse umschalten
                     toolButtons.forEach(function(b) { b.classList.remove('active'); });
                     this.classList.add('active');
                 });
             });
 
-            // Farbwaehler
+            // Pen Color
             var colorInput = this.overlay.querySelector('.cbd-board-color');
             if (colorInput) {
                 colorInput.addEventListener('input', function() {
@@ -305,7 +464,34 @@
                 });
             }
 
-            // Stiftdicke
+            // Pen Color Presets
+            var presetButtons = this.overlay.querySelectorAll('.cbd-board-preset-colors .cbd-board-preset-color');
+            presetButtons.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var color = this.getAttribute('data-color');
+                    self.setColor(color);
+                    if (colorInput) colorInput.value = color;
+                });
+            });
+
+            // Background Color
+            var bgColorInput = this.overlay.querySelector('.cbd-board-bg-color');
+            if (bgColorInput) {
+                bgColorInput.addEventListener('input', function() {
+                    self.setBoardColor(this.value);
+                });
+            }
+
+            // Background Color Presets
+            var bgPresetButtons = this.overlay.querySelectorAll('.cbd-board-bg-preset-colors .cbd-board-preset-color');
+            bgPresetButtons.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var color = this.getAttribute('data-color');
+                    self.setBoardColor(color);
+                });
+            });
+
+            // Line Width
             var widthInput = this.overlay.querySelector('.cbd-board-width');
             var widthDisplay = this.overlay.querySelector('.cbd-board-width-display');
             if (widthInput) {
@@ -318,7 +504,15 @@
                 });
             }
 
-            // Alles loeschen
+            // Grid Toggle
+            var gridToggle = this.overlay.querySelector('.cbd-board-grid-toggle');
+            if (gridToggle) {
+                gridToggle.addEventListener('click', function() {
+                    self.toggleGrid();
+                });
+            }
+
+            // Clear Button
             var clearBtn = this.overlay.querySelector('.cbd-board-clear');
             if (clearBtn) {
                 clearBtn.addEventListener('click', function() {
@@ -326,12 +520,12 @@
                 });
             }
 
-            // ResizeObserver fuer Canvas-Groesse
+            // ResizeObserver
             if (typeof ResizeObserver !== 'undefined') {
                 this.resizeObserver = new ResizeObserver(function() {
-                    self.resizeCanvas();
+                    self.resizeAllCanvases();
                 });
-                this.resizeObserver.observe(this.canvas.parentElement);
+                this.resizeObserver.observe(this.backgroundCanvas.parentElement);
             }
         },
 
@@ -339,11 +533,11 @@
          * Event-Handler entfernen
          */
         unbindEvents: function() {
-            if (this.canvas && this.boundHandlers.pointerDown) {
-                this.canvas.removeEventListener('pointerdown', this.boundHandlers.pointerDown);
-                this.canvas.removeEventListener('pointermove', this.boundHandlers.pointerMove);
-                this.canvas.removeEventListener('pointerup', this.boundHandlers.pointerUp);
-                this.canvas.removeEventListener('pointerleave', this.boundHandlers.pointerUp);
+            if (this.drawingCanvas && this.boundHandlers.pointerDown) {
+                this.drawingCanvas.removeEventListener('pointerdown', this.boundHandlers.pointerDown);
+                this.drawingCanvas.removeEventListener('pointermove', this.boundHandlers.pointerMove);
+                this.drawingCanvas.removeEventListener('pointerup', this.boundHandlers.pointerUp);
+                this.drawingCanvas.removeEventListener('pointerleave', this.boundHandlers.pointerUp);
             }
 
             if (this.boundHandlers.keyDown) {
@@ -357,10 +551,6 @@
         // Klassen-Selektor
         // =============================================
 
-        /**
-         * Klassen-Auswahl-Dialog anzeigen
-         * @param {Function} callback - Wird mit der ausgewaehlten classId aufgerufen (null = persoenlich)
-         */
         showClassSelector: function(callback) {
             var self = this;
 
@@ -368,7 +558,7 @@
             selectorOverlay.className = 'cbd-board-confirm-overlay';
 
             var optionsHtml = '<button class="cbd-class-option" data-class-id="0">' +
-                '<span class="dashicons dashicons-admin-users"></span> Pers\u00F6nlich (lokal)' +
+                '<span class="dashicons dashicons-admin-users"></span> Persönlich (lokal)' +
                 '</button>';
 
             this.classes.forEach(function(cls) {
@@ -379,8 +569,8 @@
 
             selectorOverlay.innerHTML =
                 '<div class="cbd-board-confirm-dialog cbd-class-selector-dialog">' +
-                    '<h4>Klasse w\u00E4hlen</h4>' +
-                    '<p>W\u00E4hlen Sie, wo die Zeichnung gespeichert werden soll:</p>' +
+                    '<h4>Klasse wählen</h4>' +
+                    '<p>Wählen Sie, wo die Zeichnung gespeichert werden soll:</p>' +
                     '<div class="cbd-class-options">' + optionsHtml + '</div>' +
                     '<div class="cbd-board-confirm-actions">' +
                         '<button class="cbd-board-confirm-cancel">Abbrechen</button>' +
@@ -415,55 +605,38 @@
         // Zeichenwerkzeuge
         // =============================================
 
-        /**
-         * Werkzeug wechseln
-         * @param {string} tool - 'pen' oder 'eraser'
-         */
         setTool: function(tool) {
             this.currentTool = tool;
 
-            if (this.canvas) {
+            if (this.drawingCanvas) {
                 if (tool === 'eraser') {
-                    this.canvas.classList.add('eraser-active');
+                    this.drawingCanvas.classList.add('eraser-active');
                 } else {
-                    this.canvas.classList.remove('eraser-active');
+                    this.drawingCanvas.classList.remove('eraser-active');
                 }
             }
         },
 
-        /**
-         * Stiftfarbe setzen
-         * @param {string} color - Hex-Farbwert
-         */
         setColor: function(color) {
             this.currentColor = color;
         },
 
-        /**
-         * Stiftdicke setzen
-         * @param {number} width - Breite in Pixeln
-         */
         setLineWidth: function(width) {
             this.lineWidth = width;
         },
 
         /**
-         * Canvas loeschen (mit Hintergrundfarbe fuellen)
+         * Drawing Canvas loeschen
          */
         clearCanvas: function() {
-            if (!this.ctx || !this.canvas) return;
+            if (!this.drawingCtx || !this.drawingCanvas) return;
 
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            this.ctx.fillStyle = this.boardColor;
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
 
-            // Auch aus localStorage entfernen
+            // Aus localStorage entfernen
             this.removeFromCache();
         },
 
-        /**
-         * Bestaetigungsdialog fuer "Alles loeschen"
-         */
         showClearConfirm: function() {
             var self = this;
 
@@ -471,28 +644,25 @@
             confirmOverlay.className = 'cbd-board-confirm-overlay';
             confirmOverlay.innerHTML =
                 '<div class="cbd-board-confirm-dialog">' +
-                    '<h4>Zeichnung l\u00F6schen?</h4>' +
-                    '<p>Die gesamte Zeichnung wird unwiderruflich gel\u00F6scht.</p>' +
+                    '<h4>Zeichnung löschen?</h4>' +
+                    '<p>Die gesamte Zeichnung wird unwiderruflich gelöscht.</p>' +
                     '<div class="cbd-board-confirm-actions">' +
                         '<button class="cbd-board-confirm-cancel">Abbrechen</button>' +
-                        '<button class="cbd-board-confirm-delete">L\u00F6schen</button>' +
+                        '<button class="cbd-board-confirm-delete">Löschen</button>' +
                     '</div>' +
                 '</div>';
 
             document.body.appendChild(confirmOverlay);
 
-            // Cancel
             confirmOverlay.querySelector('.cbd-board-confirm-cancel').addEventListener('click', function() {
                 document.body.removeChild(confirmOverlay);
             });
 
-            // Delete
             confirmOverlay.querySelector('.cbd-board-confirm-delete').addEventListener('click', function() {
                 self.clearCanvas();
                 document.body.removeChild(confirmOverlay);
             });
 
-            // Click auf Backdrop = Cancel
             confirmOverlay.addEventListener('click', function(e) {
                 if (e.target === confirmOverlay) {
                     document.body.removeChild(confirmOverlay);
@@ -504,79 +674,76 @@
         // Canvas Event-Handler
         // =============================================
 
-        /**
-         * Zeichnen starten
-         */
         onPointerDown: function(e) {
             this.isDrawing = true;
 
-            var rect = this.canvas.getBoundingClientRect();
+            var rect = this.drawingCanvas.getBoundingClientRect();
             this.lastX = e.clientX - rect.left;
             this.lastY = e.clientY - rect.top;
 
             // Einzelnen Punkt zeichnen
-            this.ctx.beginPath();
-            this.ctx.arc(this.lastX, this.lastY, this.lineWidth / 2, 0, Math.PI * 2);
+            this.drawingCtx.beginPath();
+            this.drawingCtx.arc(this.lastX, this.lastY, this.lineWidth / 2, 0, Math.PI * 2);
 
             if (this.currentTool === 'eraser') {
-                this.ctx.globalCompositeOperation = 'destination-out';
-                this.ctx.fillStyle = 'rgba(0,0,0,1)';
+                // Radierer: Loescht nur auf Drawing Layer
+                this.drawingCtx.globalCompositeOperation = 'destination-out';
+                this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
+            } else if (this.currentTool === 'highlighter') {
+                // Textmarkierer: Semi-transparent
+                this.drawingCtx.globalCompositeOperation = 'source-over';
+                this.drawingCtx.fillStyle = this.hexToRgba(this.currentColor, 0.3);
             } else {
-                this.ctx.globalCompositeOperation = 'source-over';
-                this.ctx.fillStyle = this.currentColor;
+                // Normal pen
+                this.drawingCtx.globalCompositeOperation = 'source-over';
+                this.drawingCtx.fillStyle = this.currentColor;
             }
 
-            this.ctx.fill();
+            this.drawingCtx.fill();
 
-            // Pointer capture fuer smooth drawing
-            this.canvas.setPointerCapture(e.pointerId);
+            // Pointer capture
+            this.drawingCanvas.setPointerCapture(e.pointerId);
         },
 
-        /**
-         * Zeichnen (waehrend Maus/Finger gedrueckt)
-         */
         onPointerMove: function(e) {
             if (!this.isDrawing) return;
 
-            var rect = this.canvas.getBoundingClientRect();
+            var rect = this.drawingCanvas.getBoundingClientRect();
             var x = e.clientX - rect.left;
             var y = e.clientY - rect.top;
 
-            this.ctx.beginPath();
-            this.ctx.moveTo(this.lastX, this.lastY);
-            this.ctx.lineTo(x, y);
+            this.drawingCtx.beginPath();
+            this.drawingCtx.moveTo(this.lastX, this.lastY);
+            this.drawingCtx.lineTo(x, y);
 
-            this.ctx.lineWidth = this.lineWidth;
-            this.ctx.lineCap = 'round';
-            this.ctx.lineJoin = 'round';
+            this.drawingCtx.lineWidth = this.lineWidth;
+            this.drawingCtx.lineCap = 'round';
+            this.drawingCtx.lineJoin = 'round';
 
             if (this.currentTool === 'eraser') {
-                this.ctx.globalCompositeOperation = 'destination-out';
-                this.ctx.strokeStyle = 'rgba(0,0,0,1)';
+                this.drawingCtx.globalCompositeOperation = 'destination-out';
+                this.drawingCtx.strokeStyle = 'rgba(0,0,0,1)';
+            } else if (this.currentTool === 'highlighter') {
+                this.drawingCtx.globalCompositeOperation = 'source-over';
+                this.drawingCtx.strokeStyle = this.hexToRgba(this.currentColor, 0.3);
             } else {
-                this.ctx.globalCompositeOperation = 'source-over';
-                this.ctx.strokeStyle = this.currentColor;
+                this.drawingCtx.globalCompositeOperation = 'source-over';
+                this.drawingCtx.strokeStyle = this.currentColor;
             }
 
-            this.ctx.stroke();
+            this.drawingCtx.stroke();
 
             this.lastX = x;
             this.lastY = y;
         },
 
-        /**
-         * Zeichnen beenden
-         */
         onPointerUp: function(e) {
             if (this.isDrawing) {
                 this.isDrawing = false;
-                this.ctx.globalCompositeOperation = 'source-over';
+                this.drawingCtx.globalCompositeOperation = 'source-over';
             }
         },
 
-        /**
-         * Tastendruck-Handler
-         */
         onKeyDown: function(e) {
             if (e.key === 'Escape') {
                 this.close();
@@ -587,9 +754,6 @@
         // Zeichnungs-Persistenz (Dispatcher)
         // =============================================
 
-        /**
-         * Zeichnung laden (Server oder Cache)
-         */
         loadDrawing: function() {
             if (this.classId && this.ajaxUrl) {
                 this.loadFromServer();
@@ -598,9 +762,6 @@
             }
         },
 
-        /**
-         * Zeichnung speichern (Server oder Cache)
-         */
         saveDrawing: function() {
             if (this.classId && this.ajaxUrl) {
                 this.saveToServer();
@@ -610,12 +771,9 @@
         },
 
         // =============================================
-        // Server-Persistenz (Klassen-System)
+        // Server-Persistenz
         // =============================================
 
-        /**
-         * Zeichnung vom Server laden
-         */
         loadFromServer: function() {
             if (!this.classId || !this.ajaxUrl || !this.stableContainerId) {
                 this.loadFromCache();
@@ -641,31 +799,25 @@
                 if (data.success && data.data.drawing_data) {
                     var img = new Image();
                     img.onload = function() {
-                        self.ctx.fillStyle = self.boardColor;
-                        self.ctx.fillRect(0, 0, self.canvas.width, self.canvas.height);
-                        self.ctx.drawImage(img, 0, 0);
+                        // Zeichnung auf Drawing Canvas laden
+                        self.drawingCtx.clearRect(0, 0, self.drawingCanvas.width, self.drawingCanvas.height);
+                        self.drawingCtx.drawImage(img, 0, 0);
                         self._setSaveStatus('Geladen');
                         setTimeout(function() { self._setSaveStatus(''); }, 2000);
                     };
                     img.src = data.data.drawing_data;
                 } else {
-                    // Keine Zeichnung auf Server - leere Tafel
-                    self.ctx.fillStyle = self.boardColor;
-                    self.ctx.fillRect(0, 0, self.canvas.width, self.canvas.height);
+                    // Keine Zeichnung auf Server
                     self._setSaveStatus('');
                 }
             })
             .catch(function(err) {
                 console.warn('[CBD Board Mode] Server-Laden fehlgeschlagen:', err);
                 self._setSaveStatus('Fehler');
-                // Fallback auf Cache
                 self.loadFromCache();
             });
         },
 
-        /**
-         * Zeichnung auf Server speichern
-         */
         saveToServer: function() {
             if (this.isSaving || !this.classId || !this.ajaxUrl || !this.stableContainerId) {
                 this.saveToCache();
@@ -676,7 +828,8 @@
             this._setSaveStatus('Speichert...');
 
             var self = this;
-            var dataUrl = this.canvas.toDataURL('image/png');
+            // Nur Drawing Canvas speichern
+            var dataUrl = this.drawingCanvas.toDataURL('image/png');
 
             var formData = new FormData();
             formData.append('action', 'cbd_save_drawing');
@@ -698,7 +851,6 @@
                 } else {
                     console.warn('[CBD Board Mode] Server-Speichern fehlgeschlagen:', data);
                     self._setSaveStatus('Fehler');
-                    // Fallback: auch lokal speichern
                     self.saveToCache();
                 }
             })
@@ -710,9 +862,6 @@
             });
         },
 
-        /**
-         * Speicher-Status im Header anzeigen
-         */
         _setSaveStatus: function(text) {
             var el = document.getElementById('cbd-board-save-status');
             if (el) {
@@ -721,63 +870,45 @@
         },
 
         // =============================================
-        // localStorage Persistenz (Fallback / Persoenlich)
+        // localStorage Persistenz
         // =============================================
 
-        /**
-         * Zeichnung in localStorage speichern
-         */
         saveToCache: function() {
-            if (!this.canvas || !this.containerId) return;
+            if (!this.drawingCanvas || !this.containerId) return;
 
             try {
                 var key = 'cbd-board-' + this.containerId;
-                var dataUrl = this.canvas.toDataURL('image/png');
+                var dataUrl = this.drawingCanvas.toDataURL('image/png');
                 localStorage.setItem(key, dataUrl);
             } catch (e) {
-                // localStorage voll oder nicht verfuegbar
                 console.warn('[CBD Board Mode] Zeichnung konnte nicht gespeichert werden:', e.message);
             }
         },
 
-        /**
-         * Zeichnung aus localStorage laden
-         */
         loadFromCache: function() {
-            if (!this.canvas || !this.ctx || !this.containerId) return;
+            if (!this.drawingCanvas || !this.drawingCtx || !this.containerId) return;
 
             try {
                 var key = 'cbd-board-' + this.containerId;
                 var dataUrl = localStorage.getItem(key);
 
                 if (!dataUrl) {
-                    // Kein gespeicherter Stand - Hintergrundfarbe setzen
-                    this.ctx.fillStyle = this.boardColor;
-                    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                    // Kein gespeicherter Stand
                     return;
                 }
 
                 var self = this;
                 var img = new Image();
                 img.onload = function() {
-                    // Hintergrund fuellen
-                    self.ctx.fillStyle = self.boardColor;
-                    self.ctx.fillRect(0, 0, self.canvas.width, self.canvas.height);
-                    // Gespeicherte Zeichnung drueber legen
-                    self.ctx.drawImage(img, 0, 0);
+                    self.drawingCtx.clearRect(0, 0, self.drawingCanvas.width, self.drawingCanvas.height);
+                    self.drawingCtx.drawImage(img, 0, 0);
                 };
                 img.src = dataUrl;
             } catch (e) {
-                // Fehler beim Laden
                 console.warn('[CBD Board Mode] Zeichnung konnte nicht geladen werden:', e.message);
-                this.ctx.fillStyle = this.boardColor;
-                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
             }
         },
 
-        /**
-         * Zeichnung aus localStorage entfernen
-         */
         removeFromCache: function() {
             if (!this.containerId) return;
 
@@ -793,14 +924,25 @@
         // Hilfsfunktionen
         // =============================================
 
-        /**
-         * HTML escapen
-         */
         _escHtml: function(str) {
             if (!str) return '';
             var div = document.createElement('div');
             div.appendChild(document.createTextNode(str));
             return div.innerHTML;
+        },
+
+        /**
+         * Hex zu RGBA konvertieren
+         */
+        hexToRgba: function(hex, alpha) {
+            var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            if (result) {
+                var r = parseInt(result[1], 16);
+                var g = parseInt(result[2], 16);
+                var b = parseInt(result[3], 16);
+                return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + alpha + ')';
+            }
+            return hex;
         }
     };
 

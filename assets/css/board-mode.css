@@ -243,6 +243,94 @@
     border-color: #999;
 }
 
+/* Preset Color Buttons */
+.cbd-board-preset-colors,
+.cbd-board-bg-preset-colors {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.cbd-board-preset-color {
+    width: 24px;
+    height: 24px;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 0;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.cbd-board-preset-color:hover {
+    border-color: rgba(255, 255, 255, 0.9);
+    transform: scale(1.15);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.cbd-board-preset-color:active {
+    transform: scale(1.05);
+}
+
+/* Background Color Picker */
+.cbd-board-bg-label {
+    font-size: 12px;
+    color: #666;
+    font-weight: 600;
+    white-space: nowrap;
+    margin: 0 4px;
+}
+
+.cbd-board-bg-color {
+    width: 36px;
+    height: 36px;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 2px;
+    background: #fff;
+    transition: border-color 0.15s ease;
+}
+
+.cbd-board-bg-color:hover {
+    border-color: #999;
+}
+
+/* Grid Toggle Button */
+.cbd-board-grid-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    background: #ffffff;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    color: #555;
+}
+
+.cbd-board-grid-toggle:hover {
+    border-color: #999;
+    background: #f0f0f0;
+    color: #333;
+}
+
+.cbd-board-grid-toggle.active {
+    border-color: #4caf50;
+    background: #e8f5e9;
+    color: #2e7d32;
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.cbd-board-grid-toggle .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
 /* Stiftdicke-Slider */
 .cbd-board-width {
     width: 100px;
@@ -290,18 +378,41 @@
 }
 
 /* =============================================
-   CANVAS - Zeichenflaeche
+   CANVAS - Multi-Layer System
    ============================================= */
 
-.cbd-board-canvas {
+.cbd-board-canvas-container {
+    position: relative;
     flex: 1;
-    cursor: crosshair;
+    overflow: hidden;
+}
+
+.cbd-board-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     display: block;
     touch-action: none;
 }
 
+.cbd-board-canvas-background {
+    z-index: 1;
+}
+
+.cbd-board-canvas-grid {
+    z-index: 2;
+    pointer-events: none;
+}
+
+.cbd-board-canvas-drawing {
+    z-index: 3;
+    cursor: crosshair;
+}
+
 /* Cursor fuer Radierer */
-.cbd-board-canvas.eraser-active {
+.cbd-board-canvas-drawing.eraser-active {
     cursor: cell;
 }
 
