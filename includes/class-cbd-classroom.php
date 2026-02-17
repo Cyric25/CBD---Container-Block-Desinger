@@ -66,6 +66,7 @@ class CBD_Classroom {
         add_action('wp_ajax_cbd_toggle_behandelt', array($this, 'ajax_toggle_behandelt'));
         add_action('wp_ajax_cbd_set_behandelt', array($this, 'ajax_set_behandelt'));
         add_action('wp_ajax_cbd_get_block_status', array($this, 'ajax_get_block_status'));
+        add_action('wp_ajax_cbd_toggle_class_subscription', array($this, 'ajax_toggle_class_subscription'));
 
         // AJAX handlers for students (no login required)
         add_action('wp_ajax_nopriv_cbd_student_auth', array($this, 'ajax_student_auth'));
@@ -204,14 +205,18 @@ class CBD_Classroom {
             wp_send_json_error(array('message' => 'Ungueltige Klassen-ID.'));
         }
 
-        // Verify ownership
+        // Besitzer ODER Seitenadmin darf löschen
         $class = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM " . CBD_TABLE_CLASSES . " WHERE id = %d AND teacher_id = %d",
-            $class_id, get_current_user_id()
+            "SELECT * FROM " . CBD_TABLE_CLASSES . " WHERE id = %d",
+            $class_id
         ));
 
         if (!$class) {
             wp_send_json_error(array('message' => 'Klasse nicht gefunden.'));
+        }
+
+        if ((int) $class->teacher_id !== get_current_user_id() && !current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => 'Keine Berechtigung zum Löschen dieser Klasse.'));
         }
 
         // Delete related data
@@ -223,7 +228,7 @@ class CBD_Classroom {
     }
 
     /**
-     * AJAX: Get all classes for the current teacher
+     * AJAX: Get all classes (own + others) with subscription status
      */
     public function ajax_get_classes() {
         check_ajax_referer('cbd_classroom_nonce', 'nonce');
@@ -234,14 +239,27 @@ class CBD_Classroom {
 
         global $wpdb;
         $teacher_id = get_current_user_id();
+        $is_admin = current_user_can('manage_options');
 
-        $classes = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, name, status, created_at, updated_at FROM " . CBD_TABLE_CLASSES . " WHERE teacher_id = %d ORDER BY name ASC",
-            $teacher_id
-        ));
+        // Abonnierte Klassen-IDs des aktuellen Lehrers
+        $subscribed = get_user_meta($teacher_id, 'cbd_subscribed_classes', true);
+        $subscribed_ids = is_array($subscribed) ? array_map('intval', $subscribed) : array();
 
-        // Attach page assignments to each class
+        // Alle Klassen laden (nicht nur eigene)
+        $classes = $wpdb->get_results(
+            "SELECT c.id, c.name, c.status, c.teacher_id, c.created_at, c.updated_at,
+                    u.display_name AS teacher_name
+             FROM " . CBD_TABLE_CLASSES . " c
+             LEFT JOIN {$wpdb->users} u ON c.teacher_id = u.ID
+             ORDER BY c.name ASC"
+        );
+
         foreach ($classes as &$class) {
+            $class->is_owner    = ((int) $class->teacher_id === $teacher_id);
+            $class->is_subscribed = $class->is_owner || in_array((int) $class->id, $subscribed_ids, true);
+            $class->can_delete  = $class->is_owner || $is_admin;
+            $class->can_edit    = $class->is_owner;
+
             $class->pages = $wpdb->get_results($wpdb->prepare(
                 "SELECT cp.page_id, cp.sort_order, p.post_title
                  FROM " . CBD_TABLE_CLASS_PAGES . " cp
@@ -253,6 +271,53 @@ class CBD_Classroom {
         }
 
         wp_send_json_success($classes);
+    }
+
+    /**
+     * AJAX: Toggle subscription to a class
+     */
+    public function ajax_toggle_class_subscription() {
+        check_ajax_referer('cbd_classroom_nonce', 'nonce');
+
+        if (!current_user_can('cbd_edit_blocks')) {
+            wp_send_json_error(array('message' => 'Keine Berechtigung.'));
+        }
+
+        $class_id   = intval($_POST['class_id'] ?? 0);
+        $subscribe  = filter_var($_POST['subscribe'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        $teacher_id = get_current_user_id();
+
+        if ($class_id <= 0) {
+            wp_send_json_error(array('message' => 'Ungültige Klassen-ID.'));
+        }
+
+        // Eigene Klassen können nicht abonniert/abbestellt werden
+        global $wpdb;
+        $is_owner = (bool) $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM " . CBD_TABLE_CLASSES . " WHERE id = %d AND teacher_id = %d",
+            $class_id, $teacher_id
+        ));
+        if ($is_owner) {
+            wp_send_json_error(array('message' => 'Eigene Klassen sind automatisch aktiv.'));
+        }
+
+        $subscribed = get_user_meta($teacher_id, 'cbd_subscribed_classes', true);
+        $subscribed_ids = is_array($subscribed) ? array_map('intval', $subscribed) : array();
+
+        if ($subscribe) {
+            if (!in_array($class_id, $subscribed_ids, true)) {
+                $subscribed_ids[] = $class_id;
+            }
+        } else {
+            $subscribed_ids = array_values(array_diff($subscribed_ids, array($class_id)));
+        }
+
+        update_user_meta($teacher_id, 'cbd_subscribed_classes', $subscribed_ids);
+
+        wp_send_json_success(array(
+            'subscribed' => $subscribe,
+            'class_id'   => $class_id,
+        ));
     }
 
     // =========================================================================
@@ -282,13 +347,8 @@ class CBD_Classroom {
             wp_send_json_error(array('message' => 'Fehlende Parameter.'));
         }
 
-        // Verify teacher owns this class
-        $class = $wpdb->get_row($wpdb->prepare(
-            "SELECT id FROM " . CBD_TABLE_CLASSES . " WHERE id = %d AND teacher_id = %d",
-            $class_id, get_current_user_id()
-        ));
-
-        if (!$class) {
+        // Zugriff prüfen: Besitzer oder Abonnent
+        if (!$this->can_access_class($class_id)) {
             wp_send_json_error(array('message' => 'Klasse nicht gefunden.'));
         }
 
@@ -336,6 +396,10 @@ class CBD_Classroom {
             wp_send_json_error(array('message' => 'Fehlende Parameter.'));
         }
 
+        if (!$this->can_access_class($class_id)) {
+            wp_send_json_error(array('message' => 'Klasse nicht gefunden.'));
+        }
+
         $drawing = $wpdb->get_row($wpdb->prepare(
             "SELECT drawing_data, is_behandelt FROM " . CBD_TABLE_DRAWINGS . " WHERE class_id = %d AND page_id = %d AND container_id = %s",
             $class_id, $page_id, $container_id
@@ -372,13 +436,8 @@ class CBD_Classroom {
             wp_send_json_error(array('message' => 'Fehlende Parameter.'));
         }
 
-        // Verify teacher owns this class
-        $class = $wpdb->get_row($wpdb->prepare(
-            "SELECT id FROM " . CBD_TABLE_CLASSES . " WHERE id = %d AND teacher_id = %d",
-            $class_id, get_current_user_id()
-        ));
-
-        if (!$class) {
+        // Zugriff prüfen: Besitzer oder Abonnent
+        if (!$this->can_access_class($class_id)) {
             wp_send_json_error(array('message' => 'Klasse nicht gefunden.'));
         }
 
@@ -1114,10 +1173,44 @@ class CBD_Classroom {
         }
 
         global $wpdb;
+        $teacher_id = get_current_user_id();
+
+        // Eigene Klassen + abonnierte Klassen
+        $subscribed = get_user_meta($teacher_id, 'cbd_subscribed_classes', true);
+        $subscribed_ids = is_array($subscribed) ? array_map('intval', $subscribed) : array();
+
+        if (!empty($subscribed_ids)) {
+            $placeholders = implode(',', array_fill(0, count($subscribed_ids), '%d'));
+            $params = array_merge(array($teacher_id), $subscribed_ids);
+            return $wpdb->get_results($wpdb->prepare(
+                "SELECT id, name FROM " . CBD_TABLE_CLASSES . "
+                 WHERE status = 'active' AND (teacher_id = %d OR id IN ($placeholders))
+                 ORDER BY name ASC",
+                $params
+            ));
+        }
+
         return $wpdb->get_results($wpdb->prepare(
             "SELECT id, name FROM " . CBD_TABLE_CLASSES . " WHERE teacher_id = %d AND status = 'active' ORDER BY name ASC",
-            get_current_user_id()
+            $teacher_id
         ));
+    }
+
+    /**
+     * Prüfen ob der aktuelle Lehrer Zugriff auf eine Klasse hat (Besitzer oder Abonnent)
+     */
+    private function can_access_class(int $class_id): bool {
+        $teacher_id = get_current_user_id();
+        global $wpdb;
+        $is_owner = (bool) $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM " . CBD_TABLE_CLASSES . " WHERE id = %d AND teacher_id = %d",
+            $class_id, $teacher_id
+        ));
+        if ($is_owner) return true;
+
+        $subscribed = get_user_meta($teacher_id, 'cbd_subscribed_classes', true);
+        $subscribed_ids = is_array($subscribed) ? array_map('intval', $subscribed) : array();
+        return in_array($class_id, $subscribed_ids, true);
     }
 
     // =========================================================================

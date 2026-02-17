@@ -105,7 +105,8 @@ $classroom_enabled = get_option('cbd_classroom_enabled', false);
 
         <!-- Klassen-Liste -->
         <div class="cbd-classroom-list-section">
-            <h2><?php _e('Meine Klassen', 'container-block-designer'); ?></h2>
+            <h2><?php _e('Alle Klassen', 'container-block-designer'); ?></h2>
+            <p class="description"><?php _e('★ = Ihre eigene Klasse. Fremde Klassen können abonniert werden, um sie im Tafel-Modus zu nutzen.', 'container-block-designer'); ?></p>
             <div id="cbd-classes-loading" class="cbd-loading">
                 <span class="spinner is-active"></span>
                 <?php _e('Lade Klassen...', 'container-block-designer'); ?>
@@ -114,6 +115,7 @@ $classroom_enabled = get_option('cbd_classroom_enabled', false);
                 <thead>
                     <tr>
                         <th class="column-name"><?php _e('Name', 'container-block-designer'); ?></th>
+                        <th class="column-owner"><?php _e('Ersteller', 'container-block-designer'); ?></th>
                         <th class="column-pages"><?php _e('Seiten', 'container-block-designer'); ?></th>
                         <th class="column-status"><?php _e('Status', 'container-block-designer'); ?></th>
                         <th class="column-created"><?php _e('Erstellt', 'container-block-designer'); ?></th>
@@ -124,7 +126,7 @@ $classroom_enabled = get_option('cbd_classroom_enabled', false);
                 </tbody>
             </table>
             <p id="cbd-no-classes" style="display:none;">
-                <?php _e('Noch keine Klassen erstellt.', 'container-block-designer'); ?>
+                <?php _e('Noch keine Klassen vorhanden.', 'container-block-designer'); ?>
             </p>
         </div>
     </div>

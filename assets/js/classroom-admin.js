@@ -86,6 +86,14 @@
                 var className = $(this).data('class-name');
                 self.deleteClass(classId, className);
             });
+
+            // Subscribe / Unsubscribe toggle (delegated)
+            $(document).on('click', '.cbd-toggle-subscription', function() {
+                var $btn = $(this);
+                var classId = $btn.data('class-id');
+                var subscribed = $btn.data('subscribed') === true || $btn.data('subscribed') === 'true';
+                self.toggleSubscription(classId, !subscribed, $btn);
+            });
         },
 
         /**
@@ -140,20 +148,77 @@
                 var statusClass = cls.status === 'active' ? 'active' : 'inactive';
                 var statusText = cls.status === 'active' ? 'Aktiv' : 'Inaktiv';
 
-                var row = '<tr>' +
+                // Besitzer-Badge
+                var ownerHtml = cls.is_owner
+                    ? '<span class="cbd-owner-badge" title="Erstellt von Ihnen">&#9733; ' + self.escHtml(cls.teacher_name || 'Ich') + '</span>'
+                    : '<span class="cbd-teacher-name">' + self.escHtml(cls.teacher_name || 'Unbekannt') + '</span>';
+
+                // Aktions-Buttons
+                var actionsHtml = '<div class="cbd-class-actions">';
+
+                if (cls.can_edit) {
+                    actionsHtml += '<button type="button" class="button button-small cbd-edit-class" data-class-id="' + cls.id + '">Bearbeiten</button>';
+                }
+
+                if (!cls.is_owner) {
+                    // Abonnieren / Abbestellen
+                    var subLabel = cls.is_subscribed ? 'Abbestellen' : 'Abonnieren';
+                    var subClass = cls.is_subscribed ? 'cbd-btn-subscribed' : 'cbd-btn-subscribe';
+                    actionsHtml += '<button type="button" class="button button-small cbd-toggle-subscription ' + subClass + '" ' +
+                        'data-class-id="' + cls.id + '" data-subscribed="' + (cls.is_subscribed ? 'true' : 'false') + '">' +
+                        subLabel + '</button>';
+                }
+
+                if (cls.can_delete) {
+                    actionsHtml += '<button type="button" class="button button-small button-link-delete cbd-delete-class" ' +
+                        'data-class-id="' + cls.id + '" data-class-name="' + self.escAttr(cls.name) + '">L\u00F6schen</button>';
+                }
+
+                actionsHtml += '</div>';
+
+                var rowClass = cls.is_owner ? 'cbd-row-own' : (cls.is_subscribed ? 'cbd-row-subscribed' : '');
+
+                var row = '<tr class="' + rowClass + '">' +
                     '<td class="column-name">' + self.escHtml(cls.name) + '</td>' +
+                    '<td class="column-owner">' + ownerHtml + '</td>' +
                     '<td class="column-pages">' + pagesHtml + '</td>' +
                     '<td class="column-status"><span class="cbd-status-badge ' + statusClass + '">' + statusText + '</span></td>' +
                     '<td class="column-created">' + self.formatDate(cls.created_at) + '</td>' +
-                    '<td class="column-actions">' +
-                        '<div class="cbd-class-actions">' +
-                            '<button type="button" class="button button-small cbd-edit-class" data-class-id="' + cls.id + '">Bearbeiten</button>' +
-                            '<button type="button" class="button button-small button-link-delete cbd-delete-class" data-class-id="' + cls.id + '" data-class-name="' + self.escAttr(cls.name) + '">L\u00F6schen</button>' +
-                        '</div>' +
-                    '</td>' +
+                    '<td class="column-actions">' + actionsHtml + '</td>' +
                 '</tr>';
 
                 $tbody.append(row);
+            });
+        },
+
+        /**
+         * Toggle class subscription
+         */
+        toggleSubscription: function(classId, subscribe, $btn) {
+            var self = this;
+            $btn.prop('disabled', true);
+
+            $.post(cbdClassroomAdmin.ajaxUrl, {
+                action: 'cbd_toggle_class_subscription',
+                nonce: cbdClassroomAdmin.nonce,
+                class_id: classId,
+                subscribe: subscribe ? 1 : 0
+            }, function(response) {
+                if (response.success) {
+                    $btn.data('subscribed', subscribe ? 'true' : 'false');
+                    if (subscribe) {
+                        $btn.text('Abbestellen').removeClass('cbd-btn-subscribe').addClass('cbd-btn-subscribed');
+                    } else {
+                        $btn.text('Abonnieren').removeClass('cbd-btn-subscribed').addClass('cbd-btn-subscribe');
+                    }
+                    self.showNotice(subscribe ? 'Klasse abonniert.' : 'Klasse abbestellt.', 'success');
+                } else {
+                    self.showNotice(response.data.message || 'Fehler.', 'error');
+                }
+                $btn.prop('disabled', false);
+            }).fail(function() {
+                self.showNotice('Netzwerk-Fehler.', 'error');
+                $btn.prop('disabled', false);
             });
         },
 

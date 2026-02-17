@@ -117,24 +117,57 @@
    ============================================= */
 
 #cbd-classes-table .column-name {
-    width: 25%;
+    width: 20%;
     font-weight: 600;
 }
 
+#cbd-classes-table .column-owner {
+    width: 15%;
+}
+
 #cbd-classes-table .column-pages {
-    width: 30%;
+    width: 25%;
 }
 
 #cbd-classes-table .column-status {
-    width: 10%;
+    width: 8%;
 }
 
 #cbd-classes-table .column-created {
-    width: 15%;
+    width: 12%;
 }
 
 #cbd-classes-table .column-actions {
     width: 20%;
+}
+
+/* Eigene Klasse hervorheben */
+tr.cbd-row-own {
+    background-color: #f0f7ee !important;
+}
+
+/* Abonnierte fremde Klasse */
+tr.cbd-row-subscribed {
+    background-color: #f0f4ff !important;
+}
+
+/* Besitzer-Badge */
+.cbd-owner-badge {
+    font-weight: 600;
+    color: #155724;
+}
+
+/* Subscribe-Button */
+.cbd-btn-subscribe {
+    background: #f0f4ff;
+    color: #1d5bd6;
+    border-color: #b3c7f7;
+}
+
+.cbd-btn-subscribed {
+    background: #eaf4ea;
+    color: #155724;
+    border-color: #a3d4a8;
 }
 
 .cbd-class-actions {
