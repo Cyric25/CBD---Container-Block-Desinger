@@ -123,7 +123,7 @@
             var count = 0;
             for (var i = 0; i < localStorage.length; i++) {
                 var key = localStorage.key(i);
-                if (key && key.startsWith('cbd-board-')) {
+                if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
                     count++;
                 }
             }
@@ -151,7 +151,7 @@
 
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
-                    if (key && key.startsWith('cbd-board-')) {
+                    if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
                         exportData.notes[key] = localStorage.getItem(key);
                         count++;
                     }
@@ -202,7 +202,7 @@
                 var keysToDelete = [];
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
-                    if (key && key.startsWith('cbd-board-')) {
+                    if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
                         keysToDelete.push(key);
                     }
                 }

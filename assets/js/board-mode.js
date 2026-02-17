@@ -1300,8 +1300,9 @@
         // =============================================
 
         loadFromServer: function() {
+            // Klassen-Modus: NIEMALS lokalen Cache verwenden
             if (!this.classId || !this.ajaxUrl || !this.stableContainerId) {
-                this.loadFromCache();
+                console.warn('[CBD Board Mode] loadFromServer: Fehlende Parameter, Abbruch.');
                 return;
             }
 
@@ -1324,7 +1325,6 @@
                 if (data.success && data.data.drawing_data) {
                     var img = new Image();
                     img.onload = function() {
-                        // Zeichnung auf Drawing Canvas laden
                         self.drawingCtx.clearRect(0, 0, self.drawingCanvas.width, self.drawingCanvas.height);
                         self.drawingCtx.drawImage(img, 0, 0);
                         self._setSaveStatus('Geladen');
@@ -1332,20 +1332,25 @@
                     };
                     img.src = data.data.drawing_data;
                 } else {
-                    // Keine Zeichnung auf Server
+                    // Keine Zeichnung auf Server → leerer Canvas (kein Cache-Fallback!)
                     self._setSaveStatus('');
                 }
             })
             .catch(function(err) {
                 console.warn('[CBD Board Mode] Server-Laden fehlgeschlagen:', err);
-                self._setSaveStatus('Fehler');
-                self.loadFromCache();
+                self._setSaveStatus('Server-Fehler');
+                // Kein Fallback auf lokalen Cache im Klassen-Modus
             });
         },
 
         saveToServer: function() {
-            if (this.isSaving || !this.classId || !this.ajaxUrl || !this.stableContainerId) {
-                this.saveToCache();
+            // Klassen-Modus: NIEMALS lokalen Cache verwenden
+            if (!this.classId || !this.ajaxUrl || !this.stableContainerId) {
+                console.warn('[CBD Board Mode] saveToServer: Fehlende Parameter, Abbruch.');
+                return;
+            }
+            if (this.isSaving) {
+                // Bereits am Speichern – kein Cache-Fallback
                 return;
             }
 
@@ -1353,7 +1358,6 @@
             this._setSaveStatus('Speichert...');
 
             var self = this;
-            // Nur Drawing Canvas speichern
             var dataUrl = this.drawingCanvas.toDataURL('image/png');
 
             var formData = new FormData();
@@ -1380,15 +1384,15 @@
                     }
                 } else {
                     console.warn('[CBD Board Mode] Server-Speichern fehlgeschlagen:', data);
-                    self._setSaveStatus('Fehler');
-                    self.saveToCache();
+                    self._setSaveStatus('Server-Fehler');
+                    // Kein Fallback auf lokalen Cache im Klassen-Modus
                 }
             })
             .catch(function(err) {
                 self.isSaving = false;
                 console.warn('[CBD Board Mode] Server-Speichern fehlgeschlagen:', err);
-                self._setSaveStatus('Fehler');
-                self.saveToCache();
+                self._setSaveStatus('Server-Fehler');
+                // Kein Fallback auf lokalen Cache im Klassen-Modus
             });
         },
 
@@ -1544,7 +1548,7 @@
 
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
-                    if (key && key.startsWith('cbd-board-')) {
+                    if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
                         exportData[key] = localStorage.getItem(key);
                         count++;
                     }
@@ -1604,7 +1608,7 @@
                         // Validierung: Ist es ein Objekt mit cbd-board Keys?
                         var keys = Object.keys(importData);
                         var validKeys = keys.filter(function(k) {
-                            return k.startsWith('cbd-board-');
+                            return k.startsWith('cbd-board-') && k !== 'cbd-board-tool-settings' && k !== 'cbd-board-font-size';
                         });
 
                         if (validKeys.length === 0) {
@@ -1616,7 +1620,7 @@
                         var existingCount = 0;
                         for (var i = 0; i < localStorage.length; i++) {
                             var key = localStorage.key(i);
-                            if (key && key.startsWith('cbd-board-')) {
+                            if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
                                 existingCount++;
                             }
                         }
@@ -1669,12 +1673,12 @@
          */
         deleteAllPersonalNotes: function() {
             try {
-                // Zähle vorhandene Notizen
+                // Zähle vorhandene Notizen (tool-settings ausschließen!)
                 var count = 0;
                 var keysToDelete = [];
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
-                    if (key && key.startsWith('cbd-board-')) {
+                    if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
                         count++;
                         keysToDelete.push(key);
                     }
