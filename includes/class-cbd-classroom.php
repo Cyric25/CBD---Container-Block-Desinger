@@ -64,6 +64,7 @@ class CBD_Classroom {
         add_action('wp_ajax_cbd_save_drawing', array($this, 'ajax_save_drawing'));
         add_action('wp_ajax_cbd_load_drawing', array($this, 'ajax_load_drawing'));
         add_action('wp_ajax_cbd_toggle_behandelt', array($this, 'ajax_toggle_behandelt'));
+        add_action('wp_ajax_cbd_set_behandelt', array($this, 'ajax_set_behandelt'));
         add_action('wp_ajax_cbd_get_block_status', array($this, 'ajax_get_block_status'));
 
         // AJAX handlers for students (no login required)
@@ -479,6 +480,81 @@ class CBD_Classroom {
                 'insert_id' => $wpdb->insert_id > 0 ? $wpdb->insert_id : null
             )
         ));
+    }
+
+    /**
+     * AJAX: Set "behandelt" status to 1 (only sets, never clears)
+     * Called automatically when a teacher draws for a class.
+     */
+    public function ajax_set_behandelt() {
+        check_ajax_referer('cbd_classroom_nonce', 'nonce');
+
+        if (!current_user_can('cbd_edit_blocks')) {
+            wp_send_json_error(array('message' => 'Keine Berechtigung.'));
+        }
+
+        global $wpdb;
+        $table = CBD_TABLE_DRAWINGS;
+
+        $class_id    = intval($_POST['class_id'] ?? 0);
+        $page_id     = intval($_POST['page_id'] ?? 0);
+        $container_id = sanitize_text_field($_POST['container_id'] ?? '');
+
+        if ($class_id <= 0 || $page_id <= 0 || empty($container_id)) {
+            wp_send_json_error(array('message' => 'Fehlende Parameter.'));
+        }
+
+        // Verify teacher owns this class
+        $class = $wpdb->get_row($wpdb->prepare(
+            "SELECT id FROM " . CBD_TABLE_CLASSES . " WHERE id = %d AND teacher_id = %d",
+            $class_id, get_current_user_id()
+        ));
+
+        if (!$class) {
+            wp_send_json_error(array('message' => 'Klasse nicht gefunden.'));
+        }
+
+        $existing = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, is_behandelt FROM $table WHERE class_id = %d AND page_id = %d AND container_id = %s",
+            $class_id, $page_id, $container_id
+        ));
+
+        if ($existing) {
+            if (!$existing->is_behandelt) {
+                $wpdb->update($table, array(
+                    'is_behandelt' => 1,
+                    'updated_at'   => current_time('mysql')
+                ), array('id' => $existing->id));
+            }
+        } else {
+            $wpdb->insert($table, array(
+                'class_id'     => $class_id,
+                'teacher_id'   => get_current_user_id(),
+                'page_id'      => $page_id,
+                'container_id' => $container_id,
+                'is_behandelt' => 1
+            ));
+        }
+
+        // Auto-assign page to class if not already assigned
+        $page_exists = $wpdb->get_var($wpdb->prepare(
+            "SELECT id FROM " . CBD_TABLE_CLASS_PAGES . " WHERE class_id = %d AND page_id = %d",
+            $class_id, $page_id
+        ));
+
+        if (!$page_exists) {
+            $max_order = $wpdb->get_var($wpdb->prepare(
+                "SELECT MAX(sort_order) FROM " . CBD_TABLE_CLASS_PAGES . " WHERE class_id = %d",
+                $class_id
+            ));
+            $wpdb->insert(CBD_TABLE_CLASS_PAGES, array(
+                'class_id'   => $class_id,
+                'page_id'    => $page_id,
+                'sort_order' => ($max_order !== null) ? ($max_order + 1) : 0
+            ));
+        }
+
+        wp_send_json_success(array('message' => 'Als behandelt markiert.'));
     }
 
     /**

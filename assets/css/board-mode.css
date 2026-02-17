@@ -178,18 +178,18 @@
     gap: 8px;
     padding: 8px 12px;
     background: #f5f5f5;
-    border-bottom: 1px solid #ddd;
+    border-top: 1px solid #ddd;
     flex-shrink: 0;
     flex-wrap: wrap;
 }
 
-/* Werkzeug-Buttons */
+/* Werkzeug-Buttons - 5% größer */
 .cbd-board-tool {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
+    width: 38px;  /* 36 * 1.05 ≈ 38 */
+    height: 38px;
     border: 2px solid #ccc;
     border-radius: 8px;
     background: #ffffff;
@@ -213,9 +213,9 @@
 }
 
 .cbd-board-tool .dashicons {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
+    font-size: 19px;  /* 18 * 1.05 ≈ 19 */
+    width: 19px;
+    height: 19px;
 }
 
 /* Trennlinie */
@@ -227,10 +227,10 @@
     flex-shrink: 0;
 }
 
-/* Farbwaehler */
+/* Farbwaehler - 5% größer */
 .cbd-board-color {
-    width: 36px;
-    height: 36px;
+    width: 38px;  /* 36 * 1.05 ≈ 38 */
+    height: 38px;
     border: 2px solid #ccc;
     border-radius: 8px;
     cursor: pointer;
@@ -453,6 +453,39 @@
 
 .cbd-board-download .dashicons,
 .cbd-board-upload .dashicons {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+/* Delete-All-Button - Deutlich rot für destruktive Aktion */
+.cbd-board-delete-all {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 2px solid #d63638;
+    border-radius: 8px;
+    background: #fff;
+    color: #d63638;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.cbd-board-delete-all:hover {
+    border-color: #b32d2e;
+    background: #fef2f2;
+    color: #b32d2e;
+    transform: scale(1.05);
+}
+
+.cbd-board-delete-all:active {
+    transform: scale(0.95);
+}
+
+.cbd-board-delete-all .dashicons {
     font-size: 18px;
     width: 18px;
     height: 18px;
@@ -990,4 +1023,75 @@
     .cbd-board-separator {
         background: #000;
     }
+}
+
+/* =============================================
+   Textgrößen-Steuerung (rechts oben über Blockinhalt)
+   ============================================= */
+
+.cbd-board-font-size-control {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 8px 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+}
+
+.cbd-board-font-size-control .cbd-board-font-label {
+    font-size: 17px;  /* 16 * 1.05 ≈ 17 */
+    margin: 0;
+}
+
+.cbd-board-font-size-control .cbd-board-font-size {
+    width: 110px;  /* 5% größer */
+    height: 6px;
+    cursor: pointer;
+    accent-color: #4caf50;
+}
+
+.cbd-board-font-size-control .cbd-board-font-size-display {
+    font-size: 13px;  /* 12 * 1.05 ≈ 13 */
+    color: #666;
+    min-width: 42px;  /* 40 * 1.05 ≈ 42 */
+    text-align: center;
+    font-weight: 600;
+    font-family: monospace;
+}
+
+/* Bilder im Blockinhalt sollen mit Text mitskalieren */
+.cbd-board-content img {
+    max-width: 100%;
+    height: auto;
+    /* Verwende em statt px damit Bilder mit font-size skalieren */
+    width: auto !important;
+    max-height: 30em;  /* Maximale Höhe relativ zur Textgröße */
+}
+
+/* Transparenz-Slider Label + Display vergrößern */
+.cbd-board-opacity-label {
+    font-size: 17px;  /* 16 * 1.05 ≈ 17 */
+    margin: 0 4px;
+}
+
+.cbd-board-opacity {
+    width: 105px;  /* 100 * 1.05 ≈ 105 */
+    height: 6px;
+    cursor: pointer;
+    accent-color: #9c27b0;
+}
+
+.cbd-board-opacity-display {
+    font-size: 13px;  /* 12 * 1.05 ≈ 13 */
+    color: #666;
+    min-width: 42px;  /* 40 * 1.05 ≈ 42 */
+    text-align: center;
+    font-weight: 600;
+    font-family: monospace;
 }

@@ -26,7 +26,15 @@
         isDrawing: false,
         currentTool: 'pen',
         currentColor: '#000000',
-        lineWidth: 3,
+
+        // Tool-spezifische Größen (unabhängig für jedes Tool)
+        penWidth: 3,
+        eraserStrokeWidth: 8,
+        eraserPointWidth: 15,
+        highlighterWidth: 20,
+        highlighterOpacity: 0.3, // 0.0 - 1.0 (0% - 100%)
+
+        lineWidth: 3, // Aktuelle Breite (wird beim Tool-Wechsel aktualisiert)
         containerId: null,
         boardColor: '#ffffff',
         fontSize: 150, // Textgröße in Prozent (150% = 1.5x normal, besser lesbar auf Tafel)
@@ -59,6 +67,7 @@
         nonce: null,
         isSaving: false,
         classes: [],
+        isBehandeltSet: false, // Einmalig pro Session als behandelt markieren
 
         // Preset board colors (for background)
         boardPresetColors: [
@@ -98,6 +107,7 @@
             this.classes = options.classes || [];
             this.classId = null;
             this.isSaving = false;
+            this.isBehandeltSet = false;
 
             // Wenn Klassen vorhanden: Selektor zeigen, sonst direkt oeffnen
             if (this.classes.length > 0 && this.ajaxUrl) {
@@ -115,6 +125,9 @@
          * Internes Oeffnen des Overlays
          */
         _openOverlay: function(contentHtml) {
+            // Tool-Einstellungen aus localStorage laden
+            this.loadToolSettings();
+
             // Overlay-DOM erstellen
             this.createOverlayDOM(contentHtml);
 
@@ -134,18 +147,21 @@
             // Events binden
             this.bindEvents();
 
-            // Download/Upload Buttons nur im persönlichen Modus zeigen
+            // Download/Upload/Delete Buttons nur im persönlichen Modus zeigen
             var downloadBtn = this.overlay.querySelector('.cbd-board-download');
             var uploadBtn = this.overlay.querySelector('.cbd-board-upload');
-            if (downloadBtn && uploadBtn) {
+            var deleteAllBtn = this.overlay.querySelector('.cbd-board-delete-all');
+            if (downloadBtn && uploadBtn && deleteAllBtn) {
                 if (this.classId === null) {
                     // Persönlicher Modus: Buttons zeigen
                     downloadBtn.style.display = 'flex';
                     uploadBtn.style.display = 'flex';
+                    deleteAllBtn.style.display = 'flex';
                 } else {
                     // Klassen-Modus: Buttons verstecken (wird server-seitig gespeichert)
                     downloadBtn.style.display = 'none';
                     uploadBtn.style.display = 'none';
+                    deleteAllBtn.style.display = 'none';
                 }
             }
         },
@@ -259,6 +275,15 @@
                 '<div class="cbd-board-split">' +
                     '<div class="cbd-board-content"></div>' +
                     '<div class="cbd-board-canvas-area">' +
+                        '<div class="cbd-board-canvas-container">' +
+                            '<canvas class="cbd-board-canvas cbd-board-canvas-background"></canvas>' +
+                            '<canvas class="cbd-board-canvas cbd-board-canvas-grid"></canvas>' +
+                            '<canvas class="cbd-board-canvas cbd-board-canvas-drawing"></canvas>' +
+                            '<div class="cbd-board-color-picker-overlay">' +
+                                '<div class="cbd-board-color-picker-label">Tafelfarbe:</div>' +
+                                '<div class="cbd-board-bg-preset-btns">' + boardPresetHtml + '</div>' +
+                            '</div>' +
+                        '</div>' +
                         '<div class="cbd-board-toolbar">' +
                             // Tools
                             '<button class="cbd-board-tool active" data-tool="pen" title="Stift">' +
@@ -281,11 +306,13 @@
                             // Line width
                             '<input type="range" class="cbd-board-width" min="1" max="20" value="3" title="Stiftdicke">' +
                             '<span class="cbd-board-width-display">3px</span>' +
-                            '<span class="cbd-board-separator"></span>' +
-                            // Font size
-                            '<label class="cbd-board-font-label">📝</label>' +
-                            '<input type="range" class="cbd-board-font-size" min="100" max="300" value="150" step="10" title="Textgröße">' +
-                            '<span class="cbd-board-font-size-display">150%</span>' +
+                            // Highlighter opacity (nur für Textmarker sichtbar)
+                            '<div class="cbd-board-opacity-control" style="display: none; align-items: center; gap: 8px;">' +
+                                '<span class="cbd-board-separator"></span>' +
+                                '<label class="cbd-board-opacity-label">🎨</label>' +
+                                '<input type="range" class="cbd-board-opacity" min="10" max="100" value="30" step="5" title="Textmarker-Transparenz">' +
+                                '<span class="cbd-board-opacity-display">30%</span>' +
+                            '</div>' +
                             '<span class="cbd-board-separator"></span>' +
                             // Grid toggle
                             '<button class="cbd-board-grid-toggle" title="Hexagon-Gitter ein/aus">' +
@@ -306,22 +333,16 @@
                                 '<span class="dashicons dashicons-trash"></span>' +
                             '</button>' +
                             '<span class="cbd-board-separator"></span>' +
-                            // Download/Upload buttons (nur für persönliche Notizen)
+                            // Download/Upload/Delete buttons (nur für persönliche Notizen)
                             '<button class="cbd-board-download" title="Notizen herunterladen" style="display:none;">' +
                                 '<span class="dashicons dashicons-download"></span>' +
                             '</button>' +
                             '<button class="cbd-board-upload" title="Notizen hochladen" style="display:none;">' +
                                 '<span class="dashicons dashicons-upload"></span>' +
                             '</button>' +
-                        '</div>' +
-                        '<div class="cbd-board-canvas-container">' +
-                            '<canvas class="cbd-board-canvas cbd-board-canvas-background"></canvas>' +
-                            '<canvas class="cbd-board-canvas cbd-board-canvas-grid"></canvas>' +
-                            '<canvas class="cbd-board-canvas cbd-board-canvas-drawing"></canvas>' +
-                            '<div class="cbd-board-color-picker-overlay">' +
-                                '<div class="cbd-board-color-picker-label">Tafelfarbe:</div>' +
-                                '<div class="cbd-board-bg-preset-btns">' + boardPresetHtml + '</div>' +
-                            '</div>' +
+                            '<button class="cbd-board-delete-all" title="Alle lokalen Notizen löschen" style="display:none;">' +
+                                '<span class="dashicons dashicons-trash"></span>' +
+                            '</button>' +
                         '</div>' +
                     '</div>' +
                 '</div>';
@@ -329,6 +350,19 @@
             // Block-Inhalt einfuegen
             var contentArea = overlay.querySelector('.cbd-board-content');
             contentArea.innerHTML = contentHtml;
+
+            // Interaktive Blöcke initialisieren (Scripts ausführen)
+            this.initializeInteractiveBlocks(contentArea);
+
+            // Textgrößen-Steuerung über dem Content-Bereich hinzufügen
+            contentArea.style.position = 'relative';  // Für absolute Positionierung der Steuerung
+            var fontControl = document.createElement('div');
+            fontControl.className = 'cbd-board-font-size-control';
+            fontControl.innerHTML =
+                '<label class="cbd-board-font-label">📝</label>' +
+                '<input type="range" class="cbd-board-font-size" min="100" max="300" value="' + this.fontSize + '" step="10" title="Textgröße">' +
+                '<span class="cbd-board-font-size-display">' + this.fontSize + '%</span>';
+            contentArea.insertBefore(fontControl, contentArea.firstChild);
 
             // Standard-Textgröße anwenden (150% für bessere Lesbarkeit auf Tafel)
             contentArea.style.fontSize = (this.fontSize / 100) + 'em';
@@ -636,6 +670,20 @@
                 });
             }
 
+            // Highlighter Opacity
+            var opacityInput = this.overlay.querySelector('.cbd-board-opacity');
+            var opacityDisplay = this.overlay.querySelector('.cbd-board-opacity-display');
+            if (opacityInput) {
+                opacityInput.addEventListener('input', function() {
+                    var percent = parseInt(this.value, 10);
+                    var opacity = percent / 100;
+                    self.setHighlighterOpacity(opacity);
+                    if (opacityDisplay) {
+                        opacityDisplay.textContent = percent + '%';
+                    }
+                });
+            }
+
             // Font Size
             var fontSizeInput = this.overlay.querySelector('.cbd-board-font-size');
             var fontSizeDisplay = this.overlay.querySelector('.cbd-board-font-size-display');
@@ -720,6 +768,14 @@
             if (uploadBtn) {
                 uploadBtn.addEventListener('click', function() {
                     self.uploadPersonalNotes();
+                });
+            }
+
+            // Delete All Button (Delete all personal notes)
+            var deleteAllBtn = this.overlay.querySelector('.cbd-board-delete-all');
+            if (deleteAllBtn) {
+                deleteAllBtn.addEventListener('click', function() {
+                    self.deleteAllPersonalNotes();
                 });
             }
 
@@ -826,6 +882,12 @@
                     this.drawingCanvas.classList.remove('eraser-active');
                 }
             }
+
+            // Lade die gespeicherte Breite für dieses Tool
+            this.loadToolWidth();
+
+            // Aktualisiere UI-Elemente (Größen-Slider und Transparenz-Slider)
+            this.updateToolUI();
         },
 
         setColor: function(color) {
@@ -834,6 +896,14 @@
 
         setLineWidth: function(width) {
             this.lineWidth = width;
+
+            // Speichere die Breite für das aktuelle Tool
+            this.saveToolWidth();
+        },
+
+        setHighlighterOpacity: function(opacity) {
+            this.highlighterOpacity = opacity;
+            this.saveToolSettings();
         },
 
         /**
@@ -844,6 +914,126 @@
             var contentArea = this.overlay.querySelector('.cbd-board-content');
             if (contentArea) {
                 contentArea.style.fontSize = (size / 100) + 'em';
+            }
+        },
+
+        /**
+         * Lädt alle Tool-Einstellungen aus localStorage
+         */
+        loadToolSettings: function() {
+            try {
+                var settings = localStorage.getItem('cbd-board-tool-settings');
+                if (settings) {
+                    settings = JSON.parse(settings);
+                    this.penWidth = settings.penWidth || 3;
+                    this.eraserStrokeWidth = settings.eraserStrokeWidth || 8;
+                    this.eraserPointWidth = settings.eraserPointWidth || 15;
+                    this.highlighterWidth = settings.highlighterWidth || 20;
+                    this.highlighterOpacity = settings.highlighterOpacity || 0.3;
+                }
+            } catch (e) {
+                console.error('[CBD Board] Fehler beim Laden der Tool-Einstellungen:', e);
+            }
+
+            // Setze lineWidth auf die Breite des aktuellen Tools
+            this.loadToolWidth();
+        },
+
+        /**
+         * Speichert alle Tool-Einstellungen in localStorage
+         */
+        saveToolSettings: function() {
+            try {
+                var settings = {
+                    penWidth: this.penWidth,
+                    eraserStrokeWidth: this.eraserStrokeWidth,
+                    eraserPointWidth: this.eraserPointWidth,
+                    highlighterWidth: this.highlighterWidth,
+                    highlighterOpacity: this.highlighterOpacity
+                };
+                localStorage.setItem('cbd-board-tool-settings', JSON.stringify(settings));
+            } catch (e) {
+                console.error('[CBD Board] Fehler beim Speichern der Tool-Einstellungen:', e);
+            }
+        },
+
+        /**
+         * Lädt die Breite für das aktuelle Tool
+         */
+        loadToolWidth: function() {
+            switch (this.currentTool) {
+                case 'pen':
+                    this.lineWidth = this.penWidth;
+                    break;
+                case 'eraser-stroke':
+                    this.lineWidth = this.eraserStrokeWidth;
+                    break;
+                case 'eraser-point':
+                    this.lineWidth = this.eraserPointWidth;
+                    break;
+                case 'highlighter':
+                    this.lineWidth = this.highlighterWidth;
+                    break;
+                default:
+                    this.lineWidth = this.penWidth;
+            }
+        },
+
+        /**
+         * Speichert die aktuelle lineWidth für das aktuelle Tool
+         */
+        saveToolWidth: function() {
+            switch (this.currentTool) {
+                case 'pen':
+                    this.penWidth = this.lineWidth;
+                    break;
+                case 'eraser-stroke':
+                    this.eraserStrokeWidth = this.lineWidth;
+                    break;
+                case 'eraser-point':
+                    this.eraserPointWidth = this.lineWidth;
+                    break;
+                case 'highlighter':
+                    this.highlighterWidth = this.lineWidth;
+                    break;
+            }
+
+            // Speichere alle Einstellungen
+            this.saveToolSettings();
+        },
+
+        /**
+         * Aktualisiert die UI-Elemente (Slider) basierend auf dem aktuellen Tool
+         */
+        updateToolUI: function() {
+            if (!this.overlay) return;
+
+            // Größen-Slider aktualisieren
+            var widthInput = this.overlay.querySelector('.cbd-board-width');
+            var widthDisplay = this.overlay.querySelector('.cbd-board-width-display');
+            if (widthInput) {
+                widthInput.value = this.lineWidth;
+                if (widthDisplay) {
+                    widthDisplay.textContent = this.lineWidth + 'px';
+                }
+            }
+
+            // Transparenz-Slider nur für Textmarker anzeigen
+            var opacityControl = this.overlay.querySelector('.cbd-board-opacity-control');
+            if (opacityControl) {
+                if (this.currentTool === 'highlighter') {
+                    opacityControl.style.display = 'flex';
+                    var opacityInput = this.overlay.querySelector('.cbd-board-opacity');
+                    var opacityDisplay = this.overlay.querySelector('.cbd-board-opacity-display');
+                    if (opacityInput) {
+                        opacityInput.value = Math.round(this.highlighterOpacity * 100);
+                        if (opacityDisplay) {
+                            opacityDisplay.textContent = Math.round(this.highlighterOpacity * 100) + '%';
+                        }
+                    }
+                } else {
+                    opacityControl.style.display = 'none';
+                }
             }
         },
 
@@ -962,26 +1152,10 @@
                 };
             }
 
-            // Einzelnen Punkt zeichnen (außer bei Punkt-Radierer - bereits oben gezeichnet)
-            if (this.currentTool !== 'eraser-point') {
-                this.drawingCtx.beginPath();
-                this.drawingCtx.arc(this.lastX, this.lastY, this.lineWidth / 2, 0, Math.PI * 2);
-
-                if (this.currentTool === 'eraser-stroke') {
-                    // Strich-Radierer: Loescht nur auf Drawing Layer
-                    this.drawingCtx.globalCompositeOperation = 'destination-out';
-                    this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
-                } else if (this.currentTool === 'highlighter') {
-                    // Textmarkierer: Helle Farbe mit 'lighten' - bleibt beim Übermalen konstant
-                    this.drawingCtx.globalCompositeOperation = 'lighten';
-                    this.drawingCtx.fillStyle = this.getLighterHighlightColor(this.currentColor);
-                } else {
-                    // Normal pen
-                    this.drawingCtx.globalCompositeOperation = 'source-over';
-                    this.drawingCtx.fillStyle = this.currentColor;
-                }
-
-                this.drawingCtx.fill();
+            // Canvas mit korrekter Ebenen-Reihenfolge neu zeichnen
+            // (Textmarker unten, normale Striche oben)
+            if (this.currentTool !== 'eraser-point' && this.currentTool !== 'eraser-stroke') {
+                this.redrawAllStrokes();
             }
 
             // Pointer capture
@@ -1021,23 +1195,9 @@
                 this.currentStroke.points.push({x: x, y: y});
             }
 
-            this.drawingCtx.beginPath();
-            this.drawingCtx.moveTo(this.lastX, this.lastY);
-            this.drawingCtx.lineTo(x, y);
-
-            this.drawingCtx.lineWidth = this.lineWidth;
-            this.drawingCtx.lineCap = 'round';
-            this.drawingCtx.lineJoin = 'round';
-
-            if (this.currentTool === 'highlighter') {
-                this.drawingCtx.globalCompositeOperation = 'lighten';
-                this.drawingCtx.strokeStyle = this.getLighterHighlightColor(this.currentColor);
-            } else {
-                this.drawingCtx.globalCompositeOperation = 'source-over';
-                this.drawingCtx.strokeStyle = this.currentColor;
-            }
-
-            this.drawingCtx.stroke();
+            // Canvas mit korrekter Ebenen-Reihenfolge neu zeichnen
+            // (Textmarker unten, normale Striche oben)
+            this.redrawAllStrokes();
 
             this.lastX = x;
             this.lastY = y;
@@ -1102,13 +1262,19 @@
             // Canvas löschen
             this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
 
+            // Sammle alle Striche (abgeschlossen + aktuell in Bearbeitung)
+            var allStrokes = this.strokes.slice(); // Kopie der abgeschlossenen Striche
+            if (this.currentStroke && this.currentStroke.points.length > 0) {
+                allStrokes.push(this.currentStroke); // Füge aktuellen Strich hinzu
+            }
+
             // Zwei-Pass-Rendering: Erst Textmarkierer (unten), dann normale Striche (oben)
 
             // Pass 1: Textmarkierer zeichnen (untere Ebene)
-            for (var i = 0; i < this.strokes.length; i++) {
-                var stroke = this.strokes[i];
+            for (var i = 0; i < allStrokes.length; i++) {
+                var stroke = allStrokes[i];
                 if (stroke.tool !== 'highlighter') continue; // Nur Textmarkierer
-                if (stroke.points.length < 2) continue;
+                if (stroke.points.length < 1) continue;
 
                 this.drawingCtx.lineWidth = stroke.width;
                 this.drawingCtx.lineCap = 'round';
@@ -1130,10 +1296,10 @@
             // Pass 2: Normale Striche zeichnen (obere Ebene)
             this.drawingCtx.globalCompositeOperation = 'source-over';
 
-            for (var i = 0; i < this.strokes.length; i++) {
-                var stroke = this.strokes[i];
+            for (var i = 0; i < allStrokes.length; i++) {
+                var stroke = allStrokes[i];
                 if (stroke.tool === 'highlighter') continue; // Überspringen, schon gezeichnet
-                if (stroke.points.length < 2) continue;
+                if (stroke.points.length < 1) continue;
 
                 this.drawingCtx.lineWidth = stroke.width;
                 this.drawingCtx.lineCap = 'round';
@@ -1259,6 +1425,11 @@
                 self.isSaving = false;
                 if (data.success) {
                     self._setSaveStatus('Gespeichert');
+                    // Einmalig als "behandelt" markieren wenn noch nicht geschehen
+                    if (!self.isBehandeltSet) {
+                        self.isBehandeltSet = true;
+                        self.setBehandeltOnServer();
+                    }
                 } else {
                     console.warn('[CBD Board Mode] Server-Speichern fehlgeschlagen:', data);
                     self._setSaveStatus('Fehler');
@@ -1278,6 +1449,34 @@
             if (el) {
                 el.textContent = text;
             }
+        },
+
+        /**
+         * Block als "behandelt" markieren (einmalig pro Session, fire-and-forget)
+         */
+        setBehandeltOnServer: function() {
+            if (!this.classId || !this.ajaxUrl || !this.stableContainerId) return;
+
+            var formData = new FormData();
+            formData.append('action', 'cbd_set_behandelt');
+            formData.append('nonce', this.nonce);
+            formData.append('class_id', this.classId);
+            formData.append('page_id', this.pageId);
+            formData.append('container_id', this.stableContainerId);
+
+            fetch(this.ajaxUrl, {
+                method: 'POST',
+                body: formData
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                if (!data.success) {
+                    console.warn('[CBD Board Mode] Behandelt-Status konnte nicht gesetzt werden:', data);
+                }
+            })
+            .catch(function(err) {
+                console.warn('[CBD Board Mode] Behandelt-Status konnte nicht gesetzt werden:', err);
+            });
         },
 
         // =============================================
@@ -1365,11 +1564,15 @@
                 var g = parseInt(result[2], 16);
                 var b = parseInt(result[3], 16);
 
-                // Mische mit 85% Weiß für sehr hellen Textmarkierer-Effekt
-                // Mehr Weiß = Heller = Besser sichtbar auf dunklen Hintergründen
-                r = Math.round(r + (255 - r) * 0.85);
-                g = Math.round(g + (255 - g) * 0.85);
-                b = Math.round(b + (255 - b) * 0.85);
+                // Berechne Weiß-Mischung basierend auf highlighterOpacity
+                // opacity 0.1 (10%) = sehr hell (viel Weiß gemischt)
+                // opacity 1.0 (100%) = dunkel (wenig Weiß gemischt)
+                var whiteMix = Math.max(0.3, Math.min(0.95, 1.0 - (this.highlighterOpacity * 0.7)));
+
+                // Mische mit Weiß für hellen Textmarkierer-Effekt
+                r = Math.round(r + (255 - r) * whiteMix);
+                g = Math.round(g + (255 - g) * whiteMix);
+                b = Math.round(b + (255 - b) * whiteMix);
 
                 // Volle Deckkraft (1.0) damit 'lighten' operation korrekt funktioniert
                 // Bei 1.0: Einmal markiert = Farbe bleibt konstant (lighten ersetzt nur dunklere Pixel)
@@ -1511,6 +1714,249 @@
 
             // File-Dialog öffnen
             input.click();
+        },
+
+        /**
+         * Alle persönlichen Notizen löschen (mit Bestätigung)
+         */
+        deleteAllPersonalNotes: function() {
+            try {
+                // Zähle vorhandene Notizen
+                var count = 0;
+                var keysToDelete = [];
+                for (var i = 0; i < localStorage.length; i++) {
+                    var key = localStorage.key(i);
+                    if (key && key.startsWith('cbd-board-')) {
+                        count++;
+                        keysToDelete.push(key);
+                    }
+                }
+
+                if (count === 0) {
+                    alert('Keine persönlichen Notizen zum Löschen vorhanden.');
+                    return;
+                }
+
+                // Bestätigungsabfrage
+                var confirmMsg = '⚠️ WARNUNG: Alle lokalen Tafel-Notizen löschen\n\n' +
+                    'Es werden ' + count + ' persönliche Notiz(en) UNWIDERRUFLICH gelöscht.\n' +
+                    'Dies kann NICHT rückgängig gemacht werden!\n\n' +
+                    'Tipp: Exportieren Sie Ihre Notizen zuerst mit dem Download-Button,\n' +
+                    'wenn Sie sie später wiederherstellen möchten.\n\n' +
+                    'Möchten Sie wirklich ALLE lokalen Notizen löschen?';
+
+                if (!confirm(confirmMsg)) {
+                    return;
+                }
+
+                // Zweite Bestätigung für zusätzliche Sicherheit
+                var confirmMsg2 = 'Letzte Bestätigung:\n\n' +
+                    'Sind Sie ABSOLUT SICHER, dass Sie alle ' + count + ' Notizen löschen möchten?\n\n' +
+                    'Dies kann NICHT rückgängig gemacht werden!';
+
+                if (!confirm(confirmMsg2)) {
+                    return;
+                }
+
+                // Alle cbd-board-* Keys löschen
+                keysToDelete.forEach(function(key) {
+                    localStorage.removeItem(key);
+                });
+
+                // Canvas leeren (falls gerade eine Zeichnung angezeigt wird)
+                if (this.drawingCtx) {
+                    this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
+                    this.strokes = [];
+                }
+
+                // Erfolgsbestätigung
+                alert('✓ Erfolgreich gelöscht!\n\n' +
+                    'Alle ' + count + ' persönlichen Tafel-Notizen wurden gelöscht.\n\n' +
+                    'Ihre Zeichnungen sind jetzt wieder leer.');
+
+            } catch (e) {
+                console.error('[CBD Board Mode] Fehler beim Löschen:', e);
+                alert('Fehler beim Löschen der Notizen: ' + e.message);
+            }
+        },
+
+        /**
+         * Interaktive Blöcke initialisieren
+         * Führt Inline-Scripts aus und triggert Block-Initialisierung
+         */
+        initializeInteractiveBlocks: function(container) {
+            if (!container) return;
+
+            var self = this;
+
+            try {
+                // 1. Externe Libraries für spezielle Blöcke laden
+                this.loadBlockDependencies(container, function() {
+                    // 2. Alle <script>-Tags finden und ausführen
+                    var scripts = container.querySelectorAll('script');
+                scripts.forEach(function(oldScript) {
+                    // Neues Script-Element erstellen (damit es ausgeführt wird)
+                    var newScript = document.createElement('script');
+
+                    // Kopiere alle Attribute
+                    Array.from(oldScript.attributes).forEach(function(attr) {
+                        newScript.setAttribute(attr.name, attr.value);
+                    });
+
+                    // Kopiere Script-Inhalt
+                    if (oldScript.src) {
+                        // Externes Script - src kopieren
+                        newScript.src = oldScript.src;
+                    } else {
+                        // Inline-Script - Inhalt kopieren
+                        newScript.textContent = oldScript.textContent;
+                    }
+
+                    // Ersetze altes Script durch neues (triggert Ausführung)
+                    oldScript.parentNode.replaceChild(newScript, oldScript);
+                });
+
+                // 3. Custom Event für Block-Initialisierung auslösen
+                var event = new CustomEvent('cbd-board-content-loaded', {
+                    detail: { container: container },
+                    bubbles: true,
+                    cancelable: false
+                });
+                container.dispatchEvent(event);
+
+                // 4. jQuery-basierte Initialisierung (falls jQuery vorhanden)
+                if (typeof jQuery !== 'undefined') {
+                    jQuery(container).trigger('cbd-board-content-loaded');
+                }
+
+                // 5. WordPress Interactivity API neu initialisieren (falls vorhanden)
+                if (window.wp && window.wp.interactivity) {
+                    // Timeout um sicherzustellen, dass DOM-Updates abgeschlossen sind
+                    setTimeout(function() {
+                        // Triggere Interactivity API für alle interaktiven Elemente im Container
+                        var interactiveElements = container.querySelectorAll('[data-wp-interactive]');
+                        interactiveElements.forEach(function(element) {
+                            // Force re-initialization by triggering a DOM mutation
+                            var parent = element.parentNode;
+                            var next = element.nextSibling;
+                            parent.removeChild(element);
+                            parent.insertBefore(element, next);
+                        });
+                    }, 100);
+                }
+
+                // 6. Spezielle Block-Initialisierung (Molekülviewer, etc.)
+                self.initializeSpecialBlocks(container);
+
+                console.log('[CBD Board Mode] Interaktive Blöcke initialisiert:', scripts.length, 'Scripts ausgeführt');
+            });
+
+            } catch (e) {
+                console.error('[CBD Board Mode] Fehler bei Block-Initialisierung:', e);
+            }
+        },
+
+        /**
+         * Lädt externe Abhängigkeiten für spezielle Blöcke (z.B. 3Dmol.js für Molekülviewer)
+         */
+        loadBlockDependencies: function(container, callback) {
+            var dependencies = [];
+
+            // Prüfe auf Molekülviewer-Block
+            if (container.querySelector('.wp-block-modular-blocks-molecule-viewer')) {
+                // Prüfe ob 3Dmol.js bereits geladen ist
+                if (typeof window.$3Dmol === 'undefined') {
+                    dependencies.push({
+                        name: '3Dmol',
+                        url: 'https://3dmol.csb.pitt.edu/build/3Dmol-min.js',
+                        check: function() { return typeof window.$3Dmol !== 'undefined'; }
+                    });
+                }
+            }
+
+            // Prüfe auf Chart-Block (Plotly)
+            if (container.querySelector('.wp-block-modular-blocks-chart-block')) {
+                if (typeof window.Plotly === 'undefined') {
+                    dependencies.push({
+                        name: 'Plotly',
+                        url: 'https://cdn.plot.ly/plotly-latest.min.js',
+                        check: function() { return typeof window.Plotly !== 'undefined'; }
+                    });
+                }
+            }
+
+            // Wenn keine Dependencies fehlen, direkt callback ausführen
+            if (dependencies.length === 0) {
+                callback();
+                return;
+            }
+
+            // Dependencies laden
+            console.log('[CBD Board Mode] Lade externe Libraries:', dependencies.map(function(d) { return d.name; }).join(', '));
+
+            var loaded = 0;
+            var total = dependencies.length;
+
+            dependencies.forEach(function(dep) {
+                var script = document.createElement('script');
+                script.src = dep.url;
+                script.onload = function() {
+                    console.log('[CBD Board Mode]', dep.name, 'erfolgreich geladen');
+                    loaded++;
+                    if (loaded === total) {
+                        // Alle Dependencies geladen, callback ausführen
+                        setTimeout(callback, 100); // Kurze Verzögerung für Initialisierung
+                    }
+                };
+                script.onerror = function() {
+                    console.error('[CBD Board Mode] Fehler beim Laden von', dep.name);
+                    loaded++;
+                    if (loaded === total) {
+                        callback(); // Auch bei Fehler weitermachen
+                    }
+                };
+                document.head.appendChild(script);
+            });
+        },
+
+        /**
+         * Spezielle Initialisierung für bekannte Blöcke
+         */
+        initializeSpecialBlocks: function(container) {
+            // Molekülviewer neu initialisieren
+            var moleculeViewers = container.querySelectorAll('.wp-block-modular-blocks-molecule-viewer');
+            if (moleculeViewers.length > 0 && typeof window.$3Dmol !== 'undefined') {
+                moleculeViewers.forEach(function(viewer) {
+                    // Triggere Re-Rendering durch DOM-Manipulation
+                    var parent = viewer.parentNode;
+                    var next = viewer.nextSibling;
+                    parent.removeChild(viewer);
+
+                    // Nach kurzer Verzögerung wieder einfügen (triggert Neuinitialisierung)
+                    setTimeout(function() {
+                        parent.insertBefore(viewer, next);
+
+                        // Custom Event für Molekülviewer
+                        var event = new CustomEvent('molecule-viewer-reinit', {
+                            bubbles: true,
+                            detail: { viewer: viewer }
+                        });
+                        viewer.dispatchEvent(event);
+                    }, 50);
+                });
+            }
+
+            // Chart-Blöcke neu initialisieren
+            var chartBlocks = container.querySelectorAll('.wp-block-modular-blocks-chart-block');
+            if (chartBlocks.length > 0 && typeof window.Plotly !== 'undefined') {
+                chartBlocks.forEach(function(chart) {
+                    var event = new CustomEvent('chart-reinit', {
+                        bubbles: true,
+                        detail: { chart: chart }
+                    });
+                    chart.dispatchEvent(event);
+                });
+            }
         }
     };
 
