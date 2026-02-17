@@ -29,10 +29,18 @@
         lineWidth: 3,
         containerId: null,
         boardColor: '#ffffff',
+        fontSize: 150, // Textgröße in Prozent (150% = 1.5x normal, besser lesbar auf Tafel)
         lastX: 0,
         lastY: 0,
         resizeObserver: null,
         boundHandlers: {},
+
+        // Palm rejection: Track active pointers
+        activePointers: new Set(),
+
+        // Stroke-based drawing: Store all strokes for stroke-eraser
+        strokes: [],
+        currentStroke: null,
 
         // Grid state: 'off', 'horizontal', 'vertical'
         gridMode: 'off',
@@ -125,6 +133,21 @@
 
             // Events binden
             this.bindEvents();
+
+            // Download/Upload Buttons nur im persönlichen Modus zeigen
+            var downloadBtn = this.overlay.querySelector('.cbd-board-download');
+            var uploadBtn = this.overlay.querySelector('.cbd-board-upload');
+            if (downloadBtn && uploadBtn) {
+                if (this.classId === null) {
+                    // Persönlicher Modus: Buttons zeigen
+                    downloadBtn.style.display = 'flex';
+                    uploadBtn.style.display = 'flex';
+                } else {
+                    // Klassen-Modus: Buttons verstecken (wird server-seitig gespeichert)
+                    downloadBtn.style.display = 'none';
+                    uploadBtn.style.display = 'none';
+                }
+            }
         },
 
         /**
@@ -181,6 +204,13 @@
             this.stableContainerId = null;
             this.isSaving = false;
             this.showGrid = false;
+
+            // Palm Rejection: Aktive Pointer löschen
+            this.activePointers.clear();
+
+            // Stroke-basiertes Radieren: Striche löschen
+            this.strokes = [];
+            this.currentStroke = null;
         },
 
         /**
@@ -252,6 +282,11 @@
                             '<input type="range" class="cbd-board-width" min="1" max="20" value="3" title="Stiftdicke">' +
                             '<span class="cbd-board-width-display">3px</span>' +
                             '<span class="cbd-board-separator"></span>' +
+                            // Font size
+                            '<label class="cbd-board-font-label">📝</label>' +
+                            '<input type="range" class="cbd-board-font-size" min="100" max="300" value="150" step="10" title="Textgröße">' +
+                            '<span class="cbd-board-font-size-display">150%</span>' +
+                            '<span class="cbd-board-separator"></span>' +
                             // Grid toggle
                             '<button class="cbd-board-grid-toggle" title="Hexagon-Gitter ein/aus">' +
                                 '<span class="dashicons dashicons-grid-view"></span>' +
@@ -270,6 +305,14 @@
                             '<button class="cbd-board-clear" title="Alles löschen">' +
                                 '<span class="dashicons dashicons-trash"></span>' +
                             '</button>' +
+                            '<span class="cbd-board-separator"></span>' +
+                            // Download/Upload buttons (nur für persönliche Notizen)
+                            '<button class="cbd-board-download" title="Notizen herunterladen" style="display:none;">' +
+                                '<span class="dashicons dashicons-download"></span>' +
+                            '</button>' +
+                            '<button class="cbd-board-upload" title="Notizen hochladen" style="display:none;">' +
+                                '<span class="dashicons dashicons-upload"></span>' +
+                            '</button>' +
                         '</div>' +
                         '<div class="cbd-board-canvas-container">' +
                             '<canvas class="cbd-board-canvas cbd-board-canvas-background"></canvas>' +
@@ -286,6 +329,9 @@
             // Block-Inhalt einfuegen
             var contentArea = overlay.querySelector('.cbd-board-content');
             contentArea.innerHTML = contentHtml;
+
+            // Standard-Textgröße anwenden (150% für bessere Lesbarkeit auf Tafel)
+            contentArea.style.fontSize = (this.fontSize / 100) + 'em';
 
             this.overlay = overlay;
         },
@@ -525,6 +571,7 @@
             this.drawingCanvas.addEventListener('pointermove', this.boundHandlers.pointerMove);
             this.drawingCanvas.addEventListener('pointerup', this.boundHandlers.pointerUp);
             this.drawingCanvas.addEventListener('pointerleave', this.boundHandlers.pointerUp);
+            this.drawingCanvas.addEventListener('pointercancel', this.boundHandlers.pointerUp);
 
             // ESC-Taste
             document.addEventListener('keydown', this.boundHandlers.keyDown);
@@ -589,6 +636,19 @@
                 });
             }
 
+            // Font Size
+            var fontSizeInput = this.overlay.querySelector('.cbd-board-font-size');
+            var fontSizeDisplay = this.overlay.querySelector('.cbd-board-font-size-display');
+            if (fontSizeInput) {
+                fontSizeInput.addEventListener('input', function() {
+                    var size = parseInt(this.value, 10);
+                    self.setFontSize(size);
+                    if (fontSizeDisplay) {
+                        fontSizeDisplay.textContent = size + '%';
+                    }
+                });
+            }
+
             // Grid Toggle
             var gridToggle = this.overlay.querySelector('.cbd-board-grid-toggle');
             if (gridToggle) {
@@ -647,6 +707,22 @@
                 });
             }
 
+            // Download Button (Export personal notes)
+            var downloadBtn = this.overlay.querySelector('.cbd-board-download');
+            if (downloadBtn) {
+                downloadBtn.addEventListener('click', function() {
+                    self.downloadPersonalNotes();
+                });
+            }
+
+            // Upload Button (Import personal notes)
+            var uploadBtn = this.overlay.querySelector('.cbd-board-upload');
+            if (uploadBtn) {
+                uploadBtn.addEventListener('click', function() {
+                    self.uploadPersonalNotes();
+                });
+            }
+
             // ResizeObserver
             if (typeof ResizeObserver !== 'undefined') {
                 this.resizeObserver = new ResizeObserver(function() {
@@ -665,6 +741,7 @@
                 this.drawingCanvas.removeEventListener('pointermove', this.boundHandlers.pointerMove);
                 this.drawingCanvas.removeEventListener('pointerup', this.boundHandlers.pointerUp);
                 this.drawingCanvas.removeEventListener('pointerleave', this.boundHandlers.pointerUp);
+                this.drawingCanvas.removeEventListener('pointercancel', this.boundHandlers.pointerUp);
             }
 
             if (this.boundHandlers.keyDown) {
@@ -760,12 +837,27 @@
         },
 
         /**
+         * Textgröße des Blockinhalts setzen
+         */
+        setFontSize: function(size) {
+            this.fontSize = size;
+            var contentArea = this.overlay.querySelector('.cbd-board-content');
+            if (contentArea) {
+                contentArea.style.fontSize = (size / 100) + 'em';
+            }
+        },
+
+        /**
          * Drawing Canvas loeschen
          */
         clearCanvas: function() {
             if (!this.drawingCtx || !this.drawingCanvas) return;
 
             this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
+
+            // Striche löschen (für Strich-basiertes Radieren)
+            this.strokes = [];
+            this.currentStroke = null;
 
             // Aus localStorage entfernen
             this.removeFromCache();
@@ -809,42 +901,88 @@
         // =============================================
 
         onPointerDown: function(e) {
+            // Handballenunterdrückung (Palm Rejection)
+            // Nur Stift (pen) oder Maus (mouse) erlauben - Touch mit mehreren Kontaktpunkten ignorieren
+
+            // Pointer zur Liste hinzufügen
+            this.activePointers.add(e.pointerId);
+
+            if (e.pointerType === 'touch') {
+                // Wenn mehrere Pointer aktiv sind: Wahrscheinlich Handballen + Finger
+                // Erste Touch erlauben, weitere Touches (Palm) ignorieren
+                if (this.activePointers.size > 1) {
+                    return; // Palm-Berührung ignorieren
+                }
+
+                // Große Kontaktfläche deutet auf Handballen hin
+                // width/height sind bei Palm größer als bei Finger/Stift
+                if (e.width > 25 || e.height > 25) {
+                    return; // Wahrscheinlich Handballen
+                }
+            }
+
+            // Stift (pen) und Maus (mouse) immer erlauben
+
             var rect = this.drawingCanvas.getBoundingClientRect();
             this.lastX = e.clientX - rect.left;
             this.lastY = e.clientY - rect.top;
 
-            // Punkt-Radierer: Nur Click, kein Drag
+            // Punkt-Radierer: Kontinuierlich radieren (wie normaler Radierer)
             if (this.currentTool === 'eraser-point') {
+                // Ersten Punkt radieren
                 this.drawingCtx.beginPath();
                 this.drawingCtx.arc(this.lastX, this.lastY, this.lineWidth * 3, 0, Math.PI * 2);
                 this.drawingCtx.globalCompositeOperation = 'destination-out';
                 this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
                 this.drawingCtx.fill();
                 this.drawingCtx.globalCompositeOperation = 'source-over';
-                return; // Kein isDrawing für Punkt-Radierer
+                // KEIN return - isDrawing wird aktiviert für kontinuierliches Radieren
+            }
+
+            // Strich-Radierer: Prüfe ob ein Strich getroffen wurde
+            if (this.currentTool === 'eraser-stroke') {
+                var deletedAny = this.eraseStrokeAtPoint(this.lastX, this.lastY);
+                if (deletedAny) {
+                    return; // Strich wurde gelöscht, kein isDrawing nötig
+                }
             }
 
             this.isDrawing = true;
 
-            // Einzelnen Punkt zeichnen
-            this.drawingCtx.beginPath();
-            this.drawingCtx.arc(this.lastX, this.lastY, this.lineWidth / 2, 0, Math.PI * 2);
-
-            if (this.currentTool === 'eraser-stroke') {
-                // Strich-Radierer: Loescht nur auf Drawing Layer
-                this.drawingCtx.globalCompositeOperation = 'destination-out';
-                this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
-            } else if (this.currentTool === 'highlighter') {
-                // Textmarkierer: Mit 'lighten' bleibt es gleich hell beim Übermalen
-                this.drawingCtx.globalCompositeOperation = 'lighten';
-                this.drawingCtx.fillStyle = this.hexToRgba(this.currentColor, 0.4);
-            } else {
-                // Normal pen
-                this.drawingCtx.globalCompositeOperation = 'source-over';
-                this.drawingCtx.fillStyle = this.currentColor;
+            // Neuen Strich beginnen (für Strich-basiertes Radieren)
+            // Radierer werden nicht als Strich gespeichert
+            if (this.currentTool !== 'eraser-stroke' && this.currentTool !== 'eraser-point') {
+                this.currentStroke = {
+                    tool: this.currentTool,
+                    color: this.currentTool === 'highlighter'
+                        ? this.getLighterHighlightColor(this.currentColor)
+                        : this.currentColor,
+                    width: this.lineWidth,
+                    points: [{x: this.lastX, y: this.lastY}]
+                };
             }
 
-            this.drawingCtx.fill();
+            // Einzelnen Punkt zeichnen (außer bei Punkt-Radierer - bereits oben gezeichnet)
+            if (this.currentTool !== 'eraser-point') {
+                this.drawingCtx.beginPath();
+                this.drawingCtx.arc(this.lastX, this.lastY, this.lineWidth / 2, 0, Math.PI * 2);
+
+                if (this.currentTool === 'eraser-stroke') {
+                    // Strich-Radierer: Loescht nur auf Drawing Layer
+                    this.drawingCtx.globalCompositeOperation = 'destination-out';
+                    this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
+                } else if (this.currentTool === 'highlighter') {
+                    // Textmarkierer: Helle Farbe mit 'lighten' - bleibt beim Übermalen konstant
+                    this.drawingCtx.globalCompositeOperation = 'lighten';
+                    this.drawingCtx.fillStyle = this.getLighterHighlightColor(this.currentColor);
+                } else {
+                    // Normal pen
+                    this.drawingCtx.globalCompositeOperation = 'source-over';
+                    this.drawingCtx.fillStyle = this.currentColor;
+                }
+
+                this.drawingCtx.fill();
+            }
 
             // Pointer capture
             this.drawingCanvas.setPointerCapture(e.pointerId);
@@ -857,6 +995,32 @@
             var x = e.clientX - rect.left;
             var y = e.clientY - rect.top;
 
+            // Strich-Radierer: Prüfe kontinuierlich ob ein Strich getroffen wird
+            if (this.currentTool === 'eraser-stroke') {
+                this.eraseStrokeAtPoint(x, y);
+                this.lastX = x;
+                this.lastY = y;
+                return;
+            }
+
+            // Punkt-Radierer: Zeichne Kreis an jeder Position (kontinuierlich)
+            if (this.currentTool === 'eraser-point') {
+                this.drawingCtx.beginPath();
+                this.drawingCtx.arc(x, y, this.lineWidth * 3, 0, Math.PI * 2);
+                this.drawingCtx.globalCompositeOperation = 'destination-out';
+                this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
+                this.drawingCtx.fill();
+                this.drawingCtx.globalCompositeOperation = 'source-over';
+                this.lastX = x;
+                this.lastY = y;
+                return;
+            }
+
+            // Punkt zum aktuellen Strich hinzufügen
+            if (this.currentStroke) {
+                this.currentStroke.points.push({x: x, y: y});
+            }
+
             this.drawingCtx.beginPath();
             this.drawingCtx.moveTo(this.lastX, this.lastY);
             this.drawingCtx.lineTo(x, y);
@@ -865,12 +1029,9 @@
             this.drawingCtx.lineCap = 'round';
             this.drawingCtx.lineJoin = 'round';
 
-            if (this.currentTool === 'eraser-stroke') {
-                this.drawingCtx.globalCompositeOperation = 'destination-out';
-                this.drawingCtx.strokeStyle = 'rgba(0,0,0,1)';
-            } else if (this.currentTool === 'highlighter') {
+            if (this.currentTool === 'highlighter') {
                 this.drawingCtx.globalCompositeOperation = 'lighten';
-                this.drawingCtx.strokeStyle = this.hexToRgba(this.currentColor, 0.4);
+                this.drawingCtx.strokeStyle = this.getLighterHighlightColor(this.currentColor);
             } else {
                 this.drawingCtx.globalCompositeOperation = 'source-over';
                 this.drawingCtx.strokeStyle = this.currentColor;
@@ -883,10 +1044,115 @@
         },
 
         onPointerUp: function(e) {
+            // Pointer aus der Liste entfernen (für Palm Rejection)
+            this.activePointers.delete(e.pointerId);
+
             if (this.isDrawing) {
                 this.isDrawing = false;
                 this.drawingCtx.globalCompositeOperation = 'source-over';
+
+                // Aktuellen Strich zur Liste hinzufügen (außer bei Radierer)
+                if (this.currentStroke && this.currentTool !== 'eraser-stroke') {
+                    this.strokes.push(this.currentStroke);
+                    this.currentStroke = null;
+                }
             }
+        },
+
+        /**
+         * Strich-Radierer: Prüft ob ein Strich an Position (x,y) ist und löscht ihn
+         */
+        eraseStrokeAtPoint: function(x, y) {
+            var eraserRadius = this.lineWidth * 2; // Größerer Radius für einfacheres Treffen
+            var deletedAny = false;
+
+            // Durch alle Striche iterieren (rückwärts für sicheres Löschen)
+            for (var i = this.strokes.length - 1; i >= 0; i--) {
+                var stroke = this.strokes[i];
+
+                // Prüfe ob Radierer einen Punkt des Strichs berührt
+                for (var j = 0; j < stroke.points.length; j++) {
+                    var point = stroke.points[j];
+                    var dx = point.x - x;
+                    var dy = point.y - y;
+                    var distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < eraserRadius + stroke.width) {
+                        // Strich getroffen! Entfernen
+                        this.strokes.splice(i, 1);
+                        deletedAny = true;
+                        break;
+                    }
+                }
+
+                if (deletedAny) break; // Nur einen Strich pro Frame löschen
+            }
+
+            if (deletedAny) {
+                this.redrawAllStrokes();
+            }
+
+            return deletedAny;
+        },
+
+        /**
+         * Canvas neu zeichnen mit allen gespeicherten Strichen
+         */
+        redrawAllStrokes: function() {
+            // Canvas löschen
+            this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
+
+            // Zwei-Pass-Rendering: Erst Textmarkierer (unten), dann normale Striche (oben)
+
+            // Pass 1: Textmarkierer zeichnen (untere Ebene)
+            for (var i = 0; i < this.strokes.length; i++) {
+                var stroke = this.strokes[i];
+                if (stroke.tool !== 'highlighter') continue; // Nur Textmarkierer
+                if (stroke.points.length < 2) continue;
+
+                this.drawingCtx.lineWidth = stroke.width;
+                this.drawingCtx.lineCap = 'round';
+                this.drawingCtx.lineJoin = 'round';
+                this.drawingCtx.strokeStyle = stroke.color;
+                this.drawingCtx.globalCompositeOperation = 'lighten';
+
+                // Strich zeichnen
+                this.drawingCtx.beginPath();
+                this.drawingCtx.moveTo(stroke.points[0].x, stroke.points[0].y);
+
+                for (var j = 1; j < stroke.points.length; j++) {
+                    this.drawingCtx.lineTo(stroke.points[j].x, stroke.points[j].y);
+                }
+
+                this.drawingCtx.stroke();
+            }
+
+            // Pass 2: Normale Striche zeichnen (obere Ebene)
+            this.drawingCtx.globalCompositeOperation = 'source-over';
+
+            for (var i = 0; i < this.strokes.length; i++) {
+                var stroke = this.strokes[i];
+                if (stroke.tool === 'highlighter') continue; // Überspringen, schon gezeichnet
+                if (stroke.points.length < 2) continue;
+
+                this.drawingCtx.lineWidth = stroke.width;
+                this.drawingCtx.lineCap = 'round';
+                this.drawingCtx.lineJoin = 'round';
+                this.drawingCtx.strokeStyle = stroke.color;
+
+                // Strich zeichnen
+                this.drawingCtx.beginPath();
+                this.drawingCtx.moveTo(stroke.points[0].x, stroke.points[0].y);
+
+                for (var j = 1; j < stroke.points.length; j++) {
+                    this.drawingCtx.lineTo(stroke.points[j].x, stroke.points[j].y);
+                }
+
+                this.drawingCtx.stroke();
+            }
+
+            // Composite Operation zurücksetzen
+            this.drawingCtx.globalCompositeOperation = 'source-over';
         },
 
         onKeyDown: function(e) {
@@ -1088,6 +1354,163 @@
                 return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + alpha + ')';
             }
             return hex;
+        },
+
+        // Hellt eine Farbe für Textmarkierer auf (mischt mit Weiß)
+        // WICHTIG: Volle Deckkraft (1.0) + 'lighten' = Konstante Farbe beim Übermalen
+        getLighterHighlightColor: function(hex) {
+            var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            if (result) {
+                var r = parseInt(result[1], 16);
+                var g = parseInt(result[2], 16);
+                var b = parseInt(result[3], 16);
+
+                // Mische mit 85% Weiß für sehr hellen Textmarkierer-Effekt
+                // Mehr Weiß = Heller = Besser sichtbar auf dunklen Hintergründen
+                r = Math.round(r + (255 - r) * 0.85);
+                g = Math.round(g + (255 - g) * 0.85);
+                b = Math.round(b + (255 - b) * 0.85);
+
+                // Volle Deckkraft (1.0) damit 'lighten' operation korrekt funktioniert
+                // Bei 1.0: Einmal markiert = Farbe bleibt konstant (lighten ersetzt nur dunklere Pixel)
+                return 'rgba(' + r + ', ' + g + ', ' + b + ', 1.0)';
+            }
+            return 'rgba(255, 255, 200, 1.0)'; // Fallback: Helles Gelb
+        },
+
+        // =============================================
+        // Import/Export persönliche Notizen
+        // =============================================
+
+        /**
+         * Persönliche Notizen als JSON-Datei herunterladen
+         */
+        downloadPersonalNotes: function() {
+            try {
+                // Alle CBD-Board Daten aus localStorage sammeln
+                var exportData = {};
+                var count = 0;
+
+                for (var i = 0; i < localStorage.length; i++) {
+                    var key = localStorage.key(i);
+                    if (key && key.startsWith('cbd-board-')) {
+                        exportData[key] = localStorage.getItem(key);
+                        count++;
+                    }
+                }
+
+                if (count === 0) {
+                    alert('Keine persönlichen Notizen zum Herunterladen vorhanden.');
+                    return;
+                }
+
+                // JSON erstellen
+                var jsonData = JSON.stringify(exportData, null, 2);
+                var blob = new Blob([jsonData], { type: 'application/json' });
+                var url = URL.createObjectURL(blob);
+
+                // Download-Link erstellen und klicken
+                var link = document.createElement('a');
+                link.href = url;
+                link.download = 'cbd-notizen-' + new Date().toISOString().split('T')[0] + '.json';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+
+                // Bestätigung
+                var msg = count === 1
+                    ? '1 Notiz wurde heruntergeladen.'
+                    : count + ' Notizen wurden heruntergeladen.';
+                alert(msg + '\n\nSie können diese Datei auf einem neuen Gerät importieren.');
+
+            } catch (e) {
+                console.error('[CBD Board Mode] Fehler beim Download:', e);
+                alert('Fehler beim Herunterladen der Notizen: ' + e.message);
+            }
+        },
+
+        /**
+         * Persönliche Notizen aus JSON-Datei importieren
+         */
+        uploadPersonalNotes: function() {
+            var self = this;
+
+            // File Input erstellen
+            var input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+
+            input.addEventListener('change', function(e) {
+                var file = e.target.files[0];
+                if (!file) return;
+
+                var reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        var importData = JSON.parse(event.target.result);
+
+                        // Validierung: Ist es ein Objekt mit cbd-board Keys?
+                        var keys = Object.keys(importData);
+                        var validKeys = keys.filter(function(k) {
+                            return k.startsWith('cbd-board-');
+                        });
+
+                        if (validKeys.length === 0) {
+                            alert('Die Datei enthält keine gültigen CBD-Notizen.');
+                            return;
+                        }
+
+                        // Prüfen, ob bereits Daten vorhanden sind
+                        var existingCount = 0;
+                        for (var i = 0; i < localStorage.length; i++) {
+                            var key = localStorage.key(i);
+                            if (key && key.startsWith('cbd-board-')) {
+                                existingCount++;
+                            }
+                        }
+
+                        // Bestätigung wenn Daten vorhanden
+                        if (existingCount > 0) {
+                            var confirmMsg = 'Es sind bereits ' + existingCount + ' persönliche Notiz(en) vorhanden.\n\n' +
+                                'Beim Import werden ' + validKeys.length + ' Notiz(en) hochgeladen.\n' +
+                                'Bestehende Notizen mit denselben IDs werden überschrieben.\n\n' +
+                                'Möchten Sie fortfahren?';
+
+                            if (!confirm(confirmMsg)) {
+                                return;
+                            }
+                        }
+
+                        // Import durchführen
+                        var imported = 0;
+                        validKeys.forEach(function(key) {
+                            localStorage.setItem(key, importData[key]);
+                            imported++;
+                        });
+
+                        // Bestätigung
+                        var successMsg = imported === 1
+                            ? '1 Notiz wurde erfolgreich importiert.'
+                            : imported + ' Notizen wurden erfolgreich importiert.';
+
+                        alert(successMsg + '\n\nDie Notizen sind jetzt verfügbar.');
+
+                        // Wenn wir gerade die aktuelle Zeichnung importiert haben, neu laden
+                        if (importData['cbd-board-' + self.containerId]) {
+                            self.loadDrawing();
+                        }
+
+                    } catch (e) {
+                        console.error('[CBD Board Mode] Fehler beim Import:', e);
+                        alert('Fehler beim Importieren der Notizen: ' + e.message + '\n\nStellen Sie sicher, dass die Datei eine gültige CBD-Notizen-Datei ist.');
+                    }
+                };
+                reader.readAsText(file);
+            });
+
+            // File-Dialog öffnen
+            input.click();
         }
     };
 

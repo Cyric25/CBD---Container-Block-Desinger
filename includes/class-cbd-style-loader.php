@@ -192,6 +192,39 @@ class CBD_Style_Loader {
                 true
             );
         }
+
+        // Personal Notes Manager (Export/Import persönlicher Notizen)
+        $notes_manager_enabled = get_option('cbd_personal_notes_manager', 'disabled');
+        if ($notes_manager_enabled !== 'disabled') {
+            // Nur auf konfigurierten Seiten anzeigen
+            $show_on_pages = get_option('cbd_notes_manager_pages', array());
+            $current_page_id = get_the_ID();
+            $should_show = false;
+
+            if ($notes_manager_enabled === 'all') {
+                // Auf allen Seiten mit Container Blocks
+                $should_show = true;
+            } elseif ($notes_manager_enabled === 'specific' && !empty($show_on_pages)) {
+                // Nur auf spezifischen Seiten
+                $should_show = in_array($current_page_id, $show_on_pages);
+            }
+
+            if ($should_show) {
+                wp_enqueue_style(
+                    'cbd-personal-notes-manager',
+                    CBD_PLUGIN_URL . 'assets/css/personal-notes-manager.css',
+                    array('dashicons'),
+                    CBD_VERSION
+                );
+                wp_enqueue_script(
+                    'cbd-personal-notes-manager',
+                    CBD_PLUGIN_URL . 'assets/js/personal-notes-manager.js',
+                    array(),
+                    CBD_VERSION,
+                    true
+                );
+            }
+        }
     }
     
     /**

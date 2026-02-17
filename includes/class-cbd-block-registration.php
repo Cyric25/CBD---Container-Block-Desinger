@@ -294,9 +294,13 @@ class CBD_Block_Registration {
         // INTERACTIVITY API MODULE WITH FALLBACK
         // ==============================================
 
+        // Conditional loading: Either Interactivity API OR jQuery Fallback, not both
+        // This prevents double-triggering of events
+        $use_interactivity_api = false;
+
         // Try to register Interactivity API Store (ESM Module)
         // This requires WordPress 6.5+ and proper module support
-        if (function_exists('wp_register_script_module')) {
+        if (function_exists('wp_register_script_module') && function_exists('wp_enqueue_script_module')) {
             wp_register_script_module(
                 'cbd-interactivity-store',
                 CBD_PLUGIN_URL . 'assets/js/interactivity-store.js',
@@ -307,12 +311,13 @@ class CBD_Block_Registration {
             // Enqueue the Interactivity API module for frontend
             if (!is_admin()) {
                 wp_enqueue_script_module('cbd-interactivity-store');
+                $use_interactivity_api = true;
             }
         }
 
-        // ALWAYS enqueue jQuery-based fallback for reliability
-        // This ensures functionality even if Interactivity API doesn't load
-        if (!is_admin()) {
+        // Enqueue jQuery-based fallback ONLY if Interactivity API is not available
+        // This prevents double-execution of event handlers
+        if (!is_admin() && !$use_interactivity_api) {
             wp_enqueue_script(
                 'cbd-interactivity-fallback',
                 CBD_PLUGIN_URL . 'assets/js/interactivity-fallback.js',
@@ -320,12 +325,26 @@ class CBD_Block_Registration {
                 CBD_VERSION,
                 true
             );
+        }
 
-            // Floating PDF Export Button (now uses html2pdf for text-based PDFs)
+        // Floating PDF Export Button (now uses html2pdf for text-based PDFs)
+        if (!is_admin()) {
             wp_enqueue_script(
                 'cbd-floating-pdf-button',
                 CBD_PLUGIN_URL . 'assets/js/floating-pdf-button.js',
                 array('jquery', 'cbd-html2pdf-loader'),
+                CBD_VERSION,
+                true
+            );
+        }
+
+        // Block Numbering - runs independently of Interactivity API/fallback
+        // This ensures block numbers are always updated correctly
+        if (!is_admin()) {
+            wp_enqueue_script(
+                'cbd-block-numbering',
+                CBD_PLUGIN_URL . 'assets/js/block-numbering.js',
+                array(),  // No dependencies - runs standalone
                 CBD_VERSION,
                 true
             );
@@ -427,6 +446,7 @@ class CBD_Block_Registration {
         }
 
         // Classroom data for board-mode integration
+        // Localize to whichever script is actually loaded (board-mode is always loaded)
         if (class_exists('CBD_Classroom') && CBD_Classroom::is_enabled() && is_user_logged_in() && current_user_can('cbd_edit_blocks')) {
             $classroom_data = array(
                 'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -434,11 +454,14 @@ class CBD_Block_Registration {
                 'pageId'  => get_the_ID() ?: 0,
                 'classes' => CBD_Classroom::get_teacher_classes(),
             );
-            wp_localize_script(
-                'cbd-interactivity-fallback',
-                'cbdClassroomData',
-                $classroom_data
-            );
+
+            // Localize to fallback if it's loaded, otherwise to board-mode
+            if (!$use_interactivity_api && wp_script_is('cbd-interactivity-fallback', 'enqueued')) {
+                wp_localize_script('cbd-interactivity-fallback', 'cbdClassroomData', $classroom_data);
+            } else {
+                // Use board-mode script as it's always loaded when board mode feature is active
+                wp_localize_script('cbd-board-mode', 'cbdClassroomData', $classroom_data);
+            }
         }
 
         // REMOVED: Old inline scripts (container-blocks-inline.js)

@@ -1,0 +1,197 @@
+/**
+ * Personal Notes Manager - Floating Button Styles
+ *
+ * Schwebender Button zum globalen Export/Import persönlicher Notizen
+ */
+
+/* Container */
+.cbd-notes-manager-button {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+/* Toggle-Button (Hauptbutton) */
+.cbd-notes-toggle {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, #2271b1 0%, #135e96 100%);
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.cbd-notes-toggle:hover {
+    background: linear-gradient(135deg, #135e96 0%, #0a4270 100%);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    transform: translateY(-2px);
+}
+
+.cbd-notes-toggle:active {
+    transform: translateY(0);
+}
+
+.cbd-notes-toggle .dashicons {
+    font-size: 28px;
+    width: 28px;
+    height: 28px;
+}
+
+/* Menü */
+.cbd-notes-menu {
+    position: absolute;
+    bottom: 70px;
+    right: 0;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    min-width: 260px;
+    animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Menü-Buttons */
+.cbd-notes-menu button {
+    width: 100%;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #f6f7f7;
+    color: #2c3338;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 8px;
+}
+
+.cbd-notes-menu button:last-of-type {
+    margin-bottom: 0;
+}
+
+.cbd-notes-menu button:hover {
+    background: #2271b1;
+    color: #fff;
+    transform: translateX(-2px);
+}
+
+.cbd-notes-menu button .dashicons {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+/* Export-Button (Download) */
+.cbd-notes-export {
+    /* Verwendet die Standard-Button-Styles */
+}
+
+.cbd-notes-export:hover {
+    background: #00a32a !important;
+}
+
+/* Import-Button (Upload) */
+.cbd-notes-import {
+    /* Verwendet die Standard-Button-Styles */
+}
+
+.cbd-notes-import:hover {
+    background: #cc1818 !important;
+}
+
+/* Info-Text */
+.cbd-notes-info {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #dcdcde;
+    text-align: center;
+}
+
+.cbd-notes-info small {
+    color: #646970;
+    font-size: 12px;
+}
+
+/* Responsive Anpassungen */
+@media screen and (max-width: 782px) {
+    .cbd-notes-manager-button {
+        bottom: 16px;
+        right: 16px;
+    }
+
+    .cbd-notes-toggle {
+        width: 48px;
+        height: 48px;
+    }
+
+    .cbd-notes-toggle .dashicons {
+        font-size: 24px;
+        width: 24px;
+        height: 24px;
+    }
+
+    .cbd-notes-menu {
+        min-width: 240px;
+        bottom: 60px;
+    }
+}
+
+/* Tooltip für Hauptbutton */
+.cbd-notes-toggle::after {
+    content: attr(title);
+    position: absolute;
+    right: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-right: 12px;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.cbd-notes-toggle:hover::after {
+    opacity: 1;
+}
+
+/* Pulsierender Effekt für Aufmerksamkeit (optional) */
+@keyframes pulse {
+    0%, 100% {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    50% {
+        box-shadow: 0 4px 20px rgba(34, 113, 177, 0.5);
+    }
+}
+
+.cbd-notes-toggle.has-notes {
+    animation: pulse 2s ease-in-out infinite;
+}

@@ -27,39 +27,8 @@
     // Warte bis DOM bereit ist
     $(document).ready(function() {
 
-        // RENUMBER BLOCKS IN DOM ORDER
-        // This fixes the issue where WordPress renders blocks in unpredictable order
-        function renumberBlocks() {
-            // Find all numbering elements
-            const allNumberElements = document.querySelectorAll('.cbd-needs-numbering');
-
-            // Filter to only TOP-LEVEL blocks (not nested inside other .cbd-container)
-            const topLevelNumbers = Array.from(allNumberElements).filter(function(element) {
-                // Get the container this number belongs to
-                const container = element.closest('.cbd-container');
-                if (!container) return false;
-
-                // Check if this container is nested inside another .cbd-container
-                const parentContainer = container.parentElement.closest('.cbd-container');
-                const isTopLevel = !parentContainer;
-
-
-                return isTopLevel;
-            });
-
-
-            // Renumber only top-level blocks
-            topLevelNumbers.forEach(function(element, index) {
-                const blockNumber = index + 1;
-                element.textContent = blockNumber;
-                element.setAttribute('data-number', blockNumber);
-
-                const container = element.closest('.cbd-container');
-            });
-        }
-
-        // Run renumbering immediately
-        renumberBlocks();
+        // NOTE: Block numbering is now handled by block-numbering.js
+        // which runs independently with MutationObserver support
 
         // Initial check
         if (checkInteractivityAPI()) {

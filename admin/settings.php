@@ -60,6 +60,17 @@ if (isset($_POST['cbd_save_settings']) && wp_verify_nonce($_POST['cbd_settings_n
     update_option('cbd_enable_block_caching', isset($_POST['enable_block_caching']) ? 1 : 0);
     update_option('cbd_classroom_enabled', isset($_POST['classroom_enabled']) ? 1 : 0);
 
+    // Personal Notes Manager Einstellungen
+    $notes_manager_mode = sanitize_text_field($_POST['notes_manager_mode'] ?? 'disabled');
+    update_option('cbd_personal_notes_manager', $notes_manager_mode);
+
+    if ($notes_manager_mode === 'specific' && isset($_POST['notes_manager_pages'])) {
+        $selected_pages = array_map('intval', (array)$_POST['notes_manager_pages']);
+        update_option('cbd_notes_manager_pages', $selected_pages);
+    } else {
+        update_option('cbd_notes_manager_pages', array());
+    }
+
     echo '<div class="notice notice-success is-dismissible"><p>' . __('Einstellungen gespeichert.', 'container-block-designer') . '</p></div>';
 }
 
@@ -88,6 +99,8 @@ $debug_mode = get_option('cbd_enable_debug_mode', 0);
 $default_status = get_option('cbd_default_block_status', 'draft');
 $enable_caching = get_option('cbd_enable_block_caching', 1);
 $classroom_enabled = get_option('cbd_classroom_enabled', 0);
+$notes_manager_mode = get_option('cbd_personal_notes_manager', 'disabled');
+$notes_manager_pages = get_option('cbd_notes_manager_pages', array());
 
 // Datenbank-Status prüfen
 global $wpdb;
@@ -235,6 +248,45 @@ $needs_migration = !$is_default_exists || !$classroom_tables_exist || version_co
                 </tr>
 
                 <tr>
+                    <th scope="row"><?php _e('Persönliche Notizen Export/Import', 'container-block-designer'); ?></th>
+                    <td>
+                        <label>
+                            <input type="radio" name="notes_manager_mode" value="disabled" <?php checked($notes_manager_mode, 'disabled'); ?>>
+                            <?php _e('Deaktiviert', 'container-block-designer'); ?>
+                        </label><br>
+                        <label>
+                            <input type="radio" name="notes_manager_mode" value="all" <?php checked($notes_manager_mode, 'all'); ?>>
+                            <?php _e('Auf allen Seiten mit Container-Blocks anzeigen', 'container-block-designer'); ?>
+                        </label><br>
+                        <label>
+                            <input type="radio" name="notes_manager_mode" value="specific" <?php checked($notes_manager_mode, 'specific'); ?>>
+                            <?php _e('Nur auf ausgewählten Seiten anzeigen:', 'container-block-designer'); ?>
+                        </label>
+                        <div style="margin-left: 25px; margin-top: 10px;" id="cbd-page-selector">
+                            <?php
+                            $pages = get_pages(array('sort_column' => 'post_title'));
+                            if (!empty($pages)) {
+                                echo '<select name="notes_manager_pages[]" multiple size="8" style="width: 100%; max-width: 400px;">';
+                                foreach ($pages as $page) {
+                                    $selected = in_array($page->ID, $notes_manager_pages) ? 'selected' : '';
+                                    echo '<option value="' . esc_attr($page->ID) . '" ' . $selected . '>';
+                                    echo esc_html($page->post_title) . ' (ID: ' . $page->ID . ')';
+                                    echo '</option>';
+                                }
+                                echo '</select>';
+                                echo '<p class="description">' . __('Halten Sie Strg/Cmd gedrückt für Mehrfachauswahl', 'container-block-designer') . '</p>';
+                            } else {
+                                echo '<p class="description">' . __('Keine Seiten vorhanden', 'container-block-designer') . '</p>';
+                            }
+                            ?>
+                        </div>
+                        <p class="description">
+                            <?php _e('Zeigt einen schwebenden Button für Export/Import persönlicher Tafel-Notizen. Schüler können damit ihre Notizen sichern und auf neue Geräte übertragen.', 'container-block-designer'); ?>
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
                     <th scope="row"><?php _e('Daten bei Deinstallation löschen', 'container-block-designer'); ?></th>
                     <td>
                         <label>
@@ -250,3 +302,19 @@ $needs_migration = !$is_default_exists || !$classroom_tables_exist || version_co
         </div>
     </form>
 </div>
+
+<script>
+jQuery(document).ready(function($) {
+    // Page Selector Enable/Disable based on radio selection
+    function togglePageSelector() {
+        var mode = $('input[name="notes_manager_mode"]:checked').val();
+        $('#cbd-page-selector').toggle(mode === 'specific');
+    }
+
+    // Initial state
+    togglePageSelector();
+
+    // Change event
+    $('input[name="notes_manager_mode"]').on('change', togglePageSelector);
+});
+</script>

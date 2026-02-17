@@ -26,7 +26,8 @@
       "Bash(node create-plugin-zip.js:*)",
       "Bash(for file in *.php includes/*.php includes/Database/*.php admin/*.php)",
       "Bash(for file in *.php includes/*.php includes/Database/*.php)",
-      "Bash(do php:*)"
+      "Bash(do php:*)",
+      "Bash(command -v:*)"
     ],
     "deny": [],
     "ask": []
