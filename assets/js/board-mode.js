@@ -147,13 +147,6 @@
             // Events binden
             this.bindEvents();
 
-            // Persönliche Menü-Einträge nur im persönlichen Modus zeigen
-            if (this.classId !== null) {
-                // Klassen-Modus: persönliche IO-Einträge ausblenden
-                this.overlay.querySelectorAll('.cbd-board-io-personal').forEach(function(el) {
-                    el.style.display = 'none';
-                });
-            }
         },
 
         /**
@@ -318,28 +311,10 @@
                             '<input type="range" class="cbd-board-grid-offset-y" min="-100" max="100" value="0" title="Vertikale Position">' +
                             '<span class="cbd-board-grid-offset-y-display">0</span>' +
                             '<span class="cbd-board-separator"></span>' +
-                            // IO-Dropdown: Zeichnung löschen + Download/Upload/Alle löschen
-                            '<div class="cbd-board-io-wrapper">' +
-                                '<button class="cbd-board-io-btn" title="Optionen">' +
-                                    '<span class="dashicons dashicons-menu-alt3"></span>' +
-                                '</button>' +
-                                '<div class="cbd-board-io-menu">' +
-                                    '<button class="cbd-board-io-clear">' +
-                                        '<span class="dashicons dashicons-trash"></span> Zeichnung löschen' +
-                                    '</button>' +
-                                    '<div class="cbd-board-io-divider cbd-board-io-personal"></div>' +
-                                    '<button class="cbd-board-io-download cbd-board-io-personal">' +
-                                        '<span class="dashicons dashicons-download"></span> Herunterladen' +
-                                    '</button>' +
-                                    '<button class="cbd-board-io-upload cbd-board-io-personal">' +
-                                        '<span class="dashicons dashicons-upload"></span> Hochladen' +
-                                    '</button>' +
-                                    '<div class="cbd-board-io-divider cbd-board-io-personal"></div>' +
-                                    '<button class="cbd-board-io-delete-all cbd-board-io-personal">' +
-                                        '<span class="dashicons dashicons-trash"></span> Alle Notizen löschen' +
-                                    '</button>' +
-                                '</div>' +
-                            '</div>' +
+                            // Zeichnung löschen
+                            '<button class="cbd-board-clear" title="Zeichnung löschen">' +
+                                '<span class="dashicons dashicons-trash"></span>' +
+                            '</button>' +
                         '</div>' +
                     '</div>' +
                 '</div>';
@@ -744,58 +719,11 @@
                 });
             }
 
-            // IO-Dropdown-Button (öffnet/schließt Menü)
-            var ioBtnWrapper = this.overlay.querySelector('.cbd-board-io-wrapper');
-            var ioBtn = this.overlay.querySelector('.cbd-board-io-btn');
-            var ioMenu = this.overlay.querySelector('.cbd-board-io-menu');
-            if (ioBtn && ioMenu) {
-                ioBtn.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    var isOpen = ioMenu.classList.contains('is-open');
-                    ioMenu.classList.toggle('is-open', !isOpen);
-                });
-                // Außerhalb klicken schließt das Menü
-                document.addEventListener('click', function() {
-                    if (ioMenu) ioMenu.classList.remove('is-open');
-                });
-                if (ioBtnWrapper) {
-                    ioBtnWrapper.addEventListener('click', function(e) { e.stopPropagation(); });
-                }
-            }
-
-            // IO: Zeichnung löschen
-            var ioClear = this.overlay.querySelector('.cbd-board-io-clear');
-            if (ioClear) {
-                ioClear.addEventListener('click', function() {
-                    if (ioMenu) ioMenu.classList.remove('is-open');
+            // Clear Button
+            var clearBtn = this.overlay.querySelector('.cbd-board-clear');
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function() {
                     self.showClearConfirm();
-                });
-            }
-
-            // IO: Herunterladen
-            var ioDownload = this.overlay.querySelector('.cbd-board-io-download');
-            if (ioDownload) {
-                ioDownload.addEventListener('click', function() {
-                    if (ioMenu) ioMenu.classList.remove('is-open');
-                    self.downloadPersonalNotes();
-                });
-            }
-
-            // IO: Hochladen
-            var ioUpload = this.overlay.querySelector('.cbd-board-io-upload');
-            if (ioUpload) {
-                ioUpload.addEventListener('click', function() {
-                    if (ioMenu) ioMenu.classList.remove('is-open');
-                    self.uploadPersonalNotes();
-                });
-            }
-
-            // IO: Alle Notizen löschen
-            var ioDeleteAll = this.overlay.querySelector('.cbd-board-io-delete-all');
-            if (ioDeleteAll) {
-                ioDeleteAll.addEventListener('click', function() {
-                    if (ioMenu) ioMenu.classList.remove('is-open');
-                    self.deleteAllPersonalNotes();
                 });
             }
 

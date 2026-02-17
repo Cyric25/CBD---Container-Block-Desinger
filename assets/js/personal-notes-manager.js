@@ -36,6 +36,11 @@
                         '<span class="dashicons dashicons-upload"></span>' +
                         'Notizen importieren' +
                     '</button>' +
+                    '<hr class="cbd-notes-divider">' +
+                    '<button class="cbd-notes-delete-all">' +
+                        '<span class="dashicons dashicons-trash"></span>' +
+                        'Alle Notizen löschen' +
+                    '</button>' +
                     '<div class="cbd-notes-info"></div>' +
                 '</div>';
 
@@ -69,6 +74,14 @@
             if (importBtn) {
                 importBtn.addEventListener('click', function() {
                     self.importAllNotes();
+                });
+            }
+
+            // Delete-All-Button
+            var deleteAllBtn = document.querySelector('.cbd-notes-delete-all');
+            if (deleteAllBtn) {
+                deleteAllBtn.addEventListener('click', function() {
+                    self.deleteAllNotes();
                 });
             }
 
@@ -178,6 +191,48 @@
             } catch (e) {
                 console.error('[CBD Notes Manager] Fehler beim Export:', e);
                 alert('Fehler beim Exportieren der Notizen: ' + e.message);
+            }
+        },
+
+        /**
+         * Alle persönlichen Notizen löschen (mit Bestätigung)
+         */
+        deleteAllNotes: function() {
+            try {
+                var keysToDelete = [];
+                for (var i = 0; i < localStorage.length; i++) {
+                    var key = localStorage.key(i);
+                    if (key && key.startsWith('cbd-board-')) {
+                        keysToDelete.push(key);
+                    }
+                }
+
+                if (keysToDelete.length === 0) {
+                    alert('Keine persönlichen Notizen vorhanden.');
+                    return;
+                }
+
+                var count = keysToDelete.length;
+                var msg = count === 1
+                    ? 'Es wird 1 persönliche Notiz UNWIDERRUFLICH gelöscht.\n\nFortfahren?'
+                    : 'Es werden ' + count + ' persönliche Notizen UNWIDERRUFLICH gelöscht.\n\nFortfahren?';
+
+                if (!confirm(msg)) return;
+                if (!confirm('Wirklich alle ' + count + ' Notizen endgültig löschen?')) return;
+
+                keysToDelete.forEach(function(key) {
+                    localStorage.removeItem(key);
+                });
+
+                // Menü schließen und Info aktualisieren
+                var menu = document.querySelector('.cbd-notes-menu');
+                if (menu) menu.style.display = 'none';
+                this.updateInfo();
+
+                alert('✓ ' + count + ' Notiz(en) wurden gelöscht.');
+            } catch (e) {
+                console.error('[CBD Notes Manager] Fehler beim Löschen:', e);
+                alert('Fehler beim Löschen: ' + e.message);
             }
         },
 

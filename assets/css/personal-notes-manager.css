@@ -119,7 +119,25 @@
 }
 
 .cbd-notes-import:hover {
-    background: #cc1818 !important;
+    background: #00a32a !important;
+}
+
+/* Trennlinie */
+.cbd-notes-divider {
+    border: none;
+    border-top: 1px solid #dcdcde;
+    margin: 4px 0 12px;
+}
+
+/* Alle löschen - roter Button */
+.cbd-notes-delete-all {
+    color: #d63638 !important;
+    background: #fef2f2 !important;
+}
+
+.cbd-notes-delete-all:hover {
+    background: #d63638 !important;
+    color: #fff !important;
 }
 
 /* Info-Text */

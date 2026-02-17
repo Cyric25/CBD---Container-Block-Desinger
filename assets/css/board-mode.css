@@ -398,112 +398,32 @@
     font-family: monospace;
 }
 
-/* IO-Dropdown-Wrapper */
-.cbd-board-io-wrapper {
-    position: relative;
-    flex-shrink: 0;
-}
-
-/* Blauer Trigger-Button */
-.cbd-board-io-btn {
+/* Loeschen-Button */
+.cbd-board-clear {
     display: flex;
     align-items: center;
     justify-content: center;
     width: 38px;
     height: 38px;
-    border: 2px solid #2271b1;
+    border: 2px solid #e0c0c0;
     border-radius: 8px;
-    background: #2271b1;
-    color: #ffffff;
+    background: #fff5f5;
     cursor: pointer;
     transition: all 0.15s ease;
     padding: 0;
+    color: #cc4444;
 }
 
-.cbd-board-io-btn:hover {
-    background: #135e96;
-    border-color: #135e96;
+.cbd-board-clear:hover {
+    border-color: #cc4444;
+    background: #ffeeee;
+    color: #aa0000;
 }
 
-.cbd-board-io-btn .dashicons {
+.cbd-board-clear .dashicons {
     font-size: 19px;
     width: 19px;
     height: 19px;
-}
-
-/* Dropdown-Menü */
-.cbd-board-io-menu {
-    display: none;
-    flex-direction: column;
-    position: absolute;
-    bottom: calc(100% + 6px);
-    right: 0;
-    background: #ffffff;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-    min-width: 200px;
-    overflow: hidden;
-    z-index: 100;
-}
-
-.cbd-board-io-menu.is-open {
-    display: flex;
-}
-
-/* Menü-Einträge */
-.cbd-board-io-menu button {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    font-size: 13px;
-    color: #333;
-    text-align: left;
-    width: 100%;
-    transition: background 0.15s ease;
-}
-
-.cbd-board-io-menu button:hover {
-    background: #f0f6fc;
-    color: #135e96;
-}
-
-.cbd-board-io-menu button .dashicons {
-    font-size: 16px;
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-}
-
-/* Zeichnung löschen - roter Eintrag */
-.cbd-board-io-clear {
-    color: #cc4444 !important;
-}
-
-.cbd-board-io-clear:hover {
-    background: #fff5f5 !important;
-    color: #aa0000 !important;
-}
-
-/* Alle Notizen löschen - ebenfalls rot */
-.cbd-board-io-delete-all {
-    color: #d63638 !important;
-}
-
-.cbd-board-io-delete-all:hover {
-    background: #fef2f2 !important;
-    color: #b32d2e !important;
-}
-
-/* Trennlinie im Menü */
-.cbd-board-io-divider {
-    height: 1px;
-    background: #eee;
-    margin: 2px 0;
 }
 
 /* =============================================
@@ -750,7 +670,7 @@
 
     .cbd-board-tool,
     .cbd-board-color,
-    .cbd-board-io-btn {
+    .cbd-board-clear {
         width: 32px;
         height: 32px;
     }
@@ -785,7 +705,7 @@
 
 .cbd-board-tool:focus-visible,
 .cbd-board-close:focus-visible,
-.cbd-board-io-btn:focus-visible {
+.cbd-board-clear:focus-visible {
     outline: 2px solid #007cba;
     outline-offset: 2px;
 }
