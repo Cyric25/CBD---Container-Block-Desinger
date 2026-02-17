@@ -446,22 +446,19 @@ class CBD_Block_Registration {
         }
 
         // Classroom data for board-mode integration
-        // Localize to whichever script is actually loaded (board-mode is always loaded)
+        // Output as inline script in wp_footer (priority 1) to avoid timing issues:
+        // enqueue_block_assets fires before cbd-board-mode is registered by the style-loader,
+        // so wp_localize_script would fail silently. Direct inline output is reliable.
         if (class_exists('CBD_Classroom') && CBD_Classroom::is_enabled() && is_user_logged_in() && current_user_can('cbd_edit_blocks')) {
-            $classroom_data = array(
-                'ajaxUrl' => admin_url('admin-ajax.php'),
-                'nonce'   => wp_create_nonce('cbd_classroom_nonce'),
-                'pageId'  => get_the_ID() ?: 0,
-                'classes' => CBD_Classroom::get_teacher_classes(),
-            );
-
-            // Localize to fallback if it's loaded, otherwise to board-mode
-            if (!$use_interactivity_api && wp_script_is('cbd-interactivity-fallback', 'enqueued')) {
-                wp_localize_script('cbd-interactivity-fallback', 'cbdClassroomData', $classroom_data);
-            } else {
-                // Use board-mode script as it's always loaded when board mode feature is active
-                wp_localize_script('cbd-board-mode', 'cbdClassroomData', $classroom_data);
-            }
+            add_action('wp_footer', function() {
+                $classroom_data = array(
+                    'ajaxUrl' => admin_url('admin-ajax.php'),
+                    'nonce'   => wp_create_nonce('cbd_classroom_nonce'),
+                    'pageId'  => get_the_ID() ?: 0,
+                    'classes' => CBD_Classroom::get_teacher_classes(),
+                );
+                echo '<script id="cbd-classroom-data">window.cbdClassroomData = ' . wp_json_encode($classroom_data) . ';</script>' . "\n";
+            }, 1);
         }
 
         // REMOVED: Old inline scripts (container-blocks-inline.js)
