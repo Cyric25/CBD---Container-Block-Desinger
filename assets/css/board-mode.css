@@ -113,7 +113,8 @@
 .cbd-board-split {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    height: calc(100vh - 50px);
+    flex: 1;          /* nimmt den Platz zwischen Header und Toolbar ein */
+    min-height: 0;    /* wichtig: verhindert Überlauf in Flex-Kontext */
     overflow: hidden;
 }
 
@@ -956,50 +957,9 @@
     }
 }
 
-/* =============================================
-   Textgrößen-Steuerung (rechts oben über Blockinhalt)
-   ============================================= */
-
-.cbd-board-font-size-control {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(255, 255, 255, 0.95);
-    padding: 8px 12px;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    backdrop-filter: blur(10px);
-}
-
-.cbd-board-font-size-control .cbd-board-font-label {
-    font-size: 17px;  /* 16 * 1.05 ≈ 17 */
-    margin: 0;
-}
-
-.cbd-board-font-size-control .cbd-board-font-size {
-    width: 110px;  /* 5% größer */
-    height: 6px;
-    cursor: pointer;
-    accent-color: #4caf50;
-}
-
-.cbd-board-font-size-control .cbd-board-font-size-display {
-    font-size: 13px;  /* 12 * 1.05 ≈ 13 */
-    color: #666;
-    min-width: 42px;  /* 40 * 1.05 ≈ 42 */
-    text-align: center;
-    font-weight: 600;
-    font-family: monospace;
-}
-
-/* Untere Kopie der Textgrößen-Steuerung */
-.cbd-board-font-size-control-bottom {
-    top: auto;
-    bottom: 12px;
+/* Textgröße-Slider in der Toolbar: etwas breiter als andere Slider */
+.cbd-board-toolbar .cbd-board-font-size {
+    width: 120px;
 }
 
 /* Glossar-Tooltip und -Sidebar über dem Tafelmodus-Overlay */
