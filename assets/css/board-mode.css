@@ -1005,6 +1005,28 @@
     max-height: 30em;  /* Maximale Höhe relativ zur Textgröße */
 }
 
+/* Visuelle Blöcke: Text-Skalierung (font-size em-Kaskade) ausschließen */
+/* font-size: 1rem bricht die em-Vererbung von .cbd-board-content */
+.cbd-board-content .wp-block-modular-blocks-image-overlay,
+.cbd-board-content .wp-block-modular-blocks-image-comparison,
+.cbd-board-content [data-chemviz-viewer],
+.cbd-board-content .wp-block-modular-blocks-chart-block {
+    font-size: 1rem;
+}
+
+/* Bilder in visuellen Blöcken: Block-eigene Größen statt Text-Slider-Regeln */
+.cbd-board-content .wp-block-modular-blocks-image-overlay img,
+.cbd-board-content .wp-block-modular-blocks-image-comparison img {
+    width: 100% !important;
+    max-height: none !important;
+    height: auto;
+}
+
+/* Overlay-Ebene füllt ihren Elterncontainer vollständig */
+.cbd-board-content .wp-block-modular-blocks-image-overlay .overlay-image {
+    height: 100%;
+}
+
 /* Transparenz-Slider Label + Display vergrößern */
 .cbd-board-opacity-label {
     font-size: 17px;  /* 16 * 1.05 ≈ 17 */
