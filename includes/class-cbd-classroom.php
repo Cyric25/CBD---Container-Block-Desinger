@@ -564,13 +564,8 @@ class CBD_Classroom {
             wp_send_json_error(array('message' => 'Fehlende Parameter.'));
         }
 
-        // Verify teacher owns this class
-        $class = $wpdb->get_row($wpdb->prepare(
-            "SELECT id FROM " . CBD_TABLE_CLASSES . " WHERE id = %d AND teacher_id = %d",
-            $class_id, get_current_user_id()
-        ));
-
-        if (!$class) {
+        // Zugriff prüfen: Besitzer oder Abonnent
+        if (!$this->can_access_class($class_id)) {
             wp_send_json_error(array('message' => 'Klasse nicht gefunden.'));
         }
 
@@ -636,13 +631,28 @@ class CBD_Classroom {
             wp_send_json_error(array('message' => 'Fehlende Parameter.'));
         }
 
-        // Get all classes for this teacher
-        $classes = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, name FROM " . CBD_TABLE_CLASSES . "
-             WHERE teacher_id = %d AND status = 'active'
-             ORDER BY name ASC",
-            get_current_user_id()
-        ));
+        // Eigene + abonnierte Klassen laden
+        $teacher_id = get_current_user_id();
+        $subscribed  = get_user_meta($teacher_id, 'cbd_subscribed_classes', true);
+        $subscribed_ids = is_array($subscribed) ? array_map('intval', $subscribed) : array();
+
+        if (!empty($subscribed_ids)) {
+            $placeholders = implode(',', array_fill(0, count($subscribed_ids), '%d'));
+            $params = array_merge(array($teacher_id), $subscribed_ids);
+            $classes = $wpdb->get_results($wpdb->prepare(
+                "SELECT id, name FROM " . CBD_TABLE_CLASSES . "
+                 WHERE status = 'active' AND (teacher_id = %d OR id IN ($placeholders))
+                 ORDER BY name ASC",
+                $params
+            ));
+        } else {
+            $classes = $wpdb->get_results($wpdb->prepare(
+                "SELECT id, name FROM " . CBD_TABLE_CLASSES . "
+                 WHERE teacher_id = %d AND status = 'active'
+                 ORDER BY name ASC",
+                $teacher_id
+            ));
+        }
 
         $status_data = array();
 
