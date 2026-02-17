@@ -67,8 +67,8 @@
         
         // Edit Component
         const ContainerBlockEdit = (props) => {
-            const { attributes = {}, setAttributes, isSelected } = props;
-            
+            const { attributes = {}, setAttributes, isSelected, clientId } = props;
+
             // WICHTIG: Default-Werte für alle Attribute
             const selectedBlock = attributes.selectedBlock || '';
             const customClasses = attributes.customClasses || '';
@@ -78,11 +78,30 @@
             const [isLoading, setIsLoading] = useState(false);
             const [defaultLoaded, setDefaultLoaded] = useState(false);
 
-            // Generate stableId on first insert (persisted in post content)
+            // Generate stableId on first insert; regenerate if block was copied (duplicate detection)
             useEffect(() => {
+                const generateId = () => 'cbd-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8);
+
                 if (!attributes.stableId) {
-                    const id = 'cbd-' + Date.now() + '-' + Math.random().toString(36).substr(2, 8);
-                    setAttributes({ stableId: id });
+                    // New block – no ID yet
+                    setAttributes({ stableId: generateId() });
+                    return;
+                }
+
+                // Duplicate detection: check if another block already has the same stableId
+                if (wp.data && wp.data.select) {
+                    const blockEditor = wp.data.select('core/block-editor');
+                    if (blockEditor && blockEditor.getClientIdsWithDescendants) {
+                        const allIds = blockEditor.getClientIdsWithDescendants();
+                        const isDuplicate = allIds.some(function(id) {
+                            if (id === clientId) return false;
+                            const block = blockEditor.getBlock(id);
+                            return block && block.attributes && block.attributes.stableId === attributes.stableId;
+                        });
+                        if (isDuplicate) {
+                            setAttributes({ stableId: generateId() });
+                        }
+                    }
                 }
             }, []);
 
