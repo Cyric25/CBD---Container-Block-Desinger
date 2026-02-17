@@ -109,8 +109,8 @@
             this.isSaving = false;
             this.isBehandeltSet = false;
 
-            // Wenn Klassen vorhanden: Selektor zeigen, sonst direkt oeffnen
-            if (this.classes.length > 0 && this.ajaxUrl) {
+            // Lehrer: Selektor immer zeigen (persönlich oder Klasse wählen)
+            if (this.ajaxUrl) {
                 var self = this;
                 this.showClassSelector(function(selectedClassId) {
                     self.classId = selectedClassId;
