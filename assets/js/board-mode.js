@@ -1872,43 +1872,60 @@
         },
 
         /**
-         * Spezielle Initialisierung für bekannte Blöcke
+         * Spezielle Initialisierung für bekannte Blöcke im Overlay.
+         * Alle Blöcke aus "Eigene WP Blocks" exponieren window.initBlockName(element).
          */
         initializeSpecialBlocks: function(container) {
-            // Molekülviewer neu initialisieren
-            var moleculeViewers = container.querySelectorAll('.wp-block-modular-blocks-molecule-viewer');
-            if (moleculeViewers.length > 0 && typeof window.$3Dmol !== 'undefined') {
-                moleculeViewers.forEach(function(viewer) {
-                    // Triggere Re-Rendering durch DOM-Manipulation
-                    var parent = viewer.parentNode;
-                    var next = viewer.nextSibling;
-                    parent.removeChild(viewer);
 
-                    // Nach kurzer Verzögerung wieder einfügen (triggert Neuinitialisierung)
-                    setTimeout(function() {
-                        parent.insertBefore(viewer, next);
+            // === Molekülviewer (3Dmol.js) ===
+            // Verwendet IntersectionObserver mit data-loaded Flag – muss direkt neu init werden
+            var viewerElements = container.querySelectorAll('[data-chemviz-viewer]');
+            if (viewerElements.length > 0 && typeof window.$3Dmol !== 'undefined' && window.ChemVizMoleculeViewer) {
+                viewerElements.forEach(function(element) {
+                    // data-loaded Flag zurücksetzen (wurde beim innerHTML-Kopieren mitgenommen)
+                    delete element.dataset.loaded;
 
-                        // Custom Event für Molekülviewer
-                        var event = new CustomEvent('molecule-viewer-reinit', {
-                            bubbles: true,
-                            detail: { viewer: viewer }
-                        });
-                        viewer.dispatchEvent(event);
-                    }, 50);
+                    // Canvas-Div leeren und ID zurücksetzen für frischen WebGL-Kontext
+                    var canvas = element.querySelector('.chemviz-viewer__canvas');
+                    if (canvas) {
+                        canvas.id = '';
+                        canvas.innerHTML = '';
+                    }
+
+                    // Direkt laden (IntersectionObserver umgehen)
+                    var config = window.ChemVizMoleculeViewer.parseConfig(element);
+                    window.ChemVizMoleculeViewer.loadViewer(element);
+                    window.ChemVizMoleculeViewer.attachControlListeners(element, config);
                 });
             }
 
-            // Chart-Blöcke neu initialisieren
-            var chartBlocks = container.querySelectorAll('.wp-block-modular-blocks-chart-block');
-            if (chartBlocks.length > 0 && typeof window.Plotly !== 'undefined') {
-                chartBlocks.forEach(function(chart) {
-                    var event = new CustomEvent('chart-reinit', {
-                        bubbles: true,
-                        detail: { chart: chart }
-                    });
-                    chart.dispatchEvent(event);
+            // === Generische Blöcke via window.init* ===
+            // Alle Blöcke exponieren eine globale Initialisierungsfunktion
+            var blockInitMap = [
+                { selector: '.wp-block-modular-blocks-drag-and-drop',       fn: 'initDragAndDrop' },
+                { selector: '.wp-block-modular-blocks-drag-the-words',      fn: 'initDragTheWords' },
+                { selector: '.wp-block-modular-blocks-multiple-choice',     fn: 'initMultipleChoice' },
+                { selector: '.wp-block-modular-blocks-image-comparison',    fn: 'initImageComparison' },
+                { selector: '.wp-block-modular-blocks-point-of-interest',   fn: 'initPointOfInterest' },
+                { selector: '.wp-block-modular-blocks-statement-connector', fn: 'initStatementConnector' },
+                { selector: '.wp-block-modular-blocks-summary-block',       fn: 'initSummaryBlock' },
+                { selector: '.wp-block-modular-blocks-image-overlay',       fn: 'initImageOverlay' },
+                { selector: '.wp-block-modular-blocks-chart-block',         fn: 'initInteractiveDataChart' },
+            ];
+
+            blockInitMap.forEach(function(entry) {
+                if (typeof window[entry.fn] !== 'function') return;
+                var blocks = container.querySelectorAll(entry.selector);
+                blocks.forEach(function(block) {
+                    // data-initialized Flag zurücksetzen, damit init erneut ausgeführt wird
+                    delete block.dataset.initialized;
+                    try {
+                        window[entry.fn](block);
+                    } catch (e) {
+                        console.warn('[CBD Board Mode] Fehler bei', entry.fn + ':', e.message);
+                    }
                 });
-            }
+            });
         }
     };
 
