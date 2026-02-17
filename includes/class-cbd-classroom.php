@@ -275,7 +275,8 @@ class CBD_Classroom {
         $class_id = intval($_POST['class_id'] ?? 0);
         $page_id = intval($_POST['page_id'] ?? 0);
         $container_id = sanitize_text_field($_POST['container_id'] ?? '');
-        $drawing_data = $_POST['drawing_data'] ?? '';
+        // Leerer Canvas wird als leerer String gesendet -> NULL in DB speichern
+        $drawing_data = !empty($_POST['drawing_data']) ? $_POST['drawing_data'] : null;
 
         if ($class_id <= 0 || $page_id <= 0 || empty($container_id)) {
             wp_send_json_error(array('message' => 'Fehlende Parameter.'));

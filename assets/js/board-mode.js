@@ -336,6 +336,12 @@
                 '<span class="cbd-board-font-size-display">' + this.fontSize + '%</span>';
             contentArea.insertBefore(fontControl, contentArea.firstChild);
 
+            // Zweite Steuerung am unteren Ende (gleicher Schieberegler)
+            var fontControlBottom = document.createElement('div');
+            fontControlBottom.className = 'cbd-board-font-size-control cbd-board-font-size-control-bottom';
+            fontControlBottom.innerHTML = fontControl.innerHTML;
+            contentArea.appendChild(fontControlBottom);
+
             // Standard-Textgröße anwenden (150% für bessere Lesbarkeit auf Tafel)
             contentArea.style.fontSize = (this.fontSize / 100) + 'em';
 
@@ -656,18 +662,17 @@
                 });
             }
 
-            // Font Size
-            var fontSizeInput = this.overlay.querySelector('.cbd-board-font-size');
-            var fontSizeDisplay = this.overlay.querySelector('.cbd-board-font-size-display');
-            if (fontSizeInput) {
-                fontSizeInput.addEventListener('input', function() {
+            // Font Size – alle Schieberegler (oben + unten) synchron halten
+            var fontSizeInputs = this.overlay.querySelectorAll('.cbd-board-font-size');
+            var fontSizeDisplays = this.overlay.querySelectorAll('.cbd-board-font-size-display');
+            fontSizeInputs.forEach(function(input) {
+                input.addEventListener('input', function() {
                     var size = parseInt(this.value, 10);
                     self.setFontSize(size);
-                    if (fontSizeDisplay) {
-                        fontSizeDisplay.textContent = size + '%';
-                    }
+                    fontSizeInputs.forEach(function(inp) { inp.value = size; });
+                    fontSizeDisplays.forEach(function(disp) { disp.textContent = size + '%'; });
                 });
-            }
+            });
 
             // Grid Toggle
             var gridToggle = this.overlay.querySelector('.cbd-board-grid-toggle');
@@ -1358,7 +1363,14 @@
             this._setSaveStatus('Speichert...');
 
             var self = this;
-            var dataUrl = this.drawingCanvas.toDataURL('image/png');
+
+            // Leeren Canvas erkennen: alle Pixel transparent -> keine Zeichnung vorhanden
+            var pixels = this.drawingCtx.getImageData(0, 0, this.drawingCanvas.width, this.drawingCanvas.height).data;
+            var isBlank = true;
+            for (var i = 3; i < pixels.length; i += 4) {
+                if (pixels[i] > 0) { isBlank = false; break; }
+            }
+            var dataUrl = isBlank ? '' : this.drawingCanvas.toDataURL('image/png');
 
             var formData = new FormData();
             formData.append('action', 'cbd_save_drawing');

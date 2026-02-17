@@ -996,6 +996,18 @@
     font-family: monospace;
 }
 
+/* Untere Kopie der Textgrößen-Steuerung */
+.cbd-board-font-size-control-bottom {
+    top: auto;
+    bottom: 12px;
+}
+
+/* Glossar-Tooltip und -Sidebar über dem Tafelmodus-Overlay */
+#glossar-tooltip,
+#glossar-sidebar {
+    z-index: 1000001 !important;
+}
+
 /* Bilder im Blockinhalt sollen mit Text mitskalieren */
 .cbd-board-content img {
     max-width: 100%;
