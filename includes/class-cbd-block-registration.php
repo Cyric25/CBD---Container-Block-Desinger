@@ -792,6 +792,11 @@ class CBD_Block_Registration {
         // Add init callback
         $wrapper_attributes['data-wp-init'] = 'callbacks.onInit';
 
+        // Bind cbd-collapsed class on wrapper so it gets removed on toggle
+        if (!empty($features['collapse']['enabled'])) {
+            $wrapper_attributes['data-wp-class--cbd-collapsed'] = 'context.isCollapsed';
+        }
+
         // ==============================================
         // END INTERACTIVITY API INTEGRATION
         // ==============================================

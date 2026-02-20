@@ -122,6 +122,9 @@
             context.isCollapsed = !context.isCollapsed;
             $container.data('cbd-context', context);
 
+            // Toggle wrapper class so CSS rules based on .cbd-container.cbd-collapsed work correctly
+            $container.toggleClass('cbd-collapsed', context.isCollapsed);
+
             // Update UI
             if (context.isCollapsed) {
                 $content.slideUp(300, function() {
