@@ -271,58 +271,65 @@
                 '</div>' +
                 // Toolbar: volle Breite, unterhalb beider Hälften
                 '<div class="cbd-board-toolbar">' +
-                    // Textgröße (linke Seite)
-                    '<label class="cbd-board-font-label">📝</label>' +
-                    '<input type="range" class="cbd-board-font-size" min="100" max="300" value="' + this.fontSize + '" step="10" title="Textgröße">' +
-                    '<span class="cbd-board-font-size-display">' + this.fontSize + '%</span>' +
-                    '<span class="cbd-board-separator"></span>' +
-                    // Zeichen-Werkzeuge
-                    '<button class="cbd-board-tool active" data-tool="pen" title="Stift">' +
-                        '<span class="dashicons dashicons-edit"></span>' +
-                    '</button>' +
-                    '<button class="cbd-board-tool" data-tool="highlighter" title="Textmarkierer">' +
-                        '<span class="dashicons dashicons-marker"></span>' +
-                    '</button>' +
-                    '<button class="cbd-board-tool" data-tool="eraser-stroke" title="Strich-Radierer">' +
-                        '<span class="dashicons dashicons-editor-removeformatting"></span>' +
-                    '</button>' +
-                    '<button class="cbd-board-tool" data-tool="eraser-point" title="Punkt-Radierer">' +
-                        '<span class="dashicons dashicons-dismiss"></span>' +
-                    '</button>' +
-                    '<span class="cbd-board-separator"></span>' +
-                    // Farben
-                    '<input type="color" class="cbd-board-color" value="#000000" title="Stiftfarbe">' +
-                    '<div class="cbd-board-preset-colors">' + presetColorsHtml + '</div>' +
-                    '<span class="cbd-board-separator"></span>' +
-                    // Stiftdicke
-                    '<input type="range" class="cbd-board-width" min="1" max="20" value="3" title="Stiftdicke">' +
-                    '<span class="cbd-board-width-display">3px</span>' +
-                    // Textmarker-Transparenz (nur sichtbar wenn Textmarker aktiv)
-                    '<div class="cbd-board-opacity-control" style="display: none; align-items: center; gap: 8px;">' +
+                    '<div class="cbd-board-toolbar-inner">' +
+                        // Textgröße (linke Seite)
+                        '<label class="cbd-board-font-label">📝</label>' +
+                        '<input type="range" class="cbd-board-font-size" min="100" max="300" value="' + this.fontSize + '" step="10" title="Textgröße">' +
+                        '<span class="cbd-board-font-size-display">' + this.fontSize + '%</span>' +
                         '<span class="cbd-board-separator"></span>' +
-                        '<label class="cbd-board-opacity-label">🎨</label>' +
-                        '<input type="range" class="cbd-board-opacity" min="10" max="100" value="30" step="5" title="Textmarker-Transparenz">' +
-                        '<span class="cbd-board-opacity-display">30%</span>' +
+                        // Zeichen-Werkzeuge
+                        '<button class="cbd-board-tool active" data-tool="pen" title="Stift">' +
+                            '<span class="dashicons dashicons-edit"></span>' +
+                        '</button>' +
+                        '<button class="cbd-board-tool" data-tool="highlighter" title="Textmarkierer">' +
+                            '<span class="dashicons dashicons-marker"></span>' +
+                        '</button>' +
+                        '<button class="cbd-board-tool" data-tool="eraser-stroke" title="Strich-Radierer">' +
+                            '<span class="dashicons dashicons-editor-removeformatting"></span>' +
+                        '</button>' +
+                        '<button class="cbd-board-tool" data-tool="eraser-point" title="Punkt-Radierer">' +
+                            '<span class="dashicons dashicons-dismiss"></span>' +
+                        '</button>' +
+                        '<span class="cbd-board-separator"></span>' +
+                        // Farben
+                        '<input type="color" class="cbd-board-color" value="#000000" title="Stiftfarbe">' +
+                        '<div class="cbd-board-preset-colors">' + presetColorsHtml + '</div>' +
+                        '<span class="cbd-board-separator"></span>' +
+                        // Stiftdicke
+                        '<input type="range" class="cbd-board-width" min="1" max="20" value="3" title="Stiftdicke">' +
+                        '<span class="cbd-board-width-display">3px</span>' +
+                        // Textmarker-Transparenz (nur sichtbar wenn Textmarker aktiv)
+                        '<div class="cbd-board-opacity-control" style="display: none; align-items: center; gap: 5px;">' +
+                            '<span class="cbd-board-separator"></span>' +
+                            '<label class="cbd-board-opacity-label">🎨</label>' +
+                            '<input type="range" class="cbd-board-opacity" min="10" max="100" value="30" step="5" title="Textmarker-Transparenz">' +
+                            '<span class="cbd-board-opacity-display">30%</span>' +
+                        '</div>' +
+                        '<span class="cbd-board-separator"></span>' +
+                        // Gitter-Toggle
+                        '<button class="cbd-board-grid-toggle" title="Hexagon-Gitter ein/aus">' +
+                            '<span class="dashicons dashicons-grid-view"></span>' +
+                        '</button>' +
+                        // Grid-Einstellungen (nur sichtbar wenn Gitter aktiv)
+                        '<div class="cbd-board-grid-controls" style="display: none;">' +
+                            '<label class="cbd-board-grid-label">Größe:</label>' +
+                            '<input type="range" class="cbd-board-grid-size" min="15" max="60" value="30" title="Gitter-Größe">' +
+                            '<span class="cbd-board-grid-size-display">30</span>' +
+                            '<label class="cbd-board-grid-label">X:</label>' +
+                            '<input type="range" class="cbd-board-grid-offset-x" min="-100" max="100" value="0" title="Horizontale Position">' +
+                            '<span class="cbd-board-grid-offset-x-display">0</span>' +
+                            '<label class="cbd-board-grid-label">Y:</label>' +
+                            '<input type="range" class="cbd-board-grid-offset-y" min="-100" max="100" value="0" title="Vertikale Position">' +
+                            '<span class="cbd-board-grid-offset-y-display">0</span>' +
+                        '</div>' +
+                        '<span class="cbd-board-separator"></span>' +
+                        // Zeichnung löschen
+                        '<button class="cbd-board-clear" title="Zeichnung löschen">' +
+                            '<span class="dashicons dashicons-trash"></span>' +
+                        '</button>' +
                     '</div>' +
-                    '<span class="cbd-board-separator"></span>' +
-                    // Gitter
-                    '<button class="cbd-board-grid-toggle" title="Hexagon-Gitter ein/aus">' +
-                        '<span class="dashicons dashicons-grid-view"></span>' +
-                    '</button>' +
-                    '<label class="cbd-board-grid-label">Größe:</label>' +
-                    '<input type="range" class="cbd-board-grid-size" min="15" max="60" value="30" title="Gitter-Größe">' +
-                    '<span class="cbd-board-grid-size-display">30</span>' +
-                    '<label class="cbd-board-grid-label">X:</label>' +
-                    '<input type="range" class="cbd-board-grid-offset-x" min="-100" max="100" value="0" title="Horizontale Position">' +
-                    '<span class="cbd-board-grid-offset-x-display">0</span>' +
-                    '<label class="cbd-board-grid-label">Y:</label>' +
-                    '<input type="range" class="cbd-board-grid-offset-y" min="-100" max="100" value="0" title="Vertikale Position">' +
-                    '<span class="cbd-board-grid-offset-y-display">0</span>' +
-                    '<span class="cbd-board-separator"></span>' +
-                    // Zeichnung löschen
-                    '<button class="cbd-board-clear" title="Zeichnung löschen">' +
-                        '<span class="dashicons dashicons-trash"></span>' +
-                    '</button>' +
+                    // Toolbar ein-/ausblenden
+                    '<button class="cbd-board-toolbar-toggle" title="Toolbar ausblenden">▲</button>' +
                 '</div>';
 
             // Block-Inhalt einfuegen
@@ -544,6 +551,12 @@
                     btn.title = 'Vertical (flache Kante unten)';
                 }
             }
+
+            // Grid-Einstellungen nur anzeigen wenn Gitter aktiv
+            var gridControls = this.overlay.querySelector('.cbd-board-grid-controls');
+            if (gridControls) {
+                gridControls.style.display = this.gridMode === 'off' ? 'none' : 'flex';
+            }
         },
 
         /**
@@ -719,6 +732,20 @@
             if (clearBtn) {
                 clearBtn.addEventListener('click', function() {
                     self.showClearConfirm();
+                });
+            }
+
+            // Toolbar ein-/ausblenden
+            var toolbarToggle = this.overlay.querySelector('.cbd-board-toolbar-toggle');
+            if (toolbarToggle) {
+                toolbarToggle.addEventListener('click', function() {
+                    var inner = self.overlay.querySelector('.cbd-board-toolbar-inner');
+                    if (inner) {
+                        var isHidden = inner.style.display === 'none';
+                        inner.style.display = isHidden ? 'flex' : 'none';
+                        toolbarToggle.textContent = isHidden ? '▲' : '▼';
+                        toolbarToggle.title = isHidden ? 'Toolbar ausblenden' : 'Toolbar einblenden';
+                    }
                 });
             }
 
