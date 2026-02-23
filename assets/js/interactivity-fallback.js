@@ -541,91 +541,124 @@
             var $container = $button.closest('[data-wp-interactive="container-block-designer"]');
             var context = $container.data('cbd-context') || {};
             var classroomData = window.cbdClassroomData || {};
+            var containerId = context.stableContainerId || $container.attr('data-stable-id');
+            var pageId = context.pageId || classroomData.pageId;
 
             if (!classroomData.classes || classroomData.classes.length === 0) {
                 alert('Keine Klassen vorhanden. Bitte erstellen Sie zuerst eine Klasse.');
                 return;
             }
 
-            // Klassen-Auswahl Dialog erstellen
-            var dialog = $('<div class="cbd-behandelt-selector-dialog"></div>');
-            var overlay = $('<div class="cbd-behandelt-selector-overlay"></div>');
-            var content = $('<div class="cbd-behandelt-selector-content"></div>');
+            // Aktuellen Status aller Klassen laden, dann Dialog öffnen
+            $.ajax({
+                url: classroomData.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'cbd_get_block_status',
+                    nonce: classroomData.nonce,
+                    page_id: pageId,
+                    container_id: containerId
+                },
+                success: function(statusResponse) {
+                    var classes = (statusResponse.success && statusResponse.data.classes)
+                        ? statusResponse.data.classes
+                        : classroomData.classes.map(function(c) { return { id: c.id, name: c.name, is_behandelt: false }; });
 
-            content.append('<h3>Klasse wählen</h3>');
-            content.append('<p>Für welche Klasse möchten Sie den Status ändern?</p>');
+                    // Dialog aufbauen
+                    var dialog = $('<div class="cbd-behandelt-selector-dialog"></div>');
+                    var overlay = $('<div class="cbd-behandelt-selector-overlay"></div>');
+                    var content = $('<div class="cbd-behandelt-selector-content"></div>');
 
-            var optionsContainer = $('<div class="cbd-behandelt-class-options"></div>');
-            classroomData.classes.forEach(function(cls) {
-                var btn = $('<button class="cbd-behandelt-class-option"></button>')
-                    .attr('data-class-id', cls.id)
-                    .text(cls.name);
-                optionsContainer.append(btn);
-            });
-            content.append(optionsContainer);
+                    content.append('<h3>Klasse wählen</h3>');
+                    content.append('<p>Wählen Sie alle Klassen aus, für die Sie den Status ändern möchten.</p>');
 
-            var cancelBtn = $('<button class="cbd-behandelt-cancel">Abbrechen</button>');
-            content.append(cancelBtn);
+                    var optionsContainer = $('<div class="cbd-behandelt-class-options"></div>');
+                    classes.forEach(function(cls) {
+                        var statusHtml = cls.is_behandelt
+                            ? '<span class="dashicons dashicons-yes-alt"></span> Behandelt'
+                            : '<span class="dashicons dashicons-marker"></span> Nicht behandelt';
+                        var btn = $('<button class="cbd-behandelt-class-option' + (cls.is_behandelt ? ' is-behandelt' : '') + '"></button>')
+                            .attr('data-class-id', cls.id)
+                            .append('<span class="cbd-class-name">' + $('<div>').text(cls.name).html() + '</span>')
+                            .append('<span class="cbd-class-status">' + statusHtml + '</span>');
+                        optionsContainer.append(btn);
+                    });
+                    content.append(optionsContainer);
 
-            dialog.append(overlay);
-            dialog.append(content);
-            $('body').append(dialog);
+                    var doneBtn = $('<button class="cbd-behandelt-cancel">Fertig</button>');
+                    content.append(doneBtn);
 
-            // Event: Klasse gewählt
-            dialog.find('.cbd-behandelt-class-option').on('click', function() {
-                var classId = $(this).attr('data-class-id');
-                dialog.remove();
+                    dialog.append(overlay);
+                    dialog.append(content);
+                    $('body').append(dialog);
 
-                // Toggle behandelt status
-                var currentStatus = context.isBehandelt || false;
-                var newStatus = !currentStatus;
+                    // Event: Klasse angeklickt – Dialog bleibt offen
+                    dialog.on('click', '.cbd-behandelt-class-option', function() {
+                        var $btn = $(this);
+                        if ($btn.prop('disabled')) return;
 
-                // AJAX request
-                $.ajax({
-                    url: classroomData.ajaxUrl,
-                    type: 'POST',
-                    data: {
-                        action: 'cbd_toggle_behandelt',
-                        nonce: classroomData.nonce,
-                        class_id: classId,
-                        page_id: context.pageId || classroomData.pageId,
-                        container_id: context.stableContainerId || $container.attr('data-stable-id'),
-                        behandelt: newStatus ? '1' : '0'
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            context.isBehandelt = newStatus;
-                            $container.data('cbd-context', context);
+                        var classId = $btn.attr('data-class-id');
+                        var cls = classes.find(function(c) { return String(c.id) === String(classId); });
+                        var newStatus = cls ? !cls.is_behandelt : true;
 
-                            // Icon Update
-                            var $icon = $button.find('.dashicons');
-                            if (newStatus) {
-                                $icon.removeClass('dashicons-marker').addClass('dashicons-yes-alt');
-                                // Grün blinken
-                                $icon.css('color', '#4caf50');
-                                setTimeout(function() {
-                                    $icon.css('color', '');
-                                }, 1000);
-                            } else {
-                                $icon.removeClass('dashicons-yes-alt').addClass('dashicons-marker');
+                        $btn.prop('disabled', true).addClass('is-loading');
+
+                        $.ajax({
+                            url: classroomData.ajaxUrl,
+                            type: 'POST',
+                            data: {
+                                action: 'cbd_toggle_behandelt',
+                                nonce: classroomData.nonce,
+                                class_id: classId,
+                                page_id: pageId,
+                                container_id: containerId,
+                                behandelt: newStatus ? '1' : '0'
+                            },
+                            success: function(response) {
+                                $btn.prop('disabled', false).removeClass('is-loading');
+                                if (response.success) {
+                                    if (cls) cls.is_behandelt = newStatus;
+                                    var $status = $btn.find('.cbd-class-status');
+                                    if (newStatus) {
+                                        $btn.addClass('is-behandelt');
+                                        $status.html('<span class="dashicons dashicons-yes-alt"></span> Behandelt');
+                                    } else {
+                                        $btn.removeClass('is-behandelt');
+                                        $status.html('<span class="dashicons dashicons-marker"></span> Nicht behandelt');
+                                    }
+                                } else {
+                                    alert('Fehler beim Speichern: ' + (response.data || 'Unbekannter Fehler'));
+                                }
+                            },
+                            error: function() {
+                                $btn.prop('disabled', false).removeClass('is-loading');
+                                alert('Fehler beim Speichern des Behandelt-Status.');
                             }
+                        });
+                    });
+
+                    // Dialog schließen und Haupt-Icon aktualisieren
+                    var closeDialog = function() {
+                        dialog.remove();
+                        var anyBehandelt = classes.some(function(c) { return c.is_behandelt; });
+                        context.isBehandelt = anyBehandelt;
+                        $container.data('cbd-context', context);
+                        var $icon = $button.find('.dashicons');
+                        $icon.removeClass('dashicons-yes-alt dashicons-marker');
+                        if (anyBehandelt) {
+                            $icon.addClass('dashicons-yes-alt').css('color', '#4caf50');
+                            setTimeout(function() { $icon.css('color', ''); }, 1000);
                         } else {
-                            alert('Fehler beim Speichern: ' + (response.data || 'Unbekannter Fehler'));
+                            $icon.addClass('dashicons-marker');
                         }
-                    },
-                    error: function() {
-                        alert('Fehler beim Speichern des Behandelt-Status.');
-                    }
-                });
-            });
+                    };
 
-            // Event: Abbrechen
-            cancelBtn.on('click', function() {
-                dialog.remove();
-            });
-
-            overlay.on('click', function() {
-                dialog.remove();
+                    doneBtn.on('click', closeDialog);
+                    overlay.on('click', closeDialog);
+                },
+                error: function() {
+                    alert('Fehler beim Laden des Status.');
+                }
             });
         });
 

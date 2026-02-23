@@ -916,6 +916,11 @@
     background: #f1f8f4;
 }
 
+.cbd-behandelt-class-option.is-loading {
+    opacity: 0.6;
+    cursor: wait;
+}
+
 .cbd-behandelt-class-option:hover {
     border-color: #4caf50;
     background: #f1f8f4;

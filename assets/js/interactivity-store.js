@@ -12,17 +12,14 @@ import { store, getContext, getElement } from '@wordpress/interactivity';
  * Helper: Show class selector dialog for "Behandelt" feature
  * (Defined outside store to avoid 'this' context issues)
  */
-function showClassSelectorDialog(classes) {
+function showClassSelectorDialog(classes, onClassToggle) {
 	return new Promise((resolve) => {
-		// Remove any existing dialogs first (synchronously)
+		// Remove any existing dialogs first
 		const existingDialogs = document.querySelectorAll('.cbd-behandelt-selector-dialog');
-		existingDialogs.forEach(d => {
-			d.remove();
-		});
+		existingDialogs.forEach(d => d.remove());
 
 		const dialog = document.createElement('div');
 		dialog.className = 'cbd-behandelt-selector-dialog';
-		dialog.setAttribute('data-dialog-id', Date.now()); // Unique ID for debugging
 
 		const escapeHtml = (text) => {
 			const div = document.createElement('div');
@@ -34,7 +31,7 @@ function showClassSelectorDialog(classes) {
 			<div class="cbd-behandelt-selector-overlay"></div>
 			<div class="cbd-behandelt-selector-content">
 				<h3>Klasse wählen</h3>
-				<p>Für welche Klasse möchten Sie den Status ändern?</p>
+				<p>Wählen Sie alle Klassen aus, für die Sie den Status ändern möchten.</p>
 				<div class="cbd-behandelt-class-options">
 					${classes.map(cls => `
 						<button class="cbd-behandelt-class-option ${cls.is_behandelt ? 'is-behandelt' : ''}" data-class-id="${cls.id}">
@@ -45,58 +42,62 @@ function showClassSelectorDialog(classes) {
 						</button>
 					`).join('')}
 				</div>
-				<button class="cbd-behandelt-cancel">Abbrechen</button>
+				<button class="cbd-behandelt-cancel">Fertig</button>
 			</div>
 		`;
 
-		// Cleanup function
 		const cleanup = () => {
-			console.log('[CBD Dialog] Cleanup started');
 			dialog.removeEventListener('click', handleClick);
-			// Remove immediately
 			if (dialog && dialog.parentNode) {
-				console.log('[CBD Dialog] Removing dialog from DOM');
 				dialog.parentNode.removeChild(dialog);
 			}
 		};
 
-		// Use event delegation on the dialog container
 		const handleClick = (e) => {
 			const classOption = e.target.closest('.cbd-behandelt-class-option');
 			const cancelBtn = e.target.closest('.cbd-behandelt-cancel');
 			const overlay = e.target.classList.contains('cbd-behandelt-selector-overlay');
 
-			if (classOption) {
+			if (classOption && !classOption.disabled) {
 				e.preventDefault();
 				e.stopPropagation();
-				e.stopImmediatePropagation(); // Prevent any other handlers
 				const classId = classOption.getAttribute('data-class-id');
-				console.log('[CBD Dialog] Class selected:', classId);
-				cleanup();
-				resolve(classId);
-				return false;
+
+				// Button während AJAX sperren
+				classOption.disabled = true;
+				classOption.classList.add('is-loading');
+
+				onClassToggle(classId).then((newStatus) => {
+					classOption.disabled = false;
+					classOption.classList.remove('is-loading');
+					const statusSpan = classOption.querySelector('.cbd-class-status');
+					if (newStatus) {
+						classOption.classList.add('is-behandelt');
+						if (statusSpan) statusSpan.innerHTML = '<span class="dashicons dashicons-yes-alt"></span> Behandelt';
+					} else {
+						classOption.classList.remove('is-behandelt');
+						if (statusSpan) statusSpan.innerHTML = '<span class="dashicons dashicons-marker"></span> Nicht behandelt';
+					}
+				}).catch((err) => {
+					classOption.disabled = false;
+					classOption.classList.remove('is-loading');
+					alert('Fehler: ' + err.message);
+				});
+
 			} else if (cancelBtn || overlay) {
 				e.preventDefault();
 				e.stopPropagation();
-				e.stopImmediatePropagation();
-				console.log('[CBD Dialog] Cancelled');
 				cleanup();
-				resolve(null);
-				return false;
+				resolve();
 			}
 		};
 
-		// Add event listener to the dialog container (event delegation)
 		dialog.addEventListener('click', handleClick, { once: false });
-
 		document.body.appendChild(dialog);
 
-		// Focus the first button for keyboard accessibility
 		setTimeout(() => {
 			const firstButton = dialog.querySelector('.cbd-behandelt-class-option');
-			if (firstButton) {
-				firstButton.focus();
-			}
+			if (firstButton) firstButton.focus();
 		}, 50);
 	});
 }
@@ -533,12 +534,10 @@ store('container-block-designer', {
 		 * Behandelt-Status togglen - Klassen-System
 		 */
 		*toggleBehandelt() {
-			console.log('[CBD] toggleBehandelt started');
 			const context = getContext();
 			const element = getElement();
 
 			const classroomData = window.cbdClassroomData || {};
-			console.log('[CBD] classroomData:', classroomData);
 
 			if (!classroomData.classes || classroomData.classes.length === 0) {
 				alert('Keine Klassen vorhanden. Bitte erstellen Sie zuerst eine Klasse.');
@@ -546,14 +545,15 @@ store('container-block-designer', {
 			}
 
 			const mainContainer = element.ref.closest('[data-wp-interactive="container-block-designer"]');
+			const containerId = context.stableContainerId || mainContainer?.getAttribute('data-stable-id');
+			const pageId = context.pageId || classroomData.pageId;
 
-			// First, load status for all classes
-			console.log('[CBD] Loading status for all classes...');
+			// Aktuellen Status aller Klassen laden
 			const formData = new FormData();
 			formData.append('action', 'cbd_get_block_status');
 			formData.append('nonce', classroomData.nonce);
-			formData.append('page_id', context.pageId || classroomData.pageId);
-			formData.append('container_id', context.stableContainerId || mainContainer?.getAttribute('data-stable-id'));
+			formData.append('page_id', pageId);
+			formData.append('container_id', containerId);
 
 			const statusResponse = yield fetch(classroomData.ajaxUrl, {
 				method: 'POST',
@@ -561,109 +561,56 @@ store('container-block-designer', {
 			});
 
 			const statusData = yield statusResponse.json();
-			console.log('[CBD] Status data received:', statusData);
 
 			if (!statusData.success) {
 				alert('Fehler beim Laden des Status.');
 				return;
 			}
 
-			// Klassen-Auswahl Dialog mit Status erstellen
-			console.log('[CBD] Opening class selector dialog with status...');
-			const classId = yield showClassSelectorDialog(statusData.data.classes);
-			console.log('[CBD] Selected class ID:', classId);
+			// Lokale Kopie der Klassen mit Status (wird im Dialog live aktualisiert)
+			const currentClasses = statusData.data.classes;
 
-			if (!classId) {
-				console.log('[CBD] User cancelled');
-				return; // User cancelled
-			}
+			// Callback: wird für jede angeklickte Klasse aufgerufen
+			const onClassToggle = (classId) => {
+				const cls = currentClasses.find(c => String(c.id) === String(classId));
+				const newStatus = cls ? !cls.is_behandelt : true;
 
-			try {
-				// Toggle behandelt status
-				const newStatus = !context.isBehandelt;
-				console.log('[CBD] Current status:', context.isBehandelt, '-> New status:', newStatus);
+				const fd = new FormData();
+				fd.append('action', 'cbd_toggle_behandelt');
+				fd.append('nonce', classroomData.nonce);
+				fd.append('class_id', classId);
+				fd.append('page_id', pageId);
+				fd.append('container_id', containerId);
+				fd.append('behandelt', newStatus ? '1' : '0');
 
-				// AJAX request to save status
-				const formData = new FormData();
-				formData.append('action', 'cbd_toggle_behandelt');
-				formData.append('nonce', classroomData.nonce);
-				formData.append('class_id', classId);
-				formData.append('page_id', context.pageId || classroomData.pageId);
-				formData.append('container_id', context.stableContainerId || mainContainer?.getAttribute('data-stable-id'));
-				formData.append('behandelt', newStatus ? '1' : '0');
-
-				console.log('[CBD] Sending AJAX request...');
-				console.log('[CBD] Parameters:', {
-					action: 'cbd_toggle_behandelt',
-					class_id: classId,
-					page_id: context.pageId || classroomData.pageId,
-					container_id: context.stableContainerId || mainContainer?.getAttribute('data-stable-id'),
-					behandelt: newStatus ? '1' : '0'
-				});
-
-				const response = yield fetch(classroomData.ajaxUrl, {
-					method: 'POST',
-					body: formData
-				});
-
-				console.log('[CBD] Response received:', response.status);
-				const data = yield response.json();
-				console.log('[CBD] Response data:', data);
-
-				// DEBUG: Log debug info explicitly
-				if (data.data && data.data.debug) {
-					console.log('=== DEBUG INFO ===');
-					console.log('Drawing ID:', data.data.debug.drawing_id);
-					console.log('Drawing Status:', data.data.debug.drawing_status);
-					console.log('DB Insert Result:', data.data.debug.db_insert_result);
-					console.log('DB Last Error:', data.data.debug.db_last_error);
-					console.log('Insert ID:', data.data.debug.insert_id);
-
-					if (!data.data.debug.drawing_id) {
-						console.error('❌ PROBLEM: Drawing was NOT created in database!');
-						if (data.data.debug.db_last_error) {
-							console.error('Error:', data.data.debug.db_last_error);
+				return fetch(classroomData.ajaxUrl, { method: 'POST', body: fd })
+					.then(r => r.json())
+					.then(data => {
+						if (data.success) {
+							if (cls) cls.is_behandelt = newStatus;
+							return newStatus;
 						}
-					} else {
-						console.log('✅ Drawing created/updated successfully!');
-					}
-				}
+						throw new Error(data.data || 'Fehler beim Speichern');
+					});
+			};
 
-				if (data.success) {
-					console.log('[CBD] Success! Updating context...');
-					context.isBehandelt = newStatus;
+			// Dialog öffnen – bleibt offen bis "Fertig" oder Overlay-Klick
+			yield showClassSelectorDialog(currentClasses, onClassToggle);
 
-					// Visual feedback - Update icon manually
-					const icon = element.ref.querySelector('.dashicons');
-					if (icon) {
-						console.log('[CBD] Updating icon, newStatus:', newStatus);
-						// Remove both classes first
-						icon.classList.remove('dashicons-yes-alt', 'dashicons-marker');
+			// Nach Schließen: Icon anhand Gesamtstatus aktualisieren
+			const anyBehandelt = currentClasses.some(c => c.is_behandelt);
+			context.isBehandelt = anyBehandelt;
 
-						// Add correct class based on status
-						if (newStatus) {
-							icon.classList.add('dashicons-yes-alt');
-							console.log('[CBD] Added dashicons-yes-alt');
-						} else {
-							icon.classList.add('dashicons-marker');
-							console.log('[CBD] Added dashicons-marker');
-						}
-
-						// Kurz grün blinken bei Erfolg
-						icon.style.color = '#4caf50';
-						setTimeout(() => {
-							icon.style.color = '';
-						}, 1000);
-					}
-
-					console.log('[CBD] Context updated, isBehandelt is now:', context.isBehandelt);
+			const icon = element.ref.querySelector('.dashicons');
+			if (icon) {
+				icon.classList.remove('dashicons-yes-alt', 'dashicons-marker');
+				if (anyBehandelt) {
+					icon.classList.add('dashicons-yes-alt');
+					icon.style.color = '#4caf50';
+					setTimeout(() => { icon.style.color = ''; }, 1000);
 				} else {
-					console.error('[CBD] Error response:', data);
-					throw new Error(data.data || 'Fehler beim Speichern');
+					icon.classList.add('dashicons-marker');
 				}
-			} catch (error) {
-				console.error('[CBD] Exception caught:', error);
-				alert('Fehler beim Speichern des Behandelt-Status: ' + error.message);
 			}
 		},
 
