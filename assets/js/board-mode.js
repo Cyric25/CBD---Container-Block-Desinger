@@ -895,7 +895,13 @@
                     if (!drawingOverlay) return;
                     var willShow = drawingOverlay.style.display === 'none';
                     drawingOverlay.style.display = willShow ? 'block' : 'none';
-                    btn.textContent = willShow ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen';
+                    // Behalte den Typ des Buttons (Tafelbild vs. Eigene Notiz)
+                    var isNote = btn.textContent.indexOf('Notiz') !== -1;
+                    if (isNote) {
+                        btn.textContent = willShow ? '📝 Eigene Notiz verbergen' : '📝 Eigene Notiz anzeigen';
+                    } else {
+                        btn.textContent = willShow ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen';
+                    }
                     btn.classList.toggle('cbd-drawing-toggle-active', willShow);
                 });
             }
