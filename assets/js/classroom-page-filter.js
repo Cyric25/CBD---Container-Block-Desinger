@@ -151,8 +151,8 @@
 
                         if (hasPages || hasLegacy) {
                             var $content = $container.find('.cbd-container-content').first();
-                            if ($content.length > 0 && $content.find('.cbd-drawing-section').length === 0) {
-                                var $section = $('<div class="cbd-drawing-section">');
+                            if ($content.length > 0 && $content.find('.cbd-class-drawing-section').length === 0) {
+                                var $section = $('<div class="cbd-drawing-section cbd-class-drawing-section">');
                                 var $toggle = $('<button class="cbd-drawing-toggle">📋 Tafelbild anzeigen</button>');
                                 var $drawingOverlay = $('<div class="cbd-drawing-overlay" style="display: none;">');
 

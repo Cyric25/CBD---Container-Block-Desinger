@@ -948,6 +948,8 @@ class CBD_Block_Registration {
         // Button 5: Board Mode (Tafel-Modus) - nur wenn Feature aktiviert
         if (!empty($features['boardMode']['enabled'])) {
             $board_color = esc_attr($features['boardMode']['boardColor'] ?? '#ffffff');
+            // Migration: alter default #1a472a → white
+            if ($board_color === '#1a472a') $board_color = '#ffffff';
             $html .= '<button type="button" ';
             $html .= 'class="cbd-board-mode-toggle" ';
             $html .= 'data-wp-on--click="actions.toggleBoardMode" ';

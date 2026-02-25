@@ -2489,14 +2489,14 @@
             var contentArea = container.querySelector('.cbd-container-content');
             if (!contentArea) return;
 
-            // Bestehende Drawing-Section entfernen
-            var oldSection = contentArea.querySelector('.cbd-drawing-section');
+            // Bestehende lokale Drawing-Section entfernen (nicht die Server-Section!)
+            var oldSection = contentArea.querySelector('.cbd-local-drawing-section');
             if (oldSection) oldSection.parentNode.removeChild(oldSection);
             if (!hasDrawing) return;
 
             // Drawing-Section aufbauen
             var section = document.createElement('div');
-            section.className = 'cbd-drawing-section';
+            section.className = 'cbd-drawing-section cbd-local-drawing-section';
 
             var toggleBtn = document.createElement('button');
             toggleBtn.className = 'cbd-drawing-toggle';
