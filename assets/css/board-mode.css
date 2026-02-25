@@ -198,6 +198,113 @@
     gap: 5px;
 }
 
+/* Seiten-Navigation in der Toolbar */
+.cbd-board-page-prev,
+.cbd-board-page-next {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    color: #555;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.cbd-board-page-prev:hover:not(:disabled),
+.cbd-board-page-next:hover:not(:disabled) {
+    background: #e8f4fd;
+    border-color: #007cba;
+    color: #007cba;
+}
+
+.cbd-board-page-prev:disabled,
+.cbd-board-page-next:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.cbd-board-page-indicator {
+    font-size: 11px;
+    font-weight: 600;
+    color: #555;
+    min-width: 34px;
+    text-align: center;
+    font-family: monospace;
+    white-space: nowrap;
+}
+
+.cbd-board-page-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid #4caf50;
+    border-radius: 6px;
+    background: #f1f8f4;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 700;
+    color: #2e7d32;
+    transition: all 0.15s ease;
+    padding: 0;
+    line-height: 1;
+}
+
+.cbd-board-page-add:hover {
+    background: #4caf50;
+    color: #fff;
+}
+
+/* Seiten-Navigation in der Schüleransicht */
+.cbd-drawing-page-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0 10px;
+}
+
+.cbd-drawing-page-prev,
+.cbd-drawing-page-next {
+    width: 32px;
+    height: 32px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    color: #555;
+    transition: all 0.15s ease;
+}
+
+.cbd-drawing-page-prev:hover:not(:disabled),
+.cbd-drawing-page-next:hover:not(:disabled) {
+    background: #e8f4fd;
+    border-color: #007cba;
+    color: #007cba;
+}
+
+.cbd-drawing-page-prev:disabled,
+.cbd-drawing-page-next:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.cbd-drawing-page-indicator {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    min-width: 40px;
+    text-align: center;
+    font-family: monospace;
+}
+
 /* Toolbar ein-/ausblenden Button */
 .cbd-board-toolbar-toggle {
     display: flex;

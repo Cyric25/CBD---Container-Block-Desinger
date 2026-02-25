@@ -1288,18 +1288,37 @@ class CBD_Classroom {
             }
         }
 
-        // Organize drawings by container_id
+        // Organize drawings by base container_id (grouping multi-page variants)
         $drawings_map = array();
         $treated_containers = array();
 
         foreach ($drawings as $drawing) {
-            $drawings_map[$drawing->container_id] = array(
+            // Detect multi-page suffix: "containerid:pN"
+            if (preg_match('/^(.+):p(\d+)$/', $drawing->container_id, $m)) {
+                $base_id   = $m[1];
+                $page_index = intval($m[2]);
+            } else {
+                $base_id    = $drawing->container_id;
+                $page_index = 0;
+            }
+
+            if (!isset($drawings_map[$base_id])) {
+                $drawings_map[$base_id] = array(
+                    'pages'        => array(),
+                    'is_behandelt' => false,
+                );
+            }
+
+            $drawings_map[$base_id]['pages'][$page_index] = array(
                 'drawing_data' => $drawing->drawing_data,
-                'is_behandelt' => (bool) $drawing->is_behandelt
+                'is_behandelt' => (bool) $drawing->is_behandelt,
             );
 
             if ($drawing->is_behandelt) {
-                $treated_containers[] = $drawing->container_id;
+                $drawings_map[$base_id]['is_behandelt'] = true;
+                if (!in_array($base_id, $treated_containers)) {
+                    $treated_containers[] = $base_id;
+                }
             }
         }
 

@@ -69,6 +69,11 @@
         classes: [],
         isBehandeltSet: false, // Einmalig pro Session als behandelt markieren
 
+        // Multi-Seiten-State
+        currentPageIndex: 0,
+        totalPages: 1,
+        pageCache: {},   // { pageIndex: dataUrl }
+
         // Preset board colors (for background)
         boardPresetColors: [
             '#ffffff', // Weiß (default)
@@ -128,6 +133,11 @@
             // Tool-Einstellungen aus localStorage laden
             this.loadToolSettings();
 
+            // Multi-Seiten-State zurücksetzen
+            this.currentPageIndex = 0;
+            this.totalPages = 1;
+            this.pageCache = {};
+
             // Overlay-DOM erstellen
             this.createOverlayDOM(contentHtml);
 
@@ -141,12 +151,14 @@
             this.initCanvases();
             this.resizeAllCanvases();
 
-            // Zeichnung laden
+            // Seitenanzahl aus localStorage laden und UI aufbauen
+            this.initPages();
+
+            // Zeichnung laden (Seite 0)
             this.loadDrawing();
 
             // Events binden
             this.bindEvents();
-
         },
 
         /**
@@ -210,6 +222,11 @@
             // Stroke-basiertes Radieren: Striche löschen
             this.strokes = [];
             this.currentStroke = null;
+
+            // Multi-Seiten-State zurücksetzen
+            this.currentPageIndex = 0;
+            this.totalPages = 1;
+            this.pageCache = {};
         },
 
         /**
@@ -327,6 +344,12 @@
                         '<button class="cbd-board-clear" title="Zeichnung löschen">' +
                             '<span class="dashicons dashicons-trash"></span>' +
                         '</button>' +
+                        '<span class="cbd-board-separator"></span>' +
+                        // Seiten-Navigation
+                        '<button class="cbd-board-page-prev" title="Vorherige Seite" disabled>◀</button>' +
+                        '<span class="cbd-board-page-indicator">1 / 1</span>' +
+                        '<button class="cbd-board-page-next" title="Nächste Seite" disabled>▶</button>' +
+                        '<button class="cbd-board-page-add" title="Neue Seite hinzufügen">+</button>' +
                     '</div>' +
                     // Toolbar ein-/ausblenden
                     '<button class="cbd-board-toolbar-toggle" title="Toolbar ausblenden">▲</button>' +
@@ -762,6 +785,28 @@
                         toolbarToggle.textContent = isHidden ? '▲' : '▼';
                         toolbarToggle.title = isHidden ? 'Toolbar ausblenden' : 'Toolbar einblenden';
                     }
+                });
+            }
+
+            // Seiten-Navigation
+            var pagePrevBtn = this.overlay.querySelector('.cbd-board-page-prev');
+            if (pagePrevBtn) {
+                pagePrevBtn.addEventListener('click', function() {
+                    self.goToPage(self.currentPageIndex - 1);
+                });
+            }
+
+            var pageNextBtn = this.overlay.querySelector('.cbd-board-page-next');
+            if (pageNextBtn) {
+                pageNextBtn.addEventListener('click', function() {
+                    self.goToPage(self.currentPageIndex + 1);
+                });
+            }
+
+            var pageAddBtn = this.overlay.querySelector('.cbd-board-page-add');
+            if (pageAddBtn) {
+                pageAddBtn.addEventListener('click', function() {
+                    self.addPage();
                 });
             }
 
@@ -1318,18 +1363,20 @@
         // =============================================
 
         loadDrawing: function() {
+            var pageContainerId = this.getPageContainerId(this.currentPageIndex);
             if (this.classId && this.ajaxUrl) {
-                this.loadFromServer();
+                this.loadFromServer(pageContainerId);
             } else {
-                this.loadFromCache();
+                this.loadFromCache('cbd-board-' + pageContainerId);
             }
         },
 
         saveDrawing: function() {
+            var pageContainerId = this.getPageContainerId(this.currentPageIndex);
             if (this.classId && this.ajaxUrl) {
-                this.saveToServer();
+                this.saveToServer(pageContainerId);
             } else {
-                this.saveToCache();
+                this.saveToCache('cbd-board-' + pageContainerId);
             }
         },
 
@@ -1337,7 +1384,7 @@
         // Server-Persistenz
         // =============================================
 
-        loadFromServer: function() {
+        loadFromServer: function(pageContainerId) {
             // Klassen-Modus: NIEMALS lokalen Cache verwenden
             if (!this.classId || !this.ajaxUrl || !this.stableContainerId) {
                 console.warn('[CBD Board Mode] loadFromServer: Fehlende Parameter, Abbruch.');
@@ -1352,7 +1399,7 @@
             formData.append('nonce', this.nonce);
             formData.append('class_id', this.classId);
             formData.append('page_id', this.pageId);
-            formData.append('container_id', this.stableContainerId);
+            formData.append('container_id', pageContainerId || this.stableContainerId);
 
             fetch(this.ajaxUrl, {
                 method: 'POST',
@@ -1381,7 +1428,7 @@
             });
         },
 
-        saveToServer: function() {
+        saveToServer: function(pageContainerId) {
             // Klassen-Modus: NIEMALS lokalen Cache verwenden
             if (!this.classId || !this.ajaxUrl || !this.stableContainerId) {
                 console.warn('[CBD Board Mode] saveToServer: Fehlende Parameter, Abbruch.');
@@ -1410,7 +1457,7 @@
             formData.append('nonce', this.nonce);
             formData.append('class_id', this.classId);
             formData.append('page_id', this.pageId);
-            formData.append('container_id', this.stableContainerId);
+            formData.append('container_id', pageContainerId || this.stableContainerId);
             formData.append('drawing_data', dataUrl);
 
             fetch(this.ajaxUrl, {
@@ -1480,11 +1527,11 @@
         // localStorage Persistenz
         // =============================================
 
-        saveToCache: function() {
+        saveToCache: function(cacheKey) {
             if (!this.drawingCanvas || !this.containerId) return;
 
             try {
-                var key = 'cbd-board-' + this.containerId;
+                var key = cacheKey || ('cbd-board-' + this.containerId);
                 var dataUrl = this.drawingCanvas.toDataURL('image/png');
                 localStorage.setItem(key, dataUrl);
             } catch (e) {
@@ -1492,11 +1539,11 @@
             }
         },
 
-        loadFromCache: function() {
+        loadFromCache: function(cacheKey) {
             if (!this.drawingCanvas || !this.drawingCtx || !this.containerId) return;
 
             try {
-                var key = 'cbd-board-' + this.containerId;
+                var key = cacheKey || ('cbd-board-' + this.containerId);
                 var dataUrl = localStorage.getItem(key);
 
                 if (!dataUrl) {
@@ -1525,6 +1572,117 @@
             } catch (e) {
                 // Ignorieren
             }
+        },
+
+        // =============================================
+        // Multi-Seiten-System
+        // =============================================
+
+        /**
+         * Container-ID für eine bestimmte Seite
+         * Seite 0: normale ID (rückwärtskompatibel)
+         * Seite N: ID + ':pN'
+         */
+        getPageContainerId: function(index) {
+            var baseId = this.stableContainerId || this.containerId;
+            return index === 0 ? baseId : baseId + ':p' + index;
+        },
+
+        /**
+         * Seitenanzahl aus localStorage laden und UI initialisieren
+         */
+        initPages: function() {
+            var baseId = this.stableContainerId || this.containerId;
+            try {
+                var stored = localStorage.getItem('cbd-board-pagecount-' + baseId);
+                this.totalPages = stored ? Math.max(1, parseInt(stored, 10)) : 1;
+            } catch (e) {
+                this.totalPages = 1;
+            }
+            this.updatePageNavUI();
+        },
+
+        /**
+         * Zu einer anderen Seite navigieren
+         */
+        goToPage: function(index) {
+            if (index < 0 || index >= this.totalPages) return;
+            if (index === this.currentPageIndex) return;
+
+            var self = this;
+
+            // Aktuelle Zeichnung in In-Memory-Cache sichern
+            this.pageCache[this.currentPageIndex] = this.drawingCanvas.toDataURL('image/png');
+
+            // Aktuelle Seite asynchron auf Server/Cache speichern
+            var fromPageContainerId = this.getPageContainerId(this.currentPageIndex);
+            if (this.classId && this.ajaxUrl) {
+                this.saveToServer(fromPageContainerId);
+            } else {
+                this.saveToCache('cbd-board-' + fromPageContainerId);
+            }
+
+            // Zur neuen Seite wechseln
+            this.currentPageIndex = index;
+            this.updatePageNavUI();
+
+            // Canvas und Striche leeren
+            this.drawingCtx.clearRect(0, 0, this.cssWidth || this.drawingCanvas.width, this.cssHeight || this.drawingCanvas.height);
+            this.strokes = [];
+
+            // Neue Seite aus Cache oder Server laden
+            if (this.pageCache[index] !== undefined && this.pageCache[index] !== null) {
+                var cached = this.pageCache[index];
+                if (cached) {
+                    var img = new Image();
+                    img.onload = function() {
+                        self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
+                        self.drawingCtx.drawImage(img, 0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
+                    };
+                    img.src = cached;
+                }
+            } else {
+                this.loadDrawing();
+            }
+        },
+
+        /**
+         * Neue leere Seite hinzufügen
+         */
+        addPage: function() {
+            // Aktuelle Seite speichern
+            this.pageCache[this.currentPageIndex] = this.drawingCanvas.toDataURL('image/png');
+            var fromPageContainerId = this.getPageContainerId(this.currentPageIndex);
+            if (this.classId && this.ajaxUrl) {
+                this.saveToServer(fromPageContainerId);
+            } else {
+                this.saveToCache('cbd-board-' + fromPageContainerId);
+            }
+
+            // Neue Seite anlegen
+            this.totalPages++;
+            var baseId = this.stableContainerId || this.containerId;
+            try { localStorage.setItem('cbd-board-pagecount-' + baseId, this.totalPages); } catch (e) {}
+
+            // Zur neuen Seite wechseln (leer)
+            this.currentPageIndex = this.totalPages - 1;
+            this.pageCache[this.currentPageIndex] = null; // Explizit als leer markieren
+            this.drawingCtx.clearRect(0, 0, this.cssWidth || this.drawingCanvas.width, this.cssHeight || this.drawingCanvas.height);
+            this.strokes = [];
+            this.updatePageNavUI();
+        },
+
+        /**
+         * Seiten-Navigations-UI aktualisieren
+         */
+        updatePageNavUI: function() {
+            if (!this.overlay) return;
+            var prevBtn = this.overlay.querySelector('.cbd-board-page-prev');
+            var nextBtn = this.overlay.querySelector('.cbd-board-page-next');
+            var indicator = this.overlay.querySelector('.cbd-board-page-indicator');
+            if (prevBtn) prevBtn.disabled = this.currentPageIndex <= 0;
+            if (nextBtn) nextBtn.disabled = this.currentPageIndex >= this.totalPages - 1;
+            if (indicator) indicator.textContent = (this.currentPageIndex + 1) + ' / ' + this.totalPages;
         },
 
         // =============================================

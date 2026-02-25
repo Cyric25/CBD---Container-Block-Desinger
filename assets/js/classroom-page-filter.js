@@ -145,30 +145,69 @@
                             }
                         }
 
-                        // Add collapsible drawing section if exists
-                        if (drawing.drawing_data) {
+                        // Add collapsible drawing section with optional page navigation
+                        var hasPages = drawing.pages && Object.keys(drawing.pages).length > 0;
+                        var hasLegacy = !hasPages && drawing.drawing_data;
+
+                        if (hasPages || hasLegacy) {
                             var $content = $container.find('.cbd-container-content').first();
                             if ($content.length > 0 && $content.find('.cbd-drawing-section').length === 0) {
-                                // Create collapsible drawing section
                                 var $section = $('<div class="cbd-drawing-section">');
                                 var $toggle = $('<button class="cbd-drawing-toggle">📋 Tafelbild anzeigen</button>');
-                                var $overlay = $('<div class="cbd-drawing-overlay" style="display: none;">');
-                                $overlay.append('<img src="' + drawing.drawing_data + '" alt="Tafel-Zeichnung">');
+                                var $drawingOverlay = $('<div class="cbd-drawing-overlay" style="display: none;">');
 
-                                $section.append($toggle);
-                                $section.append($overlay);
-                                $content.append($section); // Append at bottom instead of prepend
+                                if (hasPages) {
+                                    // Multi-page: sort page indices
+                                    var pageIndices = Object.keys(drawing.pages).map(Number).sort(function(a, b) { return a - b; });
+                                    var totalDrawingPages = pageIndices.length;
+                                    var currentDrawingPage = 0;
 
-                                // Toggle functionality
+                                    var $img = $('<img alt="Tafel-Zeichnung" style="max-width:100%;">');
+
+                                    var updateDrawingPage = function(idx) {
+                                        currentDrawingPage = idx;
+                                        var pageData = drawing.pages[pageIndices[idx]];
+                                        $img.attr('src', pageData && pageData.drawing_data ? pageData.drawing_data : '');
+                                        $pagePrev.prop('disabled', idx <= 0);
+                                        $pageNext.prop('disabled', idx >= totalDrawingPages - 1);
+                                        $pageIndicator.text((idx + 1) + ' / ' + totalDrawingPages);
+                                    };
+
+                                    if (totalDrawingPages > 1) {
+                                        var $pageNav = $('<div class="cbd-drawing-page-nav">');
+                                        var $pagePrev = $('<button class="cbd-drawing-page-prev" disabled>◀</button>');
+                                        var $pageIndicator = $('<span class="cbd-drawing-page-indicator"></span>');
+                                        var $pageNext = $('<button class="cbd-drawing-page-next">▶</button>');
+
+                                        $pagePrev.on('click', function() { updateDrawingPage(currentDrawingPage - 1); });
+                                        $pageNext.on('click', function() { updateDrawingPage(currentDrawingPage + 1); });
+
+                                        $pageNav.append($pagePrev, $pageIndicator, $pageNext);
+                                        $drawingOverlay.append($pageNav);
+                                    } else {
+                                        // Dummy-Elemente damit updateDrawingPage nicht bricht
+                                        var $pagePrev = $('<button>'), $pageNext = $('<button>'), $pageIndicator = $('<span>');
+                                    }
+
+                                    $drawingOverlay.append($img);
+                                    updateDrawingPage(0);
+                                } else {
+                                    // Legacy: einzelne Zeichnung
+                                    $drawingOverlay.append('<img src="' + this.escapeHtml(drawing.drawing_data) + '" alt="Tafel-Zeichnung" style="max-width:100%;">');
+                                }
+
+                                $section.append($toggle, $drawingOverlay);
+                                $content.append($section);
+
                                 $toggle.on('click', function(e) {
                                     e.preventDefault();
-                                    $overlay.slideToggle(300);
-                                    var isVisible = $overlay.is(':visible');
+                                    $drawingOverlay.slideToggle(300);
+                                    var isVisible = $drawingOverlay.is(':visible');
                                     $toggle.text(isVisible ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen');
                                     $toggle.toggleClass('cbd-drawing-toggle-active', isVisible);
                                 });
 
-                                console.log('CBD Classroom Page Filter: Added collapsible drawing to', stableId);
+                                console.log('CBD Classroom Page Filter: Added drawing section to', stableId);
                             }
                         }
                     }
