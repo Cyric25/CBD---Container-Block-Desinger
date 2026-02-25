@@ -341,6 +341,65 @@
     font-family: monospace;
 }
 
+/* ========================================
+   Tafelansicht im Block (lokaler Modus)
+   ======================================== */
+
+.cbd-drawing-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 2px solid #e0e0e0;
+}
+
+.cbd-drawing-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.cbd-drawing-toggle:hover {
+    background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+    transform: translateY(-1px);
+}
+
+.cbd-drawing-toggle.cbd-drawing-toggle-active {
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+}
+
+.cbd-drawing-toggle.cbd-drawing-toggle-active:hover {
+    background: linear-gradient(135deg, #f57c00 0%, #e65100 100%);
+    box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+}
+
+.cbd-drawing-overlay {
+    margin-top: 14px;
+    padding: 16px;
+    background: #f8f9fa;
+    border: 2px solid #4caf50;
+    border-radius: 10px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+}
+
+.cbd-drawing-overlay img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
 /* Toolbar ein-/ausblenden Button */
 .cbd-board-toolbar-toggle {
     display: flex;

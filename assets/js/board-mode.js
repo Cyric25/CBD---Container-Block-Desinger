@@ -196,12 +196,23 @@
             // Zeichnung speichern
             this.saveDrawing();
 
+            // State für Tafelansicht sichern (vor destroy, nur lokaler Modus)
+            var isLocal = !this.classId;
+            var snapContainerId = this.containerId;
+            var snapStableId = this.stableContainerId;
+            var snapTotalPages = this.totalPages;
+            var snapCurrentPage = this.currentPageIndex;
+
             // Closing-Animation
             this.overlay.classList.add('cbd-board-closing');
 
             var self = this;
             setTimeout(function() {
                 self.destroy();
+                // Tafelansicht im Block aktualisieren (nur lokaler Modus)
+                if (isLocal) {
+                    CBDBoardMode.updateBlockDisplay(snapContainerId, snapStableId, snapTotalPages, snapCurrentPage);
+                }
             }, 200);
         },
 
@@ -2415,7 +2426,164 @@
                     }
                 });
             });
+        },
+
+        // =============================================
+        // Tafelansicht im Block (lokaler Modus)
+        // =============================================
+
+        /**
+         * Tafelansicht im Block aktualisieren (lokaler Modus)
+         * Wird nach dem Schließen des Overlays aufgerufen
+         */
+        updateBlockDisplay: function(containerId, stableId, totalPages, currentPageIndex) {
+            var baseId = stableId || containerId;
+            if (!baseId) return;
+
+            // Block-Container im DOM finden
+            var container = null;
+            var candidates = document.querySelectorAll('[data-stable-id]');
+            for (var i = 0; i < candidates.length; i++) {
+                if (candidates[i].getAttribute('data-stable-id') === baseId) {
+                    container = candidates[i];
+                    break;
+                }
+            }
+            if (!container) return;
+
+            // Seiten-Daten aus localStorage lesen
+            var pages = [];
+            for (var p = 0; p < totalPages; p++) {
+                var key = p === 0 ? 'cbd-board-' + baseId : 'cbd-board-' + baseId + ':p' + p;
+                var dataUrl = '';
+                try { dataUrl = localStorage.getItem(key) || ''; } catch (e) {}
+                pages.push(dataUrl);
+            }
+
+            // Prüfen ob Zeichnungen vorhanden
+            var hasDrawing = pages.some(function(d) { return !!d; });
+
+            // Ziel: .cbd-container-content
+            var contentArea = container.querySelector('.cbd-container-content');
+            if (!contentArea) return;
+
+            // Bestehende Drawing-Section entfernen
+            var oldSection = contentArea.querySelector('.cbd-drawing-section');
+            if (oldSection) oldSection.parentNode.removeChild(oldSection);
+            if (!hasDrawing) return;
+
+            // Drawing-Section aufbauen
+            var section = document.createElement('div');
+            section.className = 'cbd-drawing-section';
+
+            var toggleBtn = document.createElement('button');
+            toggleBtn.className = 'cbd-drawing-toggle';
+            toggleBtn.textContent = '📋 Tafelbild anzeigen';
+
+            var drawingOverlay = document.createElement('div');
+            drawingOverlay.className = 'cbd-drawing-overlay';
+            drawingOverlay.style.display = 'none';
+
+            var img = document.createElement('img');
+            img.alt = 'Tafel-Zeichnung';
+            img.style.maxWidth = '100%';
+
+            if (totalPages > 1) {
+                // Mehrseitige Navigation mit ◀ / Indikator / ▶
+                var pageNav = document.createElement('div');
+                pageNav.className = 'cbd-drawing-page-nav';
+
+                var prevBtn = document.createElement('button');
+                prevBtn.className = 'cbd-drawing-page-prev';
+                prevBtn.textContent = '◀';
+                prevBtn.disabled = true;
+
+                var pageInd = document.createElement('span');
+                pageInd.className = 'cbd-drawing-page-indicator';
+
+                var nextBtn = document.createElement('button');
+                nextBtn.className = 'cbd-drawing-page-next';
+                nextBtn.textContent = '▶';
+
+                pageNav.appendChild(prevBtn);
+                pageNav.appendChild(pageInd);
+                pageNav.appendChild(nextBtn);
+                drawingOverlay.appendChild(pageNav);
+
+                // IIFE: saubere Closure-Isolation pro Container
+                (function(imgEl, prev, next, ind, pgs, startIdx) {
+                    var current = startIdx;
+                    function showPage(idx) {
+                        if (idx < 0 || idx >= pgs.length) return;
+                        current = idx;
+                        imgEl.src = pgs[idx] || '';
+                        prev.disabled = idx <= 0;
+                        next.disabled = idx >= pgs.length - 1;
+                        ind.textContent = (idx + 1) + ' / ' + pgs.length;
+                    }
+                    prev.addEventListener('click', function(e) { e.stopPropagation(); showPage(current - 1); });
+                    next.addEventListener('click', function(e) { e.stopPropagation(); showPage(current + 1); });
+                    showPage(startIdx);
+                })(img, prevBtn, nextBtn, pageInd, pages, currentPageIndex);
+            } else {
+                img.src = pages[0] || '';
+            }
+
+            drawingOverlay.appendChild(img);
+            section.appendChild(toggleBtn);
+            section.appendChild(drawingOverlay);
+            contentArea.appendChild(section);
+
+            toggleBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                var willShow = drawingOverlay.style.display === 'none';
+                drawingOverlay.style.display = willShow ? 'block' : 'none';
+                toggleBtn.textContent = willShow ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen';
+                toggleBtn.classList.toggle('cbd-drawing-toggle-active', willShow);
+            });
+        },
+
+        /**
+         * Beim Seitenladen: bestehende Zeichnungen in allen Board-Mode-Blöcken anzeigen
+         */
+        initBlockDisplays: function() {
+            var self = this;
+            var boardBlocks = document.querySelectorAll('.cbd-has-board-mode[data-stable-id]');
+            for (var i = 0; i < boardBlocks.length; i++) {
+                var block = boardBlocks[i];
+                var stableId = block.getAttribute('data-stable-id');
+                if (!stableId) continue;
+
+                // Seitenanzahl aus localStorage
+                var totalPages = 1;
+                try {
+                    var stored = localStorage.getItem('cbd-board-pagecount-' + stableId);
+                    totalPages = stored ? Math.max(1, parseInt(stored, 10)) : 1;
+                } catch (e) {}
+
+                // Nur anzeigen wenn mindestens eine Zeichnung vorhanden
+                var hasDrawing = false;
+                for (var p = 0; p < totalPages; p++) {
+                    var key = p === 0 ? 'cbd-board-' + stableId : 'cbd-board-' + stableId + ':p' + p;
+                    try {
+                        if (localStorage.getItem(key)) { hasDrawing = true; break; }
+                    } catch (e) {}
+                }
+
+                if (hasDrawing) {
+                    self.updateBlockDisplay(null, stableId, totalPages, 0);
+                }
+            }
         }
     };
+
+    // Beim Seitenladen gespeicherte Zeichnungen anzeigen
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            window.CBDBoardMode.initBlockDisplays();
+        });
+    } else {
+        window.CBDBoardMode.initBlockDisplays();
+    }
 
 })();
