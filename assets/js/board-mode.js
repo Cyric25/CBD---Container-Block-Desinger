@@ -87,7 +87,7 @@
         _pinchMidY: 0,
 
         // Undo
-        baseImageData: null,     // Initiales geladenes Bild als ImageData (für Undo-Basis)
+        baseImageObj: null,      // Geladenes Bild als Image-Objekt (drawImage – resize-sicher)
 
         // Preset board colors (for background)
         boardPresetColors: [
@@ -159,7 +159,7 @@
             this.panY = 0;
             this._pinchPointers = {};
             this._pinchStartDist = null;
-            this.baseImageData = null;
+            this.baseImageObj = null;
 
             // Overlay-DOM erstellen
             this.createOverlayDOM(contentHtml);
@@ -260,7 +260,7 @@
             this.panY = 0;
             this._pinchPointers = {};
             this._pinchStartDist = null;
-            this.baseImageData = null;
+            this.baseImageObj = null;
         },
 
         /**
@@ -1173,7 +1173,7 @@
             this.currentStroke = null;
 
             // Basis-Bild löschen (Undo-Basis zurücksetzen)
-            this.baseImageData = null;
+            this.baseImageObj = null;
 
             // Aus localStorage entfernen
             this.removeFromCache();
@@ -1412,9 +1412,11 @@
             this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
 
             // Basis-Bild wiederherstellen (geladene Zeichnung, dient als Undo-Basis)
-            // putImageData arbeitet in physischen Pixeln und umgeht den DPR-Transform
-            if (this.baseImageData) {
-                this.drawingCtx.putImageData(this.baseImageData, 0, 0);
+            // drawImage verwendet CSS-Koordinaten → korrekt nach Canvas-Resize
+            if (this.baseImageObj && this.baseImageObj.complete) {
+                var bw = this.cssWidth || this.drawingCanvas.width;
+                var bh = this.cssHeight || this.drawingCanvas.height;
+                this.drawingCtx.drawImage(this.baseImageObj, 0, 0, bw, bh);
             }
 
             // Sammle alle Striche (abgeschlossen + aktuell in Bearbeitung)
@@ -1539,8 +1541,8 @@
                     img.onload = function() {
                         self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
                         self.drawingCtx.drawImage(img, 0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
-                        // Basis-Bild für Undo erfassen (physische Pixel, vor neuen Strichen)
-                        self.baseImageData = self.drawingCtx.getImageData(0, 0, self.drawingCanvas.width, self.drawingCanvas.height);
+                        // Basis-Bild für Undo als Image-Objekt speichern (resize-sicher)
+                        self.baseImageObj = img;
                         self._setSaveStatus('Geladen');
                         setTimeout(function() { self._setSaveStatus(''); }, 2000);
                     };
@@ -1685,8 +1687,8 @@
                 img.onload = function() {
                     self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
                     self.drawingCtx.drawImage(img, 0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
-                    // Basis-Bild für Undo erfassen (physische Pixel, vor neuen Strichen)
-                    self.baseImageData = self.drawingCtx.getImageData(0, 0, self.drawingCanvas.width, self.drawingCanvas.height);
+                    // Basis-Bild für Undo als Image-Objekt speichern (resize-sicher)
+                    self.baseImageObj = img;
                 };
                 img.src = dataUrl;
             } catch (e) {
@@ -1760,7 +1762,7 @@
             // Canvas und Striche leeren
             this.drawingCtx.clearRect(0, 0, this.cssWidth || this.drawingCanvas.width, this.cssHeight || this.drawingCanvas.height);
             this.strokes = [];
-            this.baseImageData = null;
+            this.baseImageObj = null;
 
             // Neue Seite aus Cache oder Server laden
             if (this.pageCache[index] !== undefined && this.pageCache[index] !== null) {
@@ -1770,6 +1772,8 @@
                     img.onload = function() {
                         self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
                         self.drawingCtx.drawImage(img, 0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
+                        // Basis-Bild für Undo speichern
+                        self.baseImageObj = img;
                     };
                     img.src = cached;
                 }
@@ -1801,7 +1805,7 @@
             this.pageCache[this.currentPageIndex] = null; // Explizit als leer markieren
             this.drawingCtx.clearRect(0, 0, this.cssWidth || this.drawingCanvas.width, this.cssHeight || this.drawingCanvas.height);
             this.strokes = [];
-            this.baseImageData = null;
+            this.baseImageObj = null;
             this.updatePageNavUI();
         },
 
@@ -1829,9 +1833,8 @@
             if (this.strokes.length > 0) {
                 this.strokes.pop();
                 this.redrawAllStrokes();
-            } else if (this.baseImageData) {
-                // Alle neuen Striche weg und Basis-Bild ist alles – nichts zu tun
-                // (Basis-Bild wird durch redrawAllStrokes automatisch gezeichnet)
+            } else if (this.baseImageObj) {
+                // Keine neuen Striche – Basis-Bild durch redrawAllStrokes neu zeichnen
                 this.redrawAllStrokes();
             }
         },
