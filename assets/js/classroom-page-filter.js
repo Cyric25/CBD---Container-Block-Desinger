@@ -157,43 +157,54 @@
                                 var $drawingOverlay = $('<div class="cbd-drawing-overlay" style="display: none;">');
 
                                 if (hasPages) {
-                                    // Multi-page: sort page indices
+                                    // Multi-page: IIFE für saubere Closure-Isolation
                                     var pageIndices = Object.keys(drawing.pages).map(Number).sort(function(a, b) { return a - b; });
                                     var totalDrawingPages = pageIndices.length;
-                                    var currentDrawingPage = 0;
 
-                                    var $img = $('<img alt="Tafel-Zeichnung" style="max-width:100%;">');
-
-                                    var updateDrawingPage = function(idx) {
-                                        currentDrawingPage = idx;
-                                        var pageData = drawing.pages[pageIndices[idx]];
-                                        $img.attr('src', pageData && pageData.drawing_data ? pageData.drawing_data : '');
-                                        $pagePrev.prop('disabled', idx <= 0);
-                                        $pageNext.prop('disabled', idx >= totalDrawingPages - 1);
-                                        $pageIndicator.text((idx + 1) + ' / ' + totalDrawingPages);
-                                    };
+                                    var $img = $('<img>').attr('alt', 'Tafel-Zeichnung').css('max-width', '100%');
 
                                     if (totalDrawingPages > 1) {
                                         var $pageNav = $('<div class="cbd-drawing-page-nav">');
                                         var $pagePrev = $('<button class="cbd-drawing-page-prev" disabled>◀</button>');
-                                        var $pageIndicator = $('<span class="cbd-drawing-page-indicator"></span>');
+                                        var $pageIndicator = $('<span class="cbd-drawing-page-indicator">1 / ' + totalDrawingPages + '</span>');
                                         var $pageNext = $('<button class="cbd-drawing-page-next">▶</button>');
-
-                                        $pagePrev.on('click', function() { updateDrawingPage(currentDrawingPage - 1); });
-                                        $pageNext.on('click', function() { updateDrawingPage(currentDrawingPage + 1); });
-
                                         $pageNav.append($pagePrev, $pageIndicator, $pageNext);
                                         $drawingOverlay.append($pageNav);
+
+                                        // IIFE: alle Variablen als Parameter übergeben → kein var-Hoisting-Problem
+                                        (function($imgEl, $prev, $next, $ind, pages, indices, total) {
+                                            var current = 0;
+
+                                            function showPage(idx) {
+                                                if (idx < 0 || idx >= total) return;
+                                                current = idx;
+                                                var pd = pages[indices[idx]];
+                                                $imgEl.attr('src', pd && pd.drawing_data ? pd.drawing_data : '');
+                                                $prev.prop('disabled', idx <= 0);
+                                                $next.prop('disabled', idx >= total - 1);
+                                                $ind.text((idx + 1) + ' / ' + total);
+                                            }
+
+                                            $prev.on('click', function(e) { e.stopPropagation(); showPage(current - 1); });
+                                            $next.on('click', function(e) { e.stopPropagation(); showPage(current + 1); });
+
+                                            showPage(0);
+                                        })($img, $pagePrev, $pageIndicator, $pageNext, drawing.pages, pageIndices, totalDrawingPages);
                                     } else {
-                                        // Dummy-Elemente damit updateDrawingPage nicht bricht
-                                        var $pagePrev = $('<button>'), $pageNext = $('<button>'), $pageIndicator = $('<span>');
+                                        // Einzelne Seite: nur Bild anzeigen
+                                        var pd0 = drawing.pages[pageIndices[0]];
+                                        $img.attr('src', pd0 && pd0.drawing_data ? pd0.drawing_data : '');
                                     }
 
                                     $drawingOverlay.append($img);
-                                    updateDrawingPage(0);
                                 } else {
                                     // Legacy: einzelne Zeichnung
-                                    $drawingOverlay.append('<img src="' + this.escapeHtml(drawing.drawing_data) + '" alt="Tafel-Zeichnung" style="max-width:100%;">');
+                                    $drawingOverlay.append(
+                                        $('<img>').attr({
+                                            'src': drawing.drawing_data || '',
+                                            'alt': 'Tafel-Zeichnung'
+                                        }).css('max-width', '100%')
+                                    );
                                 }
 
                                 $section.append($toggle, $drawingOverlay);
@@ -201,10 +212,10 @@
 
                                 $toggle.on('click', function(e) {
                                     e.preventDefault();
+                                    var willBeVisible = !$drawingOverlay.is(':visible');
                                     $drawingOverlay.slideToggle(300);
-                                    var isVisible = $drawingOverlay.is(':visible');
-                                    $toggle.text(isVisible ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen');
-                                    $toggle.toggleClass('cbd-drawing-toggle-active', isVisible);
+                                    $toggle.text(willBeVisible ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen');
+                                    $toggle.toggleClass('cbd-drawing-toggle-active', willBeVisible);
                                 });
 
                                 console.log('CBD Classroom Page Filter: Added drawing section to', stableId);
