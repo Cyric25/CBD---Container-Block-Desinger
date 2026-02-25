@@ -154,6 +154,9 @@
             // Seitenanzahl aus localStorage laden und UI aufbauen
             this.initPages();
 
+            // Tafelfarbe-Button Anfangszustand setzen
+            this.setBoardColor(this.boardColor);
+
             // Zeichnung laden (Seite 0)
             this.loadDrawing();
 
@@ -279,16 +282,17 @@
                             '<canvas class="cbd-board-canvas cbd-board-canvas-background"></canvas>' +
                             '<canvas class="cbd-board-canvas cbd-board-canvas-grid"></canvas>' +
                             '<canvas class="cbd-board-canvas cbd-board-canvas-drawing"></canvas>' +
-                            '<div class="cbd-board-color-picker-overlay">' +
-                                '<div class="cbd-board-color-picker-label">Tafelfarbe:</div>' +
-                                '<div class="cbd-board-bg-preset-btns">' + boardPresetHtml + '</div>' +
-                            '</div>' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
                 // Toolbar: volle Breite, unterhalb beider Hälften
                 '<div class="cbd-board-toolbar">' +
                     '<div class="cbd-board-toolbar-inner">' +
+                        // Tafelfarbe (Zyklus-Button)
+                        '<button class="cbd-board-bg-cycle" title="Tafelfarbe wechseln (Weiß / Grün / Schwarz)" style="background-color: ' + (this.boardColor || '#1a472a') + ';">' +
+                            '<span class="dashicons dashicons-art"></span>' +
+                        '</button>' +
+                        '<span class="cbd-board-separator"></span>' +
                         // Textgröße (linke Seite)
                         '<label class="cbd-board-font-label">📝</label>' +
                         '<input type="range" class="cbd-board-font-size" min="100" max="300" value="' + this.fontSize + '" step="10" title="Textgröße">' +
@@ -604,6 +608,15 @@
         setBoardColor: function(color) {
             this.boardColor = color;
             this.redrawBackground();
+            // Toolbar-Button synchronisieren
+            if (this.overlay) {
+                var btn = this.overlay.querySelector('.cbd-board-bg-cycle');
+                if (btn) {
+                    btn.style.backgroundColor = color;
+                    var icon = btn.querySelector('.dashicons');
+                    if (icon) icon.style.color = color === '#ffffff' ? '#555' : '#fff';
+                }
+            }
         },
 
         /**
@@ -668,14 +681,22 @@
                 });
             });
 
-            // Board Background Color Preset Buttons (on canvas overlay)
-            var bgPresetBtns = this.overlay.querySelectorAll('.cbd-board-bg-preset-btn');
-            bgPresetBtns.forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    var color = this.getAttribute('data-color');
-                    self.setBoardColor(color);
+            // Tafelfarbe Zyklus-Button
+            var bgCycleBtn = this.overlay.querySelector('.cbd-board-bg-cycle');
+            if (bgCycleBtn) {
+                bgCycleBtn.addEventListener('click', function() {
+                    var colors = self.boardPresetColors;
+                    var idx = colors.indexOf(self.boardColor);
+                    var nextColor = colors[(idx + 1) % colors.length];
+                    self.setBoardColor(nextColor);
+                    bgCycleBtn.style.backgroundColor = nextColor;
+                    // Icon-Farbe für Kontrast anpassen
+                    var icon = bgCycleBtn.querySelector('.dashicons');
+                    if (icon) {
+                        icon.style.color = nextColor === '#ffffff' ? '#555' : '#fff';
+                    }
                 });
-            });
+            }
 
             // Line Width
             var widthInput = this.overlay.querySelector('.cbd-board-width');
