@@ -319,11 +319,6 @@
                 // Toolbar: volle Breite, unterhalb beider Hälften
                 '<div class="cbd-board-toolbar">' +
                     '<div class="cbd-board-toolbar-inner">' +
-                        // Tafelfarbe (Zyklus-Button)
-                        '<button class="cbd-board-bg-cycle" title="Tafelfarbe wechseln (Weiß / Grün / Schwarz)" style="background-color: ' + (this.boardColor || '#1a472a') + ';">' +
-                            '<span class="dashicons dashicons-art"></span>' +
-                        '</button>' +
-                        '<span class="cbd-board-separator"></span>' +
                         // Textgröße (linke Seite)
                         '<label class="cbd-board-font-label">📝</label>' +
                         '<input type="range" class="cbd-board-font-size" min="100" max="300" value="' + this.fontSize + '" step="10" title="Textgröße">' +
@@ -395,6 +390,10 @@
                         '<span class="cbd-board-zoom-display">100%</span>' +
                         '<button class="cbd-board-zoom-in" title="Vergrößern">+</button>' +
                         '<button class="cbd-board-zoom-reset" title="Zoom zurücksetzen">⊙</button>' +
+                        // Tafelfarbe (Zyklus-Button) – rechts außen
+                        '<button class="cbd-board-bg-cycle" title="Tafelfarbe wechseln (Weiß / Grün / Schwarz)" style="background-color: ' + (this.boardColor || '#1a472a') + '; margin-left: auto;">' +
+                            '<span class="dashicons dashicons-art"></span>' +
+                        '</button>' +
                     '</div>' +
                     // Toolbar ein-/ausblenden
                     '<button class="cbd-board-toolbar-toggle" title="Toolbar ausblenden">▲</button>' +
@@ -840,10 +839,12 @@
             var toolbarToggle = this.overlay.querySelector('.cbd-board-toolbar-toggle');
             if (toolbarToggle) {
                 toolbarToggle.addEventListener('click', function() {
+                    var toolbar = self.overlay.querySelector('.cbd-board-toolbar');
                     var inner = self.overlay.querySelector('.cbd-board-toolbar-inner');
-                    if (inner) {
+                    if (inner && toolbar) {
                         var isHidden = inner.style.display === 'none';
                         inner.style.display = isHidden ? 'flex' : 'none';
+                        toolbar.classList.toggle('cbd-board-toolbar--collapsed', !isHidden);
                         toolbarToggle.textContent = isHidden ? '▲' : '▼';
                         toolbarToggle.title = isHidden ? 'Toolbar ausblenden' : 'Toolbar einblenden';
                     }

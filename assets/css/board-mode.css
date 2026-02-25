@@ -183,6 +183,14 @@
     flex-shrink: 0;
 }
 
+/* Toolbar vollständig eingeklappt – nur Toggle-Button sichtbar */
+.cbd-board-toolbar--collapsed {
+    padding: 2px 4px;
+    background: transparent;
+    border-top: none;
+    justify-content: flex-end;
+}
+
 /* Innerer Container mit den eigentlichen Werkzeugen */
 .cbd-board-toolbar-inner {
     display: flex;
