@@ -189,7 +189,7 @@
                                             $next.on('click', function(e) { e.stopPropagation(); showPage(current + 1); });
 
                                             showPage(0);
-                                        })($img, $pagePrev, $pageIndicator, $pageNext, drawing.pages, pageIndices, totalDrawingPages);
+                                        })($img, $pagePrev, $pageNext, $pageIndicator, drawing.pages, pageIndices, totalDrawingPages);
                                     } else {
                                         // Einzelne Seite: nur Bild anzeigen
                                         var pd0 = drawing.pages[pageIndices[0]];
