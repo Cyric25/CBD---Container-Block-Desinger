@@ -59,7 +59,7 @@ $features = $block['features'] ?: array(
     'numbering' => array('enabled' => false, 'format' => 'numeric'),
     'copyText' => array('enabled' => false, 'buttonText' => 'Text kopieren'),
     'screenshot' => array('enabled' => false, 'buttonText' => 'Screenshot'),
-    'boardMode' => array('enabled' => false, 'boardColor' => '#1a472a')
+    'boardMode' => array('enabled' => false, 'boardColor' => '#ffffff')
 );
 
 $config = $block['config'] ?: array(
@@ -638,8 +638,8 @@ $config = $block['config'] ?: array(
                                     <br><br>
                                     <label><?php _e('Tafel-Hintergrundfarbe:', 'container-block-designer'); ?></label><br>
                                     <input type="color" name="features[boardMode][boardColor]"
-                                           value="<?php echo esc_attr($features['boardMode']['boardColor'] ?? '#1a472a'); ?>">
-                                    <p class="description"><?php _e('Hintergrundfarbe der Zeichenfläche (Standard: Dunkelgrün)', 'container-block-designer'); ?></p>
+                                           value="<?php echo esc_attr($features['boardMode']['boardColor'] ?? '#ffffff'); ?>">
+                                    <p class="description"><?php _e('Hintergrundfarbe der Zeichenfläche (Standard: Weiß)', 'container-block-designer'); ?></p>
                                 </td>
                             </tr>
                         </table>

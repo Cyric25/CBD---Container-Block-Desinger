@@ -507,7 +507,7 @@ store('container-block-designer', {
 
 			// Board-Farbe aus Button-Attribut lesen
 			const boardButton = mainContainer.querySelector('.cbd-board-mode-toggle');
-			const boardColor = boardButton?.getAttribute('data-board-color') || '#1a472a';
+			const boardColor = boardButton?.getAttribute('data-board-color') || '#ffffff';
 
 			// Classroom-Optionen zusammenstellen
 			const classroomData = window.cbdClassroomData || {};

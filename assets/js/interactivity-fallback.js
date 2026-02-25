@@ -505,7 +505,7 @@
             var context = $container.data('cbd-context') || {};
             var $containerBlock = $container.children('.cbd-container-block');
 
-            var boardColor = $button.attr('data-board-color') || '#1a472a';
+            var boardColor = $button.attr('data-board-color') || '#ffffff';
 
             if (window.CBDBoardMode) {
                 var classroomData = window.cbdClassroomData || {};

@@ -649,7 +649,7 @@ class CBD_Admin {
                 ),
                 'boardMode' => array(
                     'enabled' => isset($_POST['features']['boardMode']['enabled']) ? true : false,
-                    'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#1a472a') ?: '#1a472a'
+                    'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#ffffff') ?: '#ffffff'
                 )
             );
 

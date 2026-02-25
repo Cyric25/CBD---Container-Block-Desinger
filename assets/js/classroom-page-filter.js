@@ -161,7 +161,10 @@
 
                                 if (hasPages) {
                                     // Multi-page: IIFE für saubere Closure-Isolation
-                                    var pageIndices = Object.keys(drawing.pages).map(Number).sort(function(a, b) { return a - b; });
+                                    // Nur Seiten mit tatsächlichen Zeichnungsdaten berücksichtigen
+                                    var pageIndices = Object.keys(drawing.pages).map(Number).sort(function(a, b) { return a - b; }).filter(function(idx) {
+                                        return drawing.pages[idx] && drawing.pages[idx].drawing_data;
+                                    });
                                     var totalDrawingPages = pageIndices.length;
 
                                     var $img = $('<img>').attr('alt', 'Tafel-Zeichnung').css('max-width', '100%');

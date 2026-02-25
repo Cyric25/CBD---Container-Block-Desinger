@@ -116,7 +116,7 @@
             }
 
             this.containerId = containerId;
-            this.boardColor = boardColor || '#1a472a';
+            this.boardColor = boardColor || '#ffffff';
 
             // Classroom-Optionen setzen
             options = options || {};
@@ -881,6 +881,22 @@
             if (pageAddBtn) {
                 pageAddBtn.addEventListener('click', function() {
                     self.addPage();
+                });
+            }
+
+            // Klassentafelbild-Toggle im linken Inhaltsbereich aktivieren
+            // (jQuery-Handler der classroom-page-filter.js gehen beim innerHTML-Kopieren verloren)
+            var contentPanel = this.overlay.querySelector('.cbd-board-content');
+            if (contentPanel) {
+                contentPanel.addEventListener('click', function(e) {
+                    var btn = e.target.closest('.cbd-drawing-toggle');
+                    if (!btn) return;
+                    var drawingOverlay = btn.parentNode.querySelector('.cbd-drawing-overlay');
+                    if (!drawingOverlay) return;
+                    var willShow = drawingOverlay.style.display === 'none';
+                    drawingOverlay.style.display = willShow ? 'block' : 'none';
+                    btn.textContent = willShow ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen';
+                    btn.classList.toggle('cbd-drawing-toggle-active', willShow);
                 });
             }
 
@@ -2451,17 +2467,17 @@
             }
             if (!container) return;
 
-            // Seiten-Daten aus localStorage lesen
+            // Seiten-Daten aus localStorage lesen – nur Seiten mit Zeichnungsinhalt
             var pages = [];
             for (var p = 0; p < totalPages; p++) {
                 var key = p === 0 ? 'cbd-board-' + baseId : 'cbd-board-' + baseId + ':p' + p;
                 var dataUrl = '';
                 try { dataUrl = localStorage.getItem(key) || ''; } catch (e) {}
-                pages.push(dataUrl);
+                if (dataUrl) pages.push(dataUrl);
             }
 
             // Prüfen ob Zeichnungen vorhanden
-            var hasDrawing = pages.some(function(d) { return !!d; });
+            var hasDrawing = pages.length > 0;
 
             // Ziel: .cbd-container-content
             var contentArea = container.querySelector('.cbd-container-content');
@@ -2478,7 +2494,7 @@
 
             var toggleBtn = document.createElement('button');
             toggleBtn.className = 'cbd-drawing-toggle';
-            toggleBtn.textContent = '📋 Tafelbild anzeigen';
+            toggleBtn.textContent = '📝 Eigene Notiz anzeigen';
 
             var drawingOverlay = document.createElement('div');
             drawingOverlay.className = 'cbd-drawing-overlay';
@@ -2488,7 +2504,7 @@
             img.alt = 'Tafel-Zeichnung';
             img.style.maxWidth = '100%';
 
-            if (totalPages > 1) {
+            if (pages.length > 1) {
                 // Mehrseitige Navigation mit ◀ / Indikator / ▶
                 var pageNav = document.createElement('div');
                 pageNav.className = 'cbd-drawing-page-nav';
@@ -2538,7 +2554,7 @@
                 e.preventDefault();
                 var willShow = drawingOverlay.style.display === 'none';
                 drawingOverlay.style.display = willShow ? 'block' : 'none';
-                toggleBtn.textContent = willShow ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen';
+                toggleBtn.textContent = willShow ? '📝 Eigene Notiz verbergen' : '📝 Eigene Notiz anzeigen';
                 toggleBtn.classList.toggle('cbd-drawing-toggle-active', willShow);
             });
         },

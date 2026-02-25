@@ -132,7 +132,7 @@ if (isset($_POST['cbd_save_block']) && isset($_POST['cbd_nonce']) && wp_verify_n
         ),
         'boardMode' => array(
             'enabled' => isset($_POST['features']['boardMode']['enabled']) ? true : false,
-            'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#1a472a') ?: '#1a472a'
+            'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#ffffff') ?: '#ffffff'
         )
     );
 
@@ -962,8 +962,8 @@ if ($block_id > 0) {
                             </label>
                             <div class="cbd-feature-options" <?php echo !($block['features']['boardMode']['enabled'] ?? false) ? 'style="display:none;"' : ''; ?>>
                                 <label for="board_color"><?php _e('Tafel-Hintergrundfarbe:', 'container-block-designer'); ?></label>
-                                <input type="color" id="board_color" name="features[boardMode][boardColor]" value="<?php echo esc_attr($block['features']['boardMode']['boardColor'] ?? '#1a472a'); ?>">
-                                <p class="description"><?php _e('Hintergrundfarbe der Zeichenfläche (Standard: Dunkelgrün)', 'container-block-designer'); ?></p>
+                                <input type="color" id="board_color" name="features[boardMode][boardColor]" value="<?php echo esc_attr($block['features']['boardMode']['boardColor'] ?? '#ffffff'); ?>">
+                                <p class="description"><?php _e('Hintergrundfarbe der Zeichenfläche (Standard: Weiß)', 'container-block-designer'); ?></p>
                             </div>
                         </div>
                     </div>
