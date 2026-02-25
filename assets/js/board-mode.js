@@ -360,16 +360,24 @@
         },
 
         /**
-         * Alle Canvas-Groessen anpassen
+         * Alle Canvas-Groessen anpassen (mit HiDPI/Retina-Unterstuetzung)
          */
         resizeAllCanvases: function() {
             if (!this.backgroundCanvas) return;
 
             var container = this.backgroundCanvas.parentElement;
-            var width = container.clientWidth;
-            var height = container.clientHeight;
+            var cssWidth = container.clientWidth;
+            var cssHeight = container.clientHeight;
 
-            // Zeichnung vom Drawing Canvas sichern
+            // Device Pixel Ratio für scharfe Darstellung auf HiDPI-Displays
+            var dpr = window.devicePixelRatio || 1;
+
+            // CSS-Dimensionen und DPR speichern (für Zeichenoperationen)
+            this.dpr = dpr;
+            this.cssWidth = cssWidth;
+            this.cssHeight = cssHeight;
+
+            // Zeichnung vom Drawing Canvas sichern (physische Pixel, vor dem Resize)
             var imageData = null;
             if (this.drawingCanvas.width > 0 && this.drawingCanvas.height > 0) {
                 try {
@@ -379,10 +387,17 @@
                 }
             }
 
-            // Alle Canvas-Groessen setzen
+            // Alle Canvas-Dimensionen auf physische Pixel setzen (CSS × DPR)
             [this.backgroundCanvas, this.gridCanvas, this.drawingCanvas].forEach(function(canvas) {
-                canvas.width = width;
-                canvas.height = height;
+                canvas.width = cssWidth * dpr;
+                canvas.height = cssHeight * dpr;
+                canvas.style.width = cssWidth + 'px';
+                canvas.style.height = cssHeight + 'px';
+            });
+
+            // Kontexte auf DPR skalieren – Zeichenkoordinaten bleiben in CSS-Pixeln
+            [this.backgroundCtx, this.gridCtx, this.drawingCtx].forEach(function(ctx) {
+                ctx.scale(dpr, dpr);
             });
 
             // Background neu zeichnen
@@ -393,7 +408,8 @@
                 this.redrawGrid();
             }
 
-            // Zeichnung wiederherstellen
+            // Zeichnung wiederherstellen (putImageData arbeitet in physischen Pixeln,
+            // umgeht den Transform – daher korrekt nach dem scale())
             if (imageData) {
                 this.drawingCtx.putImageData(imageData, 0, 0);
             }
@@ -406,7 +422,7 @@
             if (!this.backgroundCtx || !this.backgroundCanvas) return;
 
             this.backgroundCtx.fillStyle = this.boardColor;
-            this.backgroundCtx.fillRect(0, 0, this.backgroundCanvas.width, this.backgroundCanvas.height);
+            this.backgroundCtx.fillRect(0, 0, this.cssWidth || this.backgroundCanvas.width, this.cssHeight || this.backgroundCanvas.height);
         },
 
         /**
@@ -415,13 +431,13 @@
         redrawGrid: function() {
             if (!this.gridCtx || !this.gridCanvas) return;
 
-            // Grid canvas leeren
-            this.gridCtx.clearRect(0, 0, this.gridCanvas.width, this.gridCanvas.height);
+            // Grid canvas leeren (CSS-Dimensionen, da ctx.scale aktiv)
+            this.gridCtx.clearRect(0, 0, this.cssWidth || this.gridCanvas.width, this.cssHeight || this.gridCanvas.height);
 
             if (this.gridMode === 'off') return;
 
-            var width = this.gridCanvas.width;
-            var height = this.gridCanvas.height;
+            var width = this.cssWidth || this.gridCanvas.width;
+            var height = this.cssHeight || this.gridCanvas.height;
 
             // Grid-Style (hellgrau, auf allen Hintergründen sichtbar)
             this.gridCtx.strokeStyle = 'rgba(150, 150, 150, 0.3)';
@@ -1347,8 +1363,8 @@
                 if (data.success && data.data.drawing_data) {
                     var img = new Image();
                     img.onload = function() {
-                        self.drawingCtx.clearRect(0, 0, self.drawingCanvas.width, self.drawingCanvas.height);
-                        self.drawingCtx.drawImage(img, 0, 0);
+                        self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
+                        self.drawingCtx.drawImage(img, 0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
                         self._setSaveStatus('Geladen');
                         setTimeout(function() { self._setSaveStatus(''); }, 2000);
                     };
@@ -1491,8 +1507,8 @@
                 var self = this;
                 var img = new Image();
                 img.onload = function() {
-                    self.drawingCtx.clearRect(0, 0, self.drawingCanvas.width, self.drawingCanvas.height);
-                    self.drawingCtx.drawImage(img, 0, 0);
+                    self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
+                    self.drawingCtx.drawImage(img, 0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
                 };
                 img.src = dataUrl;
             } catch (e) {
