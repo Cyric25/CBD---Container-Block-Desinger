@@ -74,6 +74,21 @@
         totalPages: 1,
         pageCache: {},   // { pageIndex: dataUrl }
 
+        // Zoom & Pan
+        zoom: 1.0,
+        panX: 0,
+        panY: 0,
+        _pinchPointers: {},      // { pointerId: {x, y} }
+        _pinchStartDist: null,
+        _pinchStartZoom: 1.0,
+        _pinchStartPanX: 0,
+        _pinchStartPanY: 0,
+        _pinchMidX: 0,
+        _pinchMidY: 0,
+
+        // Undo
+        baseImageData: null,     // Initiales geladenes Bild als ImageData (für Undo-Basis)
+
         // Preset board colors (for background)
         boardPresetColors: [
             '#ffffff', // Weiß (default)
@@ -137,6 +152,14 @@
             this.currentPageIndex = 0;
             this.totalPages = 1;
             this.pageCache = {};
+
+            // Zoom/Pan zurücksetzen
+            this.zoom = 1.0;
+            this.panX = 0;
+            this.panY = 0;
+            this._pinchPointers = {};
+            this._pinchStartDist = null;
+            this.baseImageData = null;
 
             // Overlay-DOM erstellen
             this.createOverlayDOM(contentHtml);
@@ -230,6 +253,14 @@
             this.currentPageIndex = 0;
             this.totalPages = 1;
             this.pageCache = {};
+
+            // Zoom/Pan zurücksetzen
+            this.zoom = 1.0;
+            this.panX = 0;
+            this.panY = 0;
+            this._pinchPointers = {};
+            this._pinchStartDist = null;
+            this.baseImageData = null;
         },
 
         /**
@@ -348,12 +379,22 @@
                         '<button class="cbd-board-clear" title="Zeichnung löschen">' +
                             '<span class="dashicons dashicons-trash"></span>' +
                         '</button>' +
+                        // Rückgängig
+                        '<button class="cbd-board-undo" title="Rückgängig (Strg+Z)">' +
+                            '<span class="dashicons dashicons-undo"></span>' +
+                        '</button>' +
                         '<span class="cbd-board-separator"></span>' +
                         // Seiten-Navigation
                         '<button class="cbd-board-page-prev" title="Vorherige Seite" disabled>◀</button>' +
                         '<span class="cbd-board-page-indicator">1 / 1</span>' +
                         '<button class="cbd-board-page-next" title="Nächste Seite" disabled>▶</button>' +
                         '<button class="cbd-board-page-add" title="Neue Seite hinzufügen">+</button>' +
+                        '<span class="cbd-board-separator"></span>' +
+                        // Zoom-Steuerung
+                        '<button class="cbd-board-zoom-out" title="Verkleinern">−</button>' +
+                        '<span class="cbd-board-zoom-display">100%</span>' +
+                        '<button class="cbd-board-zoom-in" title="Vergrößern">+</button>' +
+                        '<button class="cbd-board-zoom-reset" title="Zoom zurücksetzen">⊙</button>' +
                     '</div>' +
                     // Toolbar ein-/ausblenden
                     '<button class="cbd-board-toolbar-toggle" title="Toolbar ausblenden">▲</button>' +
@@ -831,6 +872,36 @@
                 });
             }
 
+            // Undo-Button
+            var undoBtn = this.overlay.querySelector('.cbd-board-undo');
+            if (undoBtn) {
+                undoBtn.addEventListener('click', function() {
+                    self.undo();
+                });
+            }
+
+            // Zoom-Buttons
+            var zoomInBtn = this.overlay.querySelector('.cbd-board-zoom-in');
+            if (zoomInBtn) {
+                zoomInBtn.addEventListener('click', function() {
+                    self.zoomIn();
+                });
+            }
+
+            var zoomOutBtn = this.overlay.querySelector('.cbd-board-zoom-out');
+            if (zoomOutBtn) {
+                zoomOutBtn.addEventListener('click', function() {
+                    self.zoomOut();
+                });
+            }
+
+            var zoomResetBtn = this.overlay.querySelector('.cbd-board-zoom-reset');
+            if (zoomResetBtn) {
+                zoomResetBtn.addEventListener('click', function() {
+                    self.resetZoom();
+                });
+            }
+
             // ResizeObserver
             if (typeof ResizeObserver !== 'undefined') {
                 this.resizeObserver = new ResizeObserver(function() {
@@ -1101,6 +1172,9 @@
             this.strokes = [];
             this.currentStroke = null;
 
+            // Basis-Bild löschen (Undo-Basis zurücksetzen)
+            this.baseImageData = null;
+
             // Aus localStorage entfernen
             this.removeFromCache();
         },
@@ -1149,15 +1223,22 @@
             // Pointer zur Liste hinzufügen
             this.activePointers.add(e.pointerId);
 
+            // Pinch-Tracking: alle Touch-Pointer erfassen
             if (e.pointerType === 'touch') {
-                // Wenn mehrere Pointer aktiv sind: Wahrscheinlich Handballen + Finger
-                // Erste Touch erlauben, weitere Touches (Palm) ignorieren
+                this._pinchPointers[e.pointerId] = {x: e.clientX, y: e.clientY};
+            }
+
+            if (e.pointerType === 'touch') {
                 if (this.activePointers.size > 1) {
-                    return; // Palm-Berührung ignorieren
+                    // Zwei Finger: Pinch-Zoom initialisieren
+                    if (this.activePointers.size === 2) {
+                        this._startPinch();
+                        this.isDrawing = false; // Laufendes Zeichnen abbrechen
+                    }
+                    return; // Nicht zeichnen
                 }
 
                 // Große Kontaktfläche deutet auf Handballen hin
-                // width/height sind bei Palm größer als bei Finger/Stift
                 if (e.width > 25 || e.height > 25) {
                     return; // Wahrscheinlich Handballen
                 }
@@ -1166,8 +1247,8 @@
             // Stift (pen) und Maus (mouse) immer erlauben
 
             var rect = this.drawingCanvas.getBoundingClientRect();
-            this.lastX = e.clientX - rect.left;
-            this.lastY = e.clientY - rect.top;
+            this.lastX = (e.clientX - rect.left) / this.zoom;
+            this.lastY = (e.clientY - rect.top) / this.zoom;
 
             // Punkt-Radierer: Kontinuierlich radieren (wie normaler Radierer)
             if (this.currentTool === 'eraser-point') {
@@ -1215,11 +1296,21 @@
         },
 
         onPointerMove: function(e) {
+            // Pinch-Zoom: Touch-Pointer-Position aktualisieren
+            if (e.pointerType === 'touch' && this._pinchPointers[e.pointerId] !== undefined) {
+                this._pinchPointers[e.pointerId] = {x: e.clientX, y: e.clientY};
+                // Bei aktivem Pinch (2 Finger): Zoom verarbeiten statt zeichnen
+                if (Object.keys(this._pinchPointers).length >= 2 && this._pinchStartDist !== null) {
+                    this._handlePinch();
+                    return;
+                }
+            }
+
             if (!this.isDrawing) return;
 
             var rect = this.drawingCanvas.getBoundingClientRect();
-            var x = e.clientX - rect.left;
-            var y = e.clientY - rect.top;
+            var x = (e.clientX - rect.left) / this.zoom;
+            var y = (e.clientY - rect.top) / this.zoom;
 
             // Strich-Radierer: Prüfe kontinuierlich ob ein Strich getroffen wird
             if (this.currentTool === 'eraser-stroke') {
@@ -1258,6 +1349,12 @@
         onPointerUp: function(e) {
             // Pointer aus der Liste entfernen (für Palm Rejection)
             this.activePointers.delete(e.pointerId);
+
+            // Pinch-Tracking: Pointer entfernen, Pinch beenden wenn < 2 Finger
+            delete this._pinchPointers[e.pointerId];
+            if (Object.keys(this._pinchPointers).length < 2) {
+                this._pinchStartDist = null;
+            }
 
             if (this.isDrawing) {
                 this.isDrawing = false;
@@ -1313,6 +1410,12 @@
         redrawAllStrokes: function() {
             // Canvas löschen
             this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
+
+            // Basis-Bild wiederherstellen (geladene Zeichnung, dient als Undo-Basis)
+            // putImageData arbeitet in physischen Pixeln und umgeht den DPR-Transform
+            if (this.baseImageData) {
+                this.drawingCtx.putImageData(this.baseImageData, 0, 0);
+            }
 
             // Sammle alle Striche (abgeschlossen + aktuell in Bearbeitung)
             var allStrokes = this.strokes.slice(); // Kopie der abgeschlossenen Striche
@@ -1376,6 +1479,9 @@
         onKeyDown: function(e) {
             if (e.key === 'Escape') {
                 this.close();
+            } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                this.undo();
             }
         },
 
@@ -1433,6 +1539,8 @@
                     img.onload = function() {
                         self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
                         self.drawingCtx.drawImage(img, 0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
+                        // Basis-Bild für Undo erfassen (physische Pixel, vor neuen Strichen)
+                        self.baseImageData = self.drawingCtx.getImageData(0, 0, self.drawingCanvas.width, self.drawingCanvas.height);
                         self._setSaveStatus('Geladen');
                         setTimeout(function() { self._setSaveStatus(''); }, 2000);
                     };
@@ -1577,6 +1685,8 @@
                 img.onload = function() {
                     self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
                     self.drawingCtx.drawImage(img, 0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
+                    // Basis-Bild für Undo erfassen (physische Pixel, vor neuen Strichen)
+                    self.baseImageData = self.drawingCtx.getImageData(0, 0, self.drawingCanvas.width, self.drawingCanvas.height);
                 };
                 img.src = dataUrl;
             } catch (e) {
@@ -1650,6 +1760,7 @@
             // Canvas und Striche leeren
             this.drawingCtx.clearRect(0, 0, this.cssWidth || this.drawingCanvas.width, this.cssHeight || this.drawingCanvas.height);
             this.strokes = [];
+            this.baseImageData = null;
 
             // Neue Seite aus Cache oder Server laden
             if (this.pageCache[index] !== undefined && this.pageCache[index] !== null) {
@@ -1690,6 +1801,7 @@
             this.pageCache[this.currentPageIndex] = null; // Explizit als leer markieren
             this.drawingCtx.clearRect(0, 0, this.cssWidth || this.drawingCanvas.width, this.cssHeight || this.drawingCanvas.height);
             this.strokes = [];
+            this.baseImageData = null;
             this.updatePageNavUI();
         },
 
@@ -1704,6 +1816,155 @@
             if (prevBtn) prevBtn.disabled = this.currentPageIndex <= 0;
             if (nextBtn) nextBtn.disabled = this.currentPageIndex >= this.totalPages - 1;
             if (indicator) indicator.textContent = (this.currentPageIndex + 1) + ' / ' + this.totalPages;
+        },
+
+        // =============================================
+        // Undo-System
+        // =============================================
+
+        /**
+         * Letzten Strich rückgängig machen (Strg+Z)
+         */
+        undo: function() {
+            if (this.strokes.length > 0) {
+                this.strokes.pop();
+                this.redrawAllStrokes();
+            } else if (this.baseImageData) {
+                // Alle neuen Striche weg und Basis-Bild ist alles – nichts zu tun
+                // (Basis-Bild wird durch redrawAllStrokes automatisch gezeichnet)
+                this.redrawAllStrokes();
+            }
+        },
+
+        // =============================================
+        // Zoom & Pan
+        // =============================================
+
+        /**
+         * CSS-Transform auf Canvas-Container anwenden
+         */
+        updateCanvasTransform: function() {
+            if (!this.overlay) return;
+            var container = this.overlay.querySelector('.cbd-board-canvas-container');
+            if (container) {
+                container.style.transform = 'translate(' + this.panX + 'px, ' + this.panY + 'px) scale(' + this.zoom + ')';
+            }
+        },
+
+        /**
+         * Zoom-Anzeige in Toolbar aktualisieren
+         */
+        updateZoomUI: function() {
+            if (!this.overlay) return;
+            var display = this.overlay.querySelector('.cbd-board-zoom-display');
+            if (display) {
+                display.textContent = Math.round(this.zoom * 100) + '%';
+            }
+        },
+
+        /**
+         * Hineinzoomen (25%-Schritte)
+         */
+        zoomIn: function() {
+            var newZoom = Math.min(4.0, this.zoom * 1.25);
+            this._setZoomCentered(newZoom);
+        },
+
+        /**
+         * Herauszoomen (25%-Schritte)
+         */
+        zoomOut: function() {
+            var newZoom = Math.max(0.5, this.zoom / 1.25);
+            this._setZoomCentered(newZoom);
+        },
+
+        /**
+         * Zoom zurücksetzen (100%)
+         */
+        resetZoom: function() {
+            this.zoom = 1.0;
+            this.panX = 0;
+            this.panY = 0;
+            this.updateZoomUI();
+            this.updateCanvasTransform();
+        },
+
+        /**
+         * Zoom auf Mittelpunkt des sichtbaren Bereichs zentrieren
+         */
+        _setZoomCentered: function(newZoom) {
+            if (!this.overlay) {
+                this.zoom = newZoom;
+                this.updateZoomUI();
+                return;
+            }
+            var canvasArea = this.overlay.querySelector('.cbd-board-canvas-area');
+            if (!canvasArea) {
+                this.zoom = newZoom;
+                this.updateZoomUI();
+                return;
+            }
+            var areaW = canvasArea.clientWidth;
+            var areaH = canvasArea.clientHeight;
+            // Mittelpunkt des sichtbaren Bereichs in Canvas-Koordinaten
+            var cx = (areaW / 2 - this.panX) / this.zoom;
+            var cy = (areaH / 2 - this.panY) / this.zoom;
+            // Nach Zoomänderung: Mittelpunkt auf gleicher Viewport-Position halten
+            this.panX = areaW / 2 - cx * newZoom;
+            this.panY = areaH / 2 - cy * newZoom;
+            this.zoom = newZoom;
+            this.updateZoomUI();
+            this.updateCanvasTransform();
+        },
+
+        /**
+         * Pinch-Zoom starten (2 Finger erkannt)
+         */
+        _startPinch: function() {
+            var ids = Object.keys(this._pinchPointers);
+            if (ids.length < 2) return;
+            var p1 = this._pinchPointers[ids[0]];
+            var p2 = this._pinchPointers[ids[1]];
+            this._pinchStartDist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+            this._pinchStartZoom = this.zoom;
+            this._pinchStartPanX = this.panX;
+            this._pinchStartPanY = this.panY;
+            this._pinchMidX = (p1.x + p2.x) / 2;
+            this._pinchMidY = (p1.y + p2.y) / 2;
+        },
+
+        /**
+         * Pinch-Zoom verarbeiten (bei Fingerbewegung)
+         */
+        _handlePinch: function() {
+            var ids = Object.keys(this._pinchPointers);
+            if (ids.length < 2 || this._pinchStartDist === null) return;
+            var p1 = this._pinchPointers[ids[0]];
+            var p2 = this._pinchPointers[ids[1]];
+            var newDist = Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+            var scale = newDist / this._pinchStartDist;
+            var newZoom = Math.max(0.5, Math.min(4.0, this._pinchStartZoom * scale));
+
+            // Neuer Mittelpunkt der Finger
+            var midX = (p1.x + p2.x) / 2;
+            var midY = (p1.y + p2.y) / 2;
+
+            // Canvas-Bereich-Position ermitteln
+            var canvasArea = this.overlay.querySelector('.cbd-board-canvas-area');
+            if (!canvasArea) return;
+            var areaRect = canvasArea.getBoundingClientRect();
+
+            // Canvas-Koordinate am initialen Pinch-Mittelpunkt
+            var midCanvasX = (this._pinchMidX - areaRect.left - this._pinchStartPanX) / this._pinchStartZoom;
+            var midCanvasY = (this._pinchMidY - areaRect.top - this._pinchStartPanY) / this._pinchStartZoom;
+
+            // Pan so anpassen dass Canvas-Koordinate am aktuellen Finger-Mittelpunkt bleibt
+            this.zoom = newZoom;
+            this.panX = midX - areaRect.left - midCanvasX * newZoom;
+            this.panY = midY - areaRect.top - midCanvasY * newZoom;
+
+            this.updateZoomUI();
+            this.updateCanvasTransform();
         },
 
         // =============================================

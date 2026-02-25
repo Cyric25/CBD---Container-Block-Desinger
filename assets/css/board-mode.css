@@ -602,6 +602,73 @@
     height: 16px;
 }
 
+/* Rückgängig-Button */
+.cbd-board-undo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    color: #555;
+}
+
+.cbd-board-undo:hover {
+    border-color: #007cba;
+    background: #e8f4fd;
+    color: #007cba;
+}
+
+.cbd-board-undo .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* Zoom-Steuerung */
+.cbd-board-zoom-out,
+.cbd-board-zoom-in,
+.cbd-board-zoom-reset {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid #bbb;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 700;
+    color: #555;
+    transition: all 0.15s ease;
+    padding: 0;
+    line-height: 1;
+}
+
+.cbd-board-zoom-out:hover,
+.cbd-board-zoom-in:hover,
+.cbd-board-zoom-reset:hover {
+    background: #e8f4fd;
+    border-color: #007cba;
+    color: #007cba;
+}
+
+.cbd-board-zoom-display {
+    font-size: 11px;
+    font-weight: 600;
+    color: #555;
+    min-width: 34px;
+    text-align: center;
+    font-family: monospace;
+    white-space: nowrap;
+}
+
 /* =============================================
    CANVAS - Multi-Layer System
    ============================================= */
@@ -609,7 +676,9 @@
 .cbd-board-canvas-container {
     position: relative;
     flex: 1;
-    overflow: hidden;
+    overflow: visible;
+    transform-origin: 0 0;
+    will-change: transform;
 }
 
 .cbd-board-canvas {
