@@ -374,12 +374,28 @@
     list-style: none;
 }
 
-/* Nicht-klickbare Elternseite (parent-only) */
+/* Nicht-klickbare Elternseite in Header-Nav (parent-only) */
 .cbd-classroom-main-nav .cbd-nav-parent-label > span {
     color: rgba(255, 255, 255, 0.6);
     font-size: 14px;
     cursor: default;
     font-style: italic;
+}
+
+/* =============================================
+   CLASSROOM SIDEBAR (behandelte Seiten)
+   ============================================= */
+
+/* Nicht-klickbare Elternseite in der Sidebar */
+.cbd-sidebar-no-link {
+    cursor: default;
+    color: #999;
+    font-style: italic;
+}
+
+.cbd-sidebar-no-link:hover {
+    background-color: transparent !important;
+    color: #999 !important;
 }
 
 /* Submenüs */

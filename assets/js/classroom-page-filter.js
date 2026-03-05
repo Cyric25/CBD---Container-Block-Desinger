@@ -405,16 +405,20 @@
                 $('body').prepend($header);
             }
 
-            // ---- Behandelte Seiten laden und Nav befüllen ----
+            // ---- Behandelte Seiten laden, Header-Nav + Sidebar befüllen ----
             $.post(cbdClassroomPageData.ajaxUrl, {
                 action: 'cbd_student_get_data',
                 token: this.token
             }, function(response) {
                 if (response.success && response.data.pages) {
-                    var $builtUl = self.buildNavUl(response.data.pages);
+                    var pages = response.data.pages;
+                    // Header: nur Level-0-Hauptseiten
+                    var $builtUl = self.buildNavUl(pages);
                     $navUl.replaceWith($builtUl);
+                    // Sidebar: vollständige Hierarchie
+                    self.injectClassroomSidebar(pages, response.data.class_name);
                 } else {
-                    $navUl.empty(); // Ladeindikator entfernen, Nav bleibt leer
+                    $navUl.empty();
                 }
             }).fail(function() {
                 $navUl.empty();
@@ -422,10 +426,8 @@
         },
 
         /**
-         * Baut eine hierarchische <ul> aus der behandelten Seitenliste.
-         * Nur Seiten mit URL (is_treated) werden als Links angezeigt.
-         * Parent-only Seiten (ohne URL) werden als nicht-klickbare Überschrift
-         * mit Unterpunkt-Dropdown angezeigt, sofern sie Kinder haben.
+         * Baut eine flache <ul> für die Header-Navigationsleiste.
+         * Zeigt nur Hauptseiten (level === 0) mit URL (behandelte Seiten).
          */
         buildNavUl: function(pages) {
             var currentPath = window.location.pathname;
@@ -435,10 +437,8 @@
                 if (item.type !== 'page' || !item.page) return;
                 var page = item.page;
 
-                // Nur Seiten mit URL (tatsächlich behandelte Seiten).
-                // Elternseiten ohne eigene behandelte Blöcke (parent-only, url=null)
-                // werden übersprungen – sie gehören nicht in die Navigationsleiste.
-                if (!page.url) return;
+                // Nur Level-0-Seiten mit URL für den Header
+                if (!page.url || (page.level || 0) !== 0) return;
 
                 var isActive = false;
                 try { isActive = new URL(page.url).pathname === currentPath; } catch (e) {}
@@ -450,6 +450,102 @@
             });
 
             return $rootUl;
+        },
+
+        /**
+         * Ersetzt den Inhalt der Theme-Sidebar mit der hierarchischen
+         * Seitenliste des Klassenmodus. Verwendet die Theme-CSS-Klassen
+         * (page-tree, page-item, page-link, etc.) für einheitliches Styling.
+         * Die Öffnen/Schließen-Logik des Themes bleibt unverändert.
+         */
+        injectClassroomSidebar: function(pages, className) {
+            var $sidebar = $('#sidebar');
+            if ($sidebar.length === 0) return;
+
+            var self        = this;
+            var currentPath = window.location.pathname;
+
+            // Sidebar-Titel aktualisieren
+            $sidebar.find('.sidebar-title').text('Inhaltsverzeichnis');
+
+            var $nav = $sidebar.find('.sidebar-navigation');
+            $nav.empty();
+
+            // Abschnitts-Überschrift mit Klassenname
+            $nav.append(
+                $('<div class="sidebar-section-title">').text('📚 ' + (className || 'Klassen-Modus'))
+            );
+
+            // Hierarchischen Baum aufbauen
+            var $rootUl     = $('<ul class="page-tree">');
+            var levelUls    = [$rootUl];
+            var levelLastLi = [null];
+
+            pages.forEach(function(item) {
+                if (item.type !== 'page' || !item.page) return;
+                var page  = item.page;
+                var level = page.level || 0;
+
+                // Stack anpassen wenn Ebene steigt oder sinkt
+                if (level < levelUls.length - 1) {
+                    levelUls.length    = level + 1;
+                    levelLastLi.length = level + 1;
+                }
+                while (levelUls.length <= level) {
+                    var $parentLi = levelLastLi[levelUls.length - 1];
+                    if (!$parentLi) break;
+                    var $sub = $('<ul class="page-tree-children">');
+                    $parentLi.append($sub);
+                    levelUls.push($sub);
+                    levelLastLi.push(null);
+                }
+
+                var $targetUl = levelUls[Math.min(level, levelUls.length - 1)];
+                var isActive  = false;
+                try { isActive = page.url && new URL(page.url).pathname === currentPath; } catch (e) {}
+
+                var $li = $('<li class="page-item">');
+                if (isActive) $li.addClass('current-page expanded');
+
+                if (page.url) {
+                    $li.append(
+                        $('<a class="page-link">').attr('href', page.url)
+                            .append($('<span class="page-title">').text(page.title))
+                    );
+                } else {
+                    // Elternseite ohne eigene behandelte Blöcke: nicht klickbar, gedimmt
+                    $li.addClass('cbd-sidebar-parent-only')
+                       .append(
+                           $('<span class="page-link cbd-sidebar-no-link">')
+                               .append($('<span class="page-title">').text(page.title))
+                       );
+                }
+
+                $targetUl.append($li);
+                levelLastLi[Math.min(level, levelLastLi.length - 1)] = $li;
+            });
+
+            // Toggle-Buttons zu Einträgen mit Kindern hinzufügen
+            $rootUl.find('.page-item').each(function() {
+                if ($(this).children('ul').length > 0) {
+                    $(this).addClass('has-children expanded');
+                    $(this).prepend(
+                        $('<button class="page-toggle" aria-label="Unterseiten anzeigen/verbergen">')
+                            .append('<span class="toggle-icon">▸</span>')
+                    );
+                }
+            });
+
+            $nav.append($rootUl);
+
+            // Event-Delegation für Toggle-Buttons (Theme-JS läuft vor dem AJAX-Ergebnis)
+            $nav.on('click', '.page-toggle', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var $item = $(this).closest('.page-item');
+                $item.toggleClass('expanded');
+                $(this).attr('aria-expanded', $item.hasClass('expanded'));
+            });
         },
 
         /**
