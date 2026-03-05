@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://github.com/Cyric25/CBD---Container-Block-Desinger
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 3.0.54
+ * Version: 3.0.55
  * Author: Cyric25
  * Author URI: https://github.com/Cyric25
  * License: GPL v2 or later

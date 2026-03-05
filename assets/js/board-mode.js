@@ -1588,6 +1588,15 @@
             .then(function(response) { return response.json(); })
             .then(function(data) {
                 if (data.success && data.data.drawing_data) {
+                    // Gespeicherte Hintergrundfarbe wiederherstellen (browser-spezifisch)
+                    try {
+                        var bgColorKey = 'cbd-board-' + (pageContainerId || self.stableContainerId) + '-bgcolor';
+                        var savedBgColor = localStorage.getItem(bgColorKey);
+                        if (savedBgColor) {
+                            self.setBoardColor(savedBgColor);
+                        }
+                    } catch (e) { /* Ignorieren */ }
+
                     var img = new Image();
                     img.onload = function() {
                         self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
@@ -1633,6 +1642,16 @@
                 if (pixels[i] > 0) { isBlank = false; break; }
             }
             var dataUrl = isBlank ? '' : this.drawingCanvas.toDataURL('image/png');
+
+            // Hintergrundfarbe lokal speichern (browser-spezifische Präferenz)
+            try {
+                var bgColorKey = 'cbd-board-' + (pageContainerId || this.stableContainerId) + '-bgcolor';
+                if (isBlank) {
+                    localStorage.removeItem(bgColorKey);
+                } else if (this.boardColor) {
+                    localStorage.setItem(bgColorKey, this.boardColor);
+                }
+            } catch (e) { /* Ignorieren */ }
 
             var formData = new FormData();
             formData.append('action', 'cbd_save_drawing');
@@ -1724,8 +1743,12 @@
 
                 if (isBlank) {
                     localStorage.removeItem(key);
+                    localStorage.removeItem(key + '-bgcolor');
                 } else {
                     localStorage.setItem(key, this.drawingCanvas.toDataURL('image/png'));
+                    if (this.boardColor) {
+                        localStorage.setItem(key + '-bgcolor', this.boardColor);
+                    }
                 }
             } catch (e) {
                 console.warn('[CBD Board Mode] Zeichnung konnte nicht gespeichert werden:', e.message);
@@ -1738,6 +1761,11 @@
             try {
                 var key = cacheKey || ('cbd-board-' + this.containerId);
                 var dataUrl = localStorage.getItem(key);
+                var savedBgColor = localStorage.getItem(key + '-bgcolor');
+
+                if (savedBgColor) {
+                    this.setBoardColor(savedBgColor);
+                }
 
                 if (!dataUrl) {
                     // Kein gespeicherter Stand
@@ -1764,6 +1792,7 @@
             try {
                 var key = 'cbd-board-' + this.containerId;
                 localStorage.removeItem(key);
+                localStorage.removeItem(key + '-bgcolor');
             } catch (e) {
                 // Ignorieren
             }
