@@ -428,63 +428,25 @@
          * mit Unterpunkt-Dropdown angezeigt, sofern sie Kinder haben.
          */
         buildNavUl: function(pages) {
-            var self          = this;
-            var currentPath   = window.location.pathname;
-            var $rootUl       = $('<ul>');
-            // Stack: levelUls[N] = das <ul> in das Einträge auf Ebene N kommen
-            var levelUls      = [$rootUl];
-            // Letztes <li> pro Ebene (für Dropdown-Anhang)
-            var levelLastLi   = [null];
+            var currentPath = window.location.pathname;
+            var $rootUl     = $('<ul>');
 
             pages.forEach(function(item) {
                 if (item.type !== 'page' || !item.page) return;
-                var page  = item.page;
-                var level = page.level || 0;
+                var page = item.page;
 
-                // Wenn wir auf eine höhere Ebene zurückgehen: Stack kürzen
-                if (level < levelUls.length - 1) {
-                    levelUls.length    = level + 1;
-                    levelLastLi.length = level + 1;
-                }
+                // Nur Seiten mit URL (tatsächlich behandelte Seiten).
+                // Elternseiten ohne eigene behandelte Blöcke (parent-only, url=null)
+                // werden übersprungen – sie gehören nicht in die Navigationsleiste.
+                if (!page.url) return;
 
-                // Wenn wir tiefer gehen als der Stack reicht: neues <ul> unter letztem <li>
-                while (levelUls.length <= level) {
-                    var $parentLi = levelLastLi[levelUls.length - 1];
-                    if (!$parentLi) {
-                        // Kein Parent vorhanden – Ebene nicht weiter verschachteln
-                        break;
-                    }
-                    var $sub = $('<ul>');
-                    $parentLi.append($sub);
-                    levelUls.push($sub);
-                    levelLastLi.push(null);
-                }
+                var isActive = false;
+                try { isActive = new URL(page.url).pathname === currentPath; } catch (e) {}
 
-                var $targetUl = levelUls[Math.min(level, levelUls.length - 1)];
                 var $li = $('<li>');
-
-                if (page.url) {
-                    // Aktuelle Seite hervorheben (Pfad ohne Query vergleichen)
-                    var isActive = false;
-                    try {
-                        isActive = new URL(page.url).pathname === currentPath;
-                    } catch (e) {}
-
-                    var $a = $('<a>')
-                        .attr('href', page.url)
-                        .text(page.title);
-                    if (isActive) {
-                        $li.addClass('current-menu-item');
-                    }
-                    $li.append($a);
-                } else {
-                    // Nicht klickbare Elternseite – nur als Label
-                    $li.addClass('cbd-nav-parent-label')
-                       .append($('<span>').text(page.title));
-                }
-
-                $targetUl.append($li);
-                levelLastLi[Math.min(level, levelLastLi.length - 1)] = $li;
+                if (isActive) $li.addClass('current-menu-item');
+                $li.append($('<a>').attr('href', page.url).text(page.title));
+                $rootUl.append($li);
             });
 
             return $rootUl;
