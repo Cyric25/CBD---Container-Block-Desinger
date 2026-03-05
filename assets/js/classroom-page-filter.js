@@ -12,6 +12,7 @@
         classroomId: null,
         token: null,
         pageId: null,
+        className: null,
 
         init: function() {
             // Get URL parameters
@@ -231,8 +232,12 @@
                 }
             });
 
-            // Add classroom mode indicator
-            this.addClassroomIndicator(data.class_name);
+            // Classroom-Navigationsleiste einfügen (ersetzt die normale Theme-Nav)
+            this.className = data.class_name;
+            this.injectClassroomNavBar(data.class_name);
+
+            // Alle internen Links abfangen, damit Classroom-Params erhalten bleiben
+            this.interceptLinks();
         },
 
         /**
@@ -330,6 +335,113 @@
                 }
             }).fail(function(xhr, status, error) {
                 console.error('CBD Classroom Page Filter: Cleanup network error', error);
+            });
+        },
+
+        /**
+         * Eigene Classroom-Navigationsleiste injizieren.
+         * Klont das bestehende Theme-Menü, hängt Classroom-Parameter an alle
+         * internen Links und ersetzt die normale Site-Header-Leiste.
+         */
+        injectClassroomNavBar: function(className) {
+            if ($('#cbd-classroom-nav-header').length > 0) {
+                return; // Bereits vorhanden
+            }
+
+            var self = this;
+            var classroomId = this.classroomId;
+            var token = this.token;
+            var siteHostname = window.location.hostname;
+
+            // ---- Menü klonen und Links umschreiben ----
+            var $originalNav = $('.main-navigation').clone();
+            $originalNav.find('a[href]').each(function() {
+                var href = $(this).attr('href');
+                if (!href || href.charAt(0) === '#') return;
+                try {
+                    var url = new URL(href, window.location.href);
+                    if (url.hostname !== siteHostname) return;
+                    url.searchParams.set('classroom', classroomId);
+                    url.searchParams.set('token', token);
+                    $(this).attr('href', url.toString());
+                } catch (e) { /* ungültige URL – ignorieren */ }
+            });
+            $originalNav.addClass('cbd-classroom-main-nav');
+
+            // ---- Verlassen-Button ----
+            var $leaveBtn = $('<button class="cbd-classroom-nav-leave">✕ Verlassen</button>');
+            $leaveBtn.on('click', function() {
+                try {
+                    localStorage.removeItem('cbd_classroom_token');
+                    localStorage.removeItem('cbd_classroom_id');
+                } catch (e) {}
+                var url = new URL(window.location.href);
+                url.searchParams.delete('classroom');
+                url.searchParams.delete('token');
+                window.location.href = url.toString();
+            });
+
+            // ---- Mobiler Hamburger-Button ----
+            var $menuToggle = $('<button class="cbd-classroom-menu-toggle" aria-label="Menü öffnen">☰</button>');
+            $menuToggle.on('click', function() {
+                $originalNav.toggleClass('active');
+                var expanded = $originalNav.hasClass('active');
+                $menuToggle.attr('aria-expanded', expanded);
+            });
+
+            // ---- Aufbau ----
+            var $left = $('<div class="cbd-classroom-nav-left">')
+                .append('<span class="cbd-classroom-nav-badge">📚 Klassen-Modus</span>')
+                .append('<span class="cbd-classroom-nav-name">' + self.escapeHtml(className) + '</span>');
+
+            var $center = $('<div class="cbd-classroom-nav-center">').append($originalNav);
+
+            var $right = $('<div class="cbd-classroom-nav-right">').append($menuToggle).append($leaveBtn);
+
+            var $content = $('<div class="cbd-classroom-nav-content container">')
+                .append($left).append($center).append($right);
+
+            var $header = $('<header id="cbd-classroom-nav-header" class="cbd-classroom-nav-header">')
+                .append($content);
+
+            // Klick außerhalb schließt mobiles Menü
+            $(document).on('click.cbdClassroomNav', function(e) {
+                if (!$header.is(e.target) && $header.has(e.target).length === 0) {
+                    $originalNav.removeClass('active');
+                }
+            });
+
+            // Normale Site-Header ausblenden, Classroom-Nav einfügen
+            var $siteHeader = $('.site-header').first();
+            if ($siteHeader.length) {
+                $siteHeader.before($header);
+                $siteHeader.hide();
+            } else {
+                $('body').prepend($header);
+            }
+        },
+
+        /**
+         * Alle internen Link-Klicks auf der Seite abfangen und Classroom-Parameter
+         * automatisch anhängen, damit der Klassenmodus beim Navigieren erhalten bleibt.
+         */
+        interceptLinks: function() {
+            var classroomId = this.classroomId;
+            var token = this.token;
+            var siteHostname = window.location.hostname;
+
+            $(document).on('click.cbdClassroomLinks', 'a[href]', function(e) {
+                var href = $(this).attr('href');
+                if (!href || href.charAt(0) === '#') return;
+                try {
+                    var url = new URL(href, window.location.href);
+                    if (url.hostname !== siteHostname) return;        // externer Link
+                    if (url.searchParams.get('classroom')) return;     // schon gesetzt
+                    e.preventDefault();
+                    url.searchParams.set('classroom', classroomId);
+                    url.searchParams.set('token', token);
+                    window.location.href = url.toString();
+                } catch (e) { /* ungültige URL – ignorieren */ }
             });
         },
 

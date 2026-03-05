@@ -286,7 +286,162 @@
 }
 
 /* =============================================
-   CLASSROOM MODE INDICATOR (Normal Pages)
+   CLASSROOM NAVIGATION BAR (Normal Pages)
+   ============================================= */
+
+.cbd-classroom-nav-header {
+    background-color: var(--color-ui-surface, #e24614);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    position: sticky;
+    top: 0;
+    z-index: 1100;
+    width: 100%;
+}
+
+.cbd-classroom-nav-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 0;
+    gap: 1rem;
+}
+
+/* Linke Seite: Badge + Klassenname */
+.cbd-classroom-nav-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.cbd-classroom-nav-badge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.8);
+    white-space: nowrap;
+}
+
+.cbd-classroom-nav-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Mitte: geklontes Menü */
+.cbd-classroom-nav-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+}
+
+.cbd-classroom-main-nav ul {
+    display: flex;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.cbd-classroom-main-nav a {
+    text-decoration: none;
+    color: rgba(255, 255, 255, 0.92);
+    font-weight: 500;
+    font-size: 15px;
+    transition: color 0.2s ease, border-bottom-color 0.2s ease;
+    padding-bottom: 2px;
+    border-bottom: 2px solid transparent;
+}
+
+.cbd-classroom-main-nav a:hover,
+.cbd-classroom-main-nav .current-menu-item > a,
+.cbd-classroom-main-nav .current-page-ancestor > a {
+    color: #fff;
+    border-bottom-color: rgba(255, 255, 255, 0.7);
+}
+
+/* Submenüs */
+.cbd-classroom-main-nav ul ul {
+    display: none;
+    position: absolute;
+    background: var(--color-ui-surface-dark, #c93d12);
+    border-radius: 6px;
+    padding: 8px 0;
+    min-width: 180px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    z-index: 200;
+    flex-direction: column;
+    gap: 0;
+}
+
+.cbd-classroom-main-nav li {
+    position: relative;
+}
+
+.cbd-classroom-main-nav li:hover > ul {
+    display: flex;
+}
+
+.cbd-classroom-main-nav ul ul a {
+    display: block;
+    padding: 8px 16px;
+    border-bottom: none;
+    font-size: 14px;
+}
+
+.cbd-classroom-main-nav ul ul a:hover {
+    background: rgba(0, 0, 0, 0.15);
+    border-bottom: none;
+}
+
+/* Rechte Seite: Toggle + Verlassen */
+.cbd-classroom-nav-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.cbd-classroom-nav-leave {
+    padding: 6px 14px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 6px;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    white-space: nowrap;
+}
+
+.cbd-classroom-nav-leave:hover {
+    background: rgba(0, 0, 0, 0.35);
+    border-color: rgba(255, 255, 255, 0.6);
+}
+
+/* Mobiler Hamburger-Button (nur auf kleinen Screens sichtbar) */
+.cbd-classroom-menu-toggle {
+    display: none;
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 5px;
+    color: #fff;
+    font-size: 1.2rem;
+    padding: 4px 10px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+/* =============================================
+   CLASSROOM MODE INDICATOR (Normal Pages) – Legacy
    ============================================= */
 
 .cbd-classroom-indicator {
@@ -419,6 +574,73 @@
         flex-direction: column;
         gap: 12px;
         align-items: flex-start;
+    }
+
+    /* Classroom Nav – Mobile */
+    .cbd-classroom-menu-toggle {
+        display: block;
+    }
+
+    .cbd-classroom-nav-center {
+        display: block;
+        width: 100%;
+        order: 10; /* unterhalb der Leiste */
+    }
+
+    .cbd-classroom-nav-content {
+        flex-wrap: wrap;
+        position: relative;
+    }
+
+    .cbd-classroom-main-nav {
+        display: none;
+        width: 100%;
+    }
+
+    .cbd-classroom-main-nav.active {
+        display: block;
+    }
+
+    .cbd-classroom-main-nav ul {
+        flex-direction: column;
+        gap: 0;
+        padding: 8px 0;
+    }
+
+    .cbd-classroom-main-nav > ul > li > a {
+        display: block;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .cbd-classroom-main-nav > ul > li:last-child > a {
+        border-bottom: none;
+    }
+
+    /* Submenüs auf Mobile immer anzeigen und einrücken */
+    .cbd-classroom-main-nav ul ul {
+        display: flex;
+        position: static;
+        background: transparent;
+        box-shadow: none;
+        border-radius: 0;
+        padding: 0 0 0 16px;
+    }
+
+    .cbd-classroom-main-nav ul ul a {
+        color: rgba(255, 255, 255, 0.8);
+        padding: 6px 0;
+    }
+
+    /* Mobile: Center-Nav als Dropdown unterhalb der Leiste */
+    .cbd-classroom-main-nav.active {
+        background: var(--color-ui-surface-dark, #c93d12);
+        padding: 4px 16px 12px;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .cbd-classroom-nav-name {
+        max-width: 140px;
     }
 }
 
