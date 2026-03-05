@@ -367,6 +367,21 @@
     border-bottom-color: rgba(255, 255, 255, 0.7);
 }
 
+/* Ladeindikator */
+.cbd-classroom-nav-loading li {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+    list-style: none;
+}
+
+/* Nicht-klickbare Elternseite (parent-only) */
+.cbd-classroom-main-nav .cbd-nav-parent-label > span {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+    cursor: default;
+    font-style: italic;
+}
+
 /* Submenüs */
 .cbd-classroom-main-nav ul ul {
     display: none;

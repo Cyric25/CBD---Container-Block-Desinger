@@ -340,8 +340,8 @@
 
         /**
          * Eigene Classroom-Navigationsleiste injizieren.
-         * Klont das bestehende Theme-Menü, hängt Classroom-Parameter an alle
-         * internen Links und ersetzt die normale Site-Header-Leiste.
+         * Zeigt nur Seiten mit behandelten Blöcken (Daten von cbd_student_get_data).
+         * Die URLs kommen vom Server und enthalten bereits ?classroom=&token=.
          */
         injectClassroomNavBar: function(className) {
             if ($('#cbd-classroom-nav-header').length > 0) {
@@ -349,24 +349,11 @@
             }
 
             var self = this;
-            var classroomId = this.classroomId;
-            var token = this.token;
-            var siteHostname = window.location.hostname;
 
-            // ---- Menü klonen und Links umschreiben ----
-            var $originalNav = $('.main-navigation').clone();
-            $originalNav.find('a[href]').each(function() {
-                var href = $(this).attr('href');
-                if (!href || href.charAt(0) === '#') return;
-                try {
-                    var url = new URL(href, window.location.href);
-                    if (url.hostname !== siteHostname) return;
-                    url.searchParams.set('classroom', classroomId);
-                    url.searchParams.set('token', token);
-                    $(this).attr('href', url.toString());
-                } catch (e) { /* ungültige URL – ignorieren */ }
-            });
-            $originalNav.addClass('cbd-classroom-main-nav');
+            // ---- Navigations-<nav> mit Ladeindikator ----
+            var $nav = $('<nav class="cbd-classroom-main-nav" aria-label="Klassenmodus Navigation">');
+            var $navUl = $('<ul class="cbd-classroom-nav-loading"><li>…</li></ul>');
+            $nav.append($navUl);
 
             // ---- Verlassen-Button ----
             var $leaveBtn = $('<button class="cbd-classroom-nav-leave">✕ Verlassen</button>');
@@ -384,9 +371,8 @@
             // ---- Mobiler Hamburger-Button ----
             var $menuToggle = $('<button class="cbd-classroom-menu-toggle" aria-label="Menü öffnen">☰</button>');
             $menuToggle.on('click', function() {
-                $originalNav.toggleClass('active');
-                var expanded = $originalNav.hasClass('active');
-                $menuToggle.attr('aria-expanded', expanded);
+                $nav.toggleClass('active');
+                $menuToggle.attr('aria-expanded', $nav.hasClass('active'));
             });
 
             // ---- Aufbau ----
@@ -394,9 +380,8 @@
                 .append('<span class="cbd-classroom-nav-badge">📚 Klassen-Modus</span>')
                 .append('<span class="cbd-classroom-nav-name">' + self.escapeHtml(className) + '</span>');
 
-            var $center = $('<div class="cbd-classroom-nav-center">').append($originalNav);
-
-            var $right = $('<div class="cbd-classroom-nav-right">').append($menuToggle).append($leaveBtn);
+            var $center = $('<div class="cbd-classroom-nav-center">').append($nav);
+            var $right  = $('<div class="cbd-classroom-nav-right">').append($menuToggle).append($leaveBtn);
 
             var $content = $('<div class="cbd-classroom-nav-content container">')
                 .append($left).append($center).append($right);
@@ -407,7 +392,7 @@
             // Klick außerhalb schließt mobiles Menü
             $(document).on('click.cbdClassroomNav', function(e) {
                 if (!$header.is(e.target) && $header.has(e.target).length === 0) {
-                    $originalNav.removeClass('active');
+                    $nav.removeClass('active');
                 }
             });
 
@@ -419,6 +404,90 @@
             } else {
                 $('body').prepend($header);
             }
+
+            // ---- Behandelte Seiten laden und Nav befüllen ----
+            $.post(cbdClassroomPageData.ajaxUrl, {
+                action: 'cbd_student_get_data',
+                token: this.token
+            }, function(response) {
+                if (response.success && response.data.pages) {
+                    var $builtUl = self.buildNavUl(response.data.pages);
+                    $navUl.replaceWith($builtUl);
+                } else {
+                    $navUl.empty(); // Ladeindikator entfernen, Nav bleibt leer
+                }
+            }).fail(function() {
+                $navUl.empty();
+            });
+        },
+
+        /**
+         * Baut eine hierarchische <ul> aus der behandelten Seitenliste.
+         * Nur Seiten mit URL (is_treated) werden als Links angezeigt.
+         * Parent-only Seiten (ohne URL) werden als nicht-klickbare Überschrift
+         * mit Unterpunkt-Dropdown angezeigt, sofern sie Kinder haben.
+         */
+        buildNavUl: function(pages) {
+            var self          = this;
+            var currentPath   = window.location.pathname;
+            var $rootUl       = $('<ul>');
+            // Stack: levelUls[N] = das <ul> in das Einträge auf Ebene N kommen
+            var levelUls      = [$rootUl];
+            // Letztes <li> pro Ebene (für Dropdown-Anhang)
+            var levelLastLi   = [null];
+
+            pages.forEach(function(item) {
+                if (item.type !== 'page' || !item.page) return;
+                var page  = item.page;
+                var level = page.level || 0;
+
+                // Wenn wir auf eine höhere Ebene zurückgehen: Stack kürzen
+                if (level < levelUls.length - 1) {
+                    levelUls.length    = level + 1;
+                    levelLastLi.length = level + 1;
+                }
+
+                // Wenn wir tiefer gehen als der Stack reicht: neues <ul> unter letztem <li>
+                while (levelUls.length <= level) {
+                    var $parentLi = levelLastLi[levelUls.length - 1];
+                    if (!$parentLi) {
+                        // Kein Parent vorhanden – Ebene nicht weiter verschachteln
+                        break;
+                    }
+                    var $sub = $('<ul>');
+                    $parentLi.append($sub);
+                    levelUls.push($sub);
+                    levelLastLi.push(null);
+                }
+
+                var $targetUl = levelUls[Math.min(level, levelUls.length - 1)];
+                var $li = $('<li>');
+
+                if (page.url) {
+                    // Aktuelle Seite hervorheben (Pfad ohne Query vergleichen)
+                    var isActive = false;
+                    try {
+                        isActive = new URL(page.url).pathname === currentPath;
+                    } catch (e) {}
+
+                    var $a = $('<a>')
+                        .attr('href', page.url)
+                        .text(page.title);
+                    if (isActive) {
+                        $li.addClass('current-menu-item');
+                    }
+                    $li.append($a);
+                } else {
+                    // Nicht klickbare Elternseite – nur als Label
+                    $li.addClass('cbd-nav-parent-label')
+                       .append($('<span>').text(page.title));
+                }
+
+                $targetUl.append($li);
+                levelLastLi[Math.min(level, levelLastLi.length - 1)] = $li;
+            });
+
+            return $rootUl;
         },
 
         /**
