@@ -755,7 +755,7 @@ class CBD_Classroom {
         error_log('[CBD Classroom] ajax_student_get_data - Class ID: ' . $class_id);
 
         $all_pages = $wpdb->get_results($wpdb->prepare(
-            "SELECT cp.page_id, p.post_title, p.post_parent
+            "SELECT cp.page_id, p.post_title, p.post_parent, p.menu_order
              FROM " . CBD_TABLE_CLASS_PAGES . " cp
              INNER JOIN {$wpdb->posts} p ON cp.page_id = p.ID
              WHERE cp.class_id = %d AND p.post_status = 'publish'
@@ -787,6 +787,7 @@ class CBD_Classroom {
                     'page_id' => $page->page_id,
                     'title' => $page->post_title,
                     'parent_id' => (int) $page->post_parent,
+                    'menu_order' => (int) $page->menu_order,
                     'is_treated' => true,
                     'treated_count' => $wpdb->get_var($wpdb->prepare(
                         "SELECT COUNT(*) FROM " . CBD_TABLE_DRAWINGS . "
@@ -818,6 +819,7 @@ class CBD_Classroom {
                         'page_id' => $parent_id,
                         'title' => $parent_post->post_title,
                         'parent_id' => (int) $parent_post->post_parent,
+                        'menu_order' => (int) $parent_post->menu_order,
                         'is_treated' => false,
                         'treated_count' => 0,
                         'url' => null, // No URL = grayed out
@@ -837,6 +839,14 @@ class CBD_Classroom {
             }
             $children_by_parent[$parent_id][] = $page_data;
         }
+
+        // Sort each group by WordPress menu_order (= Seitenreihenfolge der Website)
+        foreach ($children_by_parent as &$children) {
+            usort($children, function($a, $b) {
+                return $a['menu_order'] - $b['menu_order'];
+            });
+        }
+        unset($children);
 
         // Recursive function to build tree
         $build_tree = function($parent_id, $level = 0) use (&$build_tree, $children_by_parent, $pages_to_show) {

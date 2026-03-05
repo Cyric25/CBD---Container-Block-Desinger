@@ -203,15 +203,32 @@
             var snapTotalPages = this.totalPages;
             var snapCurrentPage = this.currentPageIndex;
 
+            // Klassen-Modus: prüfen ob aktuelle Seite leer ist
+            var snapCurrentPageBlank = false;
+            if (!isLocal && this.drawingCtx && this.totalPages === 1) {
+                var pixels = this.drawingCtx.getImageData(0, 0, this.drawingCanvas.width, this.drawingCanvas.height).data;
+                snapCurrentPageBlank = true;
+                for (var i = 3; i < pixels.length; i += 4) {
+                    if (pixels[i] > 0) { snapCurrentPageBlank = false; break; }
+                }
+            }
+
             // Closing-Animation
             this.overlay.classList.add('cbd-board-closing');
 
             var self = this;
             setTimeout(function() {
                 self.destroy();
-                // Tafelansicht im Block aktualisieren (nur lokaler Modus)
                 if (isLocal) {
+                    // Lokaler Modus: Tafelansicht im Block aktualisieren
                     CBDBoardMode.updateBlockDisplay(snapContainerId, snapStableId, snapTotalPages, snapCurrentPage);
+                } else if (snapCurrentPageBlank && snapStableId) {
+                    // Klassen-Modus, einzelne Seite, leer: Drawing-Section entfernen
+                    var container = document.querySelector('[data-stable-id="' + snapStableId + '"]');
+                    if (container) {
+                        var section = container.querySelector('.cbd-class-drawing-section');
+                        if (section) section.parentNode.removeChild(section);
+                    }
                 }
             }, 200);
         },
@@ -1697,8 +1714,19 @@
 
             try {
                 var key = cacheKey || ('cbd-board-' + this.containerId);
-                var dataUrl = this.drawingCanvas.toDataURL('image/png');
-                localStorage.setItem(key, dataUrl);
+
+                // Leeren Canvas erkennen: alle Pixel transparent
+                var pixels = this.drawingCtx.getImageData(0, 0, this.drawingCanvas.width, this.drawingCanvas.height).data;
+                var isBlank = true;
+                for (var i = 3; i < pixels.length; i += 4) {
+                    if (pixels[i] > 0) { isBlank = false; break; }
+                }
+
+                if (isBlank) {
+                    localStorage.removeItem(key);
+                } else {
+                    localStorage.setItem(key, this.drawingCanvas.toDataURL('image/png'));
+                }
             } catch (e) {
                 console.warn('[CBD Board Mode] Zeichnung konnte nicht gespeichert werden:', e.message);
             }

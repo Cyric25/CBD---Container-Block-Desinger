@@ -146,7 +146,10 @@
                         }
 
                         // Add collapsible drawing section with optional page navigation
-                        var hasPages = drawing.pages && Object.keys(drawing.pages).length > 0;
+                        // Nur anzeigen wenn mindestens eine Seite echte Zeichnungsdaten hat
+                        var hasPages = drawing.pages && Object.keys(drawing.pages).some(function(idx) {
+                            return drawing.pages[idx] && drawing.pages[idx].drawing_data;
+                        });
                         var hasLegacy = !hasPages && drawing.drawing_data;
 
                         if (hasPages || hasLegacy) {
