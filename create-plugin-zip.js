@@ -67,9 +67,10 @@ const includePaths = [
     'admin',
     'assets',
     'includes',
-    'vendor',  // IMPORTANT: Composer dependencies (TCPDF)
+    'vendor',  // IMPORTANT: Composer dependencies (mPDF + TCPDF fallback)
     'languages',
     'container-block-designer.php',
+    'debug-pdf.php',
     'LICENSE',
     'README.md',
     'CLAUDE.md',
@@ -95,15 +96,37 @@ const excludePatterns = [
     'package-lock.json',
     'composer.json',
     'composer.lock',
+    'composer.phar',
     '.DS_Store',
     'Thumbs.db',
     '.vscode',
     '.idea',
+    '.claude',
     '*.log',
     '*.tmp',
     'syntax-check.js',
     'Ordnerstruktur.txt',
-    'example-import.md'
+    'example-import.md',
+    // Vendor: exclude dev-only packages (not needed in production)
+    // IMPORTANT: Only exclude confirmed DEV packages from composer.lock
+    'phpunit',
+    'php-code-coverage',
+    'php-file-iterator',
+    'php-invoker',
+    'php-text-template',
+    'php-timer',
+    'phpcodesniffer',
+    'php_codesniffer',
+    'squizlabs',
+    'wpcs',
+    'wp-coding-standards',
+    'phar-io',
+    'theseer',
+    'nikic',
+    'sebastian',
+    'doctrine',
+    'dealerdirect',
+    'ttfonts_backup',
 ];
 
 // Create output directory if it doesn't exist
@@ -214,8 +237,10 @@ function shouldExclude(filePath) {
 
     for (const pattern of excludePatterns) {
         if (pattern.includes('*')) {
-            // Handle wildcard patterns
-            const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+            // Handle wildcard patterns - escape dots for literal matching
+            // Use [^\\/]* instead of .* so wildcards only match within a single filename
+            const escaped = pattern.replace(/\./g, '\\.').replace(/\*/g, '[^\\\\/]*');
+            const regex = new RegExp('(^|[\\\\/])' + escaped + '$');
             if (regex.test(relativePath)) {
                 return true;
             }

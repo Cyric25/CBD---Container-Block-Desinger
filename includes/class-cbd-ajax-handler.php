@@ -42,6 +42,176 @@ class CBD_Ajax_Handler {
         // PDF-Generierung (für eingeloggte Benutzer und Frontend)
         add_action('wp_ajax_cbd_generate_pdf', array($this, 'generate_pdf'));
         add_action('wp_ajax_nopriv_cbd_generate_pdf', array($this, 'generate_pdf'));
+
+        // PDF Diagnose-Endpoint
+        add_action('wp_ajax_cbd_pdf_diagnose', array($this, 'pdf_diagnose'));
+        add_action('wp_ajax_nopriv_cbd_pdf_diagnose', array($this, 'pdf_diagnose'));
+
+        // REST API Endpoints (alternative to admin-ajax.php)
+        add_action('rest_api_init', array($this, 'register_rest_routes'));
+    }
+
+    /**
+     * Register REST API routes for PDF generation
+     */
+    public function register_rest_routes() {
+        register_rest_route('cbd/v1', '/pdf-diagnose', array(
+            'methods'  => 'GET',
+            'callback' => array($this, 'rest_pdf_diagnose'),
+            'permission_callback' => '__return_true',
+        ));
+
+        register_rest_route('cbd/v1', '/generate-pdf', array(
+            'methods'  => 'POST',
+            'callback' => array($this, 'rest_generate_pdf'),
+            'permission_callback' => '__return_true',
+        ));
+    }
+
+    /**
+     * REST API: PDF Diagnose
+     */
+    public function rest_pdf_diagnose($request) {
+        $info = array(
+            'php_version'  => PHP_VERSION,
+            'memory_limit' => ini_get('memory_limit'),
+            'post_max_size' => ini_get('post_max_size'),
+            'max_input_vars' => ini_get('max_input_vars'),
+            'upload_max_filesize' => ini_get('upload_max_filesize'),
+            'ext_mbstring' => extension_loaded('mbstring'),
+            'ext_gd'       => extension_loaded('gd'),
+            'ext_zlib'     => extension_loaded('zlib'),
+            'ext_xml'      => extension_loaded('xml'),
+        );
+
+        $info['mpdf_available'] = false;
+        $info['mpdf_error'] = '';
+        try {
+            if (class_exists('\\Mpdf\\Mpdf')) {
+                $info['mpdf_available'] = true;
+            }
+        } catch (\Throwable $e) {
+            $info['mpdf_error'] = $e->getMessage();
+        }
+
+        $info['tcpdf_available'] = class_exists('TCPDF');
+
+        $upload_dir = wp_upload_dir();
+        $temp_dir = $upload_dir['basedir'] . '/cbd-temp-pdfs/';
+        $info['temp_dir'] = $temp_dir;
+        $info['temp_dir_exists'] = file_exists($temp_dir);
+        $info['temp_dir_writable'] = is_writable($temp_dir) || is_writable($upload_dir['basedir']);
+
+        return new \WP_REST_Response($info, 200);
+    }
+
+    /**
+     * REST API: Generate PDF
+     */
+    public function rest_generate_pdf($request) {
+        // Rate-limit: max 15 requests per minute per IP
+        $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        $rate_key = 'cbd_pdf_rate_' . md5($ip);
+        $rate_count = (int) get_transient($rate_key);
+        if ($rate_count >= 15) {
+            return new \WP_REST_Response(array('success' => false, 'message' => 'Zu viele Anfragen. Bitte warten Sie eine Minute.'), 429);
+        }
+        set_transient($rate_key, $rate_count + 1, 60);
+
+        $params = $request->get_json_params();
+
+        if (empty($params)) {
+            $params = $request->get_body_params();
+        }
+
+        $blocks = array();
+        $blocks_json = isset($params['blocks_json']) ? $params['blocks_json'] : '';
+
+        if (!empty($blocks_json)) {
+            if (is_string($blocks_json)) {
+                $blocks_data = json_decode(stripslashes($blocks_json), true);
+            } else {
+                $blocks_data = $blocks_json;
+            }
+
+            if (empty($blocks_data) || !is_array($blocks_data)) {
+                return new \WP_REST_Response(array('success' => false, 'message' => 'Ungültiges Block-Datenformat'), 400);
+            }
+
+            foreach ($blocks_data as $block) {
+                $sanitized = array(
+                    'html'        => isset($block['html']) ? wp_kses_post($block['html']) : '',
+                    'title'       => isset($block['title']) ? sanitize_text_field($block['title']) : '',
+                    'formulas'    => array(),
+                    'screenshots' => array(),
+                );
+
+                if (!empty($block['formulas']) && is_array($block['formulas'])) {
+                    foreach ($block['formulas'] as $formula) {
+                        $sanitized['formulas'][] = array(
+                            'id'           => sanitize_text_field($formula['id'] ?? ''),
+                            'renderedHtml' => wp_kses_post($formula['renderedHtml'] ?? ''),
+                            'latex'        => sanitize_text_field($formula['latex'] ?? ''),
+                        );
+                    }
+                }
+
+                if (!empty($block['screenshots']) && is_array($block['screenshots'])) {
+                    foreach ($block['screenshots'] as $screenshot) {
+                        $base64 = $screenshot['base64'] ?? '';
+                        if (preg_match('/^(data:image\/(png|jpeg|jpg);base64,)?[A-Za-z0-9+\/=]+$/', $base64)) {
+                            $sanitized['screenshots'][] = array(
+                                'id'     => sanitize_text_field($screenshot['id'] ?? ''),
+                                'base64' => $base64,
+                            );
+                        }
+                    }
+                }
+
+                $blocks[] = $sanitized;
+            }
+        }
+
+        if (empty($blocks)) {
+            return new \WP_REST_Response(array('success' => false, 'message' => 'Keine Blöcke gefunden'), 400);
+        }
+
+        $options = array(
+            'filename' => isset($params['filename']) ? sanitize_file_name($params['filename']) : 'export-' . date('Y-m-d') . '.pdf',
+            'mode'     => isset($params['mode']) ? sanitize_text_field($params['mode']) : 'visual',
+        );
+
+        if (!empty($params['css_variables'])) {
+            $css_vars = is_string($params['css_variables']) ? json_decode(stripslashes($params['css_variables']), true) : $params['css_variables'];
+            if (is_array($css_vars)) {
+                $options['css_variables'] = array_map('sanitize_text_field', $css_vars);
+            }
+        }
+
+        try {
+            $pdf_generator = CBD_PDF_Generator::get_instance();
+            $result = $pdf_generator->generate_pdf($blocks, $options);
+
+            if ($result['success']) {
+                return new \WP_REST_Response(array(
+                    'success'  => true,
+                    'url'      => $result['url'],
+                    'filename' => $result['filename'],
+                    'engine'   => $result['engine'] ?? 'unknown',
+                ), 200);
+            } else {
+                return new \WP_REST_Response(array(
+                    'success' => false,
+                    'message' => $result['error'] ?? 'PDF-Generierung fehlgeschlagen'
+                ), 500);
+            }
+        } catch (\Throwable $e) {
+            error_log('[CBD PDF REST] Error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            return new \WP_REST_Response(array(
+                'success' => false,
+                'message' => 'PHP-Fehler: ' . $e->getMessage()
+            ), 500);
+        }
     }
     
     /**
@@ -274,50 +444,171 @@ class CBD_Ajax_Handler {
     }
 
     /**
-     * PDF generieren - AJAX Handler
+     * PDF Diagnose - Check server capabilities before generating PDF
      */
-    public function generate_pdf() {
-        // Nonce-Überprüfung
-        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cbd-pdf-nonce')) {
-            wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
-            return;
+    public function pdf_diagnose() {
+        $info = array(
+            'php_version'  => PHP_VERSION,
+            'memory_limit' => ini_get('memory_limit'),
+            'post_max_size' => ini_get('post_max_size'),
+            'max_input_vars' => ini_get('max_input_vars'),
+            'upload_max_filesize' => ini_get('upload_max_filesize'),
+            'ext_mbstring' => extension_loaded('mbstring'),
+            'ext_gd'       => extension_loaded('gd'),
+            'ext_zlib'     => extension_loaded('zlib'),
+            'ext_xml'      => extension_loaded('xml'),
+        );
+
+        // Check if mPDF class can be loaded
+        $info['mpdf_available'] = false;
+        $info['mpdf_error'] = '';
+        try {
+            if (class_exists('\\Mpdf\\Mpdf')) {
+                $info['mpdf_available'] = true;
+            }
+        } catch (\Throwable $e) {
+            $info['mpdf_error'] = $e->getMessage();
         }
 
-        // HTML-Blöcke empfangen
-        $blocks_html = isset($_POST['blocks']) ? $_POST['blocks'] : array();
+        // Check if TCPDF is available
+        $info['tcpdf_available'] = class_exists('TCPDF');
 
-        if (empty($blocks_html) || !is_array($blocks_html)) {
+        // Check temp directory
+        $upload_dir = wp_upload_dir();
+        $temp_dir = $upload_dir['basedir'] . '/cbd-temp-pdfs/';
+        $info['temp_dir'] = $temp_dir;
+        $info['temp_dir_exists'] = file_exists($temp_dir);
+        $info['temp_dir_writable'] = is_writable($temp_dir) || is_writable($upload_dir['basedir']);
+
+        wp_send_json_success($info);
+    }
+
+    /**
+     * PDF generieren - AJAX Handler
+     *
+     * Accepts two formats:
+     * 1. New structured format: blocks_json with html, formulas, screenshots per block
+     * 2. Legacy format: blocks[] as array of HTML strings
+     */
+    public function generate_pdf() {
+        // PDF export is a public frontend feature (no login required)
+        // Rate-limit: max 15 requests per minute per IP
+        // Skip increment if this is a fallback from a failed REST request (already counted)
+        $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        $rate_key = 'cbd_pdf_rate_' . md5($ip);
+        $rate_count = (int) get_transient($rate_key);
+        $is_fallback = !empty($_POST['is_rest_fallback']);
+        if ($rate_count >= 15) {
+            wp_send_json_error(array('message' => 'Zu viele Anfragen. Bitte warten Sie eine Minute.'));
+            return;
+        }
+        if (!$is_fallback) {
+            set_transient($rate_key, $rate_count + 1, 60);
+        }
+
+        // Detect format: new structured (blocks_json) vs legacy (blocks[])
+        $blocks = array();
+
+        if (!empty($_POST['blocks_json'])) {
+            // New structured format
+            $blocks_data = json_decode(stripslashes($_POST['blocks_json']), true);
+
+            if (empty($blocks_data) || !is_array($blocks_data)) {
+                wp_send_json_error(array('message' => 'Ungültiges Block-Datenformat'));
+                return;
+            }
+
+            foreach ($blocks_data as $block) {
+                $sanitized = array(
+                    'html'        => isset($block['html']) ? wp_kses_post($block['html']) : '',
+                    'title'       => isset($block['title']) ? sanitize_text_field($block['title']) : '',
+                    'formulas'    => array(),
+                    'screenshots' => array(),
+                );
+
+                // Sanitize formulas
+                if (!empty($block['formulas']) && is_array($block['formulas'])) {
+                    foreach ($block['formulas'] as $formula) {
+                        $sanitized['formulas'][] = array(
+                            'id'           => sanitize_text_field($formula['id'] ?? ''),
+                            'renderedHtml' => wp_kses_post($formula['renderedHtml'] ?? ''),
+                            'latex'        => sanitize_text_field($formula['latex'] ?? ''),
+                        );
+                    }
+                }
+
+                // Sanitize screenshots (base64 data)
+                if (!empty($block['screenshots']) && is_array($block['screenshots'])) {
+                    foreach ($block['screenshots'] as $screenshot) {
+                        $base64 = $screenshot['base64'] ?? '';
+                        // Validate base64 image data
+                        if (preg_match('/^(data:image\/(png|jpeg|jpg);base64,)?[A-Za-z0-9+\/=]+$/', $base64)) {
+                            $sanitized['screenshots'][] = array(
+                                'id'     => sanitize_text_field($screenshot['id'] ?? ''),
+                                'base64' => $base64,
+                            );
+                        }
+                    }
+                }
+
+                $blocks[] = $sanitized;
+            }
+        } elseif (!empty($_POST['blocks']) && is_array($_POST['blocks'])) {
+            // Legacy format: array of HTML strings
+            foreach ($_POST['blocks'] as $block_html) {
+                $blocks[] = wp_kses_post($block_html);
+            }
+        } else {
             wp_send_json_error(array('message' => 'Keine Blöcke zum Exportieren gefunden'));
             return;
         }
 
-        // Sanitize HTML (erlaubt HTML-Tags, entfernt nur gefährliche Scripts)
-        $sanitized_blocks = array();
-        foreach ($blocks_html as $block_html) {
-            // wp_kses_post erlaubt alle Post-Content HTML-Tags
-            $sanitized_blocks[] = wp_kses_post($block_html);
+        if (empty($blocks)) {
+            wp_send_json_error(array('message' => 'Keine Blöcke zum Exportieren gefunden'));
+            return;
         }
 
         // PDF-Optionen
         $options = array(
-            'filename' => isset($_POST['filename']) ? sanitize_file_name($_POST['filename']) : 'container-blocks-' . date('Y-m-d') . '.pdf'
+            'filename' => isset($_POST['filename'])
+                ? sanitize_file_name($_POST['filename'])
+                : 'container-blocks-' . date('Y-m-d') . '.pdf',
+            'mode' => isset($_POST['mode'])
+                ? sanitize_text_field($_POST['mode'])
+                : 'visual',
         );
 
+        // CSS Variables from client
+        if (!empty($_POST['css_variables'])) {
+            $css_vars_raw = json_decode(stripslashes($_POST['css_variables']), true);
+            if (is_array($css_vars_raw)) {
+                $options['css_variables'] = array_map('sanitize_text_field', $css_vars_raw);
+            }
+        }
+
         // PDF Generator instanziieren
-        $pdf_generator = CBD_PDF_Generator::get_instance();
+        try {
+            $pdf_generator = CBD_PDF_Generator::get_instance();
 
-        // PDF generieren
-        $result = $pdf_generator->generate_pdf($sanitized_blocks, $options);
+            // PDF generieren
+            $result = $pdf_generator->generate_pdf($blocks, $options);
 
-        if ($result['success']) {
-            wp_send_json_success(array(
-                'message' => 'PDF erfolgreich erstellt',
-                'url' => $result['url'],
-                'filename' => $result['filename']
-            ));
-        } else {
+            if ($result['success']) {
+                wp_send_json_success(array(
+                    'message'  => 'PDF erfolgreich erstellt',
+                    'url'      => $result['url'],
+                    'filename' => $result['filename'],
+                    'engine'   => $result['engine'] ?? 'unknown',
+                ));
+            } else {
+                wp_send_json_error(array(
+                    'message' => $result['error'] ?? 'Unbekannter Fehler bei der PDF-Erstellung'
+                ));
+            }
+        } catch (\Throwable $e) {
+            error_log('[CBD PDF] Fatal error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             wp_send_json_error(array(
-                'message' => $result['error']
+                'message' => 'PHP-Fehler: ' . $e->getMessage() . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')'
             ));
         }
     }

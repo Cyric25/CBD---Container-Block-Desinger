@@ -1,4 +1,8 @@
 /**
+ * @deprecated since 3.0.0 - PDF generation is now handled server-side by mPDF.
+ * This file is kept for backward compatibility but is no longer enqueued.
+ * Use pdf-server-side.js instead.
+ *
  * jsPDF Loader with multiple CDN fallbacks
  * Ensures jsPDF is always available for the Container Block Designer
  */

@@ -682,20 +682,33 @@ class CBD_Classroom {
      * AJAX: Student authentication via class password
      */
     public function ajax_student_auth() {
-        // Rate limiting check
-        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
-        $rate_key = 'cbd_auth_attempts_' . md5($ip);
-        $attempts = (int) get_transient($rate_key);
-
-        if ($attempts >= 10) {
-            wp_send_json_error(array('message' => 'Zu viele Versuche. Bitte spaeter erneut versuchen.'));
-        }
-
         $class_id = intval($_POST['class_id'] ?? 0);
         $password = $_POST['password'] ?? '';
+        $wp_nonce = $_POST['_wpnonce'] ?? '';
 
-        if ($class_id <= 0 || empty($password)) {
-            wp_send_json_error(array('message' => 'Klasse und Passwort erforderlich.'));
+        // WordPress-authenticated users can skip password
+        $wp_user_authenticated = false;
+        if (is_user_logged_in() && wp_verify_nonce($wp_nonce, 'cbd_classroom_auth')) {
+            $wp_user_authenticated = true;
+        }
+
+        if (!$wp_user_authenticated) {
+            // Rate limiting check (only for password-based auth)
+            $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+            $rate_key = 'cbd_auth_attempts_' . md5($ip);
+            $attempts = (int) get_transient($rate_key);
+
+            if ($attempts >= 10) {
+                wp_send_json_error(array('message' => 'Zu viele Versuche. Bitte spaeter erneut versuchen.'));
+            }
+
+            if ($class_id <= 0 || empty($password)) {
+                wp_send_json_error(array('message' => 'Klasse und Passwort erforderlich.'));
+            }
+        } else {
+            if ($class_id <= 0) {
+                wp_send_json_error(array('message' => 'Bitte eine Klasse auswaehlen.'));
+            }
         }
 
         global $wpdb;
@@ -704,8 +717,16 @@ class CBD_Classroom {
             $class_id
         ));
 
-        if (!$class || !wp_check_password($password, $class->password)) {
+        if (!$class) {
+            wp_send_json_error(array('message' => 'Klasse nicht gefunden.'));
+        }
+
+        // Password check only for non-WordPress-authenticated users
+        if (!$wp_user_authenticated && !wp_check_password($password, $class->password)) {
             // Increment rate limit
+            $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+            $rate_key = 'cbd_auth_attempts_' . md5($ip);
+            $attempts = (int) get_transient($rate_key);
             set_transient($rate_key, $attempts + 1, 300); // 5 minutes
             wp_send_json_error(array('message' => 'Falsches Passwort.'));
         }
@@ -930,6 +951,8 @@ class CBD_Classroom {
 
         wp_localize_script('cbd-classroom-frontend', 'cbdClassroomFrontend', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
+            'isUserLoggedIn' => is_user_logged_in(),
+            'nonce' => wp_create_nonce('cbd_classroom_auth'),
             'i18n' => array(
                 'selectClass' => __('Klasse auswaehlen', 'container-block-designer'),
                 'enterPassword' => __('Passwort eingeben', 'container-block-designer'),

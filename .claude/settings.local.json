@@ -27,7 +27,9 @@
       "Bash(for file in *.php includes/*.php includes/Database/*.php admin/*.php)",
       "Bash(for file in *.php includes/*.php includes/Database/*.php)",
       "Bash(do php:*)",
-      "Bash(command -v:*)"
+      "Bash(command -v:*)",
+      "Bash(php.exe -v)",
+      "Bash(ls \"c:\\\\Users\\\\mtnhu\\\\OneDrive - Bildungsdirektion\\\\#Unterricht\\\\Website\\\\Plugins\\\\CDB-Designer\"/*.zip)"
     ],
     "deny": [],
     "ask": []

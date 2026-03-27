@@ -238,6 +238,16 @@ class CBD_Admin {
                 array($this, 'render_settings_page')
             );
 
+            // Untermenü: PDF Diagnose - nur Admins
+            add_submenu_page(
+                'container-block-designer',
+                __('PDF Diagnose', 'container-block-designer'),
+                __('PDF Diagnose', 'container-block-designer'),
+                'manage_options',
+                'cbd-pdf-diagnose',
+                array($this, 'render_pdf_diagnose_page')
+            );
+
             // Untermenü: Klassen-Verwaltung
             if (get_option('cbd_classroom_enabled', false) || current_user_can('manage_options')) {
                 add_submenu_page(
@@ -1061,6 +1071,143 @@ class CBD_Admin {
     /**
      * Einstellungen-Seite rendern
      */
+    /**
+     * PDF Diagnose page - Shows server capabilities for PDF generation
+     */
+    public function render_pdf_diagnose_page() {
+        echo '<div class="wrap">';
+        echo '<h1>PDF Diagnose</h1>';
+        echo '<p>Diese Seite prüft ob alle Voraussetzungen für die PDF-Generierung erfüllt sind.</p>';
+
+        echo '<table class="widefat striped" style="max-width:800px">';
+        echo '<thead><tr><th>Prüfung</th><th>Status</th><th>Details</th></tr></thead><tbody>';
+
+        // PHP Version
+        $this->diag_row('PHP Version', true, PHP_VERSION);
+
+        // Memory Limit
+        $mem = ini_get('memory_limit');
+        $mem_ok = $this->parse_size($mem) >= 128 * 1024 * 1024;
+        $this->diag_row('Memory Limit', $mem_ok, $mem . ($mem_ok ? '' : ' (mindestens 128M empfohlen)'));
+
+        // POST Max Size
+        $this->diag_row('POST Max Size', true, ini_get('post_max_size'));
+
+        // Extensions
+        $this->diag_row('ext-mbstring', extension_loaded('mbstring'), extension_loaded('mbstring') ? 'Installiert' : 'FEHLT - mPDF benötigt mbstring!');
+        $this->diag_row('ext-gd', extension_loaded('gd'), extension_loaded('gd') ? 'Installiert' : 'FEHLT - mPDF benötigt GD!');
+        $this->diag_row('ext-zlib', extension_loaded('zlib'), extension_loaded('zlib') ? 'Installiert' : 'Fehlt (optional)');
+
+        // Vendor autoload
+        $autoload_exists = file_exists(CBD_PLUGIN_DIR . 'vendor/autoload.php');
+        $this->diag_row('Composer Autoloader', $autoload_exists, $autoload_exists ? 'Vorhanden' : 'vendor/autoload.php fehlt!');
+
+        // mPDF class
+        $mpdf_ok = false;
+        $mpdf_msg = '';
+        try {
+            $mpdf_ok = class_exists('\\Mpdf\\Mpdf');
+            $mpdf_msg = $mpdf_ok ? 'Klasse geladen (v' . \Mpdf\Mpdf::VERSION . ')' : 'Klasse nicht gefunden';
+        } catch (\Throwable $e) {
+            $mpdf_msg = 'Fehler: ' . $e->getMessage();
+        }
+        $this->diag_row('mPDF Bibliothek', $mpdf_ok, $mpdf_msg);
+
+        // TCPDF class
+        $tcpdf_ok = class_exists('TCPDF');
+        $this->diag_row('TCPDF Bibliothek (Fallback)', $tcpdf_ok, $tcpdf_ok ? 'Verfügbar' : 'Nicht verfügbar');
+
+        // Temp directory
+        $upload_dir = wp_upload_dir();
+        $temp_dir = $upload_dir['basedir'] . '/cbd-temp-pdfs/';
+        if (!file_exists($temp_dir)) {
+            wp_mkdir_p($temp_dir);
+        }
+        $writable = is_writable($temp_dir);
+        $this->diag_row('Temp-Verzeichnis', $writable, $temp_dir . ($writable ? ' (beschreibbar)' : ' (NICHT beschreibbar!)'));
+
+        // Try creating mPDF instance
+        if ($mpdf_ok && extension_loaded('mbstring')) {
+            $instance_ok = false;
+            $instance_msg = '';
+            try {
+                $mpdf = new \Mpdf\Mpdf([
+                    'mode' => 'utf-8',
+                    'format' => 'A4',
+                    'tempDir' => $temp_dir,
+                    'default_font' => 'dejavusans',
+                ]);
+                $instance_ok = true;
+                $instance_msg = 'Erfolgreich erstellt';
+            } catch (\Throwable $e) {
+                $instance_msg = 'Fehler: ' . $e->getMessage();
+            }
+            $this->diag_row('mPDF Instanz erstellen', $instance_ok, $instance_msg);
+
+            // Try generating test PDF
+            if ($instance_ok) {
+                $pdf_ok = false;
+                $pdf_msg = '';
+                try {
+                    $mpdf->WriteHTML('<h1>Test</h1><p>PDF Diagnose Test</p>');
+                    $test_file = $temp_dir . 'diag-test.pdf';
+                    $mpdf->Output($test_file, \Mpdf\Output\Destination::FILE);
+                    $pdf_ok = file_exists($test_file);
+                    $pdf_msg = $pdf_ok ? 'PDF erstellt (' . round(filesize($test_file) / 1024) . ' KB)' : 'Datei nicht erstellt';
+                    @unlink($test_file);
+                } catch (\Throwable $e) {
+                    $pdf_msg = 'Fehler: ' . $e->getMessage();
+                }
+                $this->diag_row('Test-PDF erstellen', $pdf_ok, $pdf_msg);
+            }
+        }
+
+        // CBD PDF Generator
+        $gen_ok = false;
+        $gen_msg = '';
+        try {
+            if (class_exists('CBD_PDF_Generator')) {
+                $gen = CBD_PDF_Generator::get_instance();
+                $gen_ok = true;
+                $gen_msg = 'Engine: ' . $gen->get_engine();
+            } else {
+                $gen_msg = 'Klasse nicht geladen';
+            }
+        } catch (\Throwable $e) {
+            $gen_msg = 'Fehler: ' . $e->getMessage();
+        }
+        $this->diag_row('CBD PDF Generator', $gen_ok, $gen_msg);
+
+        echo '</tbody></table>';
+
+        // Last PHP error
+        $last_error = error_get_last();
+        if ($last_error) {
+            echo '<h2 style="margin-top:20px">Letzter PHP-Fehler</h2>';
+            echo '<pre style="background:#f8f8f8;padding:10px;border:1px solid #ccc;max-width:800px;overflow:auto">';
+            echo esc_html(print_r($last_error, true));
+            echo '</pre>';
+        }
+
+        echo '</div>';
+    }
+
+    private function diag_row($label, $ok, $detail) {
+        $icon = $ok ? '<span style="color:green;font-size:18px">&#10004;</span>' : '<span style="color:red;font-size:18px">&#10008;</span>';
+        echo '<tr><td><strong>' . esc_html($label) . '</strong></td><td>' . $icon . '</td><td>' . esc_html($detail) . '</td></tr>';
+    }
+
+    private function parse_size($size) {
+        $unit = strtolower(substr($size, -1));
+        $value = (int) $size;
+        switch ($unit) {
+            case 'g': $value *= 1024;
+            case 'm': $value *= 1024;
+            case 'k': $value *= 1024;
+        }
+        return $value;
+    }
+
     public function render_settings_page() {
         $file_path = CBD_PLUGIN_DIR . 'admin/settings.php';
 

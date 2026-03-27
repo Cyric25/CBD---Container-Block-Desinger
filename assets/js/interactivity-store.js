@@ -378,17 +378,11 @@ store('container-block-designer', {
 		},
 
 		/**
-		 * PDF Export erstellen
+		 * PDF Export erstellen - nutzt serverseitigen Export (mPDF) wenn verfügbar
 		 */
 		*createPDF() {
 			const context = getContext();
 			const element = getElement();
-
-			// Prüfe Dependencies
-			if (typeof html2canvas === 'undefined' || typeof jspdf === 'undefined') {
-				context.pdfError = true;
-				return;
-			}
 
 			try {
 				context.pdfLoading = true;
@@ -400,10 +394,38 @@ store('container-block-designer', {
 					icon.classList.add('dashicons-update-alt');
 				}
 
-				// Finde Container-Block Element für PDF
+				// Finde Container Element
 				const mainContainer = element.ref.closest('[data-wp-interactive="container-block-designer"]');
 				if (!mainContainer) {
 					throw new Error('Main container not found');
+				}
+
+				// Priorität 1: Server-seitiger Export (mPDF - beste Qualität)
+				if (typeof window.cbdPDFExportServerSide === 'function' && window.jQuery) {
+					const $ = window.jQuery;
+					window.cbdPDFExportServerSide([$(mainContainer)], 'visual');
+
+					context.pdfSuccess = true;
+					context.pdfLoading = false;
+
+					if (icon) {
+						icon.classList.remove('dashicons-update-alt');
+						icon.classList.add('dashicons-yes-alt');
+					}
+
+					setTimeout(() => {
+						context.pdfSuccess = false;
+						if (icon) {
+							icon.classList.remove('dashicons-yes-alt');
+							icon.classList.add('dashicons-pdf');
+						}
+					}, 3000);
+					return;
+				}
+
+				// Fallback: html2canvas + jsPDF (Client-seitig)
+				if (typeof html2canvas === 'undefined') {
+					throw new Error('Keine PDF-Bibliothek verfügbar');
 				}
 
 				const containerBlock = mainContainer.querySelector('.cbd-container-block');
@@ -418,17 +440,15 @@ store('container-block-designer', {
 					yield new Promise(resolve => setTimeout(resolve, 350));
 				}
 
-				// Buttons ausblenden für PDF
+				// Buttons ausblenden für Screenshot
 				const actionButtons = mainContainer.querySelector('.cbd-action-buttons');
 				if (actionButtons) {
 					actionButtons.style.setProperty('visibility', 'hidden', 'important');
 					actionButtons.style.setProperty('opacity', '0', 'important');
 				}
 
-				// Kurze Verzögerung damit DOM aktualisiert wird
 				yield new Promise(resolve => setTimeout(resolve, 50));
 
-				// Canvas erstellen
 				const canvas = yield html2canvas(containerBlock, {
 					useCORS: true,
 					allowTaint: false,
@@ -437,15 +457,19 @@ store('container-block-designer', {
 					backgroundColor: null
 				});
 
-				// Buttons wieder einblenden
 				if (actionButtons) {
 					actionButtons.style.removeProperty('visibility');
 					actionButtons.style.removeProperty('opacity');
 				}
 
-				// PDF erstellen
+				// jsPDF erstellen
+				const jsPDFClass = window.jspdf?.jsPDF || window.jsPDF;
+				if (!jsPDFClass) {
+					throw new Error('jsPDF nicht verfügbar');
+				}
+
 				const imgData = canvas.toDataURL('image/png');
-				const pdf = new jspdf.jsPDF({
+				const pdf = new jsPDFClass({
 					orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
 					unit: 'px',
 					format: [canvas.width, canvas.height]
@@ -454,7 +478,6 @@ store('container-block-designer', {
 				pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
 				pdf.save(`cbd-container-${context.blockId || 'export'}-${Date.now()}.pdf`);
 
-				// Wieder zusammenklappen
 				if (wasCollapsed) {
 					context.isCollapsed = true;
 				}
@@ -462,7 +485,6 @@ store('container-block-designer', {
 				context.pdfSuccess = true;
 				context.pdfLoading = false;
 
-				// Icon Feedback
 				if (icon) {
 					icon.classList.remove('dashicons-update-alt');
 					icon.classList.add('dashicons-yes-alt');
@@ -480,7 +502,7 @@ store('container-block-designer', {
 				context.pdfError = true;
 				context.pdfLoading = false;
 
-				// Icon zurücksetzen
+				const icon = element.ref.querySelector('.dashicons');
 				if (icon) {
 					icon.classList.remove('dashicons-update-alt', 'dashicons-yes-alt');
 					icon.classList.add('dashicons-pdf');

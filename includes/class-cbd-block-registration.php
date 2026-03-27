@@ -327,12 +327,12 @@ class CBD_Block_Registration {
             );
         }
 
-        // Floating PDF Export Button (now uses html2pdf for text-based PDFs)
+        // Floating PDF Export Button (uses server-side mPDF generation)
         if (!is_admin()) {
             wp_enqueue_script(
                 'cbd-floating-pdf-button',
                 CBD_PLUGIN_URL . 'assets/js/floating-pdf-button.js',
-                array('jquery', 'cbd-html2pdf-loader'),
+                array('jquery', 'cbd-pdf-server-side'),
                 CBD_VERSION,
                 true
             );
@@ -404,32 +404,13 @@ class CBD_Block_Registration {
             true
         );
 
-        // PDF Export: Load jsPDF library separately (for direct canvas-to-PDF conversion)
+        // PDF Export: Server-side generation via mPDF (primary PDF handler)
+        // html2canvas is only needed for screenshots of interactive elements
         if (!is_admin()) {
-            wp_enqueue_script(
-                'jspdf',
-                'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-                array(),
-                '2.5.1',
-                true
-            );
-        }
-
-        // PDF Export: Load html2pdf.js with fallback mechanism (text-based PDFs)
-        if (!is_admin()) {
-            wp_enqueue_script(
-                'cbd-html2pdf-loader',
-                CBD_PLUGIN_URL . 'assets/js/html2pdf-loader.js',
-                array('html2canvas', 'jspdf'),
-                CBD_VERSION,
-                true
-            );
-
-            // PDF Export: Server-side generation (NEW - text-based searchable PDFs)
             wp_enqueue_script(
                 'cbd-pdf-server-side',
                 CBD_PLUGIN_URL . 'assets/js/pdf-server-side.js',
-                array('jquery'),
+                array('jquery', 'html2canvas'),
                 CBD_VERSION,
                 true
             );
@@ -440,7 +421,9 @@ class CBD_Block_Registration {
                 'cbdPDFData',
                 array(
                     'ajaxurl' => admin_url('admin-ajax.php'),
-                    'nonce' => wp_create_nonce('cbd-pdf-nonce')
+                    'resturl' => rest_url('cbd/v1/'),
+                    'nonce'   => wp_create_nonce('cbd-pdf-nonce'),
+                    'restnonce' => wp_create_nonce('wp_rest'),
                 )
             );
         }

@@ -1,307 +1,396 @@
 /**
- * Container Block Designer - Floating PDF Export Button
- * Zeigt einen Button rechts unten an, wenn CBD-Blöcke auf der Seite sind
+ * Container Block Designer - Floating PDF Export Button with Selection Mode
+ * Shows a PDF export button when CBD blocks are present on the page.
+ * Clicking the button enters a visual selection mode where the user can
+ * click on blocks to select/deselect them for PDF export.
  *
  * @package ContainerBlockDesigner
- * @since 2.7.6
+ * @since 3.2.0
  */
 
-(function($) {
+(function ($) {
     'use strict';
 
-    $(document).ready(function() {
+    console.log('[CBD PDF] Script loaded');
 
-        // Add PDF Export button if there are container blocks
-        var totalContainers = $(".cbd-container");
+    $(document).ready(function () {
+        var totalContainers = $('.cbd-container');
+        console.log('[CBD PDF] Found', totalContainers.length, 'containers');
 
-        if (totalContainers.length > 0) {
-            if ($("#cbd-pdf-export-fab").length === 0) {
-                // Lese Theme-Farben aus CSS-Variablen
-                var rootStyles = getComputedStyle(document.documentElement);
-                var themeColor = rootStyles.getPropertyValue('--color-ui-surface').trim() || '#e24614';
-                var themeColorDark = rootStyles.getPropertyValue('--color-ui-surface-dark').trim() || '#c93d12';
+        if (totalContainers.length === 0 || $('#cbd-pdf-export-fab').length > 0) {
+            return;
+        }
 
-                // Fallback: Wenn CSS-Variablen nicht gesetzt sind, verwende Default-Werte
-                if (!themeColor || themeColor === '') {
-                    themeColor = '#e24614';
+        // Read theme colors from CSS variables
+        var rootStyles = getComputedStyle(document.documentElement);
+        var themeColor = rootStyles.getPropertyValue('--color-ui-surface').trim() || '#e24614';
+        var themeColorDark = rootStyles.getPropertyValue('--color-ui-surface-dark').trim() || '#c93d12';
+        var themeColorLight = rootStyles.getPropertyValue('--color-ui-surface-light').trim() || '#f5ede9';
+
+        // State
+        var $containerBlocks = null;
+        var selectionActive = false;
+
+        // =====================================================================
+        // Floating Action Button
+        // =====================================================================
+
+        var $pdfButton = $('<div id="cbd-pdf-export-fab">PDF</div>');
+        $pdfButton.css({
+            position: 'fixed',
+            bottom: '30px',
+            right: '30px',
+            zIndex: '999999',
+            background: themeColor,
+            color: 'white',
+            borderRadius: '12px',
+            padding: '15px',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            minWidth: '60px',
+            transition: 'all 0.2s ease'
+        });
+        $pdfButton.attr('title', 'Container-Bl\u00f6cke als PDF exportieren');
+        $pdfButton.hover(
+            function () { $(this).css({ transform: 'scale(1.05)', background: themeColorDark }); },
+            function () { $(this).css({ transform: 'scale(1)', background: themeColor }); }
+        );
+
+        $pdfButton.on('click', function () {
+            console.log('[CBD PDF] FAB clicked');
+
+            // Get top-level containers (not nested)
+            var $topLevel = $('.cbd-container:visible').filter(function () {
+                var $this = $(this);
+                if ($this.parent().closest('.cbd-container-content, .cbd-content, .cbd-collapsible-content').length > 0) {
+                    return false;
                 }
-                if (!themeColorDark || themeColorDark === '') {
-                    themeColorDark = '#c93d12';
-                }
+                return true;
+            });
 
-                var pdfButton = $('<div id="cbd-pdf-export-fab">📄 PDF</div>');
-                pdfButton.css({
-                    position: "fixed",
-                    bottom: "30px",
-                    right: "30px",
-                    zIndex: "999999",
-                    background: themeColor,
-                    color: "white",
-                    borderRadius: "12px",
-                    padding: "15px",
-                    cursor: "pointer",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-                    fontSize: "14px",
-                    fontWeight: "bold",
-                    textAlign: "center",
-                    minWidth: "80px",
-                    transition: "all 0.2s ease"
+            console.log('[CBD PDF] Top-level containers:', $topLevel.length);
+
+            if ($topLevel.length === 0) {
+                alert('Keine sichtbaren Container-Bl\u00f6cke zum Exportieren gefunden.');
+                return;
+            }
+
+            enterSelectionMode($topLevel);
+        });
+
+        $('body').append($pdfButton);
+
+        // =====================================================================
+        // CSS Injection
+        // =====================================================================
+
+        function injectSelectionCSS() {
+            if ($('#cbd-pdf-selection-styles').length > 0) return;
+
+            var css =
+                /* Toolbar */
+                '.cbd-pdf-toolbar{' +
+                  'position:fixed;top:0;left:0;right:0;z-index:999999;' +
+                  'background:' + themeColor + ';color:#fff;' +
+                  'padding:10px 20px;display:flex;align-items:center;' +
+                  'gap:10px;flex-wrap:wrap;font-size:14px;' +
+                  'box-shadow:0 2px 10px rgba(0,0,0,.3);' +
+                  'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif' +
+                '}' +
+                'body.admin-bar .cbd-pdf-toolbar{top:32px}' +
+                '@media(max-width:782px){body.admin-bar .cbd-pdf-toolbar{top:46px}}' +
+                'body.cbd-pdf-mode{padding-top:56px!important}' +
+                'body.cbd-pdf-mode.admin-bar{padding-top:88px!important}' +
+                '@media(max-width:782px){body.cbd-pdf-mode.admin-bar{padding-top:102px!important}}' +
+
+                '.cbd-pdf-toolbar .cbd-pdf-label{font-weight:700;font-size:15px;white-space:nowrap}' +
+                '.cbd-pdf-toolbar .cbd-pdf-count{opacity:.9;white-space:nowrap}' +
+                '.cbd-pdf-toolbar .cbd-pdf-spacer{flex:1}' +
+
+                '.cbd-pdf-toolbar button{' +
+                  'padding:6px 14px;border:2px solid rgba(255,255,255,.6);' +
+                  'border-radius:6px;cursor:pointer;font-size:13px;' +
+                  'background:transparent;color:#fff;transition:all .15s;white-space:nowrap' +
+                '}' +
+                '.cbd-pdf-toolbar button:hover{background:rgba(255,255,255,.2);border-color:#fff}' +
+                '.cbd-pdf-toolbar button.cbd-pdf-go{' +
+                  'background:#fff;color:' + themeColor + ';font-weight:700;border-color:#fff' +
+                '}' +
+                '.cbd-pdf-toolbar button.cbd-pdf-go:hover{background:' + themeColorLight + '}' +
+
+                '.cbd-pdf-toolbar select{' +
+                  'padding:6px 10px;border:2px solid rgba(255,255,255,.6);' +
+                  'border-radius:6px;background:transparent;color:#fff;' +
+                  'font-size:13px;cursor:pointer' +
+                '}' +
+                '.cbd-pdf-toolbar select option{background:#fff;color:#333}' +
+
+                /* Selected block: green outline */
+                '.cbd-container.cbd-pdf-on{' +
+                  'outline:4px solid #2ecc40!important;' +
+                  'outline-offset:-2px;' +
+                  'cursor:pointer!important;' +
+                  'transition:outline .2s,opacity .2s' +
+                '}' +
+
+                /* Deselected block: red dashed outline + faded */
+                '.cbd-container.cbd-pdf-off{' +
+                  'outline:4px dashed #cc3333!important;' +
+                  'outline-offset:-2px;' +
+                  'opacity:.4!important;' +
+                  'cursor:pointer!important;' +
+                  'transition:outline .2s,opacity .2s' +
+                '}' +
+
+                /* Badge */
+                '.cbd-pdf-badge{' +
+                  'position:absolute;top:-12px;right:-12px;z-index:100000;' +
+                  'width:32px;height:32px;border-radius:50%;' +
+                  'display:flex;align-items:center;justify-content:center;' +
+                  'font-size:18px;font-weight:700;color:#fff;' +
+                  'box-shadow:0 2px 8px rgba(0,0,0,.4);pointer-events:none' +
+                '}' +
+                '.cbd-pdf-badge-on{background:#2ecc40}' +
+                '.cbd-pdf-badge-off{background:#cc3333}' +
+
+                /* Kill pointer-events on everything INSIDE selectable blocks */
+                'body.cbd-pdf-mode .cbd-container.cbd-pdf-on > *,' +
+                'body.cbd-pdf-mode .cbd-container.cbd-pdf-off > *{' +
+                  'pointer-events:none!important' +
+                '}' +
+                /* But keep badge visible (it already has pointer-events:none) */
+
+                /* Mobile */
+                '@media(max-width:600px){' +
+                  '.cbd-pdf-toolbar{padding:8px 12px;gap:6px;font-size:12px}' +
+                  '.cbd-pdf-toolbar button{padding:5px 10px;font-size:12px}' +
+                  '.cbd-pdf-badge{width:26px;height:26px;font-size:14px;top:-8px;right:-8px}' +
+                '}';
+
+            $('head').append('<style id="cbd-pdf-selection-styles">' + css + '</style>');
+            console.log('[CBD PDF] CSS injected');
+        }
+
+        // =====================================================================
+        // Selection Mode
+        // =====================================================================
+
+        function enterSelectionMode($blocks) {
+            if (selectionActive) return;
+            selectionActive = true;
+            $containerBlocks = $blocks;
+            console.log('[CBD PDF] Entering selection mode with', $blocks.length, 'blocks');
+
+            injectSelectionCSS();
+            $pdfButton.hide();
+            $('body').addClass('cbd-pdf-mode');
+
+            // Create toolbar
+            var toolbar =
+                '<div class="cbd-pdf-toolbar" id="cbd-pdf-toolbar">' +
+                '  <span class="cbd-pdf-label">PDF Export</span>' +
+                '  <span class="cbd-pdf-count"></span>' +
+                '  <button type="button" class="cbd-pdf-all">Alle</button>' +
+                '  <button type="button" class="cbd-pdf-none">Keine</button>' +
+                '  <span class="cbd-pdf-spacer"></span>' +
+                '  <select class="cbd-pdf-mode-sel">' +
+                '    <option value="visual">Visuell</option>' +
+                '    <option value="print">Druck-optimiert</option>' +
+                '    <option value="text">Nur Text</option>' +
+                '  </select>' +
+                '  <button type="button" class="cbd-pdf-go">PDF erstellen</button>' +
+                '  <button type="button" class="cbd-pdf-exit">Abbrechen</button>' +
+                '</div>';
+
+            $('body').prepend(toolbar);
+            console.log('[CBD PDF] Toolbar created');
+
+            // Mark all blocks as selected
+            $containerBlocks.each(function (i) {
+                var block = this;
+                var $block = $(block);
+
+                // Add selected class
+                $block.addClass('cbd-pdf-on');
+
+                // Force position:relative for badge positioning
+                block.style.setProperty('position', 'relative', 'important');
+                block.style.setProperty('z-index', 'auto', 'important');
+
+                // Create badge with inline styles as fallback
+                var $badge = $('<span class="cbd-pdf-badge cbd-pdf-badge-on">\u2713</span>');
+                $badge.css({
+                    position: 'absolute',
+                    top: '-12px',
+                    right: '-12px',
+                    zIndex: 100000,
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    color: '#fff',
+                    background: '#2ecc40',
+                    boxShadow: '0 2px 8px rgba(0,0,0,.4)',
+                    pointerEvents: 'none'
                 });
-                pdfButton.attr("title", "Container-Blöcke als PDF exportieren");
-                pdfButton.hover(
-                    function() {
-                        $(this).css({
-                            "transform": "scale(1.05)",
-                            "background": themeColorDark
-                        });
-                    },
-                    function() {
-                        $(this).css({
-                            "transform": "scale(1)",
-                            "background": themeColor
-                        });
+
+                $block.append($badge);
+                console.log('[CBD PDF] Block', i, 'marked:', block.className.substring(0, 60));
+            });
+
+            updateCount();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            bindEvents();
+            console.log('[CBD PDF] Selection mode active');
+        }
+
+        function exitSelectionMode() {
+            if (!selectionActive) return;
+            selectionActive = false;
+            console.log('[CBD PDF] Exiting selection mode');
+
+            $('#cbd-pdf-toolbar').remove();
+            $('body').removeClass('cbd-pdf-mode');
+
+            if ($containerBlocks) {
+                $containerBlocks.each(function () {
+                    var block = this;
+                    $(block).removeClass('cbd-pdf-on cbd-pdf-off');
+                    block.style.removeProperty('position');
+                    block.style.removeProperty('z-index');
+                });
+                $containerBlocks.find('.cbd-pdf-badge').remove();
+            }
+
+            $(document).off('.cbdSel');
+            $pdfButton.show();
+            $containerBlocks = null;
+        }
+
+        function updateCount() {
+            if (!$containerBlocks) return;
+            var total = $containerBlocks.length;
+            var on = $containerBlocks.filter('.cbd-pdf-on').length;
+            $('.cbd-pdf-count').text(on + ' von ' + total + ' Bl\u00f6cken');
+            $('.cbd-pdf-go').css('opacity', on > 0 ? '1' : '.4');
+        }
+
+        function toggleBlock($block) {
+            var $badge = $block.find('> .cbd-pdf-badge');
+
+            if ($block.hasClass('cbd-pdf-on')) {
+                $block.removeClass('cbd-pdf-on').addClass('cbd-pdf-off');
+                $badge.text('\u2717')
+                    .removeClass('cbd-pdf-badge-on').addClass('cbd-pdf-badge-off')
+                    .css('background', '#cc3333');
+            } else {
+                $block.removeClass('cbd-pdf-off').addClass('cbd-pdf-on');
+                $badge.text('\u2713')
+                    .removeClass('cbd-pdf-badge-off').addClass('cbd-pdf-badge-on')
+                    .css('background', '#2ecc40');
+            }
+
+            updateCount();
+            console.log('[CBD PDF] Toggled block:', $block[0].id || '(no id)');
+        }
+
+        // =====================================================================
+        // Event Binding
+        // =====================================================================
+
+        function bindEvents() {
+            // Click on selectable block → toggle
+            $(document).on('click.cbdSel', '.cbd-pdf-on, .cbd-pdf-off', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                toggleBlock($(this));
+                return false;
+            });
+
+            // Select all
+            $(document).on('click.cbdSel', '.cbd-pdf-all', function (e) {
+                e.stopPropagation();
+                $containerBlocks.each(function () {
+                    var $b = $(this);
+                    if (!$b.hasClass('cbd-pdf-on')) {
+                        $b.removeClass('cbd-pdf-off').addClass('cbd-pdf-on');
+                        $b.find('> .cbd-pdf-badge').text('\u2713')
+                            .removeClass('cbd-pdf-badge-off').addClass('cbd-pdf-badge-on')
+                            .css('background', '#2ecc40');
                     }
-                );
-                pdfButton.on("click", function() {
+                });
+                updateCount();
+            });
 
-                    // DEBUG: Log all containers first
-                    console.log('[CBD PDF] Total visible containers:', $(".cbd-container:visible").length);
-
-                    $(".cbd-container:visible").each(function(i) {
-                        var $this = $(this);
-                        var isInContent = $this.closest('.cbd-container-content').length > 0;
-                        var title = $this.find('.cbd-block-title').first().text().trim();
-                        console.log('[CBD PDF] Container', i + 1, ':', {
-                            title: title || 'No title',
-                            id: this.id,
-                            isInsideContent: isInContent,
-                            isTopLevel: !isInContent
-                        });
-                    });
-
-                    // Filter: Only get TOP-LEVEL containers (not nested)
-                    // IMPORTANT: We must get ALL top-level blocks, even if collapsed
-                    var containerBlocks = $(".cbd-container:visible").filter(function() {
-                        var $this = $(this);
-
-                        // Check 1: Is this nested inside another container's CONTENT?
-                        // We check for .cbd-container-content, .cbd-content, .cbd-collapsible-content
-                        var $parentContentArea = $this.parent().closest('.cbd-container-content, .cbd-content, .cbd-collapsible-content');
-
-                        if ($parentContentArea.length > 0) {
-                            // This container is inside a content area, so it's nested
-                            console.log('[CBD PDF] Filtering out nested container:', this.id || '(no id)');
-                            return false;
-                        }
-
-                        // Check 2: Must be a real container with the interactive attribute
-                        var hasInteractiveAttr = $this.find('[data-wp-interactive="container-block-designer"]').length > 0 ||
-                                                 $this.is('[data-wp-interactive="container-block-designer"]');
-
-                        if (!hasInteractiveAttr) {
-                            console.log('[CBD PDF] Filtering out non-interactive container:', this.id || '(no id)');
-                            return false;
-                        }
-
-                        // Check 3: Must have actual content (even if collapsed)
-                        var hasContent = $this.find('.cbd-container-block, .cbd-container-content').length > 0;
-
-                        if (!hasContent) {
-                            console.log('[CBD PDF] Filtering out empty container:', this.id || '(no id)');
-                            return false;
-                        }
-
-                        // This is a valid top-level container
-                        console.log('[CBD PDF] INCLUDING top-level container:', this.id || '(no id)');
-                        return true;
-                    });
-
-                    console.log('[CBD PDF] After filtering, top-level containers:', containerBlocks.length);
-
-                    // DEBUG: Log which containers were selected
-                    containerBlocks.each(function(i) {
-                        console.log('[CBD PDF] Selected Block', i + 1, ':', {
-                            id: this.id || '(no id)',
-                            classes: this.className,
-                            hasCollapsedClass: $(this).hasClass('cbd-collapsed')
-                        });
-                    });
-
-
-                    if (containerBlocks.length === 0) {
-                        alert("Keine sichtbaren Container-Blöcke zum Exportieren gefunden.");
-                        return;
+            // Select none
+            $(document).on('click.cbdSel', '.cbd-pdf-none', function (e) {
+                e.stopPropagation();
+                $containerBlocks.each(function () {
+                    var $b = $(this);
+                    if (!$b.hasClass('cbd-pdf-off')) {
+                        $b.removeClass('cbd-pdf-on').addClass('cbd-pdf-off');
+                        $b.find('> .cbd-pdf-badge').text('\u2717')
+                            .removeClass('cbd-pdf-badge-on').addClass('cbd-pdf-badge-off')
+                            .css('background', '#cc3333');
                     }
+                });
+                updateCount();
+            });
 
-                    // Show PDF options modal instead of direct export
-                    showPDFOptionsModal(containerBlocks);
+            // Cancel
+            $(document).on('click.cbdSel', '.cbd-pdf-exit', function (e) {
+                e.stopPropagation();
+                exitSelectionMode();
+            });
+
+            // Create PDF
+            $(document).on('click.cbdSel', '.cbd-pdf-go', function (e) {
+                e.stopPropagation();
+                console.log('[CBD PDF] Create PDF clicked');
+
+                var selectedBlocks = [];
+                var mode = $('.cbd-pdf-mode-sel').val();
+
+                $containerBlocks.filter('.cbd-pdf-on').each(function () {
+                    selectedBlocks.push($(this));
                 });
 
-                // PDF Options Modal Function
-                function showPDFOptionsModal(containerBlocks) {
-                    // Remove existing modal if any
-                    $('#cbd-pdf-modal').remove();
-
-                    // Lese Theme-Farben aus CSS-Variablen (gleiche wie beim Button)
-                    var rootStyles = getComputedStyle(document.documentElement);
-                    var modalThemeColor = rootStyles.getPropertyValue('--color-ui-surface').trim() || themeColor || '#e24614';
-                    var modalPrimaryText = rootStyles.getPropertyValue('--color-primary-text').trim() || '#333';
-                    var modalBorderColor = rootStyles.getPropertyValue('--color-sidebar-border').trim() || '#e0e0e0';
-                    var modalLightBg = rootStyles.getPropertyValue('--color-light-background').trim() || '#f8f9fa';
-
-                    // containerBlocks already filtered to only include top-level containers
-
-                    var modalHtml = '<div id="cbd-pdf-modal" style="' +
-                        'position: fixed; top: 0; left: 0; width: 100%; height: 100%; ' +
-                        'background: rgba(0,0,0,0.7); z-index: 999999; display: flex; ' +
-                        'align-items: center; justify-content: center;">' +
-                        '<div style="background: white; border-radius: 12px; padding: 30px; ' +
-                        'max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; ' +
-                        'box-shadow: 0 20px 40px rgba(0,0,0,0.3);">' +
-                        '<h2 style="margin: 0 0 20px 0; color: ' + modalPrimaryText + '; font-size: 24px;">📄 PDF Export Optionen</h2>' +
-                        '<div style="margin-bottom: 20px;">' +
-                            '<h3 style="margin: 0 0 10px 0; color: ' + modalPrimaryText + '; font-size: 16px;">Container auswählen:</h3>' +
-                            '<div id="cbd-block-selection" style="max-height: 200px; overflow-y: auto; border: 1px solid ' + modalBorderColor + '; padding: 10px; border-radius: 6px;">';
-
-                    // Add checkboxes for each top-level container
-                    containerBlocks.each(function(index) {
-                        var $this = $(this);
-                        var blockTitle = $this.find('.cbd-block-title').text() || 'Block ' + (index + 1);
-                        var blockNumber = index + 1;
-                        var blockId = this.id || 'block-' + blockNumber;
-
-                        modalHtml += '<div style="margin-bottom: 8px;">' +
-                            '<label style="display: flex; align-items: center; cursor: pointer;">' +
-                            '<input type="checkbox" checked data-block-index="' + index + '" ' +
-                            'style="margin-right: 8px; transform: scale(1.2);">' +
-                            '<span style="font-weight: bold; margin-right: 8px;">' + blockNumber + '.</span>' +
-                            '<span>' + blockTitle + '</span>' +
-                            '</label>' +
-                            '</div>';
-                    });
-
-                    modalHtml += '</div></div>' +
-                        '<div style="margin-bottom: 20px;">' +
-                            '<h3 style="margin: 0 0 10px 0; color: ' + modalPrimaryText + '; font-size: 16px;">Export Optionen:</h3>' +
-                            '<div style="margin-bottom: 10px;">' +
-                                '<label style="display: flex; align-items: center; cursor: pointer;">' +
-                                '<input type="radio" name="pdf-mode" value="visual" checked ' +
-                                'style="margin-right: 8px; transform: scale(1.2);">' +
-                                '<span>🎨 Visuell (mit Farben und Styling)</span>' +
-                                '</label>' +
-                            '</div>' +
-                            '<div style="margin-bottom: 10px;">' +
-                                '<label style="display: flex; align-items: center; cursor: pointer;">' +
-                                '<input type="radio" name="pdf-mode" value="print" ' +
-                                'style="margin-right: 8px; transform: scale(1.2);">' +
-                                '<span>🖨️ Druck-optimiert (transparenter Hintergrund)</span>' +
-                                '</label>' +
-                            '</div>' +
-                            '<div style="margin-bottom: 10px;">' +
-                                '<label style="display: flex; align-items: center; cursor: pointer;">' +
-                                '<input type="radio" name="pdf-mode" value="text" ' +
-                                'style="margin-right: 8px; transform: scale(1.2);">' +
-                                '<span>📝 Nur Text (kleinste Dateigröße)</span>' +
-                                '</label>' +
-                            '</div>' +
-                        '</div>' +
-                        '<div style="margin-bottom: 20px;">' +
-                            '<h3 style="margin: 0 0 10px 0; color: ' + modalPrimaryText + '; font-size: 16px;">Qualität:</h3>' +
-                            '<select id="cbd-quality-select" style="width: 100%; padding: 8px; border: 1px solid ' + modalBorderColor + '; border-radius: 4px;">' +
-                                '<option value="1">Niedrig (schnell, kleine Datei)</option>' +
-                                '<option value="1.5" selected>Standard</option>' +
-                                '<option value="2">Hoch (langsam, große Datei)</option>' +
-                                '<option value="2.5">Sehr hoch (sehr langsam)</option>' +
-                            '</select>' +
-                        '</div>' +
-                        '<div style="display: flex; gap: 10px; justify-content: flex-end;">' +
-                            '<button id="cbd-pdf-cancel" style="padding: 10px 20px; border: 1px solid ' + modalBorderColor + '; ' +
-                            'background: ' + modalLightBg + '; border-radius: 6px; cursor: pointer;">Abbrechen</button>' +
-                            '<button id="cbd-pdf-create" style="padding: 10px 20px; border: none; ' +
-                            'background: ' + modalThemeColor + '; color: white; border-radius: 6px; cursor: pointer; ' +
-                            'font-weight: bold;">📄 PDF erstellen</button>' +
-                        '</div>' +
-                        '</div></div>';
-
-                    $('body').append(modalHtml);
-
-                    // Hover-Effekt für PDF erstellen Button
-                    var modalThemeColorDark = rootStyles.getPropertyValue('--color-ui-surface-dark').trim() || themeColorDark || '#c93d12';
-                    $('#cbd-pdf-create').hover(
-                        function() {
-                            $(this).css('background', modalThemeColorDark);
-                        },
-                        function() {
-                            $(this).css('background', modalThemeColor);
-                        }
-                    );
-
-                    // Modal event handlers
-                    $('#cbd-pdf-cancel, #cbd-pdf-modal').on('click', function(e) {
-                        if (e.target === this) {
-                            $('#cbd-pdf-modal').remove();
-                        }
-                    });
-
-                    $('#cbd-pdf-create').on('click', function() {
-                        var selectedBlocks = [];
-                        var mode = $('input[name="pdf-mode"]:checked').val();
-                        var quality = parseFloat($('#cbd-quality-select').val());
-
-                        // Get selected blocks (already filtered to top-level only)
-                        $('#cbd-block-selection input[type="checkbox"]:checked').each(function() {
-                            var index = parseInt($(this).data('block-index'));
-                            selectedBlocks.push($(containerBlocks[index]));
-                        });
-
-                        if (selectedBlocks.length === 0) {
-                            alert('Bitte wählen Sie mindestens einen Block aus.');
-                            return;
-                        }
-
-
-                        $('#cbd-pdf-modal').remove();
-
-                        // Create PDF with options - wait for PDF functions to be available
-                        tryCreatePDF(selectedBlocks, mode, quality);
-                    });
+                if (selectedBlocks.length === 0) {
+                    alert('Bitte mindestens einen Block ausw\u00e4hlen.');
+                    return;
                 }
 
-                function tryCreatePDF(selectedBlocks, mode, quality, attempts) {
-                    attempts = attempts || 0;
+                exitSelectionMode();
+                startPDFExport(selectedBlocks, mode);
+            });
 
-                    console.log('[CBD PDF Button] Checking available PDF methods...');
-                    console.log('[CBD PDF Button] Server-side:', typeof window.cbdPDFExportServerSide);
-                    console.log('[CBD PDF Button] Client-side with options:', typeof window.cbdPDFExportWithOptions);
-                    console.log('[CBD PDF Button] Client-side basic:', typeof window.cbdPDFExport);
-
-                    // PRIORITY 1: Try server-side PDF generation (best quality, searchable text)
-                    if (typeof window.cbdPDFExportServerSide === 'function') {
-                        console.log('[CBD PDF Button] Using server-side PDF generation');
-                        window.cbdPDFExportServerSide(selectedBlocks);
-                    }
-                    // PRIORITY 2: Try client-side with options (fallback)
-                    else if (typeof window.cbdPDFExportWithOptions === 'function') {
-                        console.log('[CBD PDF Button] Using client-side PDF generation with options');
-                        window.cbdPDFExportWithOptions(selectedBlocks, mode, quality);
-                    }
-                    // PRIORITY 3: Try basic client-side (fallback)
-                    else if (typeof window.cbdPDFExport === 'function') {
-                        console.log('[CBD PDF Button] Using basic client-side PDF generation');
-                        window.cbdPDFExport(selectedBlocks);
-                    }
-                    // Wait and retry
-                    else if (attempts < 50) {
-                        // PDF functions not available yet, wait and retry
-                        setTimeout(function() {
-                            tryCreatePDF(selectedBlocks, mode, quality, attempts + 1);
-                        }, 300);
-                    } else {
-                        alert('PDF-Erstellung fehlgeschlagen: PDF-Bibliothek konnte nicht geladen werden.');
-                    }
+            // ESC key
+            $(document).on('keydown.cbdSel', function (e) {
+                if (e.key === 'Escape' || e.keyCode === 27) {
+                    exitSelectionMode();
                 }
+            });
+        }
 
-                $("body").append(pdfButton);
+        // =====================================================================
+        // PDF Export
+        // =====================================================================
+
+        function startPDFExport(selectedBlocks, mode) {
+            console.log('[CBD PDF] Starting export:', selectedBlocks.length, 'blocks, mode:', mode);
+            if (typeof window.cbdPDFExportServerSide === 'function') {
+                window.cbdPDFExportServerSide(selectedBlocks, mode);
+            } else {
+                console.warn('[CBD PDF] No export function, using window.print()');
+                window.print();
             }
         }
     });
