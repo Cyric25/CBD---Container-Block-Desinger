@@ -158,6 +158,12 @@ class CBD_PDF_Generator {
             );
         }
 
+        // Increase pcre limits for large HTML (interactive blocks like molecule viewers)
+        $old_backtrack = ini_get('pcre.backtrack_limit');
+        $old_recursion = ini_get('pcre.recursion_limit');
+        ini_set('pcre.backtrack_limit', '5000000');
+        ini_set('pcre.recursion_limit', '500000');
+
         // Create mPDF instance
         $mpdf = new \Mpdf\Mpdf([
             'mode'          => 'utf-8',
@@ -199,6 +205,10 @@ class CBD_PDF_Generator {
         $temp_filename = 'cbd-pdf-' . uniqid() . '.pdf';
         $temp_filepath = $temp_dir . $temp_filename;
         $mpdf->Output($temp_filepath, \Mpdf\Output\Destination::FILE);
+
+        // Restore pcre limits
+        ini_set('pcre.backtrack_limit', $old_backtrack);
+        ini_set('pcre.recursion_limit', $old_recursion);
 
         // Cleanup old temp files
         $this->cleanup_temp_files($temp_dir, 3600);
@@ -268,6 +278,27 @@ class CBD_PDF_Generator {
      * @return string Cleaned HTML
      */
     private function clean_block_html($html) {
+        // === Phase 1: Fast string-based removal to shrink HTML before regex ===
+
+        // Strip ALL data-* attributes (data-wp-*, data-chemviz-*, data-action, etc.)
+        // This is the biggest size reducer for interactive blocks
+        $html = preg_replace('/\s+data-[a-z][a-z0-9_-]*="[^"]*"/i', '', $html);
+        $html = preg_replace("/\s+data-[a-z][a-z0-9_-]*='[^']*'/i", '', $html);
+
+        // Remove all <svg>...</svg> blocks (icon SVGs in controls, not needed in PDF)
+        $html = preg_replace('/<svg\b[^>]*>.*?<\/svg>/is', '', $html);
+
+        // Remove inline scripts (not needed in PDF)
+        $html = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $html);
+
+        // Remove <canvas> elements entirely (WebGL/drawing canvases)
+        $html = preg_replace('/<canvas\b[^>]*>.*?<\/canvas>/is', '', $html);
+
+        // Remove aria-* attributes
+        $html = preg_replace('/\s+aria-[a-z-]+="[^"]*"/i', '', $html);
+
+        // === Phase 2: Targeted element removal (now safe with smaller HTML) ===
+
         // Remove action buttons
         $html = preg_replace(
             '/<div[^>]*class="[^"]*cbd-action-buttons[^"]*"[^>]*>.*?<\/div>/is',
@@ -309,20 +340,11 @@ class CBD_PDF_Generator {
             '',
             $html
         );
-        $html = preg_replace(
-            '/<canvas[^>]*class="[^"]*cbd-drawing-canvas[^"]*"[^>]*>.*?<\/canvas>/is',
-            '',
-            $html
-        );
-
-        // Remove Interactivity API data attributes (mPDF doesn't need them)
-        $html = preg_replace('/\s*data-wp-[a-z-]+="[^"]*"/i', '', $html);
 
         // Remove display:none and collapsed states
         $html = preg_replace('/style="[^"]*display:\s*none[^"]*"/i', '', $html);
         $html = preg_replace('/style="[^"]*visibility:\s*hidden[^"]*"/i', '', $html);
         $html = str_replace('cbd-collapsed', '', $html);
-        $html = preg_replace('/\s*aria-hidden="[^"]*"/', '', $html);
 
         // Remove KaTeX elements entirely (formulas are replaced with plain text client-side)
         $html = preg_replace('/<span[^>]*class="[^"]*katex-mathml[^"]*"[^>]*>.*?<\/span>/is', '', $html);
@@ -331,13 +353,10 @@ class CBD_PDF_Generator {
         // Remove border-radius from inline styles (mPDF renders them poorly)
         $html = preg_replace('/border-radius\s*:\s*[^;]+;?/i', '', $html);
 
-        // Remove inline scripts (not needed in PDF)
-        $html = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $html);
+        // === Phase 3: Cleanup ===
 
-        // Remove empty style attributes left over from cleaning
+        // Remove empty style and class attributes
         $html = preg_replace('/\s*style="\s*"/', '', $html);
-
-        // Clean up multiple spaces and empty class attributes
         $html = preg_replace('/\s*class="\s*"/', '', $html);
         $html = preg_replace('/\s{2,}/', ' ', $html);
 
