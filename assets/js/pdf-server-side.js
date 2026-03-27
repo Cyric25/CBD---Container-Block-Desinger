@@ -209,7 +209,7 @@
         // Step 2: Clone block for HTML extraction (don't modify original)
         var $clone = $block.clone();
 
-        // Remove interactive controls from clone
+        // Remove interactive controls and unnecessary elements from clone
         $clone.find('.cbd-action-buttons').remove();
         $clone.find('.cbd-collapse-toggle').remove();
         $clone.find('.cbd-header-menu').remove();
@@ -217,6 +217,8 @@
         $clone.find('.cbd-selection-menu').remove();
         $clone.find('.cbd-board-overlay').remove();
         $clone.find('.cbd-drawing-canvas').remove();
+        $clone.find('script').remove();        // Remove isolated scripts (not needed in PDF)
+        $clone.find('svg').remove();           // Remove SVG icons (controls)
 
         // Remove existing drawing sections (we'll rebuild from localStorage data)
         $clone.find('.cbd-drawing-section').remove();
@@ -422,10 +424,10 @@
             });
         }
 
-        // Check nested containers
+        // Check nested containers (skip duplicates with same stableId as block)
         $original.find('[data-stable-id]').each(function () {
             var stableId = $(this).attr('data-stable-id');
-            if (stableId) {
+            if (stableId && stableId !== blockStableId) {
                 // Find corresponding element in clone
                 var $cloneEl = $clone.find('[data-stable-id="' + stableId + '"]');
                 if ($cloneEl.length > 0) {
@@ -461,7 +463,14 @@
                     // Read optional background color
                     var bgColor = null;
                     try { bgColor = localStorage.getItem(key + '-bgcolor'); } catch (e) {}
-                    pages.push({ dataUrl: dataUrl, bgColor: bgColor, pageIndex: p });
+
+                    // Compress drawing for PDF (PNG → smaller JPEG)
+                    var compressed = recompressBase64(dataUrl, 0.75, 1200);
+                    pages.push({
+                        dataUrl: compressed || dataUrl,
+                        bgColor: bgColor,
+                        pageIndex: p
+                    });
                 }
             }
 

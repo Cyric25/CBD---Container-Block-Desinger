@@ -236,24 +236,23 @@ class CBD_PDF_Generator {
         $screenshots = isset($block['screenshots']) ? $block['screenshots'] : array();
         $css_variables = isset($options['css_variables']) ? $options['css_variables'] : array();
 
-        // Step 1: Clean HTML (remove interactive controls, collapsed states)
-        $html = $this->clean_block_html($html);
-
-        // Step 2: Replace CSS variables with concrete values
-        $html = $this->replace_css_variables($html, $css_variables);
-
-        // Step 3: Insert formula renderings
-        foreach ($formulas as $formula) {
-            if (!empty($formula['id']) && !empty($formula['renderedHtml'])) {
-                // Replace the formula placeholder with rendered KaTeX HTML
-                $html = $this->insert_formula($html, $formula);
-            }
-        }
-
-        // Step 4: Insert interactive element screenshots
+        // Step 1: Insert screenshots FIRST (needs data-cbd-screenshot-id attributes)
         foreach ($screenshots as $screenshot) {
             if (!empty($screenshot['id']) && !empty($screenshot['base64'])) {
                 $html = $this->insert_screenshot($html, $screenshot);
+            }
+        }
+
+        // Step 2: Clean HTML (remove data-*, scripts, interactive controls)
+        $html = $this->clean_block_html($html);
+
+        // Step 3: Replace CSS variables with concrete values
+        $html = $this->replace_css_variables($html, $css_variables);
+
+        // Step 4: Insert formula renderings
+        foreach ($formulas as $formula) {
+            if (!empty($formula['id']) && !empty($formula['renderedHtml'])) {
+                $html = $this->insert_formula($html, $formula);
             }
         }
 
