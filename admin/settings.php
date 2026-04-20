@@ -59,6 +59,7 @@ if (isset($_POST['cbd_save_settings']) && wp_verify_nonce($_POST['cbd_settings_n
     update_option('cbd_default_block_status', sanitize_text_field($_POST['default_block_status']));
     update_option('cbd_enable_block_caching', isset($_POST['enable_block_caching']) ? 1 : 0);
     update_option('cbd_classroom_enabled', isset($_POST['classroom_enabled']) ? 1 : 0);
+    update_option('cbd_html_annotation', isset($_POST['html_annotation']) ? 1 : 0);
 
     // Personal Notes Manager Einstellungen
     $notes_manager_mode = sanitize_text_field($_POST['notes_manager_mode'] ?? 'disabled');
@@ -99,6 +100,7 @@ $debug_mode = get_option('cbd_enable_debug_mode', 0);
 $default_status = get_option('cbd_default_block_status', 'draft');
 $enable_caching = get_option('cbd_enable_block_caching', 1);
 $classroom_enabled = get_option('cbd_classroom_enabled', 0);
+$html_annotation = get_option('cbd_html_annotation', 1);
 $notes_manager_mode = get_option('cbd_personal_notes_manager', 'disabled');
 $notes_manager_pages = get_option('cbd_notes_manager_pages', array());
 
@@ -233,6 +235,17 @@ $needs_migration = !$is_default_exists || !$classroom_tables_exist || version_co
                             <?php _e('Debug-Modus aktivieren', 'container-block-designer'); ?>
                         </label>
                         <p class="description"><?php _e('Zeigt zusätzliche Debug-Informationen in der Browser-Konsole', 'container-block-designer'); ?></p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row"><?php _e('Block-Annotierung im HTML', 'container-block-designer'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="html_annotation" value="1" <?php checked($html_annotation, 1); ?>>
+                            <?php _e('HTML-Kommentare für KI-Lesbarkeit aktivieren', 'container-block-designer'); ?>
+                        </label>
+                        <p class="description"><?php _e('Fügt Kommentare wie <code>&lt;!-- ═══ CBD-Block: "Titel" [name] ═══ --&gt;</code> um jeden Block ein. Erleichtert das Auslesen von Inhalten durch KI. Standardmäßig aktiv.', 'container-block-designer'); ?></p>
                     </td>
                 </tr>
 

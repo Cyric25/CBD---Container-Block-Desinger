@@ -124,6 +124,14 @@ class CBD_Block_Registration {
             'anchor' => array(
                 'type' => 'string',
                 'default' => ''
+            ),
+            'stableId' => array(
+                'type' => 'string',
+                'default' => ''
+            ),
+            'blockTitle' => array(
+                'type' => 'string',
+                'default' => ''
             )
         );
         
@@ -214,6 +222,22 @@ class CBD_Block_Registration {
                 'anchor' => array(
                     'type' => 'string',
                     'default' => ''
+                ),
+                'stableId' => array(
+                    'type' => 'string',
+                    'default' => ''
+                ),
+                'blockTitle' => array(
+                    'type' => 'string',
+                    'default' => ''
+                ),
+                'blockConfig' => array(
+                    'type' => 'object',
+                    'default' => array()
+                ),
+                'blockFeatures' => array(
+                    'type' => 'object',
+                    'default' => array()
                 )
             ),
             'supports' => array(
@@ -723,6 +747,15 @@ class CBD_Block_Registration {
             $stable_id = 'cbd-legacy-' . md5($page_id . '|' . $selected_block . '|' . substr(md5($content), 0, 8));
         }
 
+        // Lazy migration: If we have a real stableId, update any legacy DB entries
+        if (strpos($stable_id, 'cbd-legacy-') !== 0 && get_option('cbd_legacy_migration_pending')) {
+            $current_page_id = get_the_ID() ?: 0;
+            if ($current_page_id > 0) {
+                $legacy_hash = 'cbd-legacy-' . md5($current_page_id . '|' . $selected_block . '|' . substr(md5($content), 0, 8));
+                CBD_Schema_Manager::migrate_single_legacy_id($stable_id, $legacy_hash, $current_page_id);
+            }
+        }
+
         // Build wrapper classes (.cbd-container - transparent wrapper)
         $wrapper_classes = array('cbd-container');
         $wrapper_attributes = array('id' => $container_id);
@@ -767,7 +800,22 @@ class CBD_Block_Registration {
         $local_context['boardModeActive'] = false;
         $local_context['stableContainerId'] = $stable_id;
         $local_context['pageId'] = get_the_ID() ?: 0;
-        $local_context['isBehandelt'] = false; // Classroom: Initial behandelt status
+
+        // Classroom: Behandelt-Status aus DB laden (für eingeloggte Lehrer)
+        $is_behandelt = false;
+        if (is_user_logged_in() && current_user_can('cbd_edit_blocks') && class_exists('CBD_Classroom') && CBD_Classroom::is_enabled()) {
+            global $wpdb;
+            $current_page_id = get_the_ID() ?: 0;
+            if ($current_page_id > 0 && !empty($stable_id)) {
+                $behandelt_count = $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(*) FROM " . CBD_TABLE_DRAWINGS . "
+                     WHERE page_id = %d AND container_id = %s AND is_behandelt = 1",
+                    $current_page_id, $stable_id
+                ));
+                $is_behandelt = (int) $behandelt_count > 0;
+            }
+        }
+        $local_context['isBehandelt'] = $is_behandelt;
 
         // Encode wp-context as JSON
         $wrapper_attributes['data-wp-context'] = esc_attr(wp_json_encode($local_context));
@@ -814,6 +862,7 @@ class CBD_Block_Registration {
         
         $wrapper_attributes['data-block-id'] = esc_attr($block->id);
         $wrapper_attributes['data-block-name'] = esc_attr($selected_block);
+        $wrapper_attributes['data-block-title'] = esc_attr($block->title);
         $wrapper_attributes['data-stable-id'] = esc_attr($stable_id);
         
         if (!empty($anchor)) {
@@ -837,6 +886,17 @@ class CBD_Block_Registration {
             $content_attributes['style'] = $inline_styles;
         }
         
+        // HTML-Annotierung für KI-Lesbarkeit
+        $html_annotation_enabled = get_option('cbd_html_annotation', 1);
+        $annotation_depth = self::$render_depth;
+        $annotation_title = $block->title;
+        $annotation_name  = $selected_block;
+        if ($html_annotation_enabled) {
+            $depth_mark = str_repeat('═', max(1, 4 - $annotation_depth));
+            $depth_info = $annotation_depth > 1 ? ' (Tiefe ' . $annotation_depth . ')' : '';
+            $html .= "\n<!-- " . $depth_mark . ' CBD-Block' . $depth_info . ': "' . esc_html($annotation_title) . '" [' . esc_html($annotation_name) . '] ' . $depth_mark . " -->\n";
+        }
+
         // Start outer wrapper (.cbd-container) - for controls and positioning
         $html .= '<div';
         foreach ($wrapper_attributes as $attr => $value) {
@@ -945,12 +1005,13 @@ class CBD_Block_Registration {
 
         // Button 6: Behandelt Toggle - nur wenn Classroom aktiviert und User ist Lehrer
         if (class_exists('CBD_Classroom') && CBD_Classroom::is_enabled() && is_user_logged_in() && current_user_can('cbd_edit_blocks')) {
+            $initial_icon = $is_behandelt ? 'dashicons-yes-alt' : 'dashicons-marker';
             $html .= '<button type="button" ';
             $html .= 'class="cbd-behandelt-toggle" ';
             $html .= 'data-wp-on--click="actions.toggleBehandelt" ';
             $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
             $html .= 'title="' . esc_attr__('Als behandelt markieren', 'container-block-designer') . '">';
-            $html .= '<span class="dashicons dashicons-yes-alt" ';
+            $html .= '<span class="dashicons ' . $initial_icon . '" ';
             $html .= 'data-wp-class--dashicons-yes-alt="context.isBehandelt" ';
             $html .= 'data-wp-class--dashicons-marker="!context.isBehandelt">';
             $html .= '</span>';
@@ -1039,7 +1100,13 @@ class CBD_Block_Registration {
         $html .= '</div>'; // Close .cbd-container-block
         $html .= '</div>'; // Close .cbd-content
         $html .= '</div>'; // Close .cbd-container
-        
+
+        if ($html_annotation_enabled) {
+            $depth_mark = str_repeat('═', max(1, 4 - $annotation_depth));
+            $depth_info = $annotation_depth > 1 ? ' (Tiefe ' . $annotation_depth . ')' : '';
+            $html .= "\n<!-- /" . $depth_mark . ' CBD-Block' . $depth_info . ': "' . esc_html($annotation_title) . '" ' . $depth_mark . " -->\n";
+        }
+
         // REMOVED: Old inline scripts are replaced by:
         // 1. Interactivity API (interactivity-store.js) - loaded via wp_enqueue_script_module()
         // 2. jQuery Fallback (interactivity-fallback.js) - loaded via wp_enqueue_script()
