@@ -222,21 +222,22 @@ class CBD_Block_Organizer {
     private static function get_block_label( $block, $position ) {
         global $wpdb;
 
-        $slug = str_replace( self::BLOCK_NAMESPACE, '', $block['blockName'] );
+        // Design-Name aus dem selectedBlock-Attribut lesen (vom Benutzer gewähltes Design)
+        $selected = ! empty( $block['attrs']['selectedBlock'] )
+            ? $block['attrs']['selectedBlock']
+            : str_replace( self::BLOCK_NAMESPACE, '', $block['blockName'] );
 
-        // Design-Titel + Name aus der Datenbank holen
-        $design_title = '';
-        $design_name  = $slug;
+        // Design-Titel aus der Datenbank holen
+        $design_title = $selected;
         if ( defined( 'CBD_TABLE_BLOCKS' ) ) {
             $row = $wpdb->get_row(
                 $wpdb->prepare(
-                    "SELECT title, name FROM " . CBD_TABLE_BLOCKS . " WHERE name = %s LIMIT 1",
-                    $slug
+                    "SELECT title FROM " . CBD_TABLE_BLOCKS . " WHERE name = %s LIMIT 1",
+                    $selected
                 )
             );
-            if ( $row ) {
+            if ( $row && $row->title ) {
                 $design_title = $row->title;
-                $design_name  = $row->name;
             }
         }
 
@@ -249,16 +250,10 @@ class CBD_Block_Organizer {
             }
         }
 
-        // Label zusammenbauen
-        // "#1 – Design-Titel (stil-name)"  oder  "#1 – stil-name"  falls kein DB-Eintrag
-        if ( $design_title ) {
-            $label = sprintf( '#%d – %s (%s)', $position + 1, $design_title, $design_name );
-        } else {
-            $label = sprintf( '#%d – %s', $position + 1, $design_name );
-        }
-
+        // "#1 – Lerneinheit: Einführung in die Chemie"
+        $label = sprintf( '#%d – %s', $position + 1, $design_title );
         if ( $instance_title ) {
-            $label .= ': „' . $instance_title . '"';
+            $label .= ': ' . $instance_title;
         }
 
         return $label;
