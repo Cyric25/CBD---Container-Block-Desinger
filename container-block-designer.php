@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://github.com/Cyric25/CBD---Container-Block-Desinger
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 3.1.35
+ * Version: 3.1.36
  * Author: Cyric25
  * Author URI: https://github.com/Cyric25
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '3.1.35');
+define('CBD_VERSION', '3.1.36');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -130,6 +130,7 @@ class ContainerBlockDesigner {
 
         // Admin-Bereich nur im Backend laden
         if (is_admin()) {
+            require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-organizer.php';
             require_once CBD_PLUGIN_DIR . 'includes/class-cbd-admin.php';
         }
 

@@ -61,6 +61,11 @@ class CBD_Admin {
         add_action('wp_ajax_cbd_save_block', array($this, 'ajax_save_block'));
         add_action('wp_ajax_cbd_test', array($this, 'ajax_test'));
         add_action('wp_ajax_cbd_edit_save', array($this, 'ajax_edit_save'));
+
+        // Block Organizer AJAX-Handler
+        add_action('wp_ajax_cbd_get_page_blocks', array($this, 'ajax_get_page_blocks'));
+        add_action('wp_ajax_cbd_copy_block', array($this, 'ajax_copy_block'));
+        add_action('wp_ajax_cbd_move_block', array($this, 'ajax_move_block'));
         
         // Plugin-Action-Links
         add_filter('plugin_action_links_' . CBD_PLUGIN_BASENAME, array($this, 'add_action_links'));
@@ -259,6 +264,16 @@ class CBD_Admin {
                     array($this, 'render_classroom_page')
                 );
             }
+
+            // Untermenü: Block-Organizer - nur Admins
+            add_submenu_page(
+                'container-block-designer',
+                __('Block-Organizer', 'container-block-designer'),
+                __('Block-Organizer', 'container-block-designer'),
+                'manage_options',
+                'cbd-block-organizer',
+                array($this, 'render_block_organizer_page')
+            );
         }
 
         // Versteckte Seite: Block bearbeiten - nicht im Menü sichtbar
@@ -1231,6 +1246,23 @@ class CBD_Admin {
         } else {
             echo '<div class="wrap"><h1>' . __('Klassen', 'container-block-designer') . '</h1>';
             echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/classroom.php', 'container-block-designer') . '</p></div>';
+            echo '</div>';
+        }
+    }
+
+    /**
+     * Block-Organizer-Seite rendern
+     */
+    public function render_block_organizer_page() {
+        if (!class_exists('CBD_Block_Organizer')) {
+            require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-organizer.php';
+        }
+        $file_path = CBD_PLUGIN_DIR . 'admin/block-organizer.php';
+        if (file_exists($file_path)) {
+            include $file_path;
+        } else {
+            echo '<div class="wrap"><h1>' . __('Block-Organizer', 'container-block-designer') . '</h1>';
+            echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/block-organizer.php', 'container-block-designer') . '</p></div>';
             echo '</div>';
         }
     }
@@ -2854,6 +2886,97 @@ class CBD_Admin {
         } else {
             wp_send_json_error('Fehler beim Speichern in der Datenbank');
         }
+    }
+
+    // ─── Block Organizer AJAX-Handler ──────────────────────────────────────────
+
+    /**
+     * Gibt alle Container-Blöcke einer Seite als JSON zurück.
+     */
+    public function ajax_get_page_blocks() {
+        if (!check_ajax_referer('cbd_block_organizer', 'nonce', false)) {
+            wp_send_json_error(__('Sicherheitsprüfung fehlgeschlagen.', 'container-block-designer'));
+        }
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Keine Berechtigung.', 'container-block-designer'));
+        }
+
+        if (!class_exists('CBD_Block_Organizer')) {
+            require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-organizer.php';
+        }
+
+        $post_id = intval($_POST['post_id'] ?? 0);
+        if (!$post_id) {
+            wp_send_json_error(__('Ungültige Seiten-ID.', 'container-block-designer'));
+        }
+
+        $blocks = CBD_Block_Organizer::get_page_blocks($post_id);
+        wp_send_json_success($blocks);
+    }
+
+    /**
+     * Kopiert einen Block auf eine andere Seite.
+     */
+    public function ajax_copy_block() {
+        if (!check_ajax_referer('cbd_block_organizer', 'nonce', false)) {
+            wp_send_json_error(__('Sicherheitsprüfung fehlgeschlagen.', 'container-block-designer'));
+        }
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Keine Berechtigung.', 'container-block-designer'));
+        }
+
+        if (!class_exists('CBD_Block_Organizer')) {
+            require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-organizer.php';
+        }
+
+        $source_id   = intval($_POST['source_post_id'] ?? 0);
+        $block_index = intval($_POST['block_index'] ?? 0);
+        $target_id   = intval($_POST['target_post_id'] ?? 0);
+        $position    = sanitize_text_field($_POST['position'] ?? 'end');
+
+        if (!$source_id || !$target_id) {
+            wp_send_json_error(__('Ungültige Parameter.', 'container-block-designer'));
+        }
+
+        $result = CBD_Block_Organizer::copy_block($source_id, $block_index, $target_id, $position);
+        if (is_wp_error($result)) {
+            wp_send_json_error($result->get_error_message());
+        }
+        wp_send_json_success();
+    }
+
+    /**
+     * Verschiebt einen Block auf eine andere Seite.
+     */
+    public function ajax_move_block() {
+        if (!check_ajax_referer('cbd_block_organizer', 'nonce', false)) {
+            wp_send_json_error(__('Sicherheitsprüfung fehlgeschlagen.', 'container-block-designer'));
+        }
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(__('Keine Berechtigung.', 'container-block-designer'));
+        }
+
+        if (!class_exists('CBD_Block_Organizer')) {
+            require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-organizer.php';
+        }
+
+        $source_id   = intval($_POST['source_post_id'] ?? 0);
+        $block_index = intval($_POST['block_index'] ?? 0);
+        $target_id   = intval($_POST['target_post_id'] ?? 0);
+        $position    = sanitize_text_field($_POST['position'] ?? 'end');
+
+        if (!$source_id || !$target_id) {
+            wp_send_json_error(__('Ungültige Parameter.', 'container-block-designer'));
+        }
+        if ($source_id === $target_id) {
+            wp_send_json_error(__('Quelle und Ziel dürfen nicht identisch sein.', 'container-block-designer'));
+        }
+
+        $result = CBD_Block_Organizer::move_block($source_id, $block_index, $target_id, $position);
+        if (is_wp_error($result)) {
+            wp_send_json_error($result->get_error_message());
+        }
+        wp_send_json_success();
     }
 }
 
