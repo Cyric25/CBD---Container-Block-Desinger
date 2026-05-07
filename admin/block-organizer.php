@@ -16,6 +16,63 @@ if ( ! current_user_can( 'manage_options' ) ) {
 
 $pages_with_blocks = CBD_Block_Organizer::get_pages_with_blocks();
 $nonce             = wp_create_nonce( 'cbd_block_organizer' );
+
+/**
+ * Baut eine flache, tiefengeordnete Liste aller Seiten auf (wie im WP-Seitenmanager).
+ * Gibt Array von ['post' => WP_Post, 'depth' => int] zurück.
+ */
+function cbd_flatten_page_tree( $posts, $parent_id = 0, $depth = 0 ) {
+    $result = array();
+    foreach ( $posts as $post ) {
+        if ( (int) $post->post_parent === $parent_id ) {
+            $result[] = array( 'post' => $post, 'depth' => $depth );
+            $children = cbd_flatten_page_tree( $posts, $post->ID, $depth + 1 );
+            $result   = array_merge( $result, $children );
+        }
+    }
+    return $result;
+}
+
+/**
+ * Gibt das Einrückungspräfix für eine Tiefe zurück (wie WP-Seitenmanager).
+ */
+function cbd_depth_prefix( $depth ) {
+    if ( $depth === 0 ) return '';
+    return str_repeat( '&nbsp;&nbsp;&nbsp;', $depth ) . '&#8212; ';
+}
+
+// Alle Seiten (hierarchisch) für das Ziel-Dropdown
+$all_wp_pages = get_pages( array(
+    'post_status' => array( 'publish', 'draft', 'private', 'pending' ),
+    'sort_column' => 'menu_order,post_title',
+) );
+$hierarchical_pages = cbd_flatten_page_tree( $all_wp_pages );
+
+// Alle Posts (flach) für das Ziel-Dropdown
+$all_wp_posts = get_posts( array(
+    'post_type'      => 'post',
+    'post_status'    => array( 'publish', 'draft', 'private', 'pending' ),
+    'posts_per_page' => -1,
+    'orderby'        => 'title',
+    'order'          => 'ASC',
+) );
+
+// IDs der Seiten mit Blöcken für schnellen Lookup
+$block_page_ids = array_column( $pages_with_blocks, 'id' );
+
+// Hierarchische Liste der Quell-Seiten (nur jene mit CBD-Blöcken, Tiefe aus Gesamthierarchie)
+$source_pages_flat = array();
+foreach ( $hierarchical_pages as $item ) {
+    if ( in_array( $item['post']->ID, $block_page_ids, true ) ) {
+        $source_pages_flat[] = $item;
+    }
+}
+// Posts mit Blöcken ebenfalls als Quelle
+foreach ( $all_wp_posts as $post ) {
+    if ( in_array( $post->ID, $block_page_ids, true ) ) {
+        $source_pages_flat[] = array( 'post' => $post, 'depth' => 0 );
+    }
+}
 ?>
 
 <div class="wrap" id="cbd-block-organizer">
@@ -48,12 +105,20 @@ $nonce             = wp_create_nonce( 'cbd_block_organizer' );
                     <label for="cbd-source-page"><?php _e( 'Seite auswählen:', 'container-block-designer' ); ?></label>
                     <select id="cbd-source-page">
                         <option value=""><?php _e( '— Seite wählen —', 'container-block-designer' ); ?></option>
-                        <?php foreach ( $pages_with_blocks as $p ) : ?>
-                            <option value="<?php echo esc_attr( $p['id'] ); ?>">
-                                <?php echo esc_html( $p['title'] ); ?>
-                                <span style="color:#999">(<?php echo esc_html( $p['type'] ); ?>)</span>
-                            </option>
-                        <?php endforeach; ?>
+                        <?php if ( ! empty( $source_pages_flat ) ) : ?>
+                            <optgroup label="<?php esc_attr_e( 'Seiten', 'container-block-designer' ); ?>">
+                            <?php foreach ( $source_pages_flat as $item ) :
+                                $p     = $item['post'];
+                                $depth = $item['depth'];
+                                $title = $p->post_title ?: __( '(ohne Titel)', 'container-block-designer' );
+                                $status_label = $p->post_status !== 'publish' ? ' [' . $p->post_status . ']' : '';
+                            ?>
+                                <option value="<?php echo esc_attr( $p->ID ); ?>">
+                                    <?php echo cbd_depth_prefix( $depth ) . esc_html( $title . $status_label ); ?>
+                                </option>
+                            <?php endforeach; ?>
+                            </optgroup>
+                        <?php endif; ?>
                     </select>
                 </div>
 
@@ -78,23 +143,38 @@ $nonce             = wp_create_nonce( 'cbd_block_organizer' );
                     <label for="cbd-target-page"><?php _e( 'Seite auswählen:', 'container-block-designer' ); ?></label>
                     <select id="cbd-target-page">
                         <option value=""><?php _e( '— Seite wählen —', 'container-block-designer' ); ?></option>
-                        <?php
-                        // Alle Seiten als Ziel (nicht nur jene mit Blöcken)
-                        $all_pages = get_posts( array(
-                            'post_type'      => array( 'page', 'post' ),
-                            'post_status'    => 'any',
-                            'posts_per_page' => -1,
-                            'orderby'        => 'title',
-                            'order'          => 'ASC',
-                        ) );
-                        foreach ( $all_pages as $ap ) :
-                        ?>
-                            <option value="<?php echo esc_attr( $ap->ID ); ?>">
-                                <?php echo esc_html( $ap->post_title ?: __( '(ohne Titel)', 'container-block-designer' ) ); ?>
-                                <span style="color:#999">(<?php echo esc_html( $ap->post_type ); ?>)</span>
-                            </option>
-                        <?php endforeach; ?>
+                        <?php if ( ! empty( $hierarchical_pages ) ) : ?>
+                            <optgroup label="<?php esc_attr_e( 'Seiten', 'container-block-designer' ); ?>">
+                            <?php foreach ( $hierarchical_pages as $item ) :
+                                $p     = $item['post'];
+                                $depth = $item['depth'];
+                                $title = $p->post_title ?: __( '(ohne Titel)', 'container-block-designer' );
+                                $status_label = $p->post_status !== 'publish' ? ' [' . $p->post_status . ']' : '';
+                                $has_blocks   = in_array( $p->ID, $block_page_ids, true );
+                            ?>
+                                <option value="<?php echo esc_attr( $p->ID ); ?>">
+                                    <?php echo cbd_depth_prefix( $depth ) . esc_html( $title . $status_label ) . ( $has_blocks ? ' ●' : '' ); ?>
+                                </option>
+                            <?php endforeach; ?>
+                            </optgroup>
+                        <?php endif; ?>
+                        <?php if ( ! empty( $all_wp_posts ) ) : ?>
+                            <optgroup label="<?php esc_attr_e( 'Beiträge', 'container-block-designer' ); ?>">
+                            <?php foreach ( $all_wp_posts as $p ) :
+                                $title = $p->post_title ?: __( '(ohne Titel)', 'container-block-designer' );
+                                $status_label = $p->post_status !== 'publish' ? ' [' . $p->post_status . ']' : '';
+                                $has_blocks   = in_array( $p->ID, $block_page_ids, true );
+                            ?>
+                                <option value="<?php echo esc_attr( $p->ID ); ?>">
+                                    <?php echo esc_html( $title . $status_label ) . ( $has_blocks ? ' ●' : '' ); ?>
+                                </option>
+                            <?php endforeach; ?>
+                            </optgroup>
+                        <?php endif; ?>
                     </select>
+                    <p class="description" style="margin-top:4px;font-size:11px;color:#666;">
+                        <?php _e( '● = enthält bereits Container-Blöcke', 'container-block-designer' ); ?>
+                    </p>
                 </div>
 
                 <div class="cbd-field-row">
