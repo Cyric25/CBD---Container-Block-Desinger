@@ -215,30 +215,52 @@ class CBD_Block_Organizer {
 
     /**
      * Erstellt ein lesbares Label für einen Block.
+     * Zeigt: Position, Design-Titel (aus DB), Stil-Name und optionalen Instanz-Titel.
+     *
+     * Beispiel: "#1 – Lerneinheit (lerneinheit): Einführung in die Chemie"
      */
     private static function get_block_label( $block, $position ) {
-        $type = str_replace( self::BLOCK_NAMESPACE, '', $block['blockName'] );
+        global $wpdb;
 
-        // Titel aus Block-Attributen extrahieren, falls vorhanden
-        $title = '';
-        if ( ! empty( $block['attrs']['title'] ) ) {
-            $title = $block['attrs']['title'];
-        } elseif ( ! empty( $block['attrs']['label'] ) ) {
-            $title = $block['attrs']['label'];
-        } else {
-            // Ersten Text-Inhalt aus innerHTML extrahieren (max. 50 Zeichen)
-            $text = wp_strip_all_tags( $block['innerHTML'] ?? '' );
-            $text = preg_replace( '/\s+/', ' ', trim( $text ) );
-            if ( strlen( $text ) > 50 ) {
-                $text = substr( $text, 0, 47 ) . '…';
+        $slug = str_replace( self::BLOCK_NAMESPACE, '', $block['blockName'] );
+
+        // Design-Titel + Name aus der Datenbank holen
+        $design_title = '';
+        $design_name  = $slug;
+        if ( defined( 'CBD_TABLE_BLOCKS' ) ) {
+            $row = $wpdb->get_row(
+                $wpdb->prepare(
+                    "SELECT title, name FROM " . CBD_TABLE_BLOCKS . " WHERE name = %s LIMIT 1",
+                    $slug
+                )
+            );
+            if ( $row ) {
+                $design_title = $row->title;
+                $design_name  = $row->name;
             }
-            $title = $text;
         }
 
-        $label = sprintf( '#%d – %s', $position + 1, ucfirst( $type ) );
-        if ( $title ) {
-            $label .= ': ' . $title;
+        // Instanz-Titel aus Block-Attributen (blockTitle, title, label)
+        $instance_title = '';
+        foreach ( array( 'blockTitle', 'title', 'label' ) as $attr_key ) {
+            if ( ! empty( $block['attrs'][ $attr_key ] ) ) {
+                $instance_title = $block['attrs'][ $attr_key ];
+                break;
+            }
         }
+
+        // Label zusammenbauen
+        // "#1 – Design-Titel (stil-name)"  oder  "#1 – stil-name"  falls kein DB-Eintrag
+        if ( $design_title ) {
+            $label = sprintf( '#%d – %s (%s)', $position + 1, $design_title, $design_name );
+        } else {
+            $label = sprintf( '#%d – %s', $position + 1, $design_name );
+        }
+
+        if ( $instance_title ) {
+            $label .= ': „' . $instance_title . '"';
+        }
+
         return $label;
     }
 
