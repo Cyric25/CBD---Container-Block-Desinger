@@ -172,30 +172,40 @@ class CBD_Database {
                 $block_id = $wpdb->insert_id;
             }
         }
-        
+
+        if ($result !== false) {
+            do_action('cbd_block_saved', $block_id);
+        }
+
         return $result !== false ? $block_id : false;
     }
-    
+
     /**
      * Delete block
      */
     public static function delete_block($block_id) {
         global $wpdb;
-        
-        return $wpdb->delete(
+
+        $result = $wpdb->delete(
             CBD_TABLE_BLOCKS,
             array('id' => $block_id),
             array('%d')
         );
+
+        if ($result !== false) {
+            do_action('cbd_block_deleted', $block_id);
+        }
+
+        return $result;
     }
-    
+
     /**
      * Update block status
      */
     public static function update_block_status($block_id, $status) {
         global $wpdb;
-        
-        return $wpdb->update(
+
+        $result = $wpdb->update(
             CBD_TABLE_BLOCKS,
             array(
                 'status' => $status,
@@ -205,15 +215,21 @@ class CBD_Database {
             array('%s', '%s'),
             array('%d')
         );
+
+        if ($result !== false) {
+            do_action('cbd_block_saved', $block_id);
+        }
+
+        return $result;
     }
-    
+
     /**
      * Update block features
      */
     public static function update_block_features($block_id, $features) {
         global $wpdb;
-        
-        return $wpdb->update(
+
+        $result = $wpdb->update(
             CBD_TABLE_BLOCKS,
             array(
                 'features' => wp_json_encode($features),
@@ -223,6 +239,12 @@ class CBD_Database {
             array('%s', '%s'),
             array('%d')
         );
+
+        if ($result !== false) {
+            do_action('cbd_block_saved', $block_id);
+        }
+
+        return $result;
     }
     
     /**

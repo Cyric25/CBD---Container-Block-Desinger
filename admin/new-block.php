@@ -201,6 +201,9 @@ if (isset($_POST['cbd_save_block']) && isset($_POST['cbd_nonce']) && wp_verify_n
     }
     
     if ($result !== false) {
+        // Blocklisten-/Style-Cache invalidieren
+        do_action('cbd_block_saved', $block_id);
+
         // Erfolgreich gespeichert - setze Variablen für JavaScript-Redirect
         if (!isset($_GET['block_id']) && $block_id) {
             // Neuer Block erstellt

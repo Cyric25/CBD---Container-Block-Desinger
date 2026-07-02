@@ -25,7 +25,17 @@ class CBD_Block_Registration {
      * Registrierte Blöcke
      */
     private $registered_blocks = array();
-    
+
+    /**
+     * Transient-Key für die gecachte Liste aktiver Blöcke
+     */
+    const ACTIVE_BLOCKS_CACHE_KEY = 'cbd_active_blocks';
+
+    /**
+     * Per-Request-Cache der aktiven Blöcke
+     */
+    private static $active_blocks_cache = null;
+
     /**
      * Singleton-Getter
      */
@@ -43,6 +53,47 @@ class CBD_Block_Registration {
         // Nur Asset-Hooks hier, Block-Registrierung erfolgt manuell über register_blocks()
         add_action('enqueue_block_editor_assets', array($this, 'enqueue_block_editor_assets'));
         add_action('enqueue_block_assets', array($this, 'enqueue_block_assets'));
+
+        // Cache-Invalidierung bei Änderungen an Block-Designs
+        add_action('cbd_block_saved', array(__CLASS__, 'clear_blocks_cache'));
+        add_action('cbd_block_deleted', array(__CLASS__, 'clear_blocks_cache'));
+    }
+
+    /**
+     * Liefert alle aktiven Block-Designs. Zweistufiger Cache:
+     * 1. Per-Request-Static (mehrfache Konsumenten im selben Request)
+     * 2. Transient (Cross-Request), invalidiert bei cbd_block_saved/deleted.
+     *
+     * @return array Array von Block-Objekten (stdClass)
+     */
+    public static function get_active_blocks() {
+        if (self::$active_blocks_cache !== null) {
+            return self::$active_blocks_cache;
+        }
+
+        $blocks = get_transient(self::ACTIVE_BLOCKS_CACHE_KEY);
+        if ($blocks === false) {
+            global $wpdb;
+            $blocks = $wpdb->get_results(
+                "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active'"
+            );
+            if (!is_array($blocks)) {
+                $blocks = array();
+            }
+            set_transient(self::ACTIVE_BLOCKS_CACHE_KEY, $blocks, DAY_IN_SECONDS);
+        }
+
+        self::$active_blocks_cache = $blocks;
+        return $blocks;
+    }
+
+    /**
+     * Invalidiert den Blocklisten-Cache (Static + Transient).
+     */
+    public static function clear_blocks_cache() {
+        self::$active_blocks_cache = null;
+        self::$block_cache = array();
+        delete_transient(self::ACTIVE_BLOCKS_CACHE_KEY);
     }
     
     /**
@@ -58,13 +109,9 @@ class CBD_Block_Registration {
             return;
         }
         
-        global $wpdb;
-        
-        // Hole alle aktiven Blöcke aus der Datenbank
-        $blocks = $wpdb->get_results(
-            "SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active'"
-        );
-        
+        // Hole alle aktiven Blöcke (gecacht: Static + Transient)
+        $blocks = self::get_active_blocks();
+
         // Registriere jeden Block
         foreach ($blocks as $block) {
             $this->register_block_type($block);
@@ -321,6 +368,31 @@ class CBD_Block_Registration {
         );
     }
     
+    /**
+     * Lädt die als "behandelt" markierten Container-IDs einer Seite in einem
+     * einzigen Query und cacht das Ergebnis pro Request (vermeidet N+1-Queries
+     * beim Rendern vieler Container-Blöcke auf einer Seite).
+     *
+     * @param int $page_id
+     * @return array Assoziatives Array [container_id => true] für O(1)-Lookup
+     */
+    private function get_behandelt_container_ids($page_id) {
+        static $cache = array();
+        if (isset($cache[$page_id])) {
+            return $cache[$page_id];
+        }
+
+        global $wpdb;
+        $ids = $wpdb->get_col($wpdb->prepare(
+            "SELECT container_id FROM " . CBD_TABLE_DRAWINGS . "
+             WHERE page_id = %d AND is_behandelt = 1",
+            $page_id
+        ));
+
+        $cache[$page_id] = $ids ? array_fill_keys($ids, true) : array();
+        return $cache[$page_id];
+    }
+
     /**
      * Prüft, ob die aktuell angezeigte Frontend-Seite einen Container-Block
      * enthält. Ergebnis wird pro Request statisch gecacht.
@@ -740,11 +812,9 @@ class CBD_Block_Registration {
 
             // Falls nicht gefunden, suche nach Blocks deren sanitized Name dem selected_block entspricht
             if (!$block) {
-                // Optimized: Only get blocks once per request
+                // Nutze den gemeinsamen Blocklisten-Cache statt einer eigenen Query
                 if (empty(self::$block_cache)) {
-                    $all_blocks = $wpdb->get_results("SELECT * FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active'");
-
-                    foreach ($all_blocks as $test_block) {
+                    foreach (self::get_active_blocks() as $test_block) {
                         $sanitized_name = $this->sanitize_block_name($test_block->name);
                         self::$block_cache[$sanitized_name] = $test_block;
                     }
@@ -847,18 +917,15 @@ class CBD_Block_Registration {
         $local_context['stableContainerId'] = $stable_id;
         $local_context['pageId'] = get_the_ID() ?: 0;
 
-        // Classroom: Behandelt-Status aus DB laden (für eingeloggte Lehrer)
+        // Classroom: Behandelt-Status aus DB laden (für eingeloggte Lehrer).
+        // Statt einer COUNT-Query pro Block wird die Liste der behandelten
+        // Container einmal pro Seite geladen und statisch gecacht (N+1 vermieden).
         $is_behandelt = false;
         if (is_user_logged_in() && current_user_can('cbd_edit_blocks') && class_exists('CBD_Classroom') && CBD_Classroom::is_enabled()) {
-            global $wpdb;
             $current_page_id = get_the_ID() ?: 0;
             if ($current_page_id > 0 && !empty($stable_id)) {
-                $behandelt_count = $wpdb->get_var($wpdb->prepare(
-                    "SELECT COUNT(*) FROM " . CBD_TABLE_DRAWINGS . "
-                     WHERE page_id = %d AND container_id = %s AND is_behandelt = 1",
-                    $current_page_id, $stable_id
-                ));
-                $is_behandelt = (int) $behandelt_count > 0;
+                $behandelt_ids = $this->get_behandelt_container_ids($current_page_id);
+                $is_behandelt = isset($behandelt_ids[$stable_id]);
             }
         }
         $local_context['isBehandelt'] = $is_behandelt;

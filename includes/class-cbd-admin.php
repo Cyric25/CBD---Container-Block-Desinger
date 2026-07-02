@@ -719,6 +719,7 @@ class CBD_Admin {
                 wp_cache_delete('cbd_all_blocks_styles');
                 wp_cache_delete('cbd_active_features');
                 delete_transient('cbd_compiled_styles');
+                do_action('cbd_block_saved', $block_id);
 
                 set_transient('cbd_admin_notice_' . get_current_user_id(), array(
                     'type' => 'success',
@@ -773,7 +774,8 @@ class CBD_Admin {
                     $update_data,
                     array('id' => $block_id)
                 );
-                
+                do_action('cbd_block_saved', $block_id);
+
                 // Setze Transient für Erfolgsmeldung
                 set_transient('cbd_admin_message', 'feature_toggled', 30);
                 
@@ -796,7 +798,8 @@ class CBD_Admin {
                 array('id' => $block_id),
                 array('%d')
             );
-            
+            do_action('cbd_block_deleted', $block_id);
+
             set_transient('cbd_admin_message', 'block_deleted', 30);
             
             wp_safe_redirect(admin_url('admin.php?page=container-block-designer'));
@@ -834,7 +837,8 @@ class CBD_Admin {
                     $update_data,
                     array('id' => $block_id)
                 );
-                
+                do_action('cbd_block_saved', $block_id);
+
                 set_transient('cbd_admin_message', 'status_toggled', 30);
                 
                 wp_safe_redirect(admin_url('admin.php?page=container-block-designer'));
@@ -2436,8 +2440,10 @@ class CBD_Admin {
         foreach ($default_blocks as $block) {
             $wpdb->insert($table_name, $block);
         }
+
+        do_action('cbd_block_saved', 0);
     }
-    
+
     /**
      * AJAX: Block speichern
      */
@@ -2559,9 +2565,8 @@ class CBD_Admin {
             array('%d')
         );
         
-        error_log('[CBD Ajax] Update result: ' . ($result !== false ? 'success' : 'failed') . ', Block ID: ' . $block_id);
-        
         if ($result !== false) {
+            do_action('cbd_block_saved', $block_id);
             wp_send_json_success(array(
                 'message' => __('Block erfolgreich gespeichert', 'container-block-designer'),
                 'block_id' => $block_id
@@ -2603,6 +2608,7 @@ class CBD_Admin {
         );
         
         if ($result) {
+            do_action('cbd_block_deleted', $block_id);
             wp_send_json_success(__('Block erfolgreich gelöscht', 'container-block-designer'));
         } else {
             wp_send_json_error(__('Fehler beim Löschen des Blocks', 'container-block-designer'));
@@ -2661,8 +2667,9 @@ class CBD_Admin {
             $update_data,
             array('id' => $block_id)
         );
-        
+
         if ($result !== false) {
+            do_action('cbd_block_saved', $block_id);
             wp_send_json_success(array(
                 'message' => __('Status erfolgreich geändert', 'container-block-designer'),
                 'new_status' => $new_status
@@ -2881,6 +2888,7 @@ class CBD_Admin {
             wp_cache_delete('cbd_all_blocks_styles');
             wp_cache_delete('cbd_active_features');
             delete_transient('cbd_compiled_styles');
+            do_action('cbd_block_saved', $block_id);
 
             wp_send_json_success(array(
                 'message' => 'Block erfolgreich gespeichert',

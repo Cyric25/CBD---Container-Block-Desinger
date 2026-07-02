@@ -28,27 +28,14 @@ Status-Legende: `[ ]` offen · `[x]` erledigt
 
 ---
 
-## Phase 3 — Performance strukturell (~1 Tag)
+## Phase 3 — Performance strukturell ✅ ERLEDIGT (v3.1.44)
 
-- [ ] **3.1 Blockliste zentral cachen** — `class-cbd-block-registration.php:64–66, 701, 1714` + Style-Loader
-  `cbd_blocks` wird pro Request 3–4× per `SELECT *` abgefragt.
-  Fix: Blockliste in Transient (Invalidierung bei `cbd_block_saved`/`cbd_block_deleted`), gemeinsam genutzt von Registration, Style-Loader und Renderer; nur benötigte Spalten.
-
-- [ ] **3.2 N+1 „Behandelt"-Status beheben** — `class-cbd-block-registration.php:806–817`
-  Pro Container-Block ein `SELECT COUNT(*)` (30 Blöcke = 30 Queries).
-  Fix: beim ersten Render alle behandelten `container_id`s der Seite mit EINEM Query holen, statisch cachen.
-
-- [ ] **3.3 Dynamisches Frontend-CSS cachen** — `class-cbd-style-loader.php:549–564, 1400, 2020–2039`
-  `parse_blocks()` + DB-Query + Minifizierung pro Request.
-  Fix: CSS pro Post in Transient (Key: Post-ID + `post_modified` + Block-Cache-Version).
-
-- [ ] **3.4 `board-mode.js` (112 KB) nur bei Bedarf** — `class-cbd-style-loader.php:180–194`
-  Feature-Erkennung ist site-weit statt seitenbezogen.
-  Fix: auf `get_used_blocks_on_page()` (existiert bereits, Z. 1392) stützen.
-
-- [ ] **3.5 Editor-Style-Ausgabe deduplizieren** — `class-cbd-style-loader.php:66–70, 569–602`
-  `output_editor_dynamic_styles` läuft 2× (admin_head + admin_footer), `output_emergency_editor_styles` 3×.
-  Fix: je ein Hook + `static $done`-Guard.
+- [x] **3.1 Blockliste zentral gecacht** — neue `CBD_Block_Registration::get_active_blocks()` (Per-Request-Static + Transient `cbd_active_blocks`), genutzt von `register_blocks()` und dem Render-Fallback. Invalidierung via `clear_blocks_cache()` auf `cbd_block_saved`/`cbd_block_deleted`.
+- [x] **3.2 N+1 „Behandelt"-Status behoben** — neue `get_behandelt_container_ids($page_id)` lädt alle behandelten Container einer Seite in EINEM Query (statisch gecacht), O(1)-Lookup pro Block.
+- [x] **3.3 Dynamisches Frontend-CSS gecacht** — `output_dynamic_styles()` cacht pro Post in Transient (`cbd_page_css_{id}`), signiert mit Style-Version + `post_modified`; bei Cache-Treffer wird `parse_blocks()` übersprungen.
+- [x] **3.4 `board-mode.js` seitenbezogen** — `enqueue_feature_styles()` nutzt jetzt `get_used_blocks_on_page()` + neue `extract_active_features_from_blocks()`; board-mode.js lädt nur auf Seiten, deren Blöcke das Feature tatsächlich nutzen.
+- [x] **3.5 Editor-Style-Ausgabe dedupliziert** — `output_editor_dynamic_styles` und `output_emergency_editor_styles` mit `static $done`-Guard (statt 2× bzw. 3× pro Editor-Load).
+- [x] **Bonus:** Die zuvor toten Actions `cbd_block_saved`/`cbd_block_deleted` werden jetzt an ALLEN Schreibpfaden ausgelöst (CBD_Database, alle Admin-AJAX-/Formular-Handler, new-block.php) — damit funktioniert auch die bislang schlafende Style-Cache-Invalidierung des Style-Loaders.
 
 ---
 

@@ -149,8 +149,15 @@ class CBD_Style_Loader {
      * Feature-spezifische Styles laden
      */
     private function enqueue_feature_styles() {
-        $active_features = $this->get_active_features();
-        
+        // Nur Features der TATSÄCHLICH auf dieser Seite verwendeten Blöcke laden.
+        // Verhindert, dass z.B. board-mode.js (112 KB) auf jeder Seite lädt,
+        // nur weil irgendein Block-Design site-weit den Tafel-Modus nutzt.
+        $page_blocks = $this->get_used_blocks_on_page();
+        if (empty($page_blocks)) {
+            return;
+        }
+        $active_features = $this->extract_active_features_from_blocks($page_blocks);
+
         // Icons
         if (in_array('icon', $active_features)) {
             wp_enqueue_style('dashicons');
@@ -547,19 +554,39 @@ class CBD_Style_Loader {
      * Dynamische Styles im Frontend ausgeben
      */
     public function output_dynamic_styles() {
-        $blocks = $this->get_used_blocks_on_page();
-        
-        if (empty($blocks)) {
-            return;
+        // Pro-Seite gecachtes CSS: Signatur aus Style-Version (bei Design-Änderung
+        // via clear_styles_cache erhöht) + post_modified (bei Inhaltsänderung).
+        // Bei Cache-Treffer wird sogar parse_blocks() übersprungen.
+        $post_id = get_the_ID();
+        $version = get_option('cbd_styles_version', '0');
+        $cache_key = $post_id ? 'cbd_page_css_' . $post_id : '';
+        $signature = '0';
+
+        if ($post_id) {
+            $post = get_post($post_id);
+            $modified = $post ? $post->post_modified_gmt : '0';
+            $signature = $version . '|' . $modified;
+
+            $cached = get_transient($cache_key);
+            if (is_array($cached) && isset($cached['sig']) && $cached['sig'] === $signature) {
+                if (!empty($cached['css'])) {
+                    echo "\n<!-- Container Block Designer Dynamic Styles (cached) -->\n";
+                    echo '<style id="cbd-dynamic-styles">' . "\n" . $cached['css'] . "\n</style>\n";
+                }
+                return;
+            }
         }
-        
-        $css = $this->generate_block_styles_for_page($blocks);
-        
+
+        $blocks = $this->get_used_blocks_on_page();
+        $css = empty($blocks) ? '' : $this->minify_css($this->generate_block_styles_for_page($blocks));
+
+        if ($cache_key) {
+            set_transient($cache_key, array('sig' => $signature, 'css' => $css), DAY_IN_SECONDS);
+        }
+
         if (!empty($css)) {
             echo "\n<!-- Container Block Designer Dynamic Styles -->\n";
-            echo '<style id="cbd-dynamic-styles">' . "\n";
-            echo $this->minify_css($css);
-            echo "\n</style>\n";
+            echo '<style id="cbd-dynamic-styles">' . "\n" . $css . "\n</style>\n";
         }
     }
     
@@ -567,13 +594,21 @@ class CBD_Style_Loader {
      * Dynamische Styles im Editor ausgeben
      */
     public function output_editor_dynamic_styles() {
+        // An admin_head UND admin_footer gehängt – nur einmal ausgeben
+        static $done = false;
+        if ($done) {
+            return;
+        }
+
         $screen = get_current_screen();
-        
+
         // Nur im Block Editor
         if (!$screen || !$screen->is_block_editor()) {
             return;
         }
-        
+
+        $done = true;
+
         // Force load editor base styles inline
         echo "\n<!-- Container Block Designer Editor Styles -->\n";
         echo '<style id="cbd-editor-styles">' . "\n";
@@ -798,12 +833,21 @@ class CBD_Style_Loader {
      * Production editor styles with professional appearance
      */
     public function output_emergency_editor_styles() {
+        // An 3 Hooks gehängt (admin_footer, admin_print_styles,
+        // admin_print_footer_scripts) – nur einmal ausgeben
+        static $done = false;
+        if ($done) {
+            return;
+        }
+
         $screen = get_current_screen();
-        
+
         // Only output on block editor screens or when screen is not detected
         if ($screen && !$screen->is_block_editor()) {
             return;
         }
+
+        $done = true;
         
         echo "\n<!-- Container Block Designer Production Editor Styles -->\n";
 
@@ -1988,31 +2032,44 @@ class CBD_Style_Loader {
      */
     private function get_active_features() {
         global $wpdb;
-        
+
         $cache_key = 'cbd_active_features';
         $features = wp_cache_get($cache_key);
-        
+
         if (false === $features) {
             $blocks = $wpdb->get_results(
                 "SELECT features FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active'",
                 ARRAY_A
             );
-            
-            $features = array();
-            foreach ($blocks as $block) {
-                $block_features = json_decode($block['features'], true) ?: array();
-                foreach ($block_features as $feature_key => $feature_data) {
-                    if (!empty($feature_data['enabled'])) {
-                        $features[] = $feature_key;
-                    }
-                }
-            }
-            
-            $features = array_unique($features);
+
+            $features = $this->extract_active_features_from_blocks($blocks);
             wp_cache_set($cache_key, $features, '', HOUR_IN_SECONDS);
         }
-        
+
         return $features;
+    }
+
+    /**
+     * Extrahiert die aktivierten Feature-Schlüssel aus einer Liste von
+     * Block-Zeilen (jeweils mit 'features'-JSON-Spalte).
+     *
+     * @param array $blocks
+     * @return array Eindeutige Liste aktivierter Feature-Schlüssel
+     */
+    private function extract_active_features_from_blocks($blocks) {
+        $features = array();
+        if (empty($blocks) || !is_array($blocks)) {
+            return $features;
+        }
+        foreach ($blocks as $block) {
+            $block_features = json_decode($block['features'], true) ?: array();
+            foreach ($block_features as $feature_key => $feature_data) {
+                if (!empty($feature_data['enabled'])) {
+                    $features[] = $feature_key;
+                }
+            }
+        }
+        return array_unique($features);
     }
     
     /**
