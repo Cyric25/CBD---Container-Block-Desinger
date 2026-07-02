@@ -806,37 +806,38 @@ class CBD_Style_Loader {
         }
         
         echo "\n<!-- Container Block Designer Production Editor Styles -->\n";
-        
-        // Debug: Load and show blocks
+
         $blocks = $this->get_all_blocks();
-        echo "<!-- CBD DEBUG: Found " . count($blocks) . " blocks -->\n";
-        
-        // Debug each block with FULL details
-        if (!empty($blocks)) {
-            foreach ($blocks as $i => $block) {
-                echo "<!-- CBD DEBUG Block " . ($i+1) . ": " . $block['name'] . " (Slug: " . $block['slug'] . ") -->\n";
-                echo "<!-- CBD DEBUG Full Styles for " . $block['slug'] . ": " . $block['styles'] . " -->\n";
-                echo "<!-- CBD DEBUG Features: " . substr($block['features'], 0, 100) . "... -->\n";
-                
-                // Parse and debug styles
-                $parsed_styles = json_decode($block['styles'], true);
-                if ($parsed_styles) {
-                    echo "<!-- CBD DEBUG Parsed Styles for " . $block['slug'] . ": -->\n";
-                    if (isset($parsed_styles['background']['color'])) {
-                        echo "<!-- CBD DEBUG - Background Color: " . $parsed_styles['background']['color'] . " -->\n";
+
+        // Debug-Ausgaben nur bei aktiviertem WP_DEBUG (kein Style-JSON-Dump in Produktion)
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            echo "<!-- CBD DEBUG: Found " . count($blocks) . " blocks -->\n";
+
+            if (!empty($blocks)) {
+                foreach ($blocks as $i => $block) {
+                    echo "<!-- CBD DEBUG Block " . ($i+1) . ": " . $block['name'] . " (Slug: " . $block['slug'] . ") -->\n";
+                    echo "<!-- CBD DEBUG Full Styles for " . $block['slug'] . ": " . $block['styles'] . " -->\n";
+                    echo "<!-- CBD DEBUG Features: " . substr($block['features'], 0, 100) . "... -->\n";
+
+                    $parsed_styles = json_decode($block['styles'], true);
+                    if ($parsed_styles) {
+                        echo "<!-- CBD DEBUG Parsed Styles for " . $block['slug'] . ": -->\n";
+                        if (isset($parsed_styles['background']['color'])) {
+                            echo "<!-- CBD DEBUG - Background Color: " . $parsed_styles['background']['color'] . " -->\n";
+                        }
+                        if (isset($parsed_styles['border']['color'])) {
+                            echo "<!-- CBD DEBUG - Border Color: " . $parsed_styles['border']['color'] . " -->\n";
+                        }
+                        if (isset($parsed_styles['border']['width'])) {
+                            echo "<!-- CBD DEBUG - Border Width: " . $parsed_styles['border']['width'] . " -->\n";
+                        }
+                    } else {
+                        echo "<!-- CBD DEBUG: Could not parse styles JSON for " . $block['slug'] . " -->\n";
                     }
-                    if (isset($parsed_styles['border']['color'])) {
-                        echo "<!-- CBD DEBUG - Border Color: " . $parsed_styles['border']['color'] . " -->\n";
-                    }
-                    if (isset($parsed_styles['border']['width'])) {
-                        echo "<!-- CBD DEBUG - Border Width: " . $parsed_styles['border']['width'] . " -->\n";
-                    }
-                } else {
-                    echo "<!-- CBD DEBUG: Could not parse styles JSON for " . $block['slug'] . " -->\n";
                 }
             }
         }
-        
+
         ?>
         <style id="cbd-production-editor-styles">
         /* Container Block Designer - Production Editor Styles */

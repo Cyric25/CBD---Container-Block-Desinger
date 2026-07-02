@@ -18,29 +18,13 @@ Status-Legende: `[ ]` offen · `[x]` erledigt
 
 ---
 
-## Phase 2 — Performance Quick Wins (~2–3 h)
+## Phase 2 — Performance Quick Wins (~2–3 h) ✅ ERLEDIGT (v3.1.43)
 
-Auf Seiten ohne Container-Block lädt das Plugin derzeit ~700 KB+ von 5+ externen Hosts.
-
-- [ ] **2.1 `time()`-Cache-Buster entfernen** — `includes/class-cbd-block-registration.php:386`
-  `CBD_VERSION . '-buttons-' . time()` → nur `CBD_VERSION`. Einzeiler, größter Einzelhebel (CSS wird sonst NIE gecacht).
-
-- [ ] **2.2 `has_block()`-Gate in `enqueue_block_assets()`** — `class-cbd-block-registration.php:316–453`
-  Am Anfang abbrechen, wenn die Seite keinen `container-block-designer/*`-Block enthält.
-  Betrifft: html2canvas (199 KB), jQuery, pdf-server-side.js, floating-pdf-button.js, block-numbering.js, Dashicons, CSS.
-
-- [ ] **2.3 KaTeX konditional laden** — `includes/class-latex-parser.php:47–48, 63–105`
-  Lädt aktuell ~350 KB auf JEDER Frontend- UND Admin-Seite.
-  Fix: Frontend nur bei `$`/`[latex]` im Post-Content (Prüfung existiert schon in Z. 126); Admin nur auf Block-Editor-Screens.
-
-- [ ] **2.4 Icon-CDNs reduzieren** — `class-cbd-block-registration.php:401–420` + Duplikat `class-cbd-classroom.php:1102–1121`
-  Font Awesome + Material Icons + Lucide (unversioniert von unpkg!) laden immer.
-  Fix: nur tatsächlich in aktiven Block-Features genutzte Bibliothek laden; Lucide auf feste Version pinnen oder lokal hosten; Duplikat in Classroom entfernen. (Auch DSGVO-relevant: externe Hosts.)
-
-- [ ] **2.5 Debug-Ausgaben hinter WP_DEBUG**
-  HTML-Kommentare mit Features/Config-JSON pro Block (`class-cbd-block-registration.php:729–730`);
-  Styles-JSON-Dumps im Editor (`class-cbd-style-loader.php:810–838`);
-  unbedingte `error_log()`-Aufrufe (`container-block-designer.php:309` u. a.).
+- [x] **2.1 `time()`-Cache-Buster entfernt** — nur noch `CBD_VERSION`; Frontend-CSS wird jetzt vom Browser/CDN gecacht.
+- [x] **2.2 `has_block()`-Gate** — neue Methode `frontend_has_container_block()`; `enqueue_block_assets()` bricht auf Frontend-Seiten ohne Container-Block früh ab (Editor lädt weiterhin alles). *Hinweis: Container in Reusable Blocks/FSE-Template-Parts werden von `has_block()` nicht erkannt — bei Bedarf Prüfung erweitern.*
+- [x] **2.3 KaTeX konditional** — neue Methode `should_load_katex()`; Frontend nur bei `$`/`[latex]` im Inhalt, Admin nur im Block-Editor.
+- [x] **2.4 Lucide gepinnt** — `@latest` → `0.454.0` in Block-Registration und Classroom (kein Redirect, cachebar, DSGVO). *Per-Feature-Ladung nur benötigter Icon-Libs bleibt als Refinement offen (siehe 3.x).*
+- [x] **2.5 Debug hinter WP_DEBUG** — Features/Config-JSON pro Block, Styles-JSON-Dump im Editor und Init-`error_log()` im Hauptplugin nur noch bei aktivem WP_DEBUG.
 
 ---
 

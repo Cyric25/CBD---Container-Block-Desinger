@@ -58,9 +58,41 @@ class CBD_LaTeX_Parser {
     }
 
     /**
+     * Prüft, ob KaTeX auf der aktuellen Seite überhaupt benötigt wird.
+     * Verhindert das Laden von ~350 KB auf Seiten ohne Formeln.
+     *
+     * @return bool
+     */
+    private function should_load_katex() {
+        // Admin: nur im Block-Editor (dort wird die Live-Vorschau gerendert)
+        if (is_admin()) {
+            if (!function_exists('get_current_screen')) {
+                return false;
+            }
+            $screen = get_current_screen();
+            return $screen && method_exists($screen, 'is_block_editor') && $screen->is_block_editor();
+        }
+
+        // Frontend: nur auf Einzelseiten mit LaTeX-Markern im Inhalt
+        if (is_singular()) {
+            $post = get_post();
+            if ($post instanceof WP_Post) {
+                return strpos($post->post_content, '$') !== false
+                    || strpos($post->post_content, '[latex]') !== false;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Enqueue KaTeX library
      */
     public function enqueue_katex() {
+        if (!$this->should_load_katex()) {
+            return;
+        }
+
         // KaTeX CSS
         wp_enqueue_style(
             'katex',

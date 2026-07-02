@@ -322,9 +322,42 @@ class CBD_Block_Registration {
     }
     
     /**
+     * Prüft, ob die aktuell angezeigte Frontend-Seite einen Container-Block
+     * enthält. Ergebnis wird pro Request statisch gecacht.
+     *
+     * @return bool
+     */
+    private function frontend_has_container_block() {
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache;
+        }
+
+        $cache = false;
+
+        // Container-Blöcke stehen im Inhalt einzelner Seiten/Beiträge.
+        if (is_singular()) {
+            $post = get_post();
+            if ($post instanceof WP_Post
+                && has_block('container-block-designer/container', $post)) {
+                $cache = true;
+            }
+        }
+
+        return $cache;
+    }
+
+    /**
      * Block-Assets einbinden (Frontend & Editor)
      */
     public function enqueue_block_assets() {
+        // Performance: Im Frontend nur laden, wenn die Seite tatsächlich einen
+        // Container-Block enthält. Im Editor (is_admin) immer laden, damit
+        // Blöcke korrekt gestylt in der Vorschau erscheinen.
+        if (!is_admin() && !$this->frontend_has_container_block()) {
+            return;
+        }
+
         // ==============================================
         // INTERACTIVITY API MODULE WITH FALLBACK
         // ==============================================
@@ -394,7 +427,7 @@ class CBD_Block_Registration {
             'cbd-frontend-clean',
             CBD_PLUGIN_URL . 'assets/css/cbd-frontend-clean.css',
             array(),
-            CBD_VERSION . '-buttons-' . time() // Force cache bust with button styles
+            CBD_VERSION
         );
 
         // Interactivity API specific styles
@@ -425,9 +458,9 @@ class CBD_Block_Registration {
 
         wp_enqueue_style(
             'lucide-icons',
-            'https://unpkg.com/lucide-static@latest/font/lucide.css',
+            'https://unpkg.com/lucide-static@0.454.0/font/lucide.css',
             array(),
-            null
+            '0.454.0'
         );
 
         // Enqueue html2canvas for screenshot functionality
@@ -737,9 +770,11 @@ class CBD_Block_Registration {
         $config = !empty($block->config) ? json_decode($block->config, true) : array();
         
         // DEBUG: Add debug output to see what features are available
-        $html .= '<!-- CBD DEBUG: Features available: ' . json_encode($features) . ' -->';
-        $html .= '<!-- CBD DEBUG: Config available: ' . json_encode($config) . ' -->';
-        
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            $html .= '<!-- CBD DEBUG: Features available: ' . json_encode($features) . ' -->';
+            $html .= '<!-- CBD DEBUG: Config available: ' . json_encode($config) . ' -->';
+        }
+
         // Generate unique container ID using WordPress native function
         $container_id = 'cbd-container-' . wp_unique_id();
 
