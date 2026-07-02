@@ -70,10 +70,10 @@ const includePaths = [
     'vendor',  // IMPORTANT: Composer dependencies (mPDF + TCPDF fallback)
     'languages',
     'container-block-designer.php',
-    'LICENSE',
-    'README.md'
+    'LICENSE'
     // Hinweis: Status-/Entwickler-MD-Dateien (FRONTEND_STATUS.md etc.) und
     // debug-pdf.php werden bewusst NICHT mehr ausgeliefert.
+    // README.md existiert derzeit nicht und ist daher nicht gelistet.
 ];
 
 // Files and directories to exclude
