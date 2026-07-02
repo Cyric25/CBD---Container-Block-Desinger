@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://github.com/Cyric25/CBD---Container-Block-Desinger
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 3.1.45
+ * Version: 3.1.46
  * Author: Cyric25
  * Author URI: https://github.com/Cyric25
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '3.1.45');
+define('CBD_VERSION', '3.1.46');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -756,44 +756,11 @@ class ContainerBlockDesigner {
             return; // Rolle existiert bereits
         }
 
-        // Basis-Capabilities nur für Seiten
-        $capabilities = array(
-            'read' => true,                    // Grundrecht zum Lesen
-            'edit_pages' => true,              // Seiten bearbeiten
-            'edit_others_pages' => true,       // Fremde Seiten bearbeiten
-            'edit_published_pages' => true,    // Veröffentlichte Seiten bearbeiten
-            'publish_pages' => true,           // Seiten veröffentlichen
-            'delete_pages' => false,           // NICHT löschen
-            'delete_others_pages' => false,    // Keine fremden Seiten löschen
-            'delete_published_pages' => false, // Keine veröffentlichten Seiten löschen
-
-            // WordPress Editor verwenden (minimal für Block Editor)
-            'edit_posts' => true,              // NÖTIG für Block-Editor
-            'edit_others_posts' => false,      // Keine fremden Posts
-            'edit_published_posts' => false,   // Keine veröffentlichten Posts
-            'publish_posts' => false,          // Keine Posts veröffentlichen
-            'delete_posts' => false,           // Keine Posts löschen
-
-            // Custom Container Block Designer Capabilities
-            'cbd_edit_blocks' => true,         // Container-Blocks im Editor verwenden
-            'cbd_edit_styles' => false,        // KEINE Style-Bearbeitung (nur vordefinierte nutzen)
-            'cbd_admin_blocks' => false,       // KEINE Admin-Funktionen (Settings/Import/Erstellen)
-
-            // Standard Admin-Rechte
-            'manage_options' => false,         // KEINE WordPress Admin-Rechte
-
-            // Upload-Rechte für Medien in Blocks
-            'upload_files' => true,
-
-            // WordPress Editor verwenden
-            'edit_theme_options' => false,     // Keine Theme-Bearbeitung
-        );
-
-        // Rolle hinzufügen
+        // Kanonische Capabilities (einzige Quelle der Wahrheit)
         add_role(
             'block_redakteur',
             __('Block-Redakteur', 'container-block-designer'),
-            $capabilities
+            cbd_block_redakteur_capabilities()
         );
 
         // Administrator Rolle um Container-Block Capabilities erweitern

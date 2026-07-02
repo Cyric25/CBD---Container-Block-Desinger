@@ -308,6 +308,13 @@
             );
         };
         
+        // WICHTIG bei künftigen Änderungen an ContainerBlockSave:
+        // Ändert sich das gespeicherte Markup (save-Ausgabe), werden bestehende
+        // Blöcke von Gutenberg als ungültig markiert. Dann sollte die bisherige
+        // save-Variante als `deprecated: [{ attributes, save }]` im
+        // registerBlockType-Aufruf hinterlegt werden, damit alte Inhalte gültig
+        // bleiben. Als zusätzliches Sicherheitsnetz repariert block-recovery.js
+        // ungültige Blöcke automatisch beim Öffnen des Editors.
         // Save Component
         const ContainerBlockSave = (props) => {
             const { attributes = {} } = props;

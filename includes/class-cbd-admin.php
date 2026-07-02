@@ -114,21 +114,12 @@ class CBD_Admin {
      * Erstelle Block-Redakteur Rolle
      */
     private function create_block_redakteur_role() {
-        $capabilities = array(
-            'read' => true,
-            'edit_pages' => true,
-            'edit_others_pages' => true,
-            'edit_published_pages' => true,
-            'publish_pages' => true,
-            'edit_posts' => true,
-            'upload_files' => true,
-            'cbd_edit_blocks' => true,
-            'cbd_edit_styles' => false,
-            'cbd_admin_blocks' => false,
-            'manage_options' => false,
+        // Kanonische Capabilities (einzige Quelle der Wahrheit, siehe functions.php)
+        return add_role(
+            'block_redakteur',
+            __('Block-Redakteur', 'container-block-designer'),
+            cbd_block_redakteur_capabilities()
         );
-
-        return add_role('block_redakteur', 'Block-Redakteur', $capabilities);
     }
 
     /**

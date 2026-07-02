@@ -49,32 +49,17 @@ Status-Legende: `[ ]` offen · `[x]` erledigt
 
 ---
 
-## Phase 5 — Strukturelles Refactoring (inkrementell, je ~0,5–1 Tag)
+## Phase 5 — Strukturelles Refactoring (teilweise erledigt, v3.1.46)
 
-- [ ] **5.1 Rollen-Definition vereinheitlichen (WICHTIGSTES Refactoring)**
-  `block_redakteur` wird 2× mit UNTERSCHIEDLICHEN Capability-Sets erstellt
-  (`container-block-designer.php:747–808` vs. `class-cbd-admin.php:116–133`) — welche gilt, hängt vom Codepfad ab.
-  Fix: eine `CBD_Roles`-Klasse als Single Source of Truth; ebenso `create_default_blocks()` deduplizieren (main:486 vs. admin:2397).
+- [x] **5.1 Rollen-Definition vereinheitlicht (WICHTIGSTES Refactoring)** — kanonische `cbd_block_redakteur_capabilities()` in `functions.php` als einzige Quelle der Wahrheit; beide Erstellungspfade (Hauptplugin + `CBD_Admin`) nutzen sie. Damit erhält die Rolle unabhängig vom Codepfad identische Rechte.
+- [x] **5.5 Versionen synchronisiert** — composer.json (`2.6.0` → `3.1.45`), CDB-CLAUDE.md (`2.9.0` → `3.1.45`, DB-Version → `3.1.32`). *Autoload-Strategie unverändert gelassen (die manuelle require_once-Kette funktioniert; ein Umbau auf Composer-classmap ist optional und ohne Nutzen für die Laufzeit).*
+- [x] **5.6 `deprecated`-Leitlinie** — Kommentar bei `ContainerBlockSave` in `block-editor.js`: bei künftigen `save()`-Änderungen ist ein `deprecated`-Eintrag zu pflegen; block-recovery.js bleibt Sicherheitsnetz.
 
-- [ ] **5.2 new-block.php / edit-block.php zusammenführen**
-  ~2.500 Zeilen wortgleiches, bereits divergierendes Inline-JS/CSS (`populateIconGrid`, `updateLivePreview` …).
-  Fix: gemeinsames Partial `admin/partials/block-form.php`, JS → `assets/js/admin-block-form.js`, CSS → `assets/css/admin.css`, Daten per `wp_localize_script`.
+### Bewusst zurückgestellt (erfordern laufende WP-Instanz zum Testen)
 
-- [ ] **5.3 `CBD_Admin` (2.985 Z.) aufteilen**
-  In: Admin_Menu (Routing/Enqueue), Admin_Ajax_Controller, Block_Preview_Renderer, Repair_Tools.
-  CSS-Generierung ausschließlich im Style-Loader (aktuell dupliziert in `class-cbd-admin.php:1762 ff.`).
-
-- [ ] **5.4 Service-Container-Entscheidung**
-  Entweder ernsthaft nutzen (Singletons auflösen, `init_legacy_fallback()` löschen) oder ehrlich entfernen.
-  Aktueller Zustand: doppelte Komplexität ohne Nutzen.
-
-- [ ] **5.5 Versionen & Autoloading konsolidieren**
-  CLAUDE.md (sagt 2.9.0), composer.json (2.6.x) mit realer Version synchronisieren;
-  eine Autoload-Strategie (Composer classmap passt zu den bestehenden Dateinamen), manuelle require_once-Kette abbauen.
-
-- [ ] **5.6 `deprecated`-Array im Block pflegen** — `assets/js/block-editor.js`
-  Bei künftigen Änderungen an `save()` die alte Version als deprecated-Eintrag behalten,
-  damit Blöcke gar nicht erst ungültig werden (block-recovery.js bleibt als Sicherheitsnetz).
+- [ ] **5.2 new-block.php / edit-block.php zusammenführen** — ~2.500 Zeilen dupliziertes Inline-JS/CSS. **Zurückgestellt:** großes Refactoring an funktionierender Admin-UI (Formular-Submit, Live-Vorschau, Icon-Picker), ohne Staging-Test nicht sicher verifizierbar. Empfohlener nächster Schritt: gemeinsames Partial `admin/partials/block-form.php` + `assets/js/admin-block-form.js`, schrittweise mit manuellem Test je Feature.
+- [ ] **5.3 `CBD_Admin` (2.985 Z.) aufteilen** — in Admin_Menu / Admin_Ajax_Controller / Block_Preview_Renderer / Repair_Tools; CSS-Generierung nur noch im Style-Loader. **Zurückgestellt:** dito – hohes Regressionsrisiko ohne Testumgebung.
+- [ ] **5.4 Service-Container-Entscheidung** — nach Phase 4 (tote Services entfernt) ist der Container eine saubere, wenn auch dünne Fassade über den Singletons und funktioniert. Ein vollständiger Umbau (Singletons auflösen ODER Container entfernen) ist optional und wird zurückgestellt.
 
 ---
 
