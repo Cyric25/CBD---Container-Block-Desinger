@@ -7,30 +7,14 @@ Status-Legende: `[ ]` offen · `[x]` erledigt
 
 ---
 
-## Phase 1 — Sicherheit (SOFORT, ~1–2 h)
+## Phase 1 — Sicherheit (SOFORT, ~1–2 h) ✅ ERLEDIGT (v3.1.42)
 
-- [ ] **1.1 `ajax_edit_save` absichern** — `includes/class-cbd-admin.php:2703`
-  Handler hat weder Nonce- noch Capability-Prüfung; jeder eingeloggte Benutzer kann Block-Designs überschreiben.
-  Fix: `check_ajax_referer('cbd-admin', 'nonce')` + `current_user_can('cbd_admin_blocks')` am Handler-Anfang (Muster: `set_default_block`).
-
-- [ ] **1.2 Nonce-Bypass in `ajax_save_block` entfernen** — `includes/class-cbd-admin.php:2453–2454`
-  „DEBUG: Komplett ohne Nonce-Check" — Nonce wird berechnet, aber ignoriert → CSRF.
-  Fix: `if (!$nonce_valid) wp_send_json_error(...)` aktivieren. Zusätzlich: Doppelregistrierung der Action `cbd_save_block` (auch in `CBD_Ajax_Handler`) auflösen — nur EIN Handler pro Action.
-
-- [ ] **1.3 Debug-Endpoint `cbd_debug_page_status` entfernen** — `includes/class-cbd-classroom.php:86, 1441–1474`
-  Per `wp_ajax_nopriv_` ohne jede Prüfung erreichbar, gibt Klassendaten an anonyme Besucher aus.
-  Fix: nopriv-Registrierung streichen; Handler löschen oder hinter `current_user_can('cbd_edit_blocks')` + Nonce.
-
-- [ ] **1.4 Klassenpasswort-Bypass schließen** — `includes/class-cbd-classroom.php:689–693, 724–725`
-  Jeder eingeloggte Nutzer bekommt den Auth-Nonce (Z. 955) und überspringt damit die Passwortprüfung jeder Klasse.
-  Fix: Bypass nur für Lehrer/Eigentümer (`current_user_can('cbd_edit_blocks')` bzw. Klassen-Eigentümer-Check).
-
-- [ ] **1.5 Debug-/Altdateien löschen**
-  `debug-pdf.php` (per URL aufrufbar, gibt Server-Infos OHNE Berechtigungsprüfung aus!), `debug-classroom.php`, `test-listen.php`, `admin.zip` (296 KB in Git).
-
-- [ ] **1.6 Defense-in-Depth (niedrige Prio)**
-  `current_user_can('cbd_admin_blocks')` in allen POST-Handlern von `process_admin_actions()` (`class-cbd-admin.php:730–828`);
-  Rate-Limit-Bypass über `is_rest_fallback` im PDF-Handler entfernen (`class-cbd-ajax-handler.php:500`).
+- [x] **1.1 `ajax_edit_save` absichern** — Nonce (`cbd-admin`) + `current_user_can('cbd_admin_blocks')` ergänzt. Zusätzlich `ajax_delete_block`/`ajax_toggle_status` von `edit_posts` auf `cbd_admin_blocks` angehoben.
+- [x] **1.2 Nonce-Bypass in `ajax_save_block` entfernt** — Debug-Bypass gelöscht, Nonce erzwungen, Capability auf `cbd_admin_blocks`. Doppelregistrierung von `cbd_save_block` UND `cbd_delete_block` in `CBD_Ajax_Handler` entfernt.
+- [x] **1.3 Debug-Endpoint `cbd_debug_page_status` entfernt** — Registrierung (inkl. nopriv) und Handler gelöscht.
+- [x] **1.4 Klassenpasswort-Bypass geschlossen** — Bypass nur noch für `current_user_can('cbd_edit_blocks')` (Lehrer), nicht mehr für beliebige eingeloggte Nutzer.
+- [x] **1.5 Debug-/Altdateien gelöscht** — `debug-pdf.php`, `debug-classroom.php`, `test-listen.php`, `admin.zip` aus Git entfernt.
+- [x] **1.6 Defense-in-Depth** — zentraler `cbd_admin_blocks`-Gate für mutierende Aktionen in `process_admin_actions()`; `is_rest_fallback`-Rate-Limit-Bypass im PDF-Handler entfernt.
 
 ---
 

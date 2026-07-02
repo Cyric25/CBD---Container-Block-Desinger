@@ -81,10 +81,6 @@ class CBD_Classroom {
         add_action('wp_ajax_cbd_get_page_classroom_data', array($this, 'ajax_get_page_classroom_data'));
         add_action('wp_ajax_cbd_cleanup_invalid_containers', array($this, 'ajax_cleanup_invalid_containers'));
 
-        // Debug endpoint
-        add_action('wp_ajax_cbd_debug_page_status', array($this, 'ajax_debug_page_status'));
-        add_action('wp_ajax_nopriv_cbd_debug_page_status', array($this, 'ajax_debug_page_status'));
-
         // Shortcode for student access
         add_shortcode('cbd_classroom', array($this, 'render_classroom_shortcode'));
 
@@ -686,9 +682,12 @@ class CBD_Classroom {
         $password = $_POST['password'] ?? '';
         $wp_nonce = $_POST['_wpnonce'] ?? '';
 
-        // WordPress-authenticated users can skip password
+        // Nur Lehrer/Redakteure (Block-Verwaltungsrechte) dürfen das
+        // Klassenpasswort überspringen – nicht jeder eingeloggte Benutzer.
         $wp_user_authenticated = false;
-        if (is_user_logged_in() && wp_verify_nonce($wp_nonce, 'cbd_classroom_auth')) {
+        if (is_user_logged_in()
+            && current_user_can('cbd_edit_blocks')
+            && wp_verify_nonce($wp_nonce, 'cbd_classroom_auth')) {
             $wp_user_authenticated = true;
         }
 
@@ -1435,43 +1434,6 @@ class CBD_Classroom {
         ));
     }
 
-    /**
-     * AJAX: Debug endpoint to check database status for a page
-     */
-    public function ajax_debug_page_status() {
-        $page_id = intval($_POST['page_id'] ?? 0);
-        $class_id = intval($_POST['class_id'] ?? 0);
-
-        if ($page_id <= 0 || $class_id <= 0) {
-            wp_send_json_error(array('message' => 'page_id and class_id required'));
-        }
-
-        global $wpdb;
-
-        // Check class_pages
-        $in_class_pages = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM " . CBD_TABLE_CLASS_PAGES . " WHERE class_id = %d AND page_id = %d",
-            $class_id, $page_id
-        ));
-
-        // Check drawings
-        $drawings = $wpdb->get_results($wpdb->prepare(
-            "SELECT container_id, is_behandelt FROM " . CBD_TABLE_DRAWINGS . " WHERE class_id = %d AND page_id = %d",
-            $class_id, $page_id
-        ));
-
-        // Check if page is published
-        $page_status = get_post_status($page_id);
-
-        wp_send_json_success(array(
-            'page_id' => $page_id,
-            'class_id' => $class_id,
-            'in_class_pages' => (bool) $in_class_pages,
-            'page_status' => $page_status,
-            'drawings_count' => count($drawings),
-            'drawings' => $drawings
-        ));
-    }
 }
 
 // Initialize singleton

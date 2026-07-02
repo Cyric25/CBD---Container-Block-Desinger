@@ -572,6 +572,14 @@ class CBD_Admin {
             return;
         }
 
+        // Defense-in-Depth: Mutierende Aktionen (POST oder action-Parameter)
+        // erfordern Block-Verwaltungsrechte. Reines Anzeigen der Seite bleibt
+        // über die jeweilige Menü-Capability geschützt.
+        $is_mutating = !empty($_POST) || isset($_GET['action']);
+        if ($is_mutating && !current_user_can('cbd_admin_blocks')) {
+            wp_die(__('Keine Berechtigung für diese Aktion', 'container-block-designer'));
+        }
+
         global $wpdb;
 
         // Block-Duplizierung verarbeiten
@@ -2434,30 +2442,17 @@ class CBD_Admin {
      * AJAX: Block speichern
      */
     public function ajax_save_block() {
-        error_log('[CBD Ajax] Save block request received.');
-        error_log('[CBD Ajax] POST keys: ' . implode(', ', array_keys($_POST)));
-        error_log('[CBD Ajax] Nonce received: ' . ($_POST['cbd_nonce'] ?? 'none'));
-        
         // Nonce-Überprüfung für edit-block.php (verwendet cbd-admin nonce)
         $nonce = $_POST['cbd_nonce'] ?? '';
-        $nonce_valid = wp_verify_nonce($nonce, 'cbd-admin');
-        
-        error_log('[CBD Ajax] Nonce check: ' . ($nonce_valid ? 'valid' : 'invalid'));
-        error_log('[CBD Ajax] Current user ID: ' . get_current_user_id());
-        
-        // Debug: Try to create a new nonce and compare
-        $expected_nonce = wp_create_nonce('cbd-admin');
-        error_log('[CBD Ajax] Expected nonce: ' . $expected_nonce);
-        error_log('[CBD Ajax] Received nonce: ' . $nonce);
-        
-        // DEBUG: Komplett ohne Nonce-Check
-        error_log('[CBD Ajax] Skipping nonce check for debugging.');
-        
-        // Berechtigung prüfen - Editoren können Blocks verwalten
-        if (!current_user_can('edit_posts')) {
+        if (!wp_verify_nonce($nonce, 'cbd-admin')) {
+            wp_send_json_error(__('Sicherheitsüberprüfung fehlgeschlagen', 'container-block-designer'));
+        }
+
+        // Berechtigung prüfen - nur Benutzer mit Block-Verwaltungsrechten
+        if (!current_user_can('cbd_admin_blocks')) {
             wp_send_json_error(__('Keine Berechtigung', 'container-block-designer'));
         }
-        
+
         global $wpdb;
         
         $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
@@ -2587,20 +2582,20 @@ class CBD_Admin {
         if (!$nonce_valid) {
             wp_send_json_error(__('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer'));
         }
-        
-        // Berechtigung prüfen - Editoren können Blocks verwalten
-        if (!current_user_can('edit_posts')) {
+
+        // Berechtigung prüfen - nur Benutzer mit Block-Verwaltungsrechten
+        if (!current_user_can('cbd_admin_blocks')) {
             wp_send_json_error(__('Keine Berechtigung', 'container-block-designer'));
         }
-        
+
         global $wpdb;
-        
+
         $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
-        
+
         if (!$block_id) {
             wp_send_json_error(__('Ungültige Block-ID', 'container-block-designer'));
         }
-        
+
         $result = $wpdb->delete(
             CBD_TABLE_BLOCKS,
             array('id' => $block_id),
@@ -2625,20 +2620,20 @@ class CBD_Admin {
         if (!$nonce_valid) {
             wp_send_json_error(__('Sicherheitsprüfung fehlgeschlagen', 'container-block-designer'));
         }
-        
-        // Berechtigung prüfen - Editoren können Blocks verwalten
-        if (!current_user_can('edit_posts')) {
+
+        // Berechtigung prüfen - nur Benutzer mit Block-Verwaltungsrechten
+        if (!current_user_can('cbd_admin_blocks')) {
             wp_send_json_error(__('Keine Berechtigung', 'container-block-designer'));
         }
-        
+
         global $wpdb;
-        
+
         $block_id = isset($_POST['block_id']) ? intval($_POST['block_id']) : 0;
-        
+
         if (!$block_id) {
             wp_send_json_error(__('Ungültige Block-ID', 'container-block-designer'));
         }
-        
+
         // Aktuellen Status abrufen
         $current_status = $wpdb->get_var($wpdb->prepare(
             "SELECT status FROM " . CBD_TABLE_BLOCKS . " WHERE id = %d",
@@ -2698,13 +2693,21 @@ class CBD_Admin {
     }
     
     /**
-     * Neuer AJAX Edit Save Handler - vollständige Implementierung ohne Nonce
+     * AJAX Edit Save Handler - speichert Block-Design-Änderungen aus edit-block.php
      */
     public function ajax_edit_save() {
-        error_log('[CBD Edit Save] NEW AJAX handler called!');
-        
+        // Sicherheitsprüfung: Nonce (edit-block.php nutzt wp_nonce_field('cbd-admin', 'cbd_nonce'))
+        if (!isset($_POST['cbd_nonce']) || !wp_verify_nonce($_POST['cbd_nonce'], 'cbd-admin')) {
+            wp_send_json_error(__('Sicherheitsüberprüfung fehlgeschlagen', 'container-block-designer'));
+        }
+
+        // Berechtigung: nur Benutzer mit Block-Verwaltungsrechten dürfen Designs ändern
+        if (!current_user_can('cbd_admin_blocks')) {
+            wp_send_json_error(__('Keine Berechtigung', 'container-block-designer'));
+        }
+
         global $wpdb;
-        
+
         $block_id = intval($_POST['block_id'] ?? 0);
         
         if (!$block_id) {

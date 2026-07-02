@@ -34,8 +34,8 @@ class CBD_Ajax_Handler {
         add_action('wp_ajax_nopriv_cbd_get_blocks', array($this, 'get_blocks_nopriv'));
 
         // Weitere Admin AJAX-Handler
-        add_action('wp_ajax_cbd_save_block', array($this, 'save_block'));
-        add_action('wp_ajax_cbd_delete_block', array($this, 'delete_block'));
+        // Hinweis: cbd_save_block und cbd_delete_block werden von CBD_Admin
+        // behandelt (Doppelregistrierung entfernt – verursachte Nonce-Konflikte)
         add_action('wp_ajax_cbd_duplicate_block', array($this, 'duplicate_block'));
         add_action('wp_ajax_cbd_set_default_block', array($this, 'set_default_block'));
 
@@ -493,18 +493,16 @@ class CBD_Ajax_Handler {
     public function generate_pdf() {
         // PDF export is a public frontend feature (no login required)
         // Rate-limit: max 15 requests per minute per IP
-        // Skip increment if this is a fallback from a failed REST request (already counted)
+        // Immer inkrementieren – der frühere is_rest_fallback-Bypass war
+        // client-gesteuert und hebelte das Limit komplett aus.
         $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
         $rate_key = 'cbd_pdf_rate_' . md5($ip);
         $rate_count = (int) get_transient($rate_key);
-        $is_fallback = !empty($_POST['is_rest_fallback']);
         if ($rate_count >= 15) {
             wp_send_json_error(array('message' => 'Zu viele Anfragen. Bitte warten Sie eine Minute.'));
             return;
         }
-        if (!$is_fallback) {
-            set_transient($rate_key, $rate_count + 1, 60);
-        }
+        set_transient($rate_key, $rate_count + 1, 60);
 
         // Detect format: new structured (blocks_json) vs legacy (blocks[])
         $blocks = array();
