@@ -21,7 +21,7 @@ class CBD_Schema_Manager {
     /**
      * Database version for tracking migrations
      */
-    const DB_VERSION = '3.0.0';
+    const DB_VERSION = '3.1.32';
     
     /**
      * Option key for storing database version
@@ -135,6 +135,10 @@ class CBD_Schema_Manager {
 
         if (version_compare($current_version, '3.0.0', '<')) {
             self::migrate_to_3_0_0();
+        }
+
+        if (version_compare($current_version, '3.1.32', '<')) {
+            self::migrate_legacy_container_ids();
         }
 
         // Update database version to current version
@@ -285,6 +289,97 @@ class CBD_Schema_Manager {
 
             // Add index for faster queries
             $wpdb->query("ALTER TABLE $table_name ADD KEY `is_default` (`is_default`)");
+        }
+    }
+
+    /**
+     * Migration 3.1.32: Mark that legacy container ID migration is needed.
+     * Actual migration happens lazily in render_block() where we have access
+     * to the rendered $content needed to compute legacy hashes.
+     */
+    private static function migrate_legacy_container_ids() {
+        global $wpdb;
+        $drawings_table = $wpdb->prefix . 'cbd_drawings';
+
+        // Check if drawings table exists
+        if ($wpdb->get_var("SHOW TABLES LIKE '$drawings_table'") !== $drawings_table) {
+            return;
+        }
+
+        // Count legacy entries
+        $count = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM $drawings_table WHERE container_id LIKE 'cbd-legacy-%'"
+        );
+
+        if ($count > 0) {
+            update_option('cbd_legacy_migration_pending', true);
+            error_log('[CBD Migration] Found ' . $count . ' legacy container IDs - will migrate lazily during render');
+        } else {
+            delete_option('cbd_legacy_migration_pending');
+            error_log('[CBD Migration] No legacy container IDs found');
+        }
+    }
+
+    /**
+     * Lazy migration: Update a single legacy container ID to the real stableId.
+     * Called from render_block() where we have access to the actual $content.
+     *
+     * @param string $stable_id   The real stableId (from block attributes/HTML)
+     * @param string $legacy_hash The computed legacy hash for this block
+     * @param int    $page_id     The page ID
+     */
+    public static function migrate_single_legacy_id($stable_id, $legacy_hash, $page_id) {
+        // Only run if migration is pending and IDs differ
+        if ($stable_id === $legacy_hash || strpos($stable_id, 'cbd-legacy-') === 0) {
+            return;
+        }
+
+        if (!get_option('cbd_legacy_migration_pending')) {
+            return;
+        }
+
+        global $wpdb;
+        $drawings_table = $wpdb->prefix . 'cbd_drawings';
+
+        // Check if legacy entries exist for this hash
+        $legacy_count = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $drawings_table WHERE page_id = %d AND container_id = %s",
+            $page_id, $legacy_hash
+        ));
+
+        if ($legacy_count === 0) {
+            return;
+        }
+
+        // Check if target stableId already has entries (avoid duplicates)
+        $existing_count = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM $drawings_table WHERE page_id = %d AND container_id = %s",
+            $page_id, $stable_id
+        ));
+
+        if ($existing_count > 0) {
+            // Target already exists - remove legacy duplicates
+            $wpdb->delete($drawings_table, array(
+                'page_id' => $page_id,
+                'container_id' => $legacy_hash
+            ));
+            error_log('[CBD Migration] Removed duplicate legacy entries: ' . $legacy_hash . ' (page ' . $page_id . ')');
+        } else {
+            // Update legacy to real stableId
+            $result = $wpdb->query($wpdb->prepare(
+                "UPDATE $drawings_table SET container_id = %s WHERE page_id = %d AND container_id = %s",
+                $stable_id, $page_id, $legacy_hash
+            ));
+            error_log('[CBD Migration] Updated: ' . $legacy_hash . ' => ' . $stable_id . ' (page ' . $page_id . ', rows: ' . $result . ')');
+        }
+
+        // Check if any legacy entries remain globally
+        $remaining = (int) $wpdb->get_var(
+            "SELECT COUNT(*) FROM $drawings_table WHERE container_id LIKE 'cbd-legacy-%'"
+        );
+        if ($remaining === 0) {
+            delete_option('cbd_legacy_migration_pending');
+            error_log('[CBD Migration] All legacy container IDs migrated!');
         }
     }
 
