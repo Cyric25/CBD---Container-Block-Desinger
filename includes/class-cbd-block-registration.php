@@ -286,6 +286,17 @@ class CBD_Block_Registration {
             CBD_VERSION
         );
 
+        // Automatische Block-Wiederherstellung nach Plugin-Updates:
+        // repariert ungültige Container-Blöcke beim Öffnen des Editors
+        // (ersetzt manuelles "Blockwiederherstellung versuchen" pro Block)
+        wp_enqueue_script(
+            'cbd-block-recovery',
+            CBD_PLUGIN_URL . 'assets/js/block-recovery.js',
+            array('wp-blocks', 'wp-data', 'wp-dom-ready', 'wp-notices'),
+            CBD_VERSION,
+            true
+        );
+
         // Content Importer JavaScript
         wp_enqueue_script(
             'cbd-content-importer',
