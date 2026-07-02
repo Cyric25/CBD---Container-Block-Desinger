@@ -546,13 +546,13 @@ class CBD_Admin {
     public function render_main_page() {
         // Diese Funktion sollte nur für Admins/Editoren aufgerufen werden
         // Block-Redakteure haben jetzt ihr eigenes Menü
-        $file_path = CBD_PLUGIN_DIR . 'admin/container-block-designer.php';
+        $file_path = CBD_PLUGIN_DIR . 'admin/dashboard.php';
 
         if (file_exists($file_path)) {
             include $file_path;
         } else {
             echo '<div class="wrap"><h1>' . __('Container Block Designer', 'container-block-designer') . '</h1>';
-            echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/container-block-designer.php', 'container-block-designer') . '</p></div>';
+            echo '<div class="notice notice-error"><p>' . __('Admin-Datei nicht gefunden: admin/dashboard.php', 'container-block-designer') . '</p></div>';
             echo '</div>';
         }
     }

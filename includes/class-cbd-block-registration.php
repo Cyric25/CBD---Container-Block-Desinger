@@ -710,57 +710,6 @@ class CBD_Block_Registration {
     }
 
     /**
-     * Frontend JavaScript einbinden
-     * DEPRECATED: Functionality moved to interactivity-fallback.js
-     */
-    private function enqueue_frontend_scripts() {
-        // This function is kept for backward compatibility
-        // but functionality is now handled by interactivity-fallback.js
-        return;
-
-        /* DEPRECATED CODE:
-        // Prüfe ob interaktive Features verwendet werden
-        if (!$this->has_interactive_features()) {
-            return;
-        }
-
-        // jQuery, html2canvas und jsPDF einbinden
-        wp_enqueue_script('jquery');
-        
-        wp_enqueue_script(
-            'html2canvas',
-            'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
-            array(),
-            '1.4.1',
-            true
-        );
-        
-        // PDF functionality is handled by the new jspdf-loader.js system
-        
-        wp_enqueue_script(
-            'cbd-frontend-working',
-            '',
-            array('jquery', 'html2canvas'),
-            CBD_VERSION . '-' . time(),
-            true
-        );
-
-        // Lokalisierung für Frontend
-        wp_localize_script('cbd-frontend-working', 'cbdFrontend', array(
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('cbd_frontend'),
-            'i18n' => array(
-                'copySuccess' => __('Text kopiert!', 'container-block-designer'),
-                'copyError' => __('Kopieren fehlgeschlagen', 'container-block-designer'),
-                'screenshotSuccess' => __('Screenshot erstellt!', 'container-block-designer'),
-                'screenshotError' => __('Screenshot fehlgeschlagen', 'container-block-designer'),
-                'screenshotUnavailable' => __('Screenshot-Funktion nicht verfügbar', 'container-block-designer')
-            )
-        ));
-        */
-    }
-    
-    /**
      * Prüfen ob interaktive Features vorhanden sind
      */
     private function has_interactive_features() {

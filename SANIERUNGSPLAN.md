@@ -39,27 +39,13 @@ Status-Legende: `[ ]` offen · `[x]` erledigt
 
 ---
 
-## Phase 4 — Toten Code entfernen (~0,5 Tag, ~6.000+ Zeilen)
+## Phase 4 — Toten Code entfernen ✅ ERLEDIGT (v3.1.45)
 
-- [ ] **4.1 Tote JS-Dateien löschen** (nirgends enqueued, per Grep verifiziert):
-  `jspdf-loader.js`, `jspdf-loader-old.js`, `html2pdf-loader-v2.js`, `frontend-working.js`,
-  `container-blocks-inline.js`, `unified-frontend.js`, alle `*.backup`-Dateien, vermutlich `assets/css/frontend.css`.
-  Dazu verwaiste `wp_add_inline_script('cbd-frontend-working', ...)` in `class-cbd-block-registration.php:475`.
-
-- [ ] **4.2 Tote PHP-Schichten löschen**:
-  `includes/class-consolidated-frontend.php` (1.176 Z., überall auskommentiert),
-  `includes/API/` komplett (794 Z., zweite tote REST-API — aktiv ist `class-cbd-blocks-rest-api.php`).
-
-- [ ] **4.3 Geister-Referenzen entfernen (latente Fatal Errors!)**:
-  Container-Services `frontend_renderer` und `admin_router` (`class-service-container.php:190–202`) verweisen auf nicht existierende Klassen → Fatal bei Abruf.
-  Autoloader-Mappings auf nicht existierende Dateien (`class-autoloader.php:148–149`).
-
-- [ ] **4.4 Repo-/ZIP-Hygiene**:
-  `vendor/` mit `composer install --no-dev` neu bauen (PHPUnit/PHPCS sind aktuell im 21-MB-ZIP!), aus Git nehmen oder im ZIP-Skript ausschließen;
-  10 Status-MD-Dateien (`FRONTEND_STATUS.md`, `POSITIONING_FIX_COMPLETE.md`, …) + `Ordnerstruktur.txt` archivieren/löschen;
-  `admin/container-block-designer.php` → `admin/dashboard.php` umbenennen (Namenskollision mit Hauptdatei).
-
-- [ ] **4.5 `cbd_get_service()` deduplizieren** — doppelt definiert in `container-block-designer.php:892` und `includes/functions.php:20` mit abweichendem Fehlerverhalten.
+- [x] **4.1 Tote JS-Dateien gelöscht** — `jspdf-loader.js`, `jspdf-loader-old.js`, `html2pdf-loader-v2.js`, `frontend-working.js`, `container-blocks-inline.js`, `unified-frontend.js`. Dazu die tote Methode `enqueue_frontend_scripts()` (inkl. verwaister `wp_add_inline_script('cbd-frontend-working')`) entfernt.
+- [x] **4.2 Tote PHP-Schichten gelöscht** — `includes/class-consolidated-frontend.php` und der komplette Ordner `includes/API/` (zweite tote REST-API; aktiv bleibt `class-cbd-blocks-rest-api.php`).
+- [x] **4.3 Geister-Referenzen entfernt (latente Fatal Errors)** — Services `frontend_renderer`, `admin_router`, `api_manager` aus dem Container gelöscht; Autoloader-Mappings auf nicht existierende Renderer-Dateien entfernt.
+- [x] **4.4 Repo-/ZIP-Hygiene** — `admin/container-block-designer.php` → `admin/dashboard.php` umbenannt (Referenz aktualisiert); Status-MD-Dateien und die bereits gelöschte `debug-pdf.php` aus der ZIP-Include-Liste entfernt. *Dev-Vendor-Pakete (PHPUnit/PHPCS/nikic/…) waren im ZIP-Skript bereits ausgeschlossen.*
+- [x] **4.5 `cbd_get_service()` dedupliziert** — Inline-Duplikat aus dem Hauptplugin entfernt; einzige Definition in `includes/functions.php` (mit `function_exists`-Guards), das nun explizit in `load_dependencies()` geladen wird (funktioniert auch ohne Composer).
 
 ---
 

@@ -145,9 +145,6 @@ class CBD_Autoloader {
             'CBD_Ajax_Handler' => $base_path . 'class-cbd-ajax-handler.php',
             'CBD_Style_Loader' => $base_path . 'class-cbd-style-loader.php',
             'CBD_Block_Registration' => $base_path . 'class-cbd-block-registration.php',
-            'CBD_Frontend_Renderer' => $base_path . 'class-cbd-frontend-renderer.php',
-            'CBD_Unified_Frontend_Renderer' => $base_path . 'class-unified-frontend-renderer.php',
-            'CBD_Consolidated_Frontend' => $base_path . 'class-consolidated-frontend.php',
             'CBD_Schema_Manager' => $base_path . 'Database/class-schema-manager.php'
         );
         

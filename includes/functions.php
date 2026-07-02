@@ -17,15 +17,17 @@ if (!defined('ABSPATH')) {
  * @param string $service_name Service name to retrieve
  * @return mixed|null Service instance or null if not found
  */
-function cbd_get_service($service_name) {
-    $plugin = ContainerBlockDesigner::get_instance();
-    if ($plugin && method_exists($plugin, 'get_container')) {
-        $container = $plugin->get_container();
-        if ($container && method_exists($container, 'get')) {
-            return $container->get($service_name);
+if (!function_exists('cbd_get_service')) {
+    function cbd_get_service($service_name) {
+        $plugin = ContainerBlockDesigner::get_instance();
+        if ($plugin && method_exists($plugin, 'get_container')) {
+            $container = $plugin->get_container();
+            if ($container && method_exists($container, 'get')) {
+                return $container->get($service_name);
+            }
         }
+        return null;
     }
-    return null;
 }
 
 /**
@@ -34,13 +36,15 @@ function cbd_get_service($service_name) {
  * @param string $service_name Service name to check
  * @return bool True if service exists
  */
-function cbd_has_service($service_name) {
-    $plugin = ContainerBlockDesigner::get_instance();
-    if ($plugin && method_exists($plugin, 'get_container')) {
-        $container = $plugin->get_container();
-        if ($container && method_exists($container, 'has')) {
-            return $container->has($service_name);
+if (!function_exists('cbd_has_service')) {
+    function cbd_has_service($service_name) {
+        $plugin = ContainerBlockDesigner::get_instance();
+        if ($plugin && method_exists($plugin, 'get_container')) {
+            $container = $plugin->get_container();
+            if ($container && method_exists($container, 'has')) {
+                return $container->has($service_name);
+            }
         }
+        return false;
     }
-    return false;
 }

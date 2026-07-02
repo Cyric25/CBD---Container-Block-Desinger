@@ -186,36 +186,16 @@ class CBD_Service_Container {
             return CBD_Block_Registration::get_instance();
         });
         
-        // Frontend renderer - Create new instance
-        $this->register('frontend_renderer', function($container, $config) {
-            return new CBD_Unified_Frontend_Renderer();
-        });
-        
         // AJAX handler - Create new instance
         $this->register('ajax_handler', function($container, $config) {
             return new CBD_Ajax_Handler();
         });
-        
-        // Admin router - Create new instance
-        $this->register('admin_router', function($container, $config) {
-            return new \ContainerBlockDesigner\Admin\AdminRouter();
-        });
-        
-        // API manager - Create new instance
-        // WICHTIG: Datei muss zuerst geladen werden!
-        $this->register('api_manager', function($container, $config) {
-            // Stelle sicher, dass die API Manager Datei geladen ist
-            if (!class_exists('\ContainerBlockDesigner\API\APIManager')) {
-                require_once CBD_PLUGIN_DIR . 'includes/API/class-api-manager.php';
-            }
-            return new \ContainerBlockDesigner\API\APIManager();
-        });
-        
-        // Consolidated frontend - DISABLED (Master Renderer takes over)
-        // $this->register('consolidated_frontend', function($container, $config) {
-        //     return CBD_Consolidated_Frontend::get_instance();
-        // });
-        
+
+        // Hinweis: Die Services frontend_renderer, admin_router und api_manager
+        // wurden entfernt – die referenzierten Klassen (CBD_Unified_Frontend_Renderer,
+        // ContainerBlockDesigner\Admin\AdminRouter, ContainerBlockDesigner\API\APIManager)
+        // existieren nicht bzw. sind tot; ein get() hätte einen Fatal Error ausgelöst.
+
         // Admin - Use existing singleton
         $this->register('admin', function($container, $config) {
             return CBD_Admin::get_instance();

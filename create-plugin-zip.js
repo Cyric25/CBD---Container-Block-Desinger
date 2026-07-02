@@ -70,19 +70,10 @@ const includePaths = [
     'vendor',  // IMPORTANT: Composer dependencies (mPDF + TCPDF fallback)
     'languages',
     'container-block-designer.php',
-    'debug-pdf.php',
     'LICENSE',
-    'README.md',
-    'CLAUDE.md',
-    'FRONTEND_STATUS.md',
-    'HTML_ELEMENTS_FIX_STATUS.md',
-    'INLINE-SCRIPT-ISOLATION.md',
-    'INTERACTIVITY-API.md',
-    'IOS-SCREENSHOT-STRATEGY.md',
-    'LATEX-GLOBAL-IMPLEMENTATION.md',
-    'PHP8-COMPATIBILITY.md',
-    'POSITIONING_FIX_COMPLETE.md',
-    'DOUBLE_FRAME_FIX_STATUS.md'
+    'README.md'
+    // Hinweis: Status-/Entwickler-MD-Dateien (FRONTEND_STATUS.md etc.) und
+    // debug-pdf.php werden bewusst NICHT mehr ausgeliefert.
 ];
 
 // Files and directories to exclude
