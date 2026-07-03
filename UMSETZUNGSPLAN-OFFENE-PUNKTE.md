@@ -76,11 +76,13 @@ funktionsfähig — ein Klick auf „Speichern" läuft ins Leere bzw. in einen
        wp_send_json_error(__('Fehler beim Speichern', 'container-block-designer'));
    }
    ```
-3. **Nonce-Konsistenz prüfen:** In `assets/js/admin-blocks-list.js` sendet der
-   Code `_wpnonce: cbdAdmin.nonce`. Prüfen, mit welcher Action `cbdAdmin.nonce`
-   erzeugt wird (`enqueue_admin_assets`, ca. Zeile 292, `wp_localize_script`).
-   Der `check_ajax_referer`-Aufruf oben muss dazu passen — ggf. Action-Namen
-   angleichen.
+3. **Nonce-Konsistenz (VERIFIZIERT):** `cbdAdmin.nonce` wird in
+   `class-cbd-admin.php:529` mit `wp_create_nonce('cbd_admin')` erzeugt und in
+   `admin-blocks-list.js:301 ff.` als `_wpnonce` gesendet. Der Handler oben prüft
+   daher primär `cbd_admin` — das ist korrekt. Der zweite `check_ajax_referer`
+   auf `cbd_admin_nonce` ist nur Fallback und kann entfallen.
+   **Sicherheit:** Der Handler darf NICHT als `wp_ajax_nopriv_` registriert
+   werden (nur eingeloggte Redakteure) — im Beispiel oben korrekt nur `wp_ajax_`.
 
 ### Schritte für Variante 2 (entfernen)
 1. In `assets/js/admin-blocks-list.js` die Methoden `saveQuickEdit`,
@@ -102,36 +104,57 @@ funktionsfähig — ein Klick auf „Speichern" läuft ins Leere bzw. in einen
 Die Import/Export-Seite (`admin/import-export.php`, im Menü über
 `render_import_export_page()`, `class-cbd-admin.php:1067`) ist überwiegend UI:
 - `cbd_preview_export` (JS, Zeile 527) hat keinen registrierten PHP-Handler.
-- Die Import-Formulare (`cbd_import_nonce`, Zeile 148) werden serverseitig nicht
-  ausgewertet — es gibt keinen Verarbeitungsblock, der den Upload liest und
-  Blöcke anlegt.
+- Die Import-Formulare (Nonce `cbd_import_blocks`, Zeile 148) werden serverseitig
+  nicht ausgewertet — es gibt keinen Verarbeitungsblock, der den Upload liest.
+- **Das Upload-Feld akzeptiert `.json,.zip`** (Zeile 153, `accept=".json,.zip"`).
+  ZIP-Import ist eine erhebliche Angriffsfläche (siehe Sicherheits-Sektion).
 
 ### Entscheidung (MUSS vorab geklärt werden)
-- **Variante 1:** Voll implementieren (Export als JSON-Download, Import mit
-  Datei-Upload + Validierung + `CBD_Database::save_block`).
+- **Variante 1:** Voll implementieren — **aber JSON-only** (ZIP-Support streichen,
+  siehe Sicherheit). Export als JSON-Download, Import mit Datei-Upload +
+  strikter Validierung + `CBD_Database::save_block`.
 - **Variante 2 (empfohlen für schnellen sauberen Zustand):** Menüpunkt vorerst
-  ausblenden, bis Bedarf besteht.
+  ausblenden, bis konkreter Bedarf besteht — entfernt zugleich die Angriffsfläche.
+
+### ⚠️ Sicherheit — verbindliche Anforderungen für Variante 1
+Import ist ein **authentifizierter Datei-Upload mit Datenverarbeitung** — die
+klassische Stelle für Angriffe. Wenn implementiert, ALLE Punkte erfüllen:
+
+1. **ZIP-Support entfernen.** Das `accept`-Attribut auf `.json` reduzieren UND
+   serverseitig den MIME-/Endungs-Check auf JSON beschränken. Kein `ZipArchive`,
+   kein `unzip` — ZIP-Uploads bergen Zip-Bombs (Ressourcenerschöpfung) und
+   Path-Traversal beim Entpacken (`../../wp-config.php`). Nur wenn ZIP zwingend
+   gebraucht wird: Pfade jedes Eintrags gegen `realpath()` in einem dedizierten
+   Temp-Ordner validieren, entpackte Größe deckeln, niemals in web-erreichbare
+   Verzeichnisse entpacken.
+2. **Capability + Nonce** in JEDEM Handler: `current_user_can('cbd_admin_blocks')`
+   und `check_admin_referer('cbd_import_blocks', 'cbd_import_nonce')` bzw.
+   `'cbd_export_blocks'`. Handler NIE als `nopriv` registrieren.
+3. **Upload-Validierung:** `wp_check_filetype_and_ext()` + explizite Größengrenze
+   (z. B. `if ($_FILES['import_file']['size'] > 1 * MB_IN_BYTES) reject`).
+   Inhalt mit `wp_json_file_decode()` / `json_decode()` lesen — bei `null`/Fehler
+   sofort abweisen.
+4. **Struktur strikt validieren:** Erwartete Keys prüfen (name, title, slug,
+   config, styles, features, status). Unerwartete Felder verwerfen (Whitelist,
+   keine Blacklist). `config`/`styles`/`features` per `json_decode`→sanitize→
+   `wp_json_encode` roundtripen — NIE rohe JSON-Strings aus der Datei speichern.
+5. **Kein `unserialize`** auf Upload-Daten (PHP-Object-Injection). Nur JSON.
+6. **Schreiben ausschließlich über `CBD_Database::save_block()`** (sanitisiert +
+   feuert `cbd_block_saved` für die Cache-Invalidierung). Slug-Kollisionen mit
+   `block_slug_exists()` behandeln.
+7. **Export:** Nur Block-Design-Daten ausgeben, KEINE Server-/Pfad-/Nutzerinfos.
+   `admin_post_cbd_export_blocks` mit Nonce + Capability, dann
+   `Content-Disposition: attachment` + `wp_json_encode(CBD_Database::get_blocks())`.
 
 ### Schritte für Variante 1 (implementieren)
-1. **Export-Handler** in `class-cbd-admin.php` registrieren und implementieren:
+1. **Export-Handler** registrieren:
    - `add_action('wp_ajax_cbd_preview_export', ...)` → gibt gefilterte Blocks als
-     JSON zurück (nur Preview, kein Download).
-   - Export-Download: eigener `admin_post`-Handler
-     (`add_action('admin_post_cbd_export_blocks', ...)`), der
-     `header('Content-Type: application/json')` +
-     `header('Content-Disposition: attachment; filename=...')` setzt und
-     `CBD_Database::get_blocks()` als JSON ausgibt. Nonce `cbd_export_blocks`
-     prüfen, `current_user_can('cbd_admin_blocks')`.
-2. **Import-Handler** (`admin_post_cbd_import_blocks`):
-   - Nonce `cbd_import_blocks` + Capability prüfen.
-   - `$_FILES['import_file']` via `wp_handle_upload` mit
-     `array('mimes' => array('json' => 'application/json'))` annehmen.
-   - JSON dekodieren, **strikt validieren** (erwartete Keys: name, title, slug,
-     config, styles, features, status), pro Eintrag `CBD_Database::save_block()`.
-   - Slug-Kollisionen behandeln (vorhandene `block_slug_exists()` nutzen).
-   - Am Ende `do_action('cbd_block_saved', 0)` für Cache-Invalidierung.
-   - **Sicherheit:** Kein `unserialize`, kein direktes Schreiben von `styles`/
-     `config`-Strings ohne JSON-Roundtrip; Werte durchsanitisieren.
+     JSON-Preview zurück (Nonce `cbd_export_preview` prüfen, Capability!).
+   - `add_action('admin_post_cbd_export_blocks', ...)` für den Download
+     (Anforderung 7). *Hinweis: Es existieren aktuell KEINE `admin_post_`-Handler
+     im Plugin — dieses Muster ist neu, sauber übernehmen.*
+2. **Import-Handler** `admin_post_cbd_import_blocks` gemäß Sicherheits-Sektion
+   (Punkte 1–6).
 3. Erfolg/Fehler via `set_transient('cbd_admin_notice_...')` + Redirect zurück.
 
 ### Schritte für Variante 2 (ausblenden)
@@ -180,19 +203,24 @@ Beide Dateien enthalten fast identisches Inline-JS und -CSS:
    Analog für die `<style>`-Blöcke. So wird sichtbar, welche Unterschiede echt
    (gewollt) und welche Drift (Bug) sind.
 2. **CSS zuerst** (risikoärmer): Gemeinsames CSS nach
-   `assets/css/admin-block-form.css` extrahieren, in `enqueue_admin_assets()`
-   (`class-cbd-admin.php:292`) NUR auf den beiden Screens `cbd-new-block` und
-   `cbd-edit-block` per `wp_enqueue_style` einbinden (Hook-Suffix prüfen). Inline-
-   `<style>` in beiden Dateien entfernen. → Testen: beide Seiten sehen unverändert
-   aus.
+   `assets/css/admin-block-form.css` extrahieren. Einbinden in
+   `enqueue_admin_assets()` (`class-cbd-admin.php:292`) im **bereits vorhandenen
+   `switch ($page)`-Block** unter `case 'cbd-new-block': case 'cbd-edit-block':`
+   (ab Zeile 319) — NICHT über `$hook`. Die Funktion liest die Seite aus
+   `$page = sanitize_text_field($_GET['page'])` (Zeile 300); dort werden schon
+   heute die seiten-spezifischen Assets geladen. Inline-`<style>` in beiden
+   Dateien entfernen. → Testen: beide Seiten sehen unverändert aus.
 3. **JS als Nächstes:** Die 6 Funktionen in `assets/js/admin-block-form.js`
    zusammenführen. Wo die Kopien divergieren, die **funktional korrektere/neuere**
    Variante wählen (in der Regel die aus new-block.php, da umfangreicher) —
    Auswahl im Commit begründen. Konfigurationsunterschiede (z. B. Icon-Listen,
    Default-Werte) über ein `wp_localize_script('cbd-admin-block-form', 'cbdBlockForm', array(...))`
    je Seite übergeben, nicht im JS hartkodieren.
-4. Inline-`<script>` in beiden Dateien entfernen, stattdessen das neue Handle
-   enqueuen (nur auf den beiden Screens).
+4. Inline-`<script>` in beiden Dateien entfernen, stattdessen das neue Handle im
+   selben `switch ($page)`-`case` (Schritt 2) per `wp_enqueue_script(..., true)`
+   im Footer einbinden. **Hinweis:** Das entfernt zugleich die inline gesetzten
+   `CBD_VERSION . '-' . time()`-Cache-Buster (falls vorhanden) — das feste
+   `CBD_VERSION` als Handle-Version macht die Datei cachebar (Performance).
 5. **HTML-Formular:** Erst wenn 2–4 stabil laufen, prüfen ob das Formular-Markup
    dupliziert ist. Falls ja: nach `admin/partials/block-form.php` extrahieren und
    in beiden Seiten via `include` mit vorbelegten Variablen einbinden.
@@ -316,25 +344,118 @@ Features/Styles. Risiko gering (Excerpts strippen Blöcke meist), aber bewusst.
 
 ---
 
+## Querschnitt: Sicherheits-Checkliste (für JEDE Aufgabe verbindlich)
+
+Diese Regeln schützen vor Angriffen von außen. Jeder neue oder geänderte Handler
+MUSS sie erfüllen — ohne Ausnahme:
+
+1. **Jeder AJAX-/POST-Handler prüft ZUERST Nonce, DANN Capability**, bevor
+   irgendetwas gelesen/geschrieben wird. Muster:
+   `check_ajax_referer(...)` bzw. `check_admin_referer(...)` → dann
+   `current_user_can('cbd_admin_blocks')` (Design-Verwaltung) bzw.
+   `'cbd_edit_blocks'` (Redakteur-Funktionen). Reihenfolge nicht vertauschen.
+2. **Niemals `wp_ajax_nopriv_` für schreibende oder datenoffenlegende Aktionen.**
+   (Der einzige bewusst öffentliche Endpoint ist die PDF-Generierung — nichts
+   Neues ohne ausdrückliche Freigabe öffentlich machen.)
+3. **Alle Eingaben sanitisieren, alle Ausgaben escapen.** `intval` für IDs,
+   `sanitize_text_field`/`sanitize_textarea_field` für Text, `sanitize_hex_color`
+   für Farben, `wp_kses_post` für erlaubtes HTML. Beim Echo in Admin-Templates:
+   `esc_html`/`esc_attr`/`esc_url`.
+4. **SQL nur über `$wpdb->prepare()`** bzw. `$wpdb->update/insert/delete` mit
+   Format-Specifiern (`%d`/`%s`). Nie String-Konkatenation von Nutzereingaben in
+   Queries. Tabellennamen nur aus den `CBD_TABLE_*`-Konstanten.
+5. **Kein `unserialize`, kein `eval`, kein `extract`** auf Nutzerdaten. Strukturen
+   ausschließlich als JSON (`json_decode`/`wp_json_encode`).
+6. **Datei-Uploads** (nur Aufgabe B): Endung + MIME serverseitig prüfen,
+   Größenlimit, kein ZIP/Entpacken (siehe Aufgabe-B-Sicherheit). Uploads nie in
+   web-erreichbare Verzeichnisse schreiben.
+7. **Keine internen Details ausgeben** (Pfade, Server-Config, Stacktraces,
+   Roh-JSON von Designs) — weder in Responses noch in HTML-Kommentaren. Debug-
+   Ausgaben immer hinter `if (defined('WP_DEBUG') && WP_DEBUG)`.
+8. **Beim Refactoring bestehende Schutzmechanismen erhalten:** Verschobene
+   Handler behalten Nonce + Capability. Nach dem Verschieben grep-prüfen, dass
+   die Prüfungen mitgewandert sind.
+
+## Querschnitt: Performance-Regeln
+
+1. **Nichts Neues unkonditional im Frontend enqueuen.** Assets nur laden, wenn
+   die Seite sie braucht — Muster: `frontend_has_container_block()` bzw. der
+   `switch ($page)`-Block im Admin.
+2. **Keine `time()`-/Zufalls-Cache-Buster.** Handle-Version immer `CBD_VERSION`,
+   damit Browser/CDN cachen können.
+3. **Extrahiertes Inline-JS/CSS wird cachebar** (eigene Datei + `CBD_VERSION`) —
+   das ist ein Performance-GEWINN gegenüber Inline, zusätzlich zur Entduplizierung.
+4. **Keine Queries in Schleifen.** Wenn ein Handler pro Element schreibt (Import),
+   Bulk-Logik nutzen bzw. Query-Zahl im Blick behalten; Cache am Ende EINMAL via
+   `do_action('cbd_block_saved')` invalidieren, nicht pro Element.
+5. **Schreibpfade invalidieren den Cache** über `do_action('cbd_block_saved'/
+   'cbd_block_deleted')` — jeder neue Schreib-Handler MUSS das feuern, sonst
+   zeigt das Frontend veraltete Designs.
+6. **Kein Verhalten „aus Versehen" verschlechtern:** Nach Refactorings prüfen,
+   dass Assets weiterhin nur auf den Zielseiten laden (Network-Tab).
+
 ## Diskussionspunkte (vor Umsetzung zu klären)
 
-Diese Fragen bestimmen, welche Varianten oben gelten. Sinnvoll, sie vorab zu
-entscheiden:
+Diese Fragen bestimmen, welche Varianten oben gelten. Jeweils mit Kontext,
+Optionen, Empfehlung und Konsequenz — so lässt sich die Entscheidung führen.
 
-1. **Quick-Edit (Aufgabe A):** Soll das Schnell-Bearbeiten in der Blockliste
-   funktionieren, oder ist es überflüssig (Bearbeiten-Seite reicht)?
-2. **Import/Export (Aufgabe B):** Wird der Austausch von Block-Designs zwischen
-   Installationen gebraucht? Falls nein → ausblenden.
-3. **Reihenfolge C/D:** Beide sind groß. Empfehlung: **C zuerst** (weniger
-   Risiko, sofort weniger Duplikat-Bugs), dann D. Einverstanden?
-4. **CSS-Duplikat (Aufgabe D):** Darf die Block-Preview-CSS-Generierung an den
-   Style-Loader delegiert werden (Single Source of Truth), auch wenn das Editor-
-   Vorschau minimal verändern könnte?
-5. **Service-Container (Aufgabe E):** Reicht „Fassade + Fallback entfernen"
-   (Variante 1) oder ist ein größerer Umbau gewünscht?
-6. **Test-Ressourcen:** Steht eine Staging-Umgebung mit Beispielinhalten
-   (Container-Blöcke, wiederverwendbare Blöcke, Classroom-Klasse, Block-Redakteur-
-   Nutzer) bereit? C und D sind ohne sie nicht sicher abnehmbar.
+### 1. Quick-Edit (Aufgabe A)
+**Frage:** Soll das Schnell-Bearbeiten (Titel/Beschreibung/Status direkt in der
+Blockliste) funktionieren, oder reicht die vollständige „Bearbeiten"-Seite?
+**Kontext:** Das UI existiert bereits (per JS injiziert), nur der Server-Handler
+fehlt — es war nie funktionsfähig.
+**Optionen:** (1) Handler implementieren (~1 h, sicher umsetzbar, Beispielcode
+liegt vor). (2) UI+JS entfernen (~30 min, weniger Code).
+**Empfehlung:** Implementieren, wenn du oft nur den Status/Titel änderst — spart
+Klicks. Sonst entfernen.
+**Konsequenz bei „nichts tun":** Ein sichtbarer, aber toter „Speichern"-Button
+bleibt — verwirrend für Redakteure.
+
+### 2. Import/Export (Aufgabe B)
+**Frage:** Wird der Austausch von Block-Designs zwischen Installationen
+(z. B. Test → Produktiv, oder Kolleg:innen) gebraucht?
+**Kontext:** Größte NEUE Angriffsfläche des ganzen Plans (authentifizierter
+Datei-Upload). Das Feld akzeptiert aktuell auch `.zip` — gefährlich.
+**Optionen:** (1) JSON-only implementieren mit voller Sicherheits-Checkliste
+(~1 Tag). (2) Menüpunkt ausblenden (~15 min) — entfernt die Angriffsfläche ganz.
+**Empfehlung:** **Ausblenden**, außer du brauchst den Austausch konkret. „Ein
+Feature, das man nicht hat, kann man nicht angreifen."
+**Konsequenz bei „nichts tun":** Toter Menüpunkt bleibt; das `.zip`-Upload-Feld
+suggeriert eine (nicht vorhandene) Funktion — Verwirrung, kein akutes Risiko, da
+serverseitig ohnehin nichts verarbeitet wird.
+
+### 3. Reihenfolge C vs. D
+**Frage:** Zuerst Formulare entduplizieren (C) oder `CBD_Admin` aufteilen (D)?
+**Empfehlung:** **C zuerst.** C beseitigt aktiv divergierende Duplikate (echte
+Bug-Quelle), D baut danach auf einem ruhigeren Stand auf. Beide brauchen Staging.
+**Zu entscheiden:** Einverstanden mit C→D, oder andere Priorität?
+
+### 4. CSS-Duplikat bei der Aufteilung (Aufgabe D)
+**Frage:** Darf `generate_css_from_styles()` (in `CBD_Admin`, Z. 1773) entfernt
+und an den `CBD_Style_Loader` delegiert werden (eine Quelle der CSS-Wahrheit)?
+**Kontext:** Die Editor-Vorschau nutzt aktuell eine eigene CSS-Erzeugung, die die
+des Style-Loaders dupliziert. Delegation reduziert Wartungslast, könnte die
+Vorschau aber minimal anders aussehen lassen.
+**Optionen:** (1) Delegieren (sauberer, kleines Risiko optischer Abweichung).
+(2) Belassen (kein Risiko, Duplikat bleibt).
+**Empfehlung:** Delegieren, mit optischem Vorher/Nachher-Vergleich im Editor.
+**Zu entscheiden:** Ist eine minimale Vorschau-Abweichung akzeptabel?
+
+### 5. Service-Container (Aufgabe E)
+**Frage:** Reicht „Fassade behalten + `init_legacy_fallback`-Doppelpfad
+entfernen" (Variante 1), oder größerer Umbau?
+**Empfehlung:** **Variante 1.** Für den Plugin-Umfang bringt echte Dependency
+Injection keinen Praxisnutzen; der Doppelpfad ist die eigentliche Altlast.
+**Zu entscheiden:** Variante 1 ok, oder Container ganz entfernen (Variante 3)?
+
+### 6. Test-Ressourcen (blockierend für C und D)
+**Frage:** Steht eine WordPress-Staging-Umgebung mit Beispielinhalten bereit —
+Seiten mit Container-Blöcken, wiederverwendbare Blöcke, eine Classroom-Klasse,
+ein Block-Redakteur-Testnutzer und ein Admin?
+**Warum wichtig:** C und D ändern funktionierende Admin-UI; ohne Laufzeit-Test
+sind sie nicht sicher abnehmbar (php -l prüft nur Syntax, kein Verhalten).
+**Konsequenz bei „nein":** C und D zurückstellen, bis Staging existiert. A, B
+(Variante „ausblenden") und E sind auch ohne Staging vertretbar.
 
 ## Empfohlene Reihenfolge (gesamt)
 

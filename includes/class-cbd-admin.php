@@ -336,9 +336,9 @@ class CBD_Admin {
 
                 wp_enqueue_style(
                     'lucide-icons',
-                    'https://unpkg.com/lucide-static@latest/font/lucide.css',
+                    'https://unpkg.com/lucide-static@0.454.0/font/lucide.css',
                     array(),
-                    null
+                    '0.454.0'
                 );
 
                 wp_enqueue_style(

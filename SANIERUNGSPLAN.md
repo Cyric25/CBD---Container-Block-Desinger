@@ -80,6 +80,16 @@ Kritische Selbstprüfung aller Sanierungs-Commits. Vier Schwachstellen in den ei
 
 Geprüft und in Ordnung: Rekursion der Block-Slug-Extraktion, Organizer-AJAX-Handler (Nonce + manage_options), Migration schreibt nur wp_posts, Transient-Signaturen/Invalidierung, keine JS-Aufrufer der gehärteten `cbd_save_block`-Action.
 
+### Zweiter Nachreview (Plan-Prüfung, v3.1.49)
+
+Prüfung des UMSETZUNGSPLAN-OFFENE-PUNKTE.md auf Fehler (Sicherheit + Performance) sowie erneuter Code-Scan:
+
+- [x] **Übersehene unpinnte CDN-Abhängigkeit gefixt** — `lucide-static@latest` bestand noch in der Admin-Enqueue (`class-cbd-admin.php:339`, nur new/edit-block-Seiten); Phase 2 hatte nur die Frontend-/Classroom-Vorkommen gepinnt. Jetzt `0.454.0` (Supply-Chain-Risiko im Admin + Caching). Keine `@latest`-Referenzen mehr im Plugin.
+- [x] **Plan-Fehler Aufgabe C korrigiert** — Enqueue erfolgt über `switch ($page)` (aus `$_GET['page']`), nicht über `$hook`.
+- [x] **Plan-Lücke Aufgabe B geschlossen** — Upload-Feld akzeptiert `.json,.zip`; verbindliche Sicherheits-Sektion ergänzt (ZIP-Support streichen, Upload-/MIME-/Größenvalidierung, JSON-Roundtrip, kein unserialize).
+- [x] **Aufgabe A Nonce verifiziert** — `cbdAdmin.nonce` = `wp_create_nonce('cbd_admin')`, gesendet als `_wpnonce`.
+- [x] **Querschnitt-Sektionen ergänzt** — verbindliche Sicherheits-Checkliste (8 Punkte) und Performance-Regeln (6 Punkte) für ALLE Aufgaben; Diskussionspunkte mit Kontext/Optionen/Empfehlung/Konsequenz ausgearbeitet.
+
 ### Nebenbefunde (pre-existing, nicht durch Sanierung verursacht)
 
 - `cbd_save_block_quick` (admin-blocks-list.js) hat keinen PHP-Handler — Quick-Edit in der Blockliste war schon immer funktionslos. Entweder Handler ergänzen oder JS-Teil entfernen.
