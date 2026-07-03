@@ -184,6 +184,20 @@ class CBD_Admin {
                 'dashicons-layout',
                 30
             );
+
+            // Klassen-Verwaltung auch für Block-Redakteure (Lehrpersonen).
+            // Die AJAX-Handler (ajax_save_class etc.) erlauben ohnehin
+            // cbd_edit_blocks; nur der Menüzugang fehlte bislang.
+            if (get_option('cbd_classroom_enabled', false) && current_user_can('cbd_edit_blocks')) {
+                add_submenu_page(
+                    'cbd-block-preview',
+                    __('Klassen', 'container-block-designer'),
+                    __('Klassen', 'container-block-designer'),
+                    'cbd_edit_blocks',
+                    'cbd-classroom',
+                    array($this, 'render_classroom_page')
+                );
+            }
         } else {
             // Für Admins/Editoren: Vollständiges Menü
             add_menu_page(
