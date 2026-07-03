@@ -55,11 +55,17 @@ Status-Legende: `[ ]` offen · `[x]` erledigt
 - [x] **5.5 Versionen synchronisiert** — composer.json (`2.6.0` → `3.1.45`), CDB-CLAUDE.md (`2.9.0` → `3.1.45`, DB-Version → `3.1.32`). *Autoload-Strategie unverändert gelassen (die manuelle require_once-Kette funktioniert; ein Umbau auf Composer-classmap ist optional und ohne Nutzen für die Laufzeit).*
 - [x] **5.6 `deprecated`-Leitlinie** — Kommentar bei `ContainerBlockSave` in `block-editor.js`: bei künftigen `save()`-Änderungen ist ein `deprecated`-Eintrag zu pflegen; block-recovery.js bleibt Sicherheitsnetz.
 
-### Bewusst zurückgestellt (erfordern laufende WP-Instanz zum Testen)
+---
 
-- [ ] **5.2 new-block.php / edit-block.php zusammenführen** — ~2.500 Zeilen dupliziertes Inline-JS/CSS. **Zurückgestellt:** großes Refactoring an funktionierender Admin-UI (Formular-Submit, Live-Vorschau, Icon-Picker), ohne Staging-Test nicht sicher verifizierbar. Empfohlener nächster Schritt: gemeinsames Partial `admin/partials/block-form.php` + `assets/js/admin-block-form.js`, schrittweise mit manuellem Test je Feature.
-- [ ] **5.3 `CBD_Admin` (2.985 Z.) aufteilen** — in Admin_Menu / Admin_Ajax_Controller / Block_Preview_Renderer / Repair_Tools; CSS-Generierung nur noch im Style-Loader. **Zurückgestellt:** dito – hohes Regressionsrisiko ohne Testumgebung.
-- [ ] **5.4 Service-Container-Entscheidung** — nach Phase 4 (tote Services entfernt) ist der Container eine saubere, wenn auch dünne Fassade über den Singletons und funktioniert. Ein vollständiger Umbau (Singletons auflösen ODER Container entfernen) ist optional und wird zurückgestellt.
+## Arbeitsanweisungen & offene Pakete
+
+Die vollständige, schrittweise Arbeitsanleitung für alle offenen Punkte (Aufgaben
+A–F: Quick-Edit, Import/Export, Formular-Entduplizierung, CBD_Admin-Aufteilung,
+Service-Container, Archiv-Assets) steht in einer eigenen Datei — mit exakten
+Datei-/Zeilenangaben, Zielarchitektur, Abnahmekriterien und den vorab zu
+klärenden Diskussionspunkten:
+
+➡️ **[UMSETZUNGSPLAN-OFFENE-PUNKTE.md](UMSETZUNGSPLAN-OFFENE-PUNKTE.md)**
 
 ---
 
