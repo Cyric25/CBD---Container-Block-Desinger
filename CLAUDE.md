@@ -8,7 +8,7 @@ Container Block Designer is a WordPress plugin that creates customizable contain
 
 **Current Version:** 3.1.45
 **WordPress Requirements:** 6.0+
-**PHP Requirements:** 8.0+
+**PHP Requirements:** 7.4+ (rückwärtskompatibel; getestet auf 7.4.33)
 **Tested up to:** WordPress 6.4, PHP 8.4
 
 ## Architecture
