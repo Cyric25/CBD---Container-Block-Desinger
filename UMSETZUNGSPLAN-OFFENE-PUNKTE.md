@@ -98,9 +98,20 @@ funktionsfähig — ein Klick auf „Speichern" läuft ins Leere bzw. in einen
 
 ---
 
-## Aufgabe B — Import/Export funktionsfähig machen oder ausblenden (mittel, ~0,5–1 Tag)
+## Aufgabe B — Import/Export ✅ ERLEDIGT: ausgeblendet (v3.1.50)
 
-### Problem
+**Entscheidung getroffen (Variante 2):** Der Menüpunkt wurde ausgeblendet
+(`add_submenu_page` für `cbd-import-export` in `class-cbd-admin.php` auskommentiert).
+Grund: Die Seite verarbeitete Uploads serverseitig nie und bündelte drei riskante
+Eingabewege — Datei-Upload inkl. ZIP (Zip-Bomb/Path-Traversal), eingefügtes JSON
+und **URL-Fetch (SSRF-Risiko)**. Design-Übertragung erfolgt stattdessen sicher
+über die Datenbank — Anleitung: [DESIGNS-UEBERTRAGEN.md](DESIGNS-UEBERTRAGEN.md).
+
+Der render-Callback und die JS-Datei bleiben liegen, sind ohne Menü aber nicht
+mehr erreichbar. Die folgende Beschreibung gilt nur, falls die Funktion später
+DOCH implementiert werden soll (dann Variante 1 mit voller Sicherheits-Sektion).
+
+### Problem (historisch, falls Reaktivierung gewünscht)
 Die Import/Export-Seite (`admin/import-export.php`, im Menü über
 `render_import_export_page()`, `class-cbd-admin.php:1067`) ist überwiegend UI:
 - `cbd_preview_export` (JS, Zeile 527) hat keinen registrierten PHP-Handler.
@@ -139,6 +150,13 @@ klassische Stelle für Angriffe. Wenn implementiert, ALLE Punkte erfüllen:
    keine Blacklist). `config`/`styles`/`features` per `json_decode`→sanitize→
    `wp_json_encode` roundtripen — NIE rohe JSON-Strings aus der Datei speichern.
 5. **Kein `unserialize`** auf Upload-Daten (PHP-Object-Injection). Nur JSON.
+5a. **URL-Import (SSRF!):** Das Formular bietet auch „von URL laden"
+    (`import_url`, `import-export.php:166`). Wird das implementiert, ist es ein
+    Server-Side-Request-Forgery-Risiko — der Server würde beliebige URLs abrufen
+    (interne Dienste, Cloud-Metadaten wie `169.254.169.254`). Empfehlung: URL-
+    Import GAR NICHT anbieten. Falls doch: nur `https`, DNS/IP gegen private/
+    link-local-Bereiche prüfen, `wp_safe_remote_get()` (nicht `file_get_contents`)
+    mit Größen-/Timeout-Limit.
 6. **Schreiben ausschließlich über `CBD_Database::save_block()`** (sanitisiert +
    feuert `cbd_block_saved` für die Cache-Invalidierung). Slug-Kollisionen mit
    `block_slug_exists()` behandeln.
@@ -459,8 +477,9 @@ sind sie nicht sicher abnehmbar (php -l prüft nur Syntax, kein Verhalten).
 
 ## Empfohlene Reihenfolge (gesamt)
 
-1. **A** und **B** (klein, schaffen sauberen Zustand, schnelle Erfolge)
-2. **E** (klein, entfernt Doppelpfad)
-3. **C** (Duplikate — größter Wartbarkeitsgewinn)
-4. **D** (Gott-Klasse — baut auf ruhigem C-Stand auf)
-5. **F** nur bei konkretem Bedarf
+1. ~~**B**~~ ✅ erledigt (ausgeblendet, v3.1.50)
+2. **A** (klein, schneller Erfolg)
+3. **E** (klein, entfernt Doppelpfad)
+4. **C** (Duplikate — größter Wartbarkeitsgewinn, braucht Staging)
+5. **D** (Gott-Klasse — baut auf ruhigem C-Stand auf, braucht Staging)
+6. **F** nur bei konkretem Bedarf

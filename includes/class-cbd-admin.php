@@ -192,15 +192,19 @@ class CBD_Admin {
                 array($this, 'render_blocks_list_page')
             );
 
-            // Untermenü: Import/Export - nur Admins für kritische Funktionen
-            add_submenu_page(
-                'container-block-designer',
-                __('Import/Export', 'container-block-designer'),
-                __('Import/Export', 'container-block-designer'),
-                'manage_options',
-                'cbd-import-export',
-                array($this, 'render_import_export_page')
-            );
+            // Untermenü: Import/Export - AUSGEBLENDET (v3.1.50)
+            // Die Seite verarbeitete Uploads serverseitig nie und bündelte drei
+            // riskante Eingabewege (Datei-Upload inkl. ZIP, JSON-Paste, URL-Fetch/
+            // SSRF). Design-Übertragung zwischen Installationen erfolgt stattdessen
+            // sicher über die Datenbank – siehe DESIGNS-UEBERTRAGEN.md.
+            // add_submenu_page(
+            //     'container-block-designer',
+            //     __('Import/Export', 'container-block-designer'),
+            //     __('Import/Export', 'container-block-designer'),
+            //     'manage_options',
+            //     'cbd-import-export',
+            //     array($this, 'render_import_export_page')
+            // );
 
             // Untermenü: Migration - nur Admins
             add_submenu_page(
