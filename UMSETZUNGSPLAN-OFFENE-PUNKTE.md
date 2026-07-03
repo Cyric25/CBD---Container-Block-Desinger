@@ -193,7 +193,24 @@ klassische Stelle für Angriffe. Wenn implementiert, ALLE Punkte erfüllen:
 
 ---
 
-## Aufgabe C — new-block.php / edit-block.php entduplizieren (groß, ~1 Tag)
+## Aufgabe C — new-block.php / edit-block.php entduplizieren (TEILWEISE erledigt)
+
+### Stand v3.1.53
+- ✅ **CSS ausgelagert** (Teil 1/2): beide `<style>`-Blöcke → `assets/css/new-block-form.css`
+  bzw. `edit-block-form.css`, seiten-spezifisch enqueued; Kapazitäts-Bedingung über
+  Body-Klasse `cbd-no-style-edit`. Byte-identisch je Seite (kein Merge), Templates
+  ~1450 Zeilen kleiner, CSS jetzt cachebar.
+- ⏸ **JS-Dedup zurückgestellt (Befund v3.1.53):** Analyse ergab: von den 6 gleichnamigen
+  Funktionen sind **5 byte-identisch** (`populateIconGrid`, `filterIcons`,
+  `createPlaceholder`, `toggleSticky`, `updateToggleVisibility`), nur `updateLivePreview`
+  ist divergiert. ABER alle liegen **innerhalb der `jQuery(ready)`-Closure** und teilen
+  lokale Variablen (`$`, `dashicons` …). Eine Auslagerung in eine gemeinsame Datei bricht
+  den Scope → erfordert Umbau zu eigenständigen Funktionen (Parameter durchreichen) und
+  ist nur mit laufendem Editor sicher verifizierbar. Bewusst NICHT blind ausgeführt.
+  **Sicherer nächster Schritt (mit Test-Iteration):** die 5 identischen Helfer als
+  parametrisierte Funktionen in `assets/js/admin-block-form.js` (global, `$`/`dashicons`
+  als Argumente), aus beiden Inline-Skripten entfernen und dort aufrufen; `updateLivePreview`
+  + dynamische Teile (Redirect/i18n/ajaxurl) seitenspezifisch belassen.
 
 ### Problem (mit Zahlen)
 Beide Dateien enthalten fast identisches Inline-JS und -CSS:
