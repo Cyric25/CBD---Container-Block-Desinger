@@ -15,36 +15,10 @@ jQuery(document).ready(function($) {
          * Initialize blocks list features
          */
         init: function() {
-            this.initQuickActions();
             this.initStatusToggle();
             this.initDuplication();
             this.initSearch();
             this.initSorting();
-        },
-
-        /**
-         * Initialize quick actions in row
-         */
-        initQuickActions: function() {
-            // Quick edit inline
-            $(document).on('click', '.quick-edit', function(e) {
-                e.preventDefault();
-                const row = $(this).closest('tr');
-                const blockId = row.find('input[type="checkbox"]').val();
-                CBDBlocksList.showQuickEdit(row, blockId);
-            });
-
-            // Save quick edit
-            $(document).on('click', '.save-quick-edit', function(e) {
-                e.preventDefault();
-                CBDBlocksList.saveQuickEdit($(this));
-            });
-
-            // Cancel quick edit
-            $(document).on('click', '.cancel-quick-edit', function(e) {
-                e.preventDefault();
-                CBDBlocksList.cancelQuickEdit();
-            });
         },
 
         /**
@@ -242,105 +216,6 @@ jQuery(document).ready(function($) {
             });
         },
 
-        /**
-         * Show quick edit form
-         */
-        showQuickEdit: function(row, blockId) {
-            // Hide any existing quick edit
-            CBDBlocksList.cancelQuickEdit();
-            
-            const name = row.find('.column-name strong a').text();
-            const title = row.find('.column-title').text();
-            const description = row.find('.column-description').text();
-            const status = row.find('.status-badge').hasClass('status-active') ? 'active' : 'inactive';
-            
-            // Create quick edit form
-            const quickEditHtml = `
-                <tr class="quick-edit-row">
-                    <td colspan="7">
-                        <div class="quick-edit-form">
-                            <h4>Quick Edit</h4>
-                            <div class="quick-edit-fields">
-                                <label>
-                                    <span>Name:</span>
-                                    <input type="text" name="name" value="${name}" readonly>
-                                </label>
-                                <label>
-                                    <span>Titel:</span>
-                                    <input type="text" name="title" value="${title}">
-                                </label>
-                                <label>
-                                    <span>Beschreibung:</span>
-                                    <textarea name="description">${description}</textarea>
-                                </label>
-                                <label>
-                                    <span>Status:</span>
-                                    <select name="status">
-                                        <option value="active" ${status === 'active' ? 'selected' : ''}>Aktiv</option>
-                                        <option value="inactive" ${status === 'inactive' ? 'selected' : ''}>Inaktiv</option>
-                                    </select>
-                                </label>
-                            </div>
-                            <div class="quick-edit-buttons">
-                                <button type="button" class="button save-quick-edit" data-block-id="${blockId}">Speichern</button>
-                                <button type="button" class="button cancel-quick-edit">Abbrechen</button>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            `;
-            
-            row.after(quickEditHtml);
-            row.addClass('quick-edit-parent').hide();
-        },
-
-        /**
-         * Save quick edit
-         */
-        saveQuickEdit: function(button) {
-            const form = button.closest('.quick-edit-form');
-            const blockId = button.data('block-id');
-            
-            const data = {
-                action: 'cbd_save_block_quick',
-                block_id: blockId,
-                title: form.find('input[name="title"]').val(),
-                description: form.find('textarea[name="description"]').val(),
-                status: form.find('select[name="status"]').val(),
-                _wpnonce: cbdAdmin.nonce
-            };
-            
-            button.prop('disabled', true).text('Speichern...');
-            
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: data,
-                success: function(response) {
-                    if (response.success) {
-                        CBDAdmin.common.showNotice('success', 'Block wurde aktualisiert.');
-                        setTimeout(function() {
-                            window.location.reload();
-                        }, 1000);
-                    } else {
-                        CBDAdmin.common.showNotice('error', response.data || 'Update failed');
-                        button.prop('disabled', false).text('Speichern');
-                    }
-                },
-                error: function() {
-                    CBDAdmin.common.showNotice('error', 'Network error occurred');
-                    button.prop('disabled', false).text('Speichern');
-                }
-            });
-        },
-
-        /**
-         * Cancel quick edit
-         */
-        cancelQuickEdit: function() {
-            $('.quick-edit-row').remove();
-            $('.quick-edit-parent').removeClass('quick-edit-parent').show();
-        }
     };
 
     // Initialize

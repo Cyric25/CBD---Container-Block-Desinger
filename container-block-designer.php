@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://github.com/Cyric25/CBD---Container-Block-Desinger
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 3.1.51
+ * Version: 3.1.52
  * Author: Cyric25
  * Author URI: https://github.com/Cyric25
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '3.1.51');
+define('CBD_VERSION', '3.1.52');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -315,47 +315,17 @@ class ContainerBlockDesigner {
             }
             
         } catch (Exception $e) {
-            // Log error and fall back to legacy initialization
+            // Der Service-Container delegiert nur an dieselben Singletons; ein
+            // separater Legacy-Fallback wäre reine Redundanz (v3.1.52 entfernt).
+            // Fehler wird protokolliert, damit ein Service-Fehler kein White-Screen wird.
             error_log('CBD Service Container Error: ' . $e->getMessage());
             error_log('CBD Stack Trace: ' . $e->getTraceAsString());
-            $this->init_legacy_fallback();
         } catch (Error $e) {
-            // Handle fatal errors (like private constructor calls)
             error_log('CBD Service Container Fatal Error: ' . $e->getMessage());
             error_log('CBD Stack Trace: ' . $e->getTraceAsString());
-            $this->init_legacy_fallback();
         }
     }
-    
-    /**
-     * Legacy fallback initialization
-     */
-    private function init_legacy_fallback() {
-        // Fallback to old initialization method
-        if (class_exists('CBD_Style_Loader')) {
-            CBD_Style_Loader::get_instance();
-        }
-        
-        // Legacy block registration fallback
-        if (class_exists('CBD_Block_Registration')) {
-            $registration = CBD_Block_Registration::get_instance();
-            $registration->register_blocks();
-        }
-        
-        if (class_exists('CBD_Ajax_Handler')) {
-            new CBD_Ajax_Handler();
-        }
-        
-        if (is_admin() && class_exists('CBD_Admin')) {
-            CBD_Admin::get_instance();
-        }
-        
-        // Legacy frontend renderers disabled - Block Registration handles rendering
-        // if ((!is_admin() || wp_doing_ajax()) && class_exists('CBD_Consolidated_Frontend')) {
-        //     CBD_Consolidated_Frontend::get_instance();
-        // }
-    }
-    
+
     /**
      * Version-Update prüfen und durchführen
      */
