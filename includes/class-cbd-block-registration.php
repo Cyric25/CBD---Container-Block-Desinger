@@ -410,9 +410,17 @@ class CBD_Block_Registration {
         // Container-Blöcke stehen im Inhalt einzelner Seiten/Beiträge.
         if (is_singular()) {
             $post = get_post();
-            if ($post instanceof WP_Post
-                && has_block('container-block-designer/container', $post)) {
-                $cache = true;
+            if ($post instanceof WP_Post) {
+                // Präfix-Suche statt has_block(): erkennt ALLE Varianten
+                // (container-block-designer/container UND dynamisch registrierte
+                // container-block-designer/{design}-Blöcke).
+                if (strpos($post->post_content, '<!-- wp:container-block-designer/') !== false) {
+                    $cache = true;
+                } elseif (strpos($post->post_content, '<!-- wp:block ') !== false) {
+                    // Wiederverwendbare Blöcke können Container enthalten, deren
+                    // Inhalt hier nicht sichtbar ist – konservativ laden.
+                    $cache = true;
+                }
             }
         }
 

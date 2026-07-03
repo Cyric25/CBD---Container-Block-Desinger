@@ -152,11 +152,21 @@ class CBD_Style_Loader {
         // Nur Features der TATSÄCHLICH auf dieser Seite verwendeten Blöcke laden.
         // Verhindert, dass z.B. board-mode.js (112 KB) auf jeder Seite lädt,
         // nur weil irgendein Block-Design site-weit den Tafel-Modus nutzt.
+        global $post;
+        $has_reusable = $post && $post->post_content
+            && strpos($post->post_content, '<!-- wp:block ') !== false;
+
         $page_blocks = $this->get_used_blocks_on_page();
-        if (empty($page_blocks)) {
+
+        if (!empty($page_blocks)) {
+            $active_features = $this->extract_active_features_from_blocks($page_blocks);
+        } elseif ($has_reusable) {
+            // Container könnten in wiederverwendbaren Blöcken stecken (für
+            // parse_blocks unsichtbar) – konservativ alle aktiven Features laden.
+            $active_features = $this->get_active_features();
+        } else {
             return;
         }
-        $active_features = $this->extract_active_features_from_blocks($page_blocks);
 
         // Icons
         if (in_array('icon', $active_features)) {

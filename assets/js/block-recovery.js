@@ -76,10 +76,12 @@
             console.log('CBD Block-Recovery: ' + counter.count + ' Container-Block/Blöcke automatisch repariert');
 
             if (wp.data.dispatch('core/notices')) {
+                var message = (counter.count > 1)
+                    ? counter.count + ' Container-Blöcke wurden nach dem Plugin-Update automatisch repariert.'
+                    : 'Ein Container-Block wurde nach dem Plugin-Update automatisch repariert.';
                 wp.data.dispatch('core/notices').createNotice(
                     'info',
-                    counter.count + ' Container-Block' + (counter.count > 1 ? 'öcke wurden' : ' wurde') +
-                    ' nach dem Plugin-Update automatisch repariert. Bitte die Seite aktualisieren/speichern, um die Reparatur dauerhaft zu übernehmen.',
+                    message + ' Bitte die Seite aktualisieren/speichern, um die Reparatur dauerhaft zu übernehmen.',
                     { isDismissible: true, id: 'cbd-block-recovery-notice' }
                 );
             }

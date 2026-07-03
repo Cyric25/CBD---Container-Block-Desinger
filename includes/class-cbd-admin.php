@@ -92,18 +92,26 @@ class CBD_Admin {
             // Rolle erstellen
             $this->create_block_redakteur_role();
         } else {
-            // Prüfe ob Capability vorhanden ist
-            if (!$block_redakteur_role->has_cap('cbd_edit_blocks')) {
-                $block_redakteur_role->add_cap('cbd_edit_blocks');
+            // Bestehende Rolle mit der kanonischen Definition synchronisieren
+            // (repariert Installationen, die mit älteren, divergierenden
+            // Capability-Sets erstellt wurden)
+            foreach (cbd_block_redakteur_capabilities() as $cap => $grant) {
+                if ($block_redakteur_role->has_cap($cap) !== $grant) {
+                    $block_redakteur_role->add_cap($cap, $grant);
+                }
             }
         }
 
-        // Prüfe Admin-Rollen
+        // Prüfe Admin-Rolle: jede Capability einzeln nachtragen
+        // (nicht nur bei fehlendem cbd_edit_blocks – sonst fehlt z.B.
+        // cbd_admin_blocks dauerhaft, auf das die AJAX-Handler prüfen)
         $admin_role = get_role('administrator');
-        if ($admin_role && !$admin_role->has_cap('cbd_edit_blocks')) {
-            $admin_role->add_cap('cbd_edit_blocks');
-            $admin_role->add_cap('cbd_edit_styles');
-            $admin_role->add_cap('cbd_admin_blocks');
+        if ($admin_role) {
+            foreach (array('cbd_edit_blocks', 'cbd_edit_styles', 'cbd_admin_blocks') as $cap) {
+                if (!$admin_role->has_cap($cap)) {
+                    $admin_role->add_cap($cap);
+                }
+            }
         }
 
         // Setze Transient für 1 Stunde

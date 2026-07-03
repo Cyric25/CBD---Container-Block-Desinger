@@ -78,7 +78,10 @@ class CBD_LaTeX_Parser {
             $post = get_post();
             if ($post instanceof WP_Post) {
                 return strpos($post->post_content, '$') !== false
-                    || strpos($post->post_content, '[latex]') !== false;
+                    || strpos($post->post_content, '[latex]') !== false
+                    // Wiederverwendbare Blöcke können Formeln enthalten, deren
+                    // Inhalt hier nicht sichtbar ist – konservativ laden.
+                    || strpos($post->post_content, '<!-- wp:block ') !== false;
             }
         }
 

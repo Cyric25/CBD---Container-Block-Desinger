@@ -63,6 +63,23 @@ Status-Legende: `[ ]` offen · `[x]` erledigt
 
 ---
 
+## Nachreview vom 03.07.2026 (v3.1.48)
+
+Kritische Selbstprüfung aller Sanierungs-Commits. Vier Schwachstellen in den eigenen Änderungen gefunden und behoben:
+
+- [x] **N.1 Pluralisierungs-Bug** in block-recovery.js („Container-Blocköcke") behoben.
+- [x] **N.2 Asset-Gate zu eng** — `frontend_has_container_block()` nutzt jetzt Präfix-Suche (`wp:container-block-designer/`, erkennt alle Block-Varianten) und lädt konservativ, wenn wiederverwendbare Blöcke (`wp:block`) auf der Seite sind.
+- [x] **N.3 Gleiche Reusable-Block-Lücke** bei KaTeX (`should_load_katex`) und der Feature-Erkennung geschlossen — bei `wp:block` im Inhalt wird konservativ geladen bzw. auf die globale Feature-Liste zurückgefallen.
+- [x] **N.4 Capability-Sync** — `ensure_roles_exist()` synchronisiert bestehende `block_redakteur`-Rollen mit der kanonischen Definition (nicht nur bei Neuerstellung) und trägt beim Admin jede der drei CBD-Caps einzeln nach (wichtig: die neuen AJAX-Gates prüfen `cbd_admin_blocks`).
+
+Geprüft und in Ordnung: Rekursion der Block-Slug-Extraktion, Organizer-AJAX-Handler (Nonce + manage_options), Migration schreibt nur wp_posts, Transient-Signaturen/Invalidierung, keine JS-Aufrufer der gehärteten `cbd_save_block`-Action.
+
+### Nebenbefunde (pre-existing, nicht durch Sanierung verursacht)
+
+- `cbd_save_block_quick` (admin-blocks-list.js) hat keinen PHP-Handler — Quick-Edit in der Blockliste war schon immer funktionslos. Entweder Handler ergänzen oder JS-Teil entfernen.
+- Import/Export-Seite: `cbd_preview_export`-Action hat keinen registrierten Handler; die Import-Formulare werden serverseitig nicht verarbeitet — die Seite ist weitgehend UI ohne Funktion.
+- Auf Archiv-/Übersichtsseiten (`is_singular() === false`) werden CBD-Assets nicht geladen; Container in Beitragslisten sind dort ohne Features/Styles (Excerpts strippen Blöcke i. d. R. — geringes Risiko, aber bewusste Einschränkung).
+
 ## Test-Checkliste (nach jeder Phase)
 
 1. `for file in *.php includes/*.php includes/Database/*.php; do php -l "$file" || exit 1; done`
