@@ -370,12 +370,27 @@
                 return;
             }
 
-            html2canvas(el, {
-                scale: 2,
-                backgroundColor: null, // transparent – Container-Hintergrund scheint durch
-                logging: false,
-                useCORS: true
-            }).then(function (canvas) {
+            // foreignObjectRendering rendert KaTeX' komplexe vertikale Stapelung
+            // (Brüche, \xrightarrow-Beschriftungen, Wurzeln) über den nativen
+            // SVG-foreignObject des Browsers KORREKT – der Standard-Canvas-Painter
+            // von html2canvas kollabiert diese Stapelung (Label über Pfeil rutscht
+            // auf den Pfeil). Bei Fehler/leer Fallback auf den Standard-Painter.
+            function attemptCapture(useForeignObject, onDone) {
+                html2canvas(el, {
+                    scale: 2,
+                    backgroundColor: null,
+                    logging: false,
+                    useCORS: true,
+                    foreignObjectRendering: useForeignObject
+                }).then(function (canvas) {
+                    onDone(canvas);
+                }).catch(function (err) {
+                    console.warn('[CBD PDF] Formula capture (' + (useForeignObject ? 'FO' : 'std') + ') failed for', item.id, err);
+                    onDone(null);
+                });
+            }
+
+            function store(canvas) {
                 try {
                     formulas.push({
                         id: item.id,
@@ -389,10 +404,24 @@
                 }
                 index++;
                 setTimeout(nextFormula, 10);
-            }).catch(function (err) {
-                console.warn('[CBD PDF] Formula capture failed for', item.id, err);
-                index++;
-                setTimeout(nextFormula, 10);
+            }
+
+            // 1. Versuch: foreignObjectRendering (beste KaTeX-Treue)
+            attemptCapture(true, function (canvas) {
+                if (canvas && canvas.width > 0 && canvas.height > 0) {
+                    store(canvas);
+                    return;
+                }
+                // 2. Versuch: Standard-Painter
+                attemptCapture(false, function (canvas2) {
+                    if (canvas2 && canvas2.width > 0 && canvas2.height > 0) {
+                        store(canvas2);
+                    } else {
+                        // Beide fehlgeschlagen – Fallback-Text im Platzhalter bleibt
+                        index++;
+                        setTimeout(nextFormula, 10);
+                    }
+                });
             });
         }
 
