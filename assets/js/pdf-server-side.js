@@ -228,40 +228,51 @@
         // Inject drawings directly from localStorage
         injectDrawingsFromStorage($block, $clone);
 
-        // Replace KaTeX formulas with readable text in clone.
-        // mPDF cannot handle KaTeX's complex nested CSS spans, causing doubled text.
-        // Extract the visible text from the rendered KaTeX output instead of raw LaTeX.
+        // KaTeX-Formeln: Im Klon durch Platzhalter mit Fallback-Text ersetzen.
+        // Die Originale werden unten per html2canvas als PNG erfasst und
+        // serverseitig als <img> eingesetzt (mPDF kann KaTeX-HTML nicht rendern).
+        // Schlägt der Capture fehl, ersetzt der Server nichts und der lesbare
+        // Fallback-Text bleibt stehen (bisheriges Verhalten).
+        var formulaElements = [];
+        var formulaCounter = 0;
+        $block.find('.cbd-latex-formula').each(function () {
+            var el = this;
+            if (!el.id) {
+                el.id = 'cbd-pdf-formula-' + Date.now() + '-' + (formulaCounter++);
+            }
+            formulaElements.push({
+                id: el.id,
+                element: el,
+                isDisplay: $(el).hasClass('cbd-latex-display')
+            });
+        });
+
         $clone.find('.cbd-latex-formula').each(function () {
             var $formula = $(this);
             var isDisplay = $formula.hasClass('cbd-latex-display');
+            var formulaId = this.id || '';
 
-            // Strategy: get the visible text from KaTeX's rendered output
-            // .katex-html contains the visual representation
+            // Lesbaren Fallback-Text aus dem gerenderten KaTeX extrahieren
             var readableText = '';
             var $katexHtml = $formula.find('.katex-html');
             if ($katexHtml.length > 0) {
-                // Clone KaTeX HTML, remove hidden elements, extract text
                 var $kClone = $katexHtml.clone();
                 $kClone.find('.katex-mathml').remove();
                 readableText = $kClone.text().replace(/\s+/g, ' ').trim();
             }
-
-            // Fallback: convert data-latex to readable text
             if (!readableText) {
                 var latex = $formula.attr('data-latex') || '';
                 readableText = latexToReadable(latex);
             }
 
-            if (readableText) {
-                var style = isDisplay
-                    ? 'display:block; text-align:center; margin:10px 0; font-size:12pt; font-family:dejavusans,sans-serif;'
-                    : 'display:inline; font-family:dejavusans,sans-serif;';
-                var tag = isDisplay ? 'div' : 'span';
-                var replacement = '<' + tag + ' class="cbd-pdf-formula" style="' + style + '">' +
-                    $('<span>').text(readableText).html() +
-                    '</' + tag + '>';
-                $formula.replaceWith(replacement);
-            }
+            var style = isDisplay
+                ? 'display:block; text-align:center; margin:10px 0; font-size:12pt; font-family:dejavusans,sans-serif;'
+                : 'display:inline; font-family:dejavusans,sans-serif;';
+            var tag = isDisplay ? 'div' : 'span';
+            var replacement = '<' + tag + ' class="cbd-pdf-formula" data-cbd-formula-id="' + formulaId + '" style="' + style + '">' +
+                $('<span>').text(readableText || ' ').html() +
+                '</' + tag + '>';
+            $formula.replaceWith(replacement);
         });
 
         // Ensure all content is visible in clone
@@ -297,31 +308,95 @@
         // Extract title
         var title = $clone.find('.cbd-block-title').first().text().trim() || '';
 
-        // Formulas are already replaced as plain text in the clone above,
-        // no need to extract and re-inject on the server side
-        var formulas = [];
-
         // Get clean HTML from clone
         var html = $clone[0].outerHTML;
 
-        if (interactiveElements.length > 0 && mode !== 'text') {
-            // Take screenshots of interactive elements (from original DOM)
-            screenshotInteractiveElements(interactiveElements, quality, function (screenshots) {
+        // Formeln als PNG erfassen (aus dem Original-DOM, das gerade aufgeklappt ist),
+        // danach Screenshots der interaktiven Elemente.
+        // Im Text-Modus bewusst kein Capture – dort gilt der lesbare Fallback-Text.
+        captureFormulaImages(mode === 'text' ? [] : formulaElements, function (formulas) {
+            if (interactiveElements.length > 0 && mode !== 'text') {
+                // Take screenshots of interactive elements (from original DOM)
+                screenshotInteractiveElements(interactiveElements, quality, function (screenshots) {
+                    callback({
+                        html: html,
+                        title: title,
+                        formulas: formulas,
+                        screenshots: screenshots
+                    });
+                });
+            } else {
                 callback({
                     html: html,
                     title: title,
                     formulas: formulas,
-                    screenshots: screenshots
+                    screenshots: []
                 });
-            });
-        } else {
-            callback({
-                html: html,
-                title: title,
-                formulas: formulas,
-                screenshots: []
+            }
+        });
+    }
+
+    /**
+     * Rendert KaTeX-Formeln als PNG-Bilder (html2canvas, scale 2 für Schärfe).
+     * Liefert [{id, image, width, height, isDisplay}] – width/height in CSS-px,
+     * damit der Server das Bild in Originalgröße einsetzen kann.
+     * Fehlgeschlagene Captures werden ausgelassen (Server lässt dann den
+     * Fallback-Text im Platzhalter stehen).
+     */
+    function captureFormulaImages(formulaElements, callback) {
+        if (!formulaElements.length || typeof html2canvas === 'undefined') {
+            callback([]);
+            return;
+        }
+
+        var formulas = [];
+        var index = 0;
+
+        function nextFormula() {
+            if (index >= formulaElements.length) {
+                console.log('[CBD PDF] Captured ' + formulas.length + '/' + formulaElements.length + ' formula images');
+                callback(formulas);
+                return;
+            }
+
+            var item = formulaElements[index];
+            var el = item.element;
+            var rect = el.getBoundingClientRect();
+
+            // Unsichtbare/leere Formeln überspringen (Fallback-Text greift)
+            if (rect.width < 2 || rect.height < 2) {
+                index++;
+                nextFormula();
+                return;
+            }
+
+            html2canvas(el, {
+                scale: 2,
+                backgroundColor: null, // transparent – Container-Hintergrund scheint durch
+                logging: false,
+                useCORS: true
+            }).then(function (canvas) {
+                try {
+                    formulas.push({
+                        id: item.id,
+                        image: canvas.toDataURL('image/png'),
+                        width: Math.round(rect.width),
+                        height: Math.round(rect.height),
+                        isDisplay: item.isDisplay ? 1 : 0
+                    });
+                } catch (e) {
+                    console.warn('[CBD PDF] Formula toDataURL failed for', item.id, e);
+                }
+                index++;
+                setTimeout(nextFormula, 10);
+            }).catch(function (err) {
+                console.warn('[CBD PDF] Formula capture failed for', item.id, err);
+                index++;
+                setTimeout(nextFormula, 10);
             });
         }
+
+        nextFormula();
     }
 
     // =========================================================================

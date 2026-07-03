@@ -148,11 +148,20 @@ class CBD_Ajax_Handler {
 
                 if (!empty($block['formulas']) && is_array($block['formulas'])) {
                     foreach ($block['formulas'] as $formula) {
-                        $sanitized['formulas'][] = array(
+                        $entry = array(
                             'id'           => sanitize_text_field($formula['id'] ?? ''),
                             'renderedHtml' => wp_kses_post($formula['renderedHtml'] ?? ''),
                             'latex'        => sanitize_text_field($formula['latex'] ?? ''),
                         );
+                        // Formel als PNG-Bild (gleiche Validierung wie Screenshots)
+                        $image = $formula['image'] ?? '';
+                        if ($image && preg_match('/^(data:image\/(png|jpeg|jpg);base64,)?[A-Za-z0-9+\/=]+$/', $image)) {
+                            $entry['image']     = $image;
+                            $entry['width']     = intval($formula['width'] ?? 0);
+                            $entry['height']    = intval($formula['height'] ?? 0);
+                            $entry['isDisplay'] = !empty($formula['isDisplay']);
+                        }
+                        $sanitized['formulas'][] = $entry;
                     }
                 }
 
@@ -527,11 +536,20 @@ class CBD_Ajax_Handler {
                 // Sanitize formulas
                 if (!empty($block['formulas']) && is_array($block['formulas'])) {
                     foreach ($block['formulas'] as $formula) {
-                        $sanitized['formulas'][] = array(
+                        $entry = array(
                             'id'           => sanitize_text_field($formula['id'] ?? ''),
                             'renderedHtml' => wp_kses_post($formula['renderedHtml'] ?? ''),
                             'latex'        => sanitize_text_field($formula['latex'] ?? ''),
                         );
+                        // Formel als PNG-Bild (gleiche Validierung wie Screenshots)
+                        $image = $formula['image'] ?? '';
+                        if ($image && preg_match('/^(data:image\/(png|jpeg|jpg);base64,)?[A-Za-z0-9+\/=]+$/', $image)) {
+                            $entry['image']     = $image;
+                            $entry['width']     = intval($formula['width'] ?? 0);
+                            $entry['height']    = intval($formula['height'] ?? 0);
+                            $entry['isDisplay'] = !empty($formula['isDisplay']);
+                        }
+                        $sanitized['formulas'][] = $entry;
                     }
                 }
 

@@ -243,6 +243,15 @@ class CBD_PDF_Generator {
             }
         }
 
+        // Step 1.5: Insert formula images (needs data-cbd-formula-id attributes,
+        // die clean_block_html gleich strippt). Formeln OHNE Bild behalten den
+        // lesbaren Fallback-Text aus dem Client.
+        foreach ($formulas as $formula) {
+            if (!empty($formula['id']) && !empty($formula['image'])) {
+                $html = $this->insert_formula_image($html, $formula);
+            }
+        }
+
         // Step 2: Clean HTML (remove data-*, scripts, interactive controls)
         $html = $this->clean_block_html($html);
 
@@ -405,6 +414,52 @@ class CBD_PDF_Generator {
      * @param array $formula Formula data with id and renderedHtml
      * @return string Updated HTML
      */
+    /**
+     * Ersetzt einen Formel-Platzhalter durch das clientseitig gerenderte
+     * PNG-Bild (KaTeX via html2canvas). width/height sind CSS-Pixel des
+     * Originals; das Canvas ist mit scale 2 erfasst und wird auf die
+     * Originalgröße skaliert (scharfe Darstellung in mPDF).
+     *
+     * @param string $html    Block-HTML mit <span|div data-cbd-formula-id="...">Fallback</...>
+     * @param array  $formula ['id','image','width','height','isDisplay']
+     * @return string
+     */
+    private function insert_formula_image($html, $formula) {
+        $formula_id = preg_quote($formula['id'], '/');
+        $image = $formula['image'];
+
+        if (strpos($image, 'data:image/') !== 0) {
+            $image = 'data:image/png;base64,' . $image;
+        }
+
+        $width  = max(0, intval($formula['width'] ?? 0));
+        $height = max(0, intval($formula['height'] ?? 0));
+        $size_style = '';
+        if ($width > 0 && $height > 0) {
+            $size_style = 'width:' . $width . 'px; height:' . $height . 'px; ';
+        }
+
+        if (!empty($formula['isDisplay'])) {
+            $replacement = '<div style="text-align:center; margin:10px 0; page-break-inside:avoid;">'
+                . '<img src="' . $image . '" style="' . $size_style . 'max-width:100%;" />'
+                . '</div>';
+        } else {
+            $replacement = '<img src="' . $image . '" style="' . $size_style . 'vertical-align:middle;" />';
+        }
+
+        // Platzhalter (span ODER div) samt Fallback-Text ersetzen. Der
+        // Platzhalter-Inhalt ist reiner Text (kein verschachteltes Markup),
+        // daher ist der non-greedy Match sicher.
+        $html = preg_replace(
+            '/<(?:div|span)[^>]*data-cbd-formula-id="' . $formula_id . '"[^>]*>.*?<\/(?:div|span)>/is',
+            $replacement,
+            $html,
+            1
+        );
+
+        return $html;
+    }
+
     private function insert_formula($html, $formula) {
         $formula_id = preg_quote($formula['id'], '/');
         $rendered = $formula['renderedHtml'];
