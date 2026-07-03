@@ -155,6 +155,13 @@ composer analyze
 
 CDB-Designer uses pure PHP with vanilla JavaScript (no build process required), but syntax checking is mandatory.
 
+**PHP 7.4-Kompatibilität (automatisch):** `node create-plugin-zip.js` führt vor dem
+Versions-Bump/ZIP-Bau automatisch `tools/check-php74.php` aus (parst alle Plugin-Dateien
+gezielt gegen PHP 7.4 via nikic/php-parser) und **bricht ab, wenn PHP-8.0-only-Syntax
+gefunden wird**. Wichtig, weil lokal oft PHP 8.x läuft und `php -l` 8.0-Syntax NICHT als
+Fehler meldet — die Zielumgebung ist aber PHP 7.4.33. Manuell prüfbar mit
+`php tools/check-php74.php`.
+
 **Create distributable plugin ZIP:**
 
 ```bash

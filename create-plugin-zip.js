@@ -7,6 +7,35 @@
 const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
+const { execFileSync } = require('child_process');
+
+// PHP 7.4-Kompatibilitätscheck (lokal läuft oft PHP 8.x, das 8.0-only-Syntax
+// nicht als Fehler meldet). Bricht den ZIP-Bau ab, wenn 8.0-Syntax gefunden wird.
+function checkPhp74Compatibility() {
+    const checker = path.join(__dirname, 'tools', 'check-php74.php');
+    if (!fs.existsSync(checker)) {
+        console.warn('⚠️  7.4-Check übersprungen: tools/check-php74.php nicht gefunden.');
+        return;
+    }
+    try {
+        const out = execFileSync('php', [checker, __dirname], { encoding: 'utf8' });
+        process.stdout.write(out);
+    } catch (err) {
+        // exit 2 = Parser nicht verfügbar (nur Warnung); exit 1 = echte Fehler (Abbruch)
+        if (err.status === 2) {
+            console.warn('⚠️  ' + (err.stderr || '7.4-Check übersprungen (Parser nicht verfügbar).').trim());
+            return;
+        }
+        if (err.code === 'ENOENT') {
+            console.warn('⚠️  7.4-Check übersprungen: PHP-CLI nicht im PATH.');
+            return;
+        }
+        if (err.stdout) process.stdout.write(err.stdout);
+        if (err.stderr) process.stderr.write(err.stderr);
+        console.error('\n❌ ZIP-Bau abgebrochen: Code ist nicht PHP-7.4-kompatibel (siehe oben).');
+        process.exit(1);
+    }
+}
 
 // Read version from main plugin file
 function getPluginVersion() {
@@ -51,6 +80,9 @@ function updatePluginVersion(newVersion) {
     fs.writeFileSync(mainFile, content, 'utf8');
     console.log(`✓ Updated version to ${newVersion} in container-block-designer.php`);
 }
+
+// PHP 7.4-Kompatibilität prüfen BEVOR Version erhöht/ZIP gebaut wird
+checkPhp74Compatibility();
 
 // Configuration
 const pluginName = 'container-block-designer';
