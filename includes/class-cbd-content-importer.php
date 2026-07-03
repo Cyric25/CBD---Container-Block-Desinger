@@ -292,6 +292,7 @@ class CBD_Content_Importer {
 
         $content_text = implode("\n", $content);
         $html_content = $this->markdown_to_html($content_text);
+        $html_content = $this->strip_unsafe_html($html_content);
 
         // NEU: Block-Titel ist immer die H3-Überschrift (oder H2 bei Quellenverzeichnis)
         // H1-Thema wird nicht mehr als Block-Titel verwendet
@@ -321,6 +322,32 @@ class CBD_Content_Importer {
 
         // Fallback: K1
         return 'k1';
+    }
+
+    /**
+     * Gezielte Sicherheitsbereinigung der erzeugten HTML-Ausgabe.
+     *
+     * Kein wp_kses_post: das würde LaTeX-Formeln mit </> (z. B. "$a < b$")
+     * zerstören. Der Markdown-Parser erzeugt selbst nur harmlose Struktur-Tags
+     * (h1-h6, p, strong, em, ul/ol/li, table…), niemals <script>, Event-Handler
+     * oder javascript:-URLs. Deren gezielte Entfernung ist daher verlustfrei für
+     * legitime Inhalte und schließt XSS über importierte Fremd-Markdown
+     * (die Ausgabe landet im Editor u. a. via innerHTML).
+     *
+     * @param string $html
+     * @return string
+     */
+    private function strip_unsafe_html($html) {
+        // <script>/<style>/<iframe>/<object>/<embed>-Blöcke komplett entfernen
+        $html = preg_replace('#<\s*(script|style|iframe|object|embed)\b[^>]*>.*?<\s*/\s*\1\s*>#is', '', $html);
+        // Selbstschließende/verwaiste gefährliche Tags
+        $html = preg_replace('#<\s*/?\s*(script|style|iframe|object|embed)\b[^>]*>#i', '', $html);
+        // Inline-Event-Handler (onerror=, onclick=, onload=, …)
+        $html = preg_replace('#\son\w+\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)#i', '', $html);
+        // javascript:- und data:text/html-URLs in Attributen neutralisieren
+        $html = preg_replace('#(href|src)\s*=\s*("|\')\s*(javascript|data)\s*:#i', '$1=$2#', $html);
+
+        return $html;
     }
 
     /**
