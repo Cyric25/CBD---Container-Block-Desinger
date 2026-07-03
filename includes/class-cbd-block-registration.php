@@ -407,20 +407,31 @@ class CBD_Block_Registration {
 
         $cache = false;
 
-        // Container-Blöcke stehen im Inhalt einzelner Seiten/Beiträge.
+        // Robuste Ermittlung des Beitrags zur enqueue-Zeit: get_queried_object_id()
+        // ist zuverlässiger als das globale $post, das zu diesem Zeitpunkt je nach
+        // Theme noch nicht gesetzt ist (sonst würde das Gate fälschlich false liefern
+        // und Frontend-Skripte wie Copy/Screenshot würden nicht geladen).
+        $post = null;
         if (is_singular()) {
-            $post = get_post();
-            if ($post instanceof WP_Post) {
-                // Präfix-Suche statt has_block(): erkennt ALLE Varianten
-                // (container-block-designer/container UND dynamisch registrierte
-                // container-block-designer/{design}-Blöcke).
-                if (strpos($post->post_content, '<!-- wp:container-block-designer/') !== false) {
-                    $cache = true;
-                } elseif (strpos($post->post_content, '<!-- wp:block ') !== false) {
-                    // Wiederverwendbare Blöcke können Container enthalten, deren
-                    // Inhalt hier nicht sichtbar ist – konservativ laden.
-                    $cache = true;
-                }
+            $post_id = get_queried_object_id();
+            if ($post_id) {
+                $post = get_post($post_id);
+            }
+            if (!$post instanceof WP_Post) {
+                $post = get_post(); // Fallback: globales $post
+            }
+        }
+
+        if ($post instanceof WP_Post) {
+            // Präfix-Suche statt has_block(): erkennt ALLE Varianten
+            // (container-block-designer/container UND dynamisch registrierte
+            // container-block-designer/{design}-Blöcke).
+            if (strpos($post->post_content, '<!-- wp:container-block-designer/') !== false) {
+                $cache = true;
+            } elseif (strpos($post->post_content, '<!-- wp:block ') !== false) {
+                // Wiederverwendbare Blöcke können Container enthalten, deren
+                // Inhalt hier nicht sichtbar ist – konservativ laden.
+                $cache = true;
             }
         }
 

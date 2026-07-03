@@ -46,17 +46,20 @@
         "allow-plugins": {
             "dealerdirect/phpcodesniffer-composer-installer": true
         },
-        "optimize-autoloader": true
+        "optimize-autoloader": true,
+        "platform": {
+            "php": "7.4.33"
+        }
     },
     "extra": {
         "wordpress-plugin": {
             "main-file": "container-block-designer.php",
             "version": "2.6.1",
             "requires-wp": "6.0",
-            "requires-php": "8.0",
+            "requires-php": "7.4",
             "tested-wp": "6.4",
             "tested-php": "8.4",
-            "php-compatibility": "8.0-8.4"
+            "php-compatibility": "7.4-8.4"
         }
     }
 }
