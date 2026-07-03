@@ -75,6 +75,30 @@ class CBD_Admin {
         
         // Verarbeite Admin-Aktionen früh (vor Ausgabe)
         add_action('admin_init', array($this, 'process_admin_actions'));
+
+        // Body-Klasse für kapazitätsabhängiges Formular-CSS (ersetzt die frühere
+        // PHP-Bedingung in new-block.php/edit-block.php)
+        add_filter('admin_body_class', array($this, 'add_admin_body_class'));
+    }
+
+    /**
+     * Ergänzt eine Body-Klasse, wenn der Nutzer keine Styles bearbeiten darf.
+     * Die ausgelagerten Formular-CSS-Dateien blenden darüber die Style-Sektion aus.
+     *
+     * @param string $classes
+     * @return string
+     */
+    public function add_admin_body_class($classes) {
+        $page = sanitize_text_field($_GET['page'] ?? '');
+        // Dieselbe Logik wie in den Templates ($can_edit_styles) verwenden,
+        // damit Admins/Block-Redakteure die Style-Sektion NICHT verlieren.
+        $can_edit_styles = function_exists('cbd_user_can_edit_styles')
+            ? cbd_user_can_edit_styles()
+            : current_user_can('cbd_edit_styles');
+        if (($page === 'cbd-new-block' || $page === 'cbd-edit-block') && !$can_edit_styles) {
+            $classes .= ' cbd-no-style-edit';
+        }
+        return $classes;
     }
 
     /**
@@ -351,6 +375,23 @@ class CBD_Admin {
                     array('cbd-admin-common'),
                     CBD_VERSION
                 );
+
+                // Seiten-spezifisches Formular-CSS (aus den Templates ausgelagert)
+                if ($page === 'cbd-new-block') {
+                    wp_enqueue_style(
+                        'cbd-new-block-form',
+                        CBD_PLUGIN_URL . 'assets/css/new-block-form.css',
+                        array('cbd-block-editor'),
+                        CBD_VERSION
+                    );
+                } else {
+                    wp_enqueue_style(
+                        'cbd-edit-block-form',
+                        CBD_PLUGIN_URL . 'assets/css/edit-block-form.css',
+                        array('cbd-block-editor'),
+                        CBD_VERSION
+                    );
+                }
 
                 // Icon Picker Styles
                 wp_enqueue_style(
