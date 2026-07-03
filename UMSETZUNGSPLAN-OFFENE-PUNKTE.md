@@ -273,6 +273,25 @@ Beide Dateien enthalten fast identisches Inline-JS und -CSS:
 
 ## Aufgabe D — CBD_Admin (2.985 Z.) aufteilen (groß, ~1–1,5 Tage)
 
+### Voranalyse v3.1.53 (vor Umsetzung)
+- **Gut:** Die 8 `ajax_*`-Methoden sind self-contained (kein `$this->` auf andere
+  CBD_Admin-Methoden, nur Globals `$wpdb`/`wp_send_json_*`/`do_action`) → für eine
+  eigene `CBD_Admin_Ajax`-Klasse geeignet.
+- **Achtung:** Die Methoden liegen NICHT zusammenhängend (z. B. `ajax_edit_save`
+  ~2749, dann andere Methoden, `ajax_get_page_blocks` erst ~2951). Ein Verschieben
+  betrifft mehrere getrennte Bereiche → in einer IDE mit „Move Method"/Refactoring-
+  Tools machen, NICHT per blindem Text-Verschieben. Nach dem Move zwingend prüfen:
+  alle `add_action('wp_ajax_…')` zeigen auf die neue Klasse, jeder Handler behält
+  Nonce + Capability, php -l grün, jede AJAX-Aktion im Backend real getestet.
+- **CSS-Delegation (freigegeben):** `generate_css_from_styles()` (~Z. 1773) an den
+  `CBD_Style_Loader` delegieren. Vorher prüfen, ob der Style-Loader eine passende
+  öffentliche Methode hat; sonst dort eine schaffen. Editor-Vorschau vorher/nachher
+  visuell vergleichen (kleine Abweichung wurde als akzeptabel freigegeben).
+- **Empfehlung:** Nur mit laufender WP-Instanz + Test nach jedem Teil-Move. Blind
+  (nur php -l) nicht abnehmbar, da Verhalten/Registrierung nicht prüfbar.
+
+
+
 ### Problem
 `includes/class-cbd-admin.php` vereint mind. 6 Verantwortlichkeiten. Vollständiges
 Methoden-Inventar (Stand v3.1.48) zur Zuordnung:
