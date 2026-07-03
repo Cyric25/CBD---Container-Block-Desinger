@@ -70,6 +70,13 @@
             console.log('CBD Classroom Page Filter: Treated containers:', treatedContainers);
             console.log('CBD Classroom Page Filter: Drawings:', Object.keys(drawings));
 
+            // Navigationsleiste (mit "Verlassen"-Button) IMMER zuerst einfügen –
+            // unabhängig davon, ob die Seite Container-Blöcke hat. Sonst säße der
+            // Schüler auf container-losen Seiten in der Klasse fest (kein Ausgang).
+            this.className = data.class_name;
+            this.injectClassroomNavBar(data.class_name);
+            this.interceptLinks();
+
             // Find all container blocks on the page
             // Try multiple selectors to catch all containers
             var $containers = $('[data-wp-interactive="container-block-designer"], [data-stable-id^="cbd-"]');
@@ -232,12 +239,8 @@
                 }
             });
 
-            // Classroom-Navigationsleiste einfügen (ersetzt die normale Theme-Nav)
-            this.className = data.class_name;
-            this.injectClassroomNavBar(data.class_name);
-
-            // Alle internen Links abfangen, damit Classroom-Params erhalten bleiben
-            this.interceptLinks();
+            // Nav-Leiste + Link-Interception erfolgen bereits am Anfang von
+            // filterContainers (siehe oben) – hier nicht erneut aufrufen.
         },
 
         /**
