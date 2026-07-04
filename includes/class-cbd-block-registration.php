@@ -756,9 +756,9 @@ class CBD_Block_Registration {
     private static $block_cache = array(); // Performance: Cache DB results
 
     public function render_block($attributes, $content) {
-        // TEMPORÄRER DEBUG-WRAPPER (Fehlersuche HTTP 500): fängt Throwables
-        // pro Block, loggt Block + Fundstelle nach uploads/cbd-debug.log und
-        // lässt die Seite weiterrendern. Vor dem nächsten Release entfernen.
+        // Schutz-Wrapper: Ein Throwable in einem einzelnen Block darf nicht
+        // die ganze Seite killen (HTTP 500 mit abgeschnittenem HTML). Der
+        // Fehler wird geloggt, der Block ausgelassen, die Seite rendert weiter.
         try {
             return $this->render_block_inner($attributes, $content);
         } catch (\Throwable $e) {
@@ -766,11 +766,11 @@ class CBD_Block_Registration {
                 self::$render_depth--;
             }
             $selected = isset($attributes['selectedBlock']) ? $attributes['selectedBlock'] : '?';
-            $info = 'render_block(' . $selected . '): ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine();
-            if (function_exists('cbd_debug_write')) {
-                cbd_debug_write($info);
-            }
-            return "\n<!-- CBD-DEBUG " . esc_html($info) . " -->\n";
+            // Echter Fehlerfall: bewusst ungegatet loggen (mit Fundstelle)
+            error_log('[CBD render_block] Block "' . $selected . '" übersprungen: '
+                . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            // Keine Serverpfade in die öffentliche Ausgabe
+            return "\n<!-- CBD: Block \"" . esc_html($selected) . "\" konnte nicht gerendert werden (Details im PHP-Error-Log) -->\n";
         }
     }
 

@@ -309,8 +309,8 @@ class CBD_LaTeX_Parser {
         } catch (\Throwable $e) {
             // Throwable statt Exception: fängt auch PHP-Errors (TypeError etc.)
             // ab, damit eine kaputte Formel nicht die ganze Seite killt.
-            if (function_exists('cbd_debug_write')) {
-                cbd_debug_write('LaTeX-Parser: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD LaTeX Parser] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             }
             // Return original content if parsing fails
             return $content;
