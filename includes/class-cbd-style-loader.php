@@ -187,25 +187,11 @@ class CBD_Style_Loader {
             wp_enqueue_style('dashicons');
         }
         
-        // Collapsible
-        if (in_array('collapse', $active_features)) {
-            wp_enqueue_style(
-                'cbd-feature-collapsible',
-                CBD_PLUGIN_URL . 'assets/css/features/collapsible.css',
-                array(),
-                CBD_VERSION
-            );
-        }
-        
-        // Copy Button
-        if (in_array('copyText', $active_features)) {
-            wp_enqueue_style(
-                'cbd-feature-copy',
-                CBD_PLUGIN_URL . 'assets/css/features/copy.css',
-                array(),
-                CBD_VERSION
-            );
-        }
+        // Hinweis: Für collapse/copyText gibt es KEINE eigenen CSS-Dateien —
+        // assets/css/features/ hat nie existiert. Die früheren Enqueues waren
+        // unsichtbar tot (Bedingungen matchten vor AP1 nie) und erzeugten nach
+        // dem Key-Fix 404s (v3.1.66). Die Styles kommen aus dem generierten
+        // Feature-CSS (generate_feature_css) und cbd-frontend-clean.css.
 
         // Board Mode (Tafel-Modus)
         if (in_array('boardMode', $active_features)) {
