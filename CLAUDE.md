@@ -216,6 +216,30 @@ git push origin main
 
 **ZIP output location:** `container-block-designer-v{version}.zip` (plugin root)
 
+**Autoloader-Schutz (KRITISCH, seit v3.1.66):** Das ZIP schließt Composer-
+Dev-Pakete (phpunit, wpcs, …) aus. `create-plugin-zip.js` führt deshalb vor
+dem Zippen automatisch `composer dump-autoload --no-dev --optimize` aus und
+stellt den Dev-Autoloader danach wieder her. **Diesen Schritt niemals
+entfernen** — ein mit Dev-Paketen generierter Autoloader bindet phpunit-Dateien
+fest ein → Fatal Error / HTTP 500 auf der Zielinstallation (passiert bei den
+ZIPs v3.1.63–3.1.65). ZIPs daher NUR über `node create-plugin-zip.js` bauen,
+nie manuell zippen. Verifikation nach dem Bau: ZIP entpacken und
+`php -r 'define("ABSPATH","/"); require ".../vendor/autoload.php";'` muss
+ohne Fatal laufen.
+
+## Debugging-Konventionen
+
+- **PHP:** Informations-Logs laufen über klasseneigene `debug_log()`-Helper
+  bzw. `if (defined('WP_DEBUG') && WP_DEBUG)`-Gates. Echte Fehlerfälle
+  (Failed/Error) loggen bewusst ungegatet via `error_log()`.
+- **JavaScript (Frontend + Admin):** Alle `console.log`-Ausgaben sind hinter
+  `window.cbdDebug` gegated. Zum Aktivieren in der Browser-Konsole:
+  `window.cbdDebug = true` (dann Aktion wiederholen). `console.error/warn`
+  bleiben immer aktiv.
+- **Render-Schutz:** `CBD_Block_Registration::render_block()` fängt Throwables
+  pro Block — ein kaputter Block wird mit HTML-Kommentar übersprungen statt
+  die Seite mit HTTP 500 abzubrechen; die Fundstelle steht im PHP-Error-Log.
+
 ## Important Files
 
 ### Core PHP Files
@@ -293,11 +317,12 @@ Recent fixes:
 
 ## Additional Documentation
 
-Status/technical notes available in repository:
-- `FRONTEND_STATUS.md` - Frontend rendering status
-- `HTML_ELEMENTS_FIX_STATUS.md` - HTML compatibility fixes
-- `INLINE-SCRIPT-ISOLATION.md` - Script isolation strategy
-- `INTERACTIVITY-API.md` - WordPress Interactivity API usage
-- `IOS-SCREENSHOT-STRATEGY.md` - iOS screenshot handling
-- `PHP8-COMPATIBILITY.md` - PHP 8 compatibility notes
-- `POSITIONING_FIX_COMPLETE.md` - Layout positioning fixes
+- **`docs/VERBESSERUNGSPLAN.md` bis `-4.md`** — Review-Runden 2026-07 über das
+  gesamte Website-Projekt (CDB, Modular-Plugin, Theme): 42 Arbeitspakete mit
+  Problem, Fundstelle, Lösung, Verifikation und Erledigt-Status; inkl.
+  dokumentierter Entscheidungen (Buttons folgen Feature-Flags, PHP 7.4 bleibt,
+  keine CDN-Einbindungen).
+- **`docs/AENDERUNGEN-UND-UPLOAD.md`** — verständliche Gesamtübersicht der
+  Änderungen + Upload-/Recovery-Anleitung.
+- **`docs/archiv/`** — historische Status-/Implementierungsnotizen früherer
+  Entwicklungsphasen (nicht mehr gepflegt, teils veraltet — siehe README dort).
