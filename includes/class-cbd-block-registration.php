@@ -1042,7 +1042,7 @@ class CBD_Block_Registration {
             $html .= 'data-wp-on--click="actions.toggleCollapse" ';
             $html .= 'data-wp-bind--aria-expanded="!context.isCollapsed" ';
             $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
-            $html .= 'title="Ein-/Ausklappen">';
+            $html .= 'title="' . esc_attr__('Ein-/Ausklappen', 'container-block-designer') . '">';
             $html .= '<span class="dashicons dashicons-arrow-up-alt2" ';
             $html .= 'data-wp-class--dashicons-arrow-up-alt2="!context.isCollapsed" ';
             $html .= 'data-wp-class--dashicons-arrow-down-alt2="context.isCollapsed">';
@@ -1074,7 +1074,7 @@ class CBD_Block_Registration {
             $html .= 'data-wp-on--click="actions.createScreenshot" ';
             $html .= 'data-wp-bind--disabled="context.screenshotLoading" ';
             $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
-            $html .= 'title="Screenshot erstellen">';
+            $html .= 'title="' . esc_attr__('Screenshot erstellen', 'container-block-designer') . '">';
             $html .= '<span class="dashicons dashicons-camera" ';
             $html .= 'data-wp-class--dashicons-camera="!context.screenshotLoading && !context.screenshotSuccess" ';
             $html .= 'data-wp-class--dashicons-update-alt="context.screenshotLoading" ';
@@ -1089,7 +1089,7 @@ class CBD_Block_Registration {
         $html .= 'data-wp-on--click="actions.createPDF" ';
         $html .= 'data-wp-bind--disabled="context.pdfLoading" ';
         $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
-        $html .= 'title="Als PDF exportieren">';
+        $html .= 'title="' . esc_attr__('Als PDF exportieren', 'container-block-designer') . '">';
         $html .= '<span class="dashicons dashicons-pdf" ';
         $html .= 'data-wp-class--dashicons-pdf="!context.pdfLoading && !context.pdfSuccess" ';
         $html .= 'data-wp-class--dashicons-update-alt="context.pdfLoading" ';
