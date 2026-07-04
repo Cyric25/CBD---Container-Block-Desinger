@@ -15,7 +15,17 @@ if (!defined('ABSPATH')) {
  * Admin-Klasse für das Container Block Designer Plugin
  */
 class CBD_Admin {
-    
+
+    /**
+     * Debug-Log nur bei WP_DEBUG (AP25) — u. a. wurde vorher bei jedem
+     * Speichern der komplette $_POST-Inhalt ins Log geschrieben.
+     */
+    private static function debug_log($message) {
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log($message);
+        }
+    }
+
     /**
      * Singleton-Instanz
      */
@@ -163,17 +173,17 @@ class CBD_Admin {
         $is_block_redakteur = $current_user && in_array('block_redakteur', $current_user->roles);
 
         // Debug Information
-        error_log('[CBD Menu Debug] User ID: ' . $current_user->ID);
-        error_log('[CBD Menu Debug] User Roles: ' . implode(', ', $current_user->roles));
-        error_log('[CBD Menu Debug] Is Block-Redakteur: ' . ($is_block_redakteur ? 'YES' : 'NO'));
-        error_log('[CBD Menu Debug] Has cbd_edit_blocks: ' . (current_user_can('cbd_edit_blocks') ? 'YES' : 'NO'));
-        error_log('[CBD Menu Debug] Has cbd_admin_blocks: ' . (current_user_can('cbd_admin_blocks') ? 'YES' : 'NO'));
+        self::debug_log('[CBD Menu Debug] User ID: ' . $current_user->ID);
+        self::debug_log('[CBD Menu Debug] User Roles: ' . implode(', ', $current_user->roles));
+        self::debug_log('[CBD Menu Debug] Is Block-Redakteur: ' . ($is_block_redakteur ? 'YES' : 'NO'));
+        self::debug_log('[CBD Menu Debug] Has cbd_edit_blocks: ' . (current_user_can('cbd_edit_blocks') ? 'YES' : 'NO'));
+        self::debug_log('[CBD Menu Debug] Has cbd_admin_blocks: ' . (current_user_can('cbd_admin_blocks') ? 'YES' : 'NO'));
 
         if ($is_block_redakteur) {
             // Für Block-Redakteure: Nur Block-Vorschau als Hauptmenü
             // Verwende read als minimale Capability falls cbd_edit_blocks fehlt
             $capability = current_user_can('cbd_edit_blocks') ? 'cbd_edit_blocks' : 'read';
-            error_log('[CBD Menu Debug] Using capability for block_redakteur: ' . $capability);
+            self::debug_log('[CBD Menu Debug] Using capability for block_redakteur: ' . $capability);
 
             add_menu_page(
                 __('Container Block Vorschau', 'container-block-designer'),
@@ -361,24 +371,24 @@ class CBD_Admin {
         switch ($page) {
             case 'cbd-new-block':
             case 'cbd-edit-block':
-                // Icon Libraries CDN
+                // Icon Libraries - lokal gebündelt (DSGVO), alle drei für den Icon-Picker
                 wp_enqueue_style(
                     'font-awesome',
-                    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
+                    CBD_PLUGIN_URL . 'assets/vendor/font-awesome/css/all.min.css',
                     array(),
                     '6.5.1'
                 );
 
                 wp_enqueue_style(
                     'material-icons',
-                    'https://fonts.googleapis.com/icon?family=Material+Icons',
+                    CBD_PLUGIN_URL . 'assets/vendor/material-icons/material-icons.css',
                     array(),
-                    null
+                    CBD_VERSION
                 );
 
                 wp_enqueue_style(
                     'lucide-icons',
-                    'https://unpkg.com/lucide-static@0.454.0/font/lucide.css',
+                    CBD_PLUGIN_URL . 'assets/vendor/lucide/lucide.css',
                     array(),
                     '0.454.0'
                 );
@@ -622,7 +632,7 @@ class CBD_Admin {
     public function process_admin_actions() {
         // Debug: Log all POST requests
         if (!empty($_POST)) {
-            error_log('[CBD Admin] POST request detected. Page: ' . ($_GET['page'] ?? 'none') . ', POST keys: ' . implode(', ', array_keys($_POST)));
+            self::debug_log('[CBD Admin] POST request detected. Page: ' . ($_GET['page'] ?? 'none') . ', POST keys: ' . implode(', ', array_keys($_POST)));
         }
         
         // Nur auf unseren Admin-Seiten
@@ -642,16 +652,16 @@ class CBD_Admin {
 
         // Block-Duplizierung verarbeiten
         if (isset($_GET['action']) && $_GET['action'] === 'duplicate' && isset($_GET['block_id'])) {
-            error_log('[CBD Admin] Duplicate action detected: block_id=' . $_GET['block_id']);
+            self::debug_log('[CBD Admin] Duplicate action detected: block_id=' . $_GET['block_id']);
 
             $block_id = intval($_GET['block_id']);
             $nonce_action = 'cbd_duplicate_block_' . $block_id;
 
             // Debug Nonce
-            error_log('[CBD Admin] Nonce check: action=' . $nonce_action . ', received=' . ($_GET['_wpnonce'] ?? 'none'));
+            self::debug_log('[CBD Admin] Nonce check: action=' . $nonce_action . ', received=' . ($_GET['_wpnonce'] ?? 'none'));
 
             if (!wp_verify_nonce($_GET['_wpnonce'], $nonce_action)) {
-                error_log('[CBD Admin] Nonce verification failed');
+                self::debug_log('[CBD Admin] Nonce verification failed');
                 wp_die('Sicherheitsprüfung fehlgeschlagen');
             }
 
@@ -660,9 +670,9 @@ class CBD_Admin {
                 require_once CBD_PLUGIN_DIR . 'includes/class-cbd-database.php';
             }
 
-            error_log('[CBD Admin] Attempting to duplicate block ID: ' . $block_id);
+            self::debug_log('[CBD Admin] Attempting to duplicate block ID: ' . $block_id);
             $duplicate_id = CBD_Database::duplicate_block($block_id);
-            error_log('[CBD Admin] Duplicate result: ' . ($duplicate_id ? 'Success (ID: ' . $duplicate_id . ')' : 'Failed'));
+            self::debug_log('[CBD Admin] Duplicate result: ' . ($duplicate_id ? 'Success (ID: ' . $duplicate_id . ')' : 'Failed'));
 
             if ($duplicate_id) {
                 wp_redirect(admin_url('admin.php?page=cbd-blocks&duplicated=1&block_id=' . $duplicate_id));
@@ -675,10 +685,10 @@ class CBD_Admin {
         
         // Block-Speichern verarbeiten (für edit-block.php)
         if (isset($_POST['save_block']) && isset($_POST['block_id']) && isset($_POST['cbd_nonce'])) {
-            error_log('[CBD Admin] Edit block form submitted. POST data: ' . print_r($_POST, true));
+            self::debug_log('[CBD Admin] Edit block form submitted. POST data: ' . print_r($_POST, true));
             
             if (!wp_verify_nonce($_POST['cbd_nonce'], 'cbd-admin')) {
-                error_log('[CBD Admin] Nonce verification failed. Expected: cbd-admin, Received: ' . ($_POST['cbd_nonce'] ?? 'none'));
+                self::debug_log('[CBD Admin] Nonce verification failed. Expected: cbd-admin, Received: ' . ($_POST['cbd_nonce'] ?? 'none'));
                 wp_die('Sicherheitsprüfung fehlgeschlagen');
             }
             
@@ -713,36 +723,8 @@ class CBD_Admin {
                 )
             );
             
-            // Features sammeln - verwende das korrekte Format aus edit-block.php
-            $features = array(
-                'icon' => array(
-                    'enabled' => isset($_POST['features']['icon']['enabled']) ? true : false,
-                    'value' => sanitize_text_field($_POST['features']['icon']['value'] ?? 'dashicons-admin-generic'),
-                    'position' => sanitize_text_field($_POST['features']['icon']['position'] ?? 'top-left')
-                ),
-                'collapse' => array(
-                    'enabled' => isset($_POST['features']['collapse']['enabled']) ? true : false,
-                    'defaultState' => sanitize_text_field($_POST['features']['collapse']['defaultState'] ?? 'expanded')
-                ),
-                'numbering' => array(
-                    'enabled' => isset($_POST['features']['numbering']['enabled']) ? true : false,
-                    'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric'),
-                    'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left'),
-                    'countingMode' => sanitize_text_field($_POST['features']['numbering']['countingMode'] ?? 'same-design')
-                ),
-                'copyText' => array(
-                    'enabled' => isset($_POST['features']['copyText']['enabled']) ? true : false,
-                    'buttonText' => sanitize_text_field($_POST['features']['copyText']['buttonText'] ?? 'Text kopieren')
-                ),
-                'screenshot' => array(
-                    'enabled' => isset($_POST['features']['screenshot']['enabled']) ? true : false,
-                    'buttonText' => sanitize_text_field($_POST['features']['screenshot']['buttonText'] ?? 'Screenshot')
-                ),
-                'boardMode' => array(
-                    'enabled' => isset($_POST['features']['boardMode']['enabled']) ? true : false,
-                    'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#ffffff') ?: '#ffffff'
-                )
-            );
+            // Features sammeln - zentrale Parsing-Funktion (AP13)
+            $features = cbd_parse_features_from_post($_POST);
 
             // Config sammeln
             $config = array(
@@ -2566,36 +2548,8 @@ class CBD_Admin {
             )
         );
         
-        // Features sammeln
-        $features = array(
-            'icon' => array(
-                'enabled' => isset($_POST['features']['icon']['enabled']) ? true : false,
-                'value' => sanitize_text_field($_POST['features']['icon']['value'] ?? 'dashicons-admin-generic'),
-                'position' => sanitize_text_field($_POST['features']['icon']['position'] ?? 'top-left')
-            ),
-            'collapse' => array(
-                'enabled' => isset($_POST['features']['collapse']['enabled']) ? true : false,
-                'defaultState' => sanitize_text_field($_POST['features']['collapse']['defaultState'] ?? 'expanded')
-            ),
-            'numbering' => array(
-                'enabled' => isset($_POST['features']['numbering']['enabled']) ? true : false,
-                'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric'),
-                'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left'),
-                'countingMode' => sanitize_text_field($_POST['features']['numbering']['countingMode'] ?? 'same-design')
-            ),
-            'copyText' => array(
-                'enabled' => isset($_POST['features']['copyText']['enabled']) ? true : false,
-                'buttonText' => sanitize_text_field($_POST['features']['copyText']['buttonText'] ?? 'Text kopieren')
-            ),
-            'screenshot' => array(
-                'enabled' => isset($_POST['features']['screenshot']['enabled']) ? true : false,
-                'buttonText' => sanitize_text_field($_POST['features']['screenshot']['buttonText'] ?? 'Screenshot')
-            ),
-            'boardMode' => array(
-                'enabled' => isset($_POST['features']['boardMode']['enabled']) ? true : false,
-                'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#1a472a') ?: '#1a472a'
-            )
-        );
+        // Features sammeln - zentrale Parsing-Funktion (AP13)
+        $features = cbd_parse_features_from_post($_POST);
 
         // Config sammeln (falls vorhanden)
         $config = array(
@@ -2753,7 +2707,7 @@ class CBD_Admin {
      * Test AJAX handler
      */
     public function ajax_test() {
-        error_log('[CBD Ajax Test] Test AJAX handler called!');
+        self::debug_log('[CBD Ajax Test] Test AJAX handler called!');
         wp_send_json_success('Test erfolgreich!');
     }
     
@@ -2784,8 +2738,8 @@ class CBD_Admin {
         $title = sanitize_text_field($_POST['title'] ?? '');
         $description = sanitize_textarea_field($_POST['description'] ?? '');
         
-        error_log('[CBD Edit Save] Name received: "' . $name . '"');
-        error_log('[CBD Edit Save] Title received: "' . $title . '"');
+        self::debug_log('[CBD Edit Save] Name received: "' . $name . '"');
+        self::debug_log('[CBD Edit Save] Title received: "' . $title . '"');
         
         // Slug-Warnung: Prüfe ob Name geändert wurde
         $current_block = $wpdb->get_row($wpdb->prepare(
@@ -2794,7 +2748,7 @@ class CBD_Admin {
         ));
         
         if ($current_block && $current_block->name !== $name) {
-            error_log('[CBD Edit Save] WARNING: Block name changed from "' . $current_block->name . '" to "' . $name . '" but slug stays "' . $current_block->slug . '"');
+            self::debug_log('[CBD Edit Save] WARNING: Block name changed from "' . $current_block->name . '" to "' . $name . '" but slug stays "' . $current_block->slug . '"');
         }
         $status = isset($_POST['status']) ? 'active' : 'inactive';
         
@@ -2878,36 +2832,8 @@ class CBD_Admin {
             )
         );
         
-        // Features sammeln
-        $features = array(
-            'icon' => array(
-                'enabled' => isset($_POST['features']['icon']['enabled']) ? true : false,
-                'value' => sanitize_text_field($_POST['features']['icon']['value'] ?? 'dashicons-admin-generic'),
-                'position' => sanitize_text_field($_POST['features']['icon']['position'] ?? 'top-left')
-            ),
-            'collapse' => array(
-                'enabled' => isset($_POST['features']['collapse']['enabled']) ? true : false,
-                'defaultState' => sanitize_text_field($_POST['features']['collapse']['defaultState'] ?? 'expanded')
-            ),
-            'numbering' => array(
-                'enabled' => isset($_POST['features']['numbering']['enabled']) ? true : false,
-                'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric'),
-                'position' => sanitize_text_field($_POST['features']['numbering']['position'] ?? 'top-left'),
-                'countingMode' => sanitize_text_field($_POST['features']['numbering']['countingMode'] ?? 'same-design')
-            ),
-            'copyText' => array(
-                'enabled' => isset($_POST['features']['copyText']['enabled']) ? true : false,
-                'buttonText' => sanitize_text_field($_POST['features']['copyText']['buttonText'] ?? 'Text kopieren')
-            ),
-            'screenshot' => array(
-                'enabled' => isset($_POST['features']['screenshot']['enabled']) ? true : false,
-                'buttonText' => sanitize_text_field($_POST['features']['screenshot']['buttonText'] ?? 'Screenshot')
-            ),
-            'boardMode' => array(
-                'enabled' => isset($_POST['features']['boardMode']['enabled']) ? true : false,
-                'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#1a472a') ?: '#1a472a'
-            )
-        );
+        // Features sammeln - zentrale Parsing-Funktion (AP13)
+        $features = cbd_parse_features_from_post($_POST);
 
         // Config sammeln
         $config = array(
@@ -2918,7 +2844,7 @@ class CBD_Admin {
         // Slug generieren basierend auf name (falls nicht explizit gesetzt)
         $slug = sanitize_title($name);
 
-        error_log('[CBD Edit Save] Generated slug: "' . $slug . '" from name: "' . $name . '"');
+        self::debug_log('[CBD Edit Save] Generated slug: "' . $slug . '" from name: "' . $name . '"');
 
         // Daten aktualisieren - WICHTIG: slug hinzufügen!
         $result = $wpdb->update(
@@ -2939,7 +2865,7 @@ class CBD_Admin {
             array('%d')
         );
         
-        error_log('[CBD Edit Save] Update result: ' . ($result !== false ? 'success' : 'failed'));
+        self::debug_log('[CBD Edit Save] Update result: ' . ($result !== false ? 'success' : 'failed'));
         
         if ($result !== false) {
             // Cache leeren für sofortige Verfügbarkeit

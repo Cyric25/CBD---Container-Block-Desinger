@@ -227,17 +227,17 @@
         loadClassroomData: function() {
             var self = this;
 
-            console.log('[CBD Classroom] Loading classroom data...');
+            window.cbdDebug && console.log('[CBD Classroom] Loading classroom data...');
 
             $.post(cbdClassroomFrontend.ajaxUrl, {
                 action: 'cbd_student_get_data',
                 token: this.token
             }, function(response) {
-                console.log('[CBD Classroom] Response received:', response);
+                window.cbdDebug && console.log('[CBD Classroom] Response received:', response);
 
                 if (response.success) {
-                    console.log('[CBD Classroom] Pages data:', response.data.pages);
-                    console.log('[CBD Classroom] Number of items:', response.data.pages ? response.data.pages.length : 0);
+                    window.cbdDebug && console.log('[CBD Classroom] Pages data:', response.data.pages);
+                    window.cbdDebug && console.log('[CBD Classroom] Number of items:', response.data.pages ? response.data.pages.length : 0);
                     self.renderClassroomContent(response.data);
                 } else {
                     console.warn('[CBD Classroom] Token expired or invalid, trying re-login...');
@@ -269,18 +269,18 @@
             var $pagesContainer = $('#cbd-classroom-pages');
             $pagesContainer.empty();
 
-            console.log('[CBD Classroom] Rendering content, pages:', data.pages);
-            console.log('[CBD Classroom] Pages length:', data.pages ? data.pages.length : 'undefined');
+            window.cbdDebug && console.log('[CBD Classroom] Rendering content, pages:', data.pages);
+            window.cbdDebug && console.log('[CBD Classroom] Pages length:', data.pages ? data.pages.length : 'undefined');
 
             if (data.pages && data.pages.length > 0) {
-                console.log('[CBD Classroom] Rendering', data.pages.length, 'items');
+                window.cbdDebug && console.log('[CBD Classroom] Rendering', data.pages.length, 'items');
                 data.pages.forEach(function(item, index) {
-                    console.log('[CBD Classroom] Item', index, ':', item);
+                    window.cbdDebug && console.log('[CBD Classroom] Item', index, ':', item);
                     if (item.type === 'page' && item.page) {
                         var page = item.page;
                         var level = page.level || 0;
 
-                        console.log('[CBD Classroom] Rendering page:', page.title, 'Level:', level);
+                        window.cbdDebug && console.log('[CBD Classroom] Rendering page:', page.title, 'Level:', level);
 
                         // Create page item with indentation based on level
                         var $pageItem = $('<div class="cbd-classroom-page-item">');

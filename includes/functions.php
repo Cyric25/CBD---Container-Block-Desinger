@@ -88,3 +88,52 @@ if (!function_exists('cbd_has_service')) {
         return false;
     }
 }
+
+/**
+ * Parst und sanitisiert die Feature-Einstellungen aus $_POST.
+ *
+ * Einzige Quelle der Wahrheit für Feature-Keys, Felder und Defaults (AP13,
+ * VERBESSERUNGSPLAN.md). Vorher existierte dieses Parsing vierfach parallel
+ * (class-cbd-admin.php 3x, admin/new-block.php 1x) und driftete auseinander
+ * (Ursache des collapse/collapsible-Bugs).
+ *
+ * Kanonische Keys: icon, collapse, numbering, copyText, screenshot, boardMode.
+ *
+ * @param array $post Der komplette $_POST-Array
+ * @return array Kanonische Feature-Struktur (für wp_json_encode in DB-Spalte features)
+ */
+if (!function_exists('cbd_parse_features_from_post')) {
+    function cbd_parse_features_from_post($post) {
+        $f = (isset($post['features']) && is_array($post['features'])) ? $post['features'] : array();
+
+        return array(
+            'icon' => array(
+                'enabled' => isset($f['icon']['enabled']),
+                'value' => sanitize_text_field($f['icon']['value'] ?? 'dashicons-admin-generic'),
+                'position' => sanitize_text_field($f['icon']['position'] ?? 'top-left')
+            ),
+            'collapse' => array(
+                'enabled' => isset($f['collapse']['enabled']),
+                'defaultState' => sanitize_text_field($f['collapse']['defaultState'] ?? 'expanded')
+            ),
+            'numbering' => array(
+                'enabled' => isset($f['numbering']['enabled']),
+                'format' => sanitize_text_field($f['numbering']['format'] ?? 'numeric'),
+                'position' => sanitize_text_field($f['numbering']['position'] ?? 'top-left'),
+                'countingMode' => sanitize_text_field($f['numbering']['countingMode'] ?? 'same-design')
+            ),
+            'copyText' => array(
+                'enabled' => isset($f['copyText']['enabled']),
+                'buttonText' => sanitize_text_field($f['copyText']['buttonText'] ?? 'Text kopieren')
+            ),
+            'screenshot' => array(
+                'enabled' => isset($f['screenshot']['enabled']),
+                'buttonText' => sanitize_text_field($f['screenshot']['buttonText'] ?? 'Screenshot')
+            ),
+            'boardMode' => array(
+                'enabled' => isset($f['boardMode']['enabled']),
+                'boardColor' => sanitize_hex_color($f['boardMode']['boardColor'] ?? '#ffffff') ?: '#ffffff'
+            )
+        );
+    }
+}

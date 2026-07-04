@@ -35,8 +35,10 @@ class CBD_Ajax_Handler {
 
         // Weitere Admin AJAX-Handler
         // Hinweis: cbd_save_block und cbd_delete_block werden von CBD_Admin
-        // behandelt (Doppelregistrierung entfernt – verursachte Nonce-Konflikte)
-        add_action('wp_ajax_cbd_duplicate_block', array($this, 'duplicate_block'));
+        // behandelt (Doppelregistrierung entfernt – verursachte Nonce-Konflikte).
+        // cbd_duplicate_block entfernt (AP31): kein JS-Konsument — der Admin
+        // dupliziert per GET-Link über CBD_Admin → CBD_Database::duplicate_block();
+        // die AJAX-Variante kopierte zudem is_default mit (zwei Standard-Blöcke).
         add_action('wp_ajax_cbd_set_default_block', array($this, 'set_default_block'));
 
         // PDF-Generierung (für eingeloggte Benutzer und Frontend)
@@ -227,12 +229,9 @@ class CBD_Ajax_Handler {
      * Alle Blöcke abrufen - KORRIGIERTE VERSION
      */
     public function get_blocks() {
-        // Debug-Log
-        error_log('CBD: AJAX get_blocks aufgerufen');
-        
         // Nonce-Überprüfung - flexibel für verschiedene Nonces
         $nonce_valid = false;
-        
+
         // Prüfe verschiedene mögliche Nonce-Namen
         if (isset($_POST['nonce'])) {
             if (wp_verify_nonce($_POST['nonce'], 'cbd-nonce') ||
@@ -242,27 +241,23 @@ class CBD_Ajax_Handler {
                 $nonce_valid = true;
             }
         }
-        
+
         // Falls kein gültiger Nonce, prüfe ob Benutzer berechtigt ist
         if (!$nonce_valid && !cbd_user_can_use_blocks()) {
-            error_log('CBD: Nonce-Prüfung fehlgeschlagen oder keine Berechtigung für Container-Blocks');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('CBD: Nonce-Prüfung fehlgeschlagen oder keine Berechtigung für Container-Blocks');
+            }
             wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
             return;
         }
-        
+
         global $wpdb;
-        
-        // Hole Blocks direkt aus der Datenbank
+
+        // Hole Blocks direkt aus der Datenbank.
+        // Hinweis: Bewusst eigene Query statt get_active_blocks()-Cache —
+        // dieser Endpunkt nimmt auch Legacy-Zeilen mit status IS NULL mit.
         $table_name = $wpdb->prefix . 'cbd_blocks';
-        
-        // Prüfe ob Tabelle existiert
-        if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") !== $table_name) {
-            error_log('CBD: Tabelle existiert nicht: ' . $table_name);
-            wp_send_json_success(array());
-            return;
-        }
-        
-        // SQL-Query für aktive Blocks
+
         $sql = "SELECT
                 id,
                 COALESCE(title, name) as name,
@@ -275,25 +270,29 @@ class CBD_Ajax_Handler {
             FROM $table_name
             WHERE status = 'active' OR status IS NULL
             ORDER BY COALESCE(title, name) ASC";
-        
+
         $blocks = $wpdb->get_results($sql, ARRAY_A);
-        
-        error_log('CBD: Gefundene Blocks: ' . count($blocks));
-        
+
+        // Fehlende Tabelle (frische Installation vor Aktivierungs-Hook):
+        // get_results liefert dann ein leeres Array — kein SHOW TABLES nötig.
+        if (!is_array($blocks)) {
+            $blocks = array();
+        }
+
         // Verarbeite die Blocks
         $processed_blocks = array();
-        
+
         if ($blocks) {
             foreach ($blocks as $block) {
                 // Stelle sicher dass slug existiert
                 if (empty($block['slug'])) {
                     $block['slug'] = sanitize_title($block['name']);
                 }
-                
+
                 // Parse JSON-Felder
                 $config = !empty($block['config']) ? json_decode($block['config'], true) : array();
                 $features = !empty($block['features']) ? json_decode($block['features'], true) : array();
-                
+
                 $processed_blocks[] = array(
                     'id' => intval($block['id']),
                     'name' => esc_html($block['name']),
@@ -305,10 +304,7 @@ class CBD_Ajax_Handler {
                 );
             }
         }
-        
-        // Debug-Ausgabe
-        error_log('CBD: Sende ' . count($processed_blocks) . ' Blocks zurück');
-        
+
         // Sende erfolgreiche Antwort
         wp_send_json_success($processed_blocks);
     }
@@ -320,137 +316,9 @@ class CBD_Ajax_Handler {
         wp_send_json_error(array('message' => 'Nicht autorisiert'));
     }
     
-    /**
-     * Block speichern
-     */
-    public function save_block() {
-        // Nonce-Überprüfung
-        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cbd-admin-nonce')) {
-            wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
-            return;
-        }
-        
-        // Berechtigung prüfen
-        if (!current_user_can('edit_posts')) {
-            wp_send_json_error(array('message' => 'Keine Berechtigung'));
-            return;
-        }
-        
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'cbd_blocks';
-        
-        // Daten vorbereiten
-        $data = array(
-            'name' => sanitize_text_field($_POST['name']),
-            'slug' => sanitize_title($_POST['slug'] ?: $_POST['name']),
-            'description' => sanitize_textarea_field($_POST['description'] ?: ''),
-            'config' => json_encode($_POST['config'] ?: array()),
-            'features' => json_encode($_POST['features'] ?: array()),
-            'status' => 'active'
-        );
-        
-        // Speichern oder Update
-        if (!empty($_POST['id'])) {
-            $result = $wpdb->update($table_name, $data, array('id' => intval($_POST['id'])));
-        } else {
-            $result = $wpdb->insert($table_name, $data);
-        }
-        
-        if ($result === false) {
-            wp_send_json_error(array('message' => 'Fehler beim Speichern'));
-            return;
-        }
-        
-        wp_send_json_success(array('message' => 'Block gespeichert'));
-    }
-    
-    /**
-     * Block löschen
-     */
-    public function delete_block() {
-        // Nonce-Überprüfung
-        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cbd-admin-nonce')) {
-            wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
-            return;
-        }
-        
-        // Berechtigung prüfen
-        if (!current_user_can('edit_posts')) {
-            wp_send_json_error(array('message' => 'Keine Berechtigung'));
-            return;
-        }
-        
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'cbd_blocks';
-        
-        $block_id = intval($_POST['block_id']);
-        
-        if (!$block_id) {
-            wp_send_json_error(array('message' => 'Ungültige Block-ID'));
-            return;
-        }
-        
-        $result = $wpdb->delete($table_name, array('id' => $block_id));
-        
-        if ($result === false) {
-            wp_send_json_error(array('message' => 'Fehler beim Löschen'));
-            return;
-        }
-        
-        wp_send_json_success(array('message' => 'Block gelöscht'));
-    }
-    
-    /**
-     * Block duplizieren
-     */
-    public function duplicate_block() {
-        // Nonce-Überprüfung
-        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cbd-admin-nonce')) {
-            wp_send_json_error(array('message' => 'Sicherheitsprüfung fehlgeschlagen'));
-            return;
-        }
-        
-        // Berechtigung prüfen
-        if (!current_user_can('edit_posts')) {
-            wp_send_json_error(array('message' => 'Keine Berechtigung'));
-            return;
-        }
-        
-        global $wpdb;
-        $table_name = $wpdb->prefix . 'cbd_blocks';
-        
-        $block_id = intval($_POST['block_id']);
-        
-        if (!$block_id) {
-            wp_send_json_error(array('message' => 'Ungültige Block-ID'));
-            return;
-        }
-        
-        // Original-Block holen
-        $original = $wpdb->get_row(
-            $wpdb->prepare("SELECT * FROM $table_name WHERE id = %d", $block_id),
-            ARRAY_A
-        );
-        
-        if (!$original) {
-            wp_send_json_error(array('message' => 'Block nicht gefunden'));
-            return;
-        }
-        
-        // Kopie erstellen
-        unset($original['id']);
-        $original['name'] = $original['name'] . ' (Kopie)';
-        $original['slug'] = $original['slug'] . '-copy-' . time();
-        
-        $result = $wpdb->insert($table_name, $original);
-        
-        if ($result === false) {
-            wp_send_json_error(array('message' => 'Fehler beim Duplizieren'));
-            return;
-        }
-        
-        wp_send_json_success(array('message' => 'Block dupliziert', 'id' => $wpdb->insert_id));
-    }
+    // Hinweis (AP22): save_block()/delete_block() wurden entfernt — sie waren
+    // nie als AJAX-Handler registriert (CBD_Admin übernimmt Speichern/Löschen)
+    // und hatten schwächere Berechtigungs-/Sanitizing-Prüfungen als CBD_Admin.
 
     /**
      * PDF Diagnose - Check server capabilities before generating PDF
@@ -667,14 +535,10 @@ class CBD_Ajax_Handler {
             return;
         }
 
-        // Zuerst alle anderen Blocks auf is_default = 0 setzen
-        $wpdb->update(
-            $table_name,
-            array('is_default' => 0),
-            array(),
-            array('%d'),
-            array()
-        );
+        // Zuerst alle anderen Blocks auf is_default = 0 setzen.
+        // WICHTIG: $wpdb->update() mit leerem WHERE-Array erzeugt ungültiges
+        // SQL und schlägt still fehl (AP19) — direkter Query ohne WHERE.
+        $wpdb->query("UPDATE {$table_name} SET is_default = 0");
 
         // Dann den ausgewählten Block als Standard setzen
         $result = $wpdb->update(

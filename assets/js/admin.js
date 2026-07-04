@@ -11,7 +11,7 @@
 
     // Admin initialization
     $(document).ready(function() {
-        console.log('CBD Admin: Initialized');
+        window.cbdDebug && console.log('CBD Admin: Initialized');
 
         // Any general admin JS functionality can be added here
         // Specific functionality is in:

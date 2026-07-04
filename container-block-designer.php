@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://github.com/Cyric25/CBD---Container-Block-Desinger
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 3.1.60
+ * Version: 3.1.64
  * Author: Cyric25
  * Author URI: https://github.com/Cyric25
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '3.1.60');
+define('CBD_VERSION', '3.1.64');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -397,6 +397,14 @@ class ContainerBlockDesigner {
             // Standard-Blocks mit korrekten Namen neu erstellen
             $this->create_default_blocks();
         }
+
+        // Updates für Version 3.1.61 - Feature-Key-Migration
+        // (collapsible→collapse, copy→copyText; siehe CBD_Schema_Manager)
+        if (version_compare($from_version, '3.1.61', '<')) {
+            if (class_exists('CBD_Schema_Manager')) {
+                CBD_Schema_Manager::run_migrations();
+            }
+        }
     }
     
     /**
@@ -469,8 +477,15 @@ class ContainerBlockDesigner {
             return; // Bereits korrekte Blocks vorhanden
         }
         
-        // Lösche alte Standard-Blocks mit deutschen Namen falls vorhanden
-        $wpdb->query("DELETE FROM " . CBD_TABLE_BLOCKS . " WHERE name LIKE '%Container%' OR name LIKE '%Info-Box%' OR name LIKE '%Klappbar%'");
+        // Lösche alte Standard-Blocks mit deutschen Namen falls vorhanden.
+        // WICHTIG: Nur exakte Alt-Namen löschen — ein LIKE '%Container%' würde
+        // auch benutzerdefinierte Blöcke treffen (z. B. "Aufgaben-Container").
+        $wpdb->query($wpdb->prepare(
+            "DELETE FROM " . CBD_TABLE_BLOCKS . " WHERE name IN (%s, %s, %s)",
+            'Einfacher Container',
+            'Info-Box',
+            'Klappbarer Container'
+        ));
         
         // Standard-Blocks definieren
         $default_blocks = array(
@@ -570,7 +585,7 @@ class ContainerBlockDesigner {
                     )
                 )),
                 'features' => json_encode(array(
-                    'collapsible' => array(
+                    'collapse' => array(
                         'enabled' => true,
                         'defaultState' => 'expanded'
                     )

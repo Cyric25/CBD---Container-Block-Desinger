@@ -266,7 +266,7 @@
                 `<div class="cbd-icon-item selected" style="font-size: 48px; padding: 20px; text-align: center;">${event.detail.unicode}</div>`
             );
 
-            console.log('CBD: Emoji selected:', event.detail.unicode);
+            window.cbdDebug && console.log('CBD: Emoji selected:', event.detail.unicode);
         };
 
         // Store listener reference for cleanup

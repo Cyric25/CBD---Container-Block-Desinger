@@ -38,26 +38,20 @@
             element.textContent = blockNumber;
             element.setAttribute('data-number', blockNumber);
         });
-
-        console.log('[CBD Numbering] Renumbered ' + topLevelNumbers.length + ' blocks');
     }
 
     /**
      * Initialisierung
      */
     function init() {
-        // Initial numbering when DOM is ready
+        // Initial numbering when DOM is ready.
+        // Dynamisch nachgeladene Blöcke übernimmt der MutationObserver —
+        // die früheren Nachlauf-Timeouts (500/1000ms) waren redundant.
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', function() {
-                setTimeout(renumberBlocks, 100); // Small delay to ensure blocks are rendered
-            });
+            document.addEventListener('DOMContentLoaded', renumberBlocks);
         } else {
-            setTimeout(renumberBlocks, 100);
+            renumberBlocks();
         }
-
-        // Re-number after a longer delay to catch dynamically added blocks
-        setTimeout(renumberBlocks, 500);
-        setTimeout(renumberBlocks, 1000);
 
         // Watch for new blocks being added to the DOM
         if (typeof MutationObserver !== 'undefined') {
@@ -80,7 +74,6 @@
                     });
 
                     if (hasNumberingElements) {
-                        console.log('[CBD Numbering] New blocks detected, renumbering...');
                         renumberBlocks();
                     }
                 }, 250);
@@ -91,8 +84,6 @@
                 childList: true,
                 subtree: true
             });
-
-            console.log('[CBD Numbering] MutationObserver initialized');
         }
     }
 

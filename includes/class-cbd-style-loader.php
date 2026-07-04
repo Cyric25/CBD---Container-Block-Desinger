@@ -75,6 +75,20 @@ class CBD_Style_Loader {
         // Cache leeren bei Block-Updates
         add_action('cbd_block_saved', array($this, 'clear_styles_cache'));
         add_action('cbd_block_deleted', array($this, 'clear_styles_cache'));
+
+        // Seiten-CSS-Cache invalidieren, wenn sich ein WIEDERVERWENDBARER
+        // Block ändert (AP37): dessen Container sind für die Cache-Signatur
+        // (Styles-Version + post_modified der Seite) unsichtbar — ohne Bump
+        // bliebe bis zu 24h altes CSS aktiv.
+        add_action('save_post_wp_block', array($this, 'bump_styles_version'));
+    }
+
+    /**
+     * Styles-Version erhöhen — invalidiert alle Seiten-CSS-Caches
+     * (cbd_page_css_*) über die Signaturprüfung in output_dynamic_styles().
+     */
+    public function bump_styles_version() {
+        update_option('cbd_styles_version', time());
     }
     
     /**
@@ -174,7 +188,7 @@ class CBD_Style_Loader {
         }
         
         // Collapsible
-        if (in_array('collapsible', $active_features)) {
+        if (in_array('collapse', $active_features)) {
             wp_enqueue_style(
                 'cbd-feature-collapsible',
                 CBD_PLUGIN_URL . 'assets/css/features/collapsible.css',
@@ -184,7 +198,7 @@ class CBD_Style_Loader {
         }
         
         // Copy Button
-        if (in_array('copy', $active_features)) {
+        if (in_array('copyText', $active_features)) {
             wp_enqueue_style(
                 'cbd-feature-copy',
                 CBD_PLUGIN_URL . 'assets/css/features/copy.css',
@@ -1920,8 +1934,8 @@ class CBD_Style_Loader {
             $css .= "}\n";
         }
         
-        // Collapsible Styles
-        if (!empty($features['collapsible']['enabled'])) {
+        // Collapsible Styles (Feature-Key im Admin/DB: 'collapse')
+        if (!empty($features['collapse']['enabled'])) {
             $css .= "{$selector}.cbd-collapsed .cbd-container-content {\n";
             $css .= "  display: none;\n";
             $css .= "}\n";
@@ -1937,8 +1951,8 @@ class CBD_Style_Loader {
             $css .= "}\n";
         }
         
-        // Copy Button Styles
-        if (!empty($features['copy']['enabled'])) {
+        // Copy Button Styles (Feature-Key im Admin/DB: 'copyText')
+        if (!empty($features['copyText']['enabled'])) {
             $css .= "{$selector} .cbd-copy-button {\n";
             $css .= "  position: absolute;\n";
             $css .= "  top: 10px;\n";
@@ -1989,7 +2003,7 @@ class CBD_Style_Loader {
             $css .= ".cbd-number { display: flex; align-items: center; justify-content: center; }\n";
         }
         
-        if (!empty($has_features['collapsible'])) {
+        if (!empty($has_features['collapse'])) {
             $css .= "\n/* Collapsible Feature Styles */\n";
             $css .= ".cbd-container.cbd-collapsible { position: relative; }\n";
             $css .= ".cbd-collapse-toggle { position: absolute; }\n";

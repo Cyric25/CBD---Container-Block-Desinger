@@ -21,7 +21,7 @@ class CBD_Schema_Manager {
     /**
      * Database version for tracking migrations
      */
-    const DB_VERSION = '3.1.32';
+    const DB_VERSION = '3.1.61';
     
     /**
      * Option key for storing database version
@@ -141,8 +141,76 @@ class CBD_Schema_Manager {
             self::migrate_legacy_container_ids();
         }
 
+        if (version_compare($current_version, '3.1.61', '<')) {
+            self::migrate_feature_keys_to_3_1_61();
+        }
+
         // Update database version to current version
         update_option(self::DB_VERSION_KEY, self::DB_VERSION);
+    }
+
+    /**
+     * Migration zu 3.1.61 - Feature-Keys vereinheitlichen
+     *
+     * Historisch existierten zwei Schreibweisen in der features-JSON-Spalte:
+     * Admin/Renderer nutzen 'collapse'/'copyText', ältere Default-Blöcke und
+     * der Style-Loader nutzten 'collapsible'/'copy'. Kanonisch sind ab jetzt
+     * 'collapse' und 'copyText' (siehe VERBESSERUNGSPLAN.md AP1).
+     */
+    private static function migrate_feature_keys_to_3_1_61() {
+        global $wpdb;
+        $table_name = CBD_TABLE_BLOCKS;
+
+        $rows = $wpdb->get_results("SELECT id, features FROM $table_name", ARRAY_A);
+        if (empty($rows)) {
+            return;
+        }
+
+        $key_map = array(
+            'collapsible' => 'collapse',
+            'copy'        => 'copyText',
+        );
+
+        foreach ($rows as $row) {
+            $features = json_decode($row['features'], true);
+            if (!is_array($features)) {
+                continue;
+            }
+
+            $changed = false;
+            foreach ($key_map as $old_key => $new_key) {
+                if (!isset($features[$old_key])) {
+                    continue;
+                }
+                // Alten Key umhängen, sofern der kanonische nicht schon existiert
+                if (!isset($features[$new_key])) {
+                    $features[$new_key] = $features[$old_key];
+                }
+                unset($features[$old_key]);
+                $changed = true;
+            }
+
+            if ($changed) {
+                $wpdb->update(
+                    $table_name,
+                    array('features' => wp_json_encode($features)),
+                    array('id' => $row['id']),
+                    array('%s'),
+                    array('%d')
+                );
+            }
+        }
+
+        // Caches invalidieren, damit Frontend/Editor die neuen Keys sehen
+        if (class_exists('CBD_Block_Registration')) {
+            CBD_Block_Registration::clear_blocks_cache();
+        }
+        if (class_exists('CBD_Style_Loader')) {
+            $style_loader = CBD_Style_Loader::get_instance();
+            if (method_exists($style_loader, 'clear_styles_cache')) {
+                $style_loader->clear_styles_cache();
+            }
+        }
     }
 
     /**

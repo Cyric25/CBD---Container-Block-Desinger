@@ -218,8 +218,11 @@ class CBD_Block_Registration {
         
         if ($result) {
             $this->registered_blocks[$block_name] = $block;
-            error_log('[CBD Block Registration] Block type registered: ' . $block_name);
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD Block Registration] Block type registered: ' . $block_name);
+            }
         } else {
+            // Echter Fehlerfall: bewusst ungegatet loggen
             error_log('[CBD Block Registration] Failed to register block type: ' . $block_name);
         }
     }
@@ -244,7 +247,9 @@ class CBD_Block_Registration {
         
         // Überprüfe nochmals ob Block bereits registriert ist
         if (WP_Block_Type_Registry::get_instance()->is_registered($block_name)) {
-            error_log('[CBD Block Registration] Main container block already registered');
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[CBD Block Registration] Main container block already registered');
+            }
             return;
         }
         
@@ -295,7 +300,9 @@ class CBD_Block_Registration {
             )
         ));
         
-        error_log('[CBD Block Registration] Main container block registered');
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('[CBD Block Registration] Main container block registered');
+        }
     }
     
     /**
@@ -498,8 +505,10 @@ class CBD_Block_Registration {
         }
 
         // Block Numbering - runs independently of Interactivity API/fallback
-        // This ensures block numbers are always updated correctly
-        if (!is_admin()) {
+        // Nur laden, wenn ein aktives Block-Design das Numbering-Feature
+        // überhaupt nutzt (AP21) — sonst spart das den MutationObserver
+        // auf dem gesamten Body.
+        if (!is_admin() && $this->any_active_block_has_feature('numbering')) {
             wp_enqueue_script(
                 'cbd-block-numbering',
                 CBD_PLUGIN_URL . 'assets/js/block-numbering.js',
@@ -532,27 +541,38 @@ class CBD_Block_Registration {
         // Dashicons for frontend icons
         wp_enqueue_style('dashicons');
 
-        // Icon Libraries for multi-library support (Font Awesome, Material Icons, Lucide)
-        wp_enqueue_style(
-            'font-awesome',
-            'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
-            array(),
-            '6.5.1'
-        );
+        // Icon Libraries (Font Awesome, Material Icons, Lucide)
+        // DSGVO: lokal gebündelt statt CDN (cdnjs/Google Fonts/unpkg).
+        // Performance: nur die Bibliotheken laden, die von aktiven
+        // Block-Designs tatsächlich verwendet werden.
+        $icon_libs = $this->get_required_icon_libraries();
 
-        wp_enqueue_style(
-            'material-icons',
-            'https://fonts.googleapis.com/icon?family=Material+Icons',
-            array(),
-            null
-        );
+        if (!empty($icon_libs['fontawesome'])) {
+            wp_enqueue_style(
+                'font-awesome',
+                CBD_PLUGIN_URL . 'assets/vendor/font-awesome/css/all.min.css',
+                array(),
+                '6.5.1'
+            );
+        }
 
-        wp_enqueue_style(
-            'lucide-icons',
-            'https://unpkg.com/lucide-static@0.454.0/font/lucide.css',
-            array(),
-            '0.454.0'
-        );
+        if (!empty($icon_libs['material'])) {
+            wp_enqueue_style(
+                'material-icons',
+                CBD_PLUGIN_URL . 'assets/vendor/material-icons/material-icons.css',
+                array(),
+                CBD_VERSION
+            );
+        }
+
+        if (!empty($icon_libs['lucide'])) {
+            wp_enqueue_style(
+                'lucide-icons',
+                CBD_PLUGIN_URL . 'assets/vendor/lucide/lucide.css',
+                array(),
+                '0.454.0'
+            );
+        }
 
         // Enqueue html2canvas for screenshot functionality
         wp_enqueue_script(
@@ -728,15 +748,6 @@ class CBD_Block_Registration {
         */
     }
 
-    /**
-     * Prüfen ob interaktive Features vorhanden sind
-     */
-    private function has_interactive_features() {
-        // Always return true since we now always render the action buttons
-        // The buttons are displayed for all container blocks
-        return true;
-    }
-    
     /**
      * Block rendern - Updated with new structure
      */
@@ -946,19 +957,23 @@ class CBD_Block_Registration {
         $wrapper_attributes['data-block-title'] = esc_attr($block->title);
         $wrapper_attributes['data-stable-id'] = esc_attr($stable_id);
         
-        if (!empty($anchor)) {
-            $wrapper_attributes['id'] = $anchor;
-        }
-        
         $wrapper_attributes['class'] = implode(' ', $wrapper_classes);
-        
+
         // Inner content block classes (.cbd-container-block)
         $content_classes = array('cbd-container-block');
         $content_attributes = array();
-        
+
+        // Anchor auf den inneren Block legen — NICHT die Wrapper-ID
+        // überschreiben: Interactivity-Kontext (context.containerId) und der
+        // Content-Wrapper ({$container_id}-content) referenzieren die
+        // generierte Container-ID; ein Ersetzen würde JS-Zugriffe brechen.
+        if (!empty($anchor)) {
+            $content_attributes['id'] = $anchor;
+        }
+
         // Add block-specific class to content block
         $content_classes[] = 'cbd-block-' . sanitize_html_class($selected_block);
-        
+
         $content_attributes['class'] = implode(' ', $content_classes);
         
         // Generate inline styles for content block only
@@ -989,7 +1004,9 @@ class CBD_Block_Registration {
         // NOTE: We add a placeholder and renumber via JavaScript after DOM is ready
         // because WordPress renders blocks in unpredictable order
 
-        $show_number = (self::$render_depth == 1);
+        // Nummern-Marker nur für Top-Level-Blöcke UND nur wenn das
+        // Numbering-Feature im Block-Design aktiviert ist (AP21)
+        $show_number = (self::$render_depth == 1) && !empty($features['numbering']['enabled']);
 
         if ($show_number) {
             // Add a marker class for JavaScript to find and renumber
@@ -1012,48 +1029,59 @@ class CBD_Block_Registration {
         $html .= '>';
         
         // Button styling with Interactivity API directives
-        // ALWAYS show all buttons (like before) - features control functionality, not visibility
+        // Buttons erscheinen nur, wenn das jeweilige Feature im Block-Design
+        // aktiviert ist (Entscheidung AP12, VERBESSERUNGSPLAN.md). PDF-Export
+        // hat kein Feature-Flag und bleibt immer verfügbar.
         $html .= '<!-- CBD: INTERACTIVE BUTTONS WITH INTERACTIVITY API -->';
         $html .= '<div class="cbd-action-buttons">';
 
-        // Button 1: Collapse - ALWAYS visible
-        $html .= '<button type="button" ';
-        $html .= 'class="cbd-collapse-toggle" ';
-        $html .= 'data-wp-on--click="actions.toggleCollapse" ';
-        $html .= 'data-wp-bind--aria-expanded="!context.isCollapsed" ';
-        $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
-        $html .= 'title="Ein-/Ausklappen">';
-        $html .= '<span class="dashicons dashicons-arrow-up-alt2" ';
-        $html .= 'data-wp-class--dashicons-arrow-up-alt2="!context.isCollapsed" ';
-        $html .= 'data-wp-class--dashicons-arrow-down-alt2="context.isCollapsed">';
-        $html .= '</span>';
-        $html .= '</button>';
+        // Button 1: Collapse - nur wenn Feature aktiviert
+        if (!empty($features['collapse']['enabled'])) {
+            $html .= '<button type="button" ';
+            $html .= 'class="cbd-collapse-toggle" ';
+            $html .= 'data-wp-on--click="actions.toggleCollapse" ';
+            $html .= 'data-wp-bind--aria-expanded="!context.isCollapsed" ';
+            $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+            $html .= 'title="Ein-/Ausklappen">';
+            $html .= '<span class="dashicons dashicons-arrow-up-alt2" ';
+            $html .= 'data-wp-class--dashicons-arrow-up-alt2="!context.isCollapsed" ';
+            $html .= 'data-wp-class--dashicons-arrow-down-alt2="context.isCollapsed">';
+            $html .= '</span>';
+            $html .= '</button>';
+        }
 
-        // Button 2: Copy Text - ALWAYS visible
-        $html .= '<button type="button" ';
-        $html .= 'class="cbd-copy-text" ';
-        $html .= 'data-wp-on--click="actions.copyText" ';
-        $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
-        $html .= 'title="Text kopieren">';
-        $html .= '<span class="dashicons dashicons-clipboard" ';
-        $html .= 'data-wp-class--dashicons-clipboard="!context.copySuccess" ';
-        $html .= 'data-wp-class--dashicons-yes-alt="context.copySuccess">';
-        $html .= '</span>';
-        $html .= '</button>';
+        // Button 2: Copy Text - nur wenn Feature aktiviert
+        if (!empty($features['copyText']['enabled'])) {
+            $copy_title = !empty($features['copyText']['buttonText'])
+                ? $features['copyText']['buttonText']
+                : __('Text kopieren', 'container-block-designer');
+            $html .= '<button type="button" ';
+            $html .= 'class="cbd-copy-text" ';
+            $html .= 'data-wp-on--click="actions.copyText" ';
+            $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+            $html .= 'title="' . esc_attr($copy_title) . '">';
+            $html .= '<span class="dashicons dashicons-clipboard" ';
+            $html .= 'data-wp-class--dashicons-clipboard="!context.copySuccess" ';
+            $html .= 'data-wp-class--dashicons-yes-alt="context.copySuccess">';
+            $html .= '</span>';
+            $html .= '</button>';
+        }
 
-        // Button 3: Screenshot - ALWAYS visible
-        $html .= '<button type="button" ';
-        $html .= 'class="cbd-screenshot" ';
-        $html .= 'data-wp-on--click="actions.createScreenshot" ';
-        $html .= 'data-wp-bind--disabled="context.screenshotLoading" ';
-        $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
-        $html .= 'title="Screenshot erstellen">';
-        $html .= '<span class="dashicons dashicons-camera" ';
-        $html .= 'data-wp-class--dashicons-camera="!context.screenshotLoading && !context.screenshotSuccess" ';
-        $html .= 'data-wp-class--dashicons-update-alt="context.screenshotLoading" ';
-        $html .= 'data-wp-class--dashicons-yes-alt="context.screenshotSuccess">';
-        $html .= '</span>';
-        $html .= '</button>';
+        // Button 3: Screenshot - nur wenn Feature aktiviert
+        if (!empty($features['screenshot']['enabled'])) {
+            $html .= '<button type="button" ';
+            $html .= 'class="cbd-screenshot" ';
+            $html .= 'data-wp-on--click="actions.createScreenshot" ';
+            $html .= 'data-wp-bind--disabled="context.screenshotLoading" ';
+            $html .= 'style="display: flex !important; visibility: visible !important; opacity: 1 !important;" ';
+            $html .= 'title="Screenshot erstellen">';
+            $html .= '<span class="dashicons dashicons-camera" ';
+            $html .= 'data-wp-class--dashicons-camera="!context.screenshotLoading && !context.screenshotSuccess" ';
+            $html .= 'data-wp-class--dashicons-update-alt="context.screenshotLoading" ';
+            $html .= 'data-wp-class--dashicons-yes-alt="context.screenshotSuccess">';
+            $html .= '</span>';
+            $html .= '</button>';
+        }
 
         // Button 4: PDF Export - ALWAYS visible
         $html .= '<button type="button" ';
@@ -1113,10 +1141,7 @@ class CBD_Block_Registration {
         // Note: We explicitly do NOT use config or database titles anymore
         
         $has_icon = !empty($features['icon']['enabled']);
-        
-        // DEBUG: Always show icon for testing until we fix feature detection
-        $has_icon = true; // Force icon display for now
-        
+
         // Always show header if there's a title OR icon - inline layout
         if ($has_icon || !empty($block_title)) {
             $html .= '<div class="cbd-block-header" style="margin-bottom: 15px; padding: 12px 20px;">';
@@ -1241,12 +1266,36 @@ class CBD_Block_Registration {
     private function format_number($number, $format) {
         switch ($format) {
             case 'alphabetic':
-                return chr(64 + $number); // A, B, C...
-                
+                // A, B, ... Z, AA, AB, ... (Excel-Spaltenlogik, robust über Z hinaus)
+                $result = '';
+                $n = (int) $number;
+                while ($n > 0) {
+                    $n--;
+                    $result = chr(65 + ($n % 26)) . $result;
+                    $n = intdiv($n, 26);
+                }
+                return $result !== '' ? $result : $number;
+
             case 'roman':
-                $map = array('', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X');
-                return isset($map[$number]) ? $map[$number] : $number;
-                
+                // Echte Konvertierung statt Lookup-Tabelle (funktioniert über X hinaus)
+                $n = (int) $number;
+                if ($n < 1) {
+                    return $number;
+                }
+                $map = array(
+                    1000 => 'M', 900 => 'CM', 500 => 'D', 400 => 'CD',
+                    100 => 'C', 90 => 'XC', 50 => 'L', 40 => 'XL',
+                    10 => 'X', 9 => 'IX', 5 => 'V', 4 => 'IV', 1 => 'I'
+                );
+                $result = '';
+                foreach ($map as $value => $numeral) {
+                    while ($n >= $value) {
+                        $result .= $numeral;
+                        $n -= $value;
+                    }
+                }
+                return $result;
+
             case 'numeric':
             default:
                 return $number;
@@ -1823,6 +1872,46 @@ class CBD_Block_Registration {
      * @param array $attributes Additional HTML attributes
      * @return string Icon HTML
      */
+    /**
+     * Ermittelt, welche Icon-Bibliotheken von aktiven Block-Designs
+     * tatsächlich benötigt werden (für bedingtes Asset-Loading).
+     *
+     * @return array Assoziativ: ['fontawesome' => true, 'material' => true, ...]
+     */
+    /**
+     * Prüft, ob irgendein aktives Block-Design ein bestimmtes Feature nutzt
+     * (für bedingtes Asset-Loading, nutzt den gecachten Blocklisten-Cache).
+     *
+     * @param string $feature_key Feature-Key (z. B. 'numbering', 'boardMode')
+     * @return bool
+     */
+    private function any_active_block_has_feature($feature_key) {
+        foreach (self::get_active_blocks() as $block) {
+            $features = !empty($block->features) ? json_decode($block->features, true) : array();
+            if (!empty($features[$feature_key]['enabled'])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function get_required_icon_libraries() {
+        $libraries = array();
+
+        foreach (self::get_active_blocks() as $block) {
+            $features = !empty($block->features) ? json_decode($block->features, true) : array();
+            if (empty($features['icon']['enabled'])) {
+                continue;
+            }
+
+            $icon_value = isset($features['icon']['value']) ? $features['icon']['value'] : '';
+            $icon_data = $this->parse_icon_value($icon_value);
+            $libraries[$icon_data['type']] = true;
+        }
+
+        return $libraries;
+    }
+
     private function render_icon($icon_value, $color = 'inherit', $attributes = array()) {
         if (empty($icon_value)) {
             return '';

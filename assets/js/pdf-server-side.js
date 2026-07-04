@@ -53,7 +53,7 @@
             return false;
         }
 
-        console.log('[CBD PDF] Starting export:', containerBlocks.length, 'blocks, mode:', mode);
+        window.cbdDebug && console.log('[CBD PDF] Starting export:', containerBlocks.length, 'blocks, mode:', mode);
 
         // Show progress overlay
         var $overlay = createProgressOverlay(containerBlocks.length);
@@ -354,7 +354,7 @@
 
         function nextFormula() {
             if (index >= formulaElements.length) {
-                console.log('[CBD PDF] Captured ' + formulas.length + '/' + formulaElements.length + ' formula images');
+                window.cbdDebug && console.log('[CBD PDF] Captured ' + formulas.length + '/' + formulaElements.length + ' formula images');
                 callback(formulas);
                 return;
             }
@@ -617,7 +617,7 @@
         }
 
         if (totalInjected > 0) {
-            console.log('[CBD PDF] Injected', totalInjected, 'drawing page(s) from localStorage');
+            window.cbdDebug && console.log('[CBD PDF] Injected', totalInjected, 'drawing page(s) from localStorage');
         }
     }
 
@@ -814,7 +814,7 @@
 
                     // Check if canvas export produced valid data (not blank)
                     if (base64 && base64.length > 1000) {
-                        console.log('[CBD PDF] Direct canvas export for', item.id, '(' + Math.round(base64.length / 1024) + ' KB)');
+                        window.cbdDebug && console.log('[CBD PDF] Direct canvas export for', item.id, '(' + Math.round(base64.length / 1024) + ' KB)');
                         screenshots.push({ id: item.id, base64: base64 });
                         index++;
                         setTimeout(nextScreenshot, 20);
@@ -849,7 +849,7 @@
                 backgroundColor: '#ffffff'
             }).then(function (canvas) {
                 var base64 = canvasToCompressedBase64(canvas, jpegQuality);
-                console.log('[CBD PDF] html2canvas for', item.id, '(' + Math.round(base64.length / 1024) + ' KB)');
+                window.cbdDebug && console.log('[CBD PDF] html2canvas for', item.id, '(' + Math.round(base64.length / 1024) + ' KB)');
 
                 screenshots.push({ id: item.id, base64: base64 });
                 index++;
@@ -906,7 +906,7 @@
      */
     function sendToServer(blocksData, mode, $overlay) {
         // Step 1: Run diagnosis via REST API (bypasses admin-ajax.php)
-        console.log('[CBD PDF] Running server diagnosis via REST API...');
+        window.cbdDebug && console.log('[CBD PDF] Running server diagnosis via REST API...');
 
         var diagnoseUrl = cbdPDFData.resturl ? cbdPDFData.resturl + 'pdf-diagnose' : null;
 
@@ -921,7 +921,7 @@
             type: 'GET',
             timeout: 15000,
             success: function (info) {
-                console.log('[CBD PDF] Server info:', info);
+                window.cbdDebug && console.log('[CBD PDF] Server info:', info);
 
                 // Check for missing extensions
                 var problems = [];
@@ -963,7 +963,7 @@
         // Calculate payload size and warn if too large
         var payload = JSON.stringify(blocksData);
         var payloadKB = Math.round(payload.length / 1024);
-        console.log('[CBD PDF] Sending', blocksData.length, 'blocks to server, payload:', payloadKB, 'KB');
+        window.cbdDebug && console.log('[CBD PDF] Sending', blocksData.length, 'blocks to server, payload:', payloadKB, 'KB');
 
         // If payload > 6MB, try to reduce screenshot quality
         if (payload.length > 6 * 1024 * 1024) {
@@ -987,7 +987,7 @@
                 }
             }
             payload = JSON.stringify(blocksData);
-            console.log('[CBD PDF] Recompressed payload:', Math.round(payload.length / 1024), 'KB');
+            window.cbdDebug && console.log('[CBD PDF] Recompressed payload:', Math.round(payload.length / 1024), 'KB');
         }
 
         // Use REST API (bypasses admin-ajax.php which may have issues)
@@ -1010,7 +1010,7 @@
                     $overlay.remove();
 
                     if (response.success) {
-                        console.log('[CBD PDF] PDF generated with engine:', response.engine);
+                        window.cbdDebug && console.log('[CBD PDF] PDF generated with engine:', response.engine);
                         downloadPDF(response.url, response.filename || filename);
                     } else {
                         console.error('[CBD PDF] Server error:', response.message);
@@ -1021,7 +1021,7 @@
                     console.error('[CBD PDF] REST error:', status, error, 'Response:', xhr.responseText);
 
                     // Fallback: Try admin-ajax.php
-                    console.log('[CBD PDF] Falling back to admin-ajax.php...');
+                    window.cbdDebug && console.log('[CBD PDF] Falling back to admin-ajax.php...');
                     sendPDFViaAjax(payload, filename, mode, cssVariables, $overlay);
                 }
             });
@@ -1052,7 +1052,7 @@
                 $overlay.remove();
 
                 if (response.success) {
-                    console.log('[CBD PDF] PDF generated via AJAX, engine:', response.data.engine);
+                    window.cbdDebug && console.log('[CBD PDF] PDF generated via AJAX, engine:', response.data.engine);
                     downloadPDF(response.data.url, response.data.filename || filename);
                 } else {
                     var errorMsg = response.data ? response.data.message : 'Unbekannter Fehler';
@@ -1161,5 +1161,5 @@
         }
     }
 
-    console.log('[CBD PDF] Server-side PDF export loaded (v3.0, iOS:', isIOS, ')');
+    window.cbdDebug && console.log('[CBD PDF] Server-side PDF export loaded (v3.0, iOS:', isIOS, ')');
 })();

@@ -73,7 +73,7 @@
         });
 
         if (counter.count > 0) {
-            console.log('CBD Block-Recovery: ' + counter.count + ' Container-Block/Blöcke automatisch repariert');
+            window.cbdDebug && console.log('CBD Block-Recovery: ' + counter.count + ' Container-Block/Blöcke automatisch repariert');
 
             if (wp.data.dispatch('core/notices')) {
                 var message = (counter.count > 1)

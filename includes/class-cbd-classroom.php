@@ -26,6 +26,16 @@ if (!defined('ABSPATH')) {
 class CBD_Classroom {
 
     /**
+     * Debug-Log nur bei WP_DEBUG (AP25) — die AJAX-Pfade liefen sonst
+     * mit Dutzenden Log-Zeilen pro Toggle/Abruf voll.
+     */
+    private static function debug_log($message) {
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log($message);
+        }
+    }
+
+    /**
      * Singleton instance
      */
     private static $instance = null;
@@ -438,18 +448,18 @@ class CBD_Classroom {
         }
 
         // Get or create drawing record
-        error_log('[CBD Classroom] toggle_behandelt - Parameters: class_id=' . $class_id . ', page_id=' . $page_id . ', container_id=' . $container_id);
+        self::debug_log('[CBD Classroom] toggle_behandelt - Parameters: class_id=' . $class_id . ', page_id=' . $page_id . ', container_id=' . $container_id);
 
         $existing = $wpdb->get_row($wpdb->prepare(
             "SELECT id, is_behandelt FROM $table WHERE class_id = %d AND page_id = %d AND container_id = %s",
             $class_id, $page_id, $container_id
         ));
 
-        error_log('[CBD Classroom] Existing drawing: ' . ($existing ? 'YES (id=' . $existing->id . ', is_behandelt=' . $existing->is_behandelt . ')' : 'NO'));
+        self::debug_log('[CBD Classroom] Existing drawing: ' . ($existing ? 'YES (id=' . $existing->id . ', is_behandelt=' . $existing->is_behandelt . ')' : 'NO'));
 
         if ($existing) {
             $new_status = $existing->is_behandelt ? 0 : 1;
-            error_log('[CBD Classroom] UPDATING existing drawing to status: ' . $new_status);
+            self::debug_log('[CBD Classroom] UPDATING existing drawing to status: ' . $new_status);
 
             $result = $wpdb->update($table, array(
                 'is_behandelt' => $new_status,
@@ -459,12 +469,12 @@ class CBD_Classroom {
             if ($result === false) {
                 error_log('[CBD Classroom] UPDATE FAILED! Error: ' . $wpdb->last_error);
             } else {
-                error_log('[CBD Classroom] UPDATE successful. Rows affected: ' . $result);
+                self::debug_log('[CBD Classroom] UPDATE successful. Rows affected: ' . $result);
             }
         } else {
             $new_status = 1;
-            error_log('[CBD Classroom] INSERTING new drawing with status: ' . $new_status);
-            error_log('[CBD Classroom] Insert data: ' . print_r(array(
+            self::debug_log('[CBD Classroom] INSERTING new drawing with status: ' . $new_status);
+            self::debug_log('[CBD Classroom] Insert data: ' . print_r(array(
                 'class_id' => $class_id,
                 'teacher_id' => get_current_user_id(),
                 'page_id' => $page_id,
@@ -484,19 +494,19 @@ class CBD_Classroom {
                 error_log('[CBD Classroom] INSERT FAILED! Error: ' . $wpdb->last_error);
                 error_log('[CBD Classroom] Last query: ' . $wpdb->last_query);
             } else {
-                error_log('[CBD Classroom] INSERT successful. Insert ID: ' . $wpdb->insert_id);
+                self::debug_log('[CBD Classroom] INSERT successful. Insert ID: ' . $wpdb->insert_id);
             }
         }
 
         // Auto-assign page to class when first block is marked as behandelt
         if ($new_status == 1) {
-            error_log('[CBD Classroom] toggle_behandelt - New status is 1, checking if page should be auto-added');
+            self::debug_log('[CBD Classroom] toggle_behandelt - New status is 1, checking if page should be auto-added');
             $page_exists = $wpdb->get_var($wpdb->prepare(
                 "SELECT id FROM " . CBD_TABLE_CLASS_PAGES . " WHERE class_id = %d AND page_id = %d",
                 $class_id, $page_id
             ));
 
-            error_log('[CBD Classroom] Page exists in class_pages: ' . ($page_exists ? 'YES (ID: ' . $page_exists . ')' : 'NO'));
+            self::debug_log('[CBD Classroom] Page exists in class_pages: ' . ($page_exists ? 'YES (ID: ' . $page_exists . ')' : 'NO'));
 
             if (!$page_exists) {
                 // Get max sort_order for this class
@@ -512,7 +522,7 @@ class CBD_Classroom {
                 ));
 
                 if ($result) {
-                    error_log('[CBD Classroom] Successfully added page ' . $page_id . ' to class_pages for class ' . $class_id);
+                    self::debug_log('[CBD Classroom] Successfully added page ' . $page_id . ' to class_pages for class ' . $class_id);
                 } else {
                     error_log('[CBD Classroom] FAILED to add page to class_pages. Error: ' . $wpdb->last_error);
                 }
@@ -772,7 +782,7 @@ class CBD_Classroom {
         // Pages will be loaded individually when user clicks on them
 
         // STEP 1: Get ALL pages assigned to this class
-        error_log('[CBD Classroom] ajax_student_get_data - Class ID: ' . $class_id);
+        self::debug_log('[CBD Classroom] ajax_student_get_data - Class ID: ' . $class_id);
 
         $all_pages = $wpdb->get_results($wpdb->prepare(
             "SELECT cp.page_id, p.post_title, p.post_parent, p.menu_order
@@ -783,7 +793,7 @@ class CBD_Classroom {
             $class_id
         ));
 
-        error_log('[CBD Classroom] Found ' . count($all_pages) . ' total pages in class');
+        self::debug_log('[CBD Classroom] Found ' . count($all_pages) . ' total pages in class');
 
         // STEP 2: Get list of page IDs that have behandelt blocks
         $treated_page_ids = $wpdb->get_col($wpdb->prepare(
@@ -792,7 +802,7 @@ class CBD_Classroom {
             $class_id
         ));
 
-        error_log('[CBD Classroom] Found ' . count($treated_page_ids) . ' pages with behandelt blocks');
+        self::debug_log('[CBD Classroom] Found ' . count($treated_page_ids) . ' pages with behandelt blocks');
 
         // STEP 3: Build hierarchy and determine which pages to show
         $pages_to_show = array();
@@ -892,7 +902,7 @@ class CBD_Classroom {
         // Build flat list starting from top-level pages (parent_id = 0)
         $flat_pages = $build_tree(0, 0);
 
-        error_log('[CBD Classroom] Built flat list with ' . count($flat_pages) . ' pages');
+        self::debug_log('[CBD Classroom] Built flat list with ' . count($flat_pages) . ' pages');
 
         // Convert flat list to format expected by frontend
         $grouped_pages = array();
@@ -1097,24 +1107,24 @@ class CBD_Classroom {
         // Dashicons for frontend icons
         wp_enqueue_style('dashicons');
 
-        // Icon Libraries (Font Awesome, Material Icons, Lucide)
+        // Icon Libraries - lokal gebündelt (DSGVO)
         wp_enqueue_style(
             'font-awesome',
-            'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
+            CBD_PLUGIN_URL . 'assets/vendor/font-awesome/css/all.min.css',
             array(),
             '6.5.1'
         );
 
         wp_enqueue_style(
             'material-icons',
-            'https://fonts.googleapis.com/icon?family=Material+Icons',
+            CBD_PLUGIN_URL . 'assets/vendor/material-icons/material-icons.css',
             array(),
-            null
+            CBD_VERSION
         );
 
         wp_enqueue_style(
             'lucide-icons',
-            'https://unpkg.com/lucide-static@0.454.0/font/lucide.css',
+            CBD_PLUGIN_URL . 'assets/vendor/lucide/lucide.css',
             array(),
             '0.454.0'
         );
@@ -1128,10 +1138,10 @@ class CBD_Classroom {
             true
         );
 
-        // jsPDF library
+        // jsPDF library - lokal gebündelt (DSGVO)
         wp_enqueue_script(
             'jspdf',
-            'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+            CBD_PLUGIN_URL . 'assets/lib/jspdf.umd.min.js',
             array(),
             '2.5.1',
             true
@@ -1276,12 +1286,12 @@ class CBD_Classroom {
         $session = get_transient($transient_key);
 
         // Debug logging
-        error_log('[CBD Classroom] ajax_get_page_classroom_data called');
-        error_log('[CBD Classroom] Token: ' . substr($token, 0, 20) . '...');
-        error_log('[CBD Classroom] Transient key: ' . $transient_key);
-        error_log('[CBD Classroom] Session found: ' . ($session ? 'YES' : 'NO'));
+        self::debug_log('[CBD Classroom] ajax_get_page_classroom_data called');
+        self::debug_log('[CBD Classroom] Token: ' . substr($token, 0, 20) . '...');
+        self::debug_log('[CBD Classroom] Transient key: ' . $transient_key);
+        self::debug_log('[CBD Classroom] Session found: ' . ($session ? 'YES' : 'NO'));
         if ($session) {
-            error_log('[CBD Classroom] Session data: ' . print_r($session, true));
+            self::debug_log('[CBD Classroom] Session data: ' . print_r($session, true));
         }
 
         if (!$session || !isset($session['class_id'])) {
@@ -1304,7 +1314,7 @@ class CBD_Classroom {
         ));
 
         // Get drawings and behandelt status for this page
-        error_log('[CBD Classroom] ajax_get_page_classroom_data - Querying page_id: ' . $page_id . ', class_id: ' . $class_id);
+        self::debug_log('[CBD Classroom] ajax_get_page_classroom_data - Querying page_id: ' . $page_id . ', class_id: ' . $class_id);
 
         $drawings = $wpdb->get_results($wpdb->prepare(
             "SELECT container_id, drawing_data, is_behandelt
@@ -1313,10 +1323,10 @@ class CBD_Classroom {
             $class_id, $page_id
         ));
 
-        error_log('[CBD Classroom] ajax_get_page_classroom_data - Found ' . count($drawings) . ' drawings');
+        self::debug_log('[CBD Classroom] ajax_get_page_classroom_data - Found ' . count($drawings) . ' drawings');
         if (count($drawings) > 0) {
             foreach ($drawings as $d) {
-                error_log('[CBD Classroom] Drawing: container_id=' . $d->container_id . ', is_behandelt=' . $d->is_behandelt);
+                self::debug_log('[CBD Classroom] Drawing: container_id=' . $d->container_id . ', is_behandelt=' . $d->is_behandelt);
             }
         }
 
@@ -1354,7 +1364,7 @@ class CBD_Classroom {
             }
         }
 
-        error_log('[CBD Classroom] ajax_get_page_classroom_data - Treated containers: ' . implode(', ', $treated_containers));
+        self::debug_log('[CBD Classroom] ajax_get_page_classroom_data - Treated containers: ' . implode(', ', $treated_containers));
 
         wp_send_json_success(array(
             'class_name' => $class ? $class->name : '',
@@ -1395,7 +1405,7 @@ class CBD_Classroom {
         // Sanitize container IDs
         $invalid_containers = array_map('sanitize_text_field', $invalid_containers);
 
-        error_log('[CBD Classroom] ajax_cleanup_invalid_containers - Removing ' . count($invalid_containers) . ' invalid containers from page ' . $page_id);
+        self::debug_log('[CBD Classroom] ajax_cleanup_invalid_containers - Removing ' . count($invalid_containers) . ' invalid containers from page ' . $page_id);
 
         // Delete invalid container references
         $deleted_count = 0;
@@ -1412,11 +1422,11 @@ class CBD_Classroom {
 
             if ($result !== false) {
                 $deleted_count += $result;
-                error_log('[CBD Classroom] Deleted drawing: class_id=' . $class_id . ', page_id=' . $page_id . ', container_id=' . $container_id);
+                self::debug_log('[CBD Classroom] Deleted drawing: class_id=' . $class_id . ', page_id=' . $page_id . ', container_id=' . $container_id);
             }
         }
 
-        error_log('[CBD Classroom] Cleanup complete - Deleted ' . $deleted_count . ' entries');
+        self::debug_log('[CBD Classroom] Cleanup complete - Deleted ' . $deleted_count . ' entries');
 
         // Check if any treated containers remain for this page
         $remaining_count = $wpdb->get_var($wpdb->prepare(
@@ -1425,7 +1435,7 @@ class CBD_Classroom {
             $class_id, $page_id
         ));
 
-        error_log('[CBD Classroom] Remaining treated containers: ' . $remaining_count);
+        self::debug_log('[CBD Classroom] Remaining treated containers: ' . $remaining_count);
 
         wp_send_json_success(array(
             'deleted_count' => $deleted_count,

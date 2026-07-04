@@ -11,11 +11,11 @@
 (function ($) {
     'use strict';
 
-    console.log('[CBD PDF] Script loaded');
+    window.cbdDebug && console.log('[CBD PDF] Script loaded');
 
     $(document).ready(function () {
         var totalContainers = $('.cbd-container');
-        console.log('[CBD PDF] Found', totalContainers.length, 'containers');
+        window.cbdDebug && console.log('[CBD PDF] Found', totalContainers.length, 'containers');
 
         if (totalContainers.length === 0 || $('#cbd-pdf-export-fab').length > 0) {
             return;
@@ -60,7 +60,7 @@
         );
 
         $pdfButton.on('click', function () {
-            console.log('[CBD PDF] FAB clicked');
+            window.cbdDebug && console.log('[CBD PDF] FAB clicked');
 
             // Get top-level containers (not nested)
             var $topLevel = $('.cbd-container:visible').filter(function () {
@@ -71,7 +71,7 @@
                 return true;
             });
 
-            console.log('[CBD PDF] Top-level containers:', $topLevel.length);
+            window.cbdDebug && console.log('[CBD PDF] Top-level containers:', $topLevel.length);
 
             if ($topLevel.length === 0) {
                 alert('Keine sichtbaren Container-Bl\u00f6cke zum Exportieren gefunden.');
@@ -171,7 +171,7 @@
                 '}';
 
             $('head').append('<style id="cbd-pdf-selection-styles">' + css + '</style>');
-            console.log('[CBD PDF] CSS injected');
+            window.cbdDebug && console.log('[CBD PDF] CSS injected');
         }
 
         // =====================================================================
@@ -182,7 +182,7 @@
             if (selectionActive) return;
             selectionActive = true;
             $containerBlocks = $blocks;
-            console.log('[CBD PDF] Entering selection mode with', $blocks.length, 'blocks');
+            window.cbdDebug && console.log('[CBD PDF] Entering selection mode with', $blocks.length, 'blocks');
 
             injectSelectionCSS();
             $pdfButton.hide();
@@ -206,7 +206,7 @@
                 '</div>';
 
             $('body').prepend(toolbar);
-            console.log('[CBD PDF] Toolbar created');
+            window.cbdDebug && console.log('[CBD PDF] Toolbar created');
 
             // Mark all blocks as selected
             $containerBlocks.each(function (i) {
@@ -242,19 +242,19 @@
                 });
 
                 $block.append($badge);
-                console.log('[CBD PDF] Block', i, 'marked:', block.className.substring(0, 60));
+                window.cbdDebug && console.log('[CBD PDF] Block', i, 'marked:', block.className.substring(0, 60));
             });
 
             updateCount();
             window.scrollTo({ top: 0, behavior: 'smooth' });
             bindEvents();
-            console.log('[CBD PDF] Selection mode active');
+            window.cbdDebug && console.log('[CBD PDF] Selection mode active');
         }
 
         function exitSelectionMode() {
             if (!selectionActive) return;
             selectionActive = false;
-            console.log('[CBD PDF] Exiting selection mode');
+            window.cbdDebug && console.log('[CBD PDF] Exiting selection mode');
 
             $('#cbd-pdf-toolbar').remove();
             $('body').removeClass('cbd-pdf-mode');
@@ -298,7 +298,7 @@
             }
 
             updateCount();
-            console.log('[CBD PDF] Toggled block:', $block[0].id || '(no id)');
+            window.cbdDebug && console.log('[CBD PDF] Toggled block:', $block[0].id || '(no id)');
         }
 
         // =====================================================================
@@ -354,7 +354,7 @@
             // Create PDF
             $(document).on('click.cbdSel', '.cbd-pdf-go', function (e) {
                 e.stopPropagation();
-                console.log('[CBD PDF] Create PDF clicked');
+                window.cbdDebug && console.log('[CBD PDF] Create PDF clicked');
 
                 var selectedBlocks = [];
                 var mode = $('.cbd-pdf-mode-sel').val();
@@ -385,7 +385,7 @@
         // =====================================================================
 
         function startPDFExport(selectedBlocks, mode) {
-            console.log('[CBD PDF] Starting export:', selectedBlocks.length, 'blocks, mode:', mode);
+            window.cbdDebug && console.log('[CBD PDF] Starting export:', selectedBlocks.length, 'blocks, mode:', mode);
             if (typeof window.cbdPDFExportServerSide === 'function') {
                 window.cbdPDFExportServerSide(selectedBlocks, mode);
             } else {

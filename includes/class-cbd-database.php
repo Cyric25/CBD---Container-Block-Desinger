@@ -141,7 +141,9 @@ class CBD_Database {
         $save_data = array(
             'name' => sanitize_text_field($data['name'] ?? ''),
             'title' => sanitize_text_field($data['title'] ?? ''),
-            'slug' => sanitize_text_field($data['slug'] ?? $data['name'] ?? ''), // Wichtig: slug hinzufügen
+            // sanitize_title statt sanitize_text_field: Slugs mit Leerzeichen/
+            // Umlauten würden sonst das Frontend-Matching (WHERE slug = %s) verfehlen
+            'slug' => sanitize_title($data['slug'] ?? $data['name'] ?? ''),
             'description' => sanitize_textarea_field($data['description'] ?? ''),
             'config' => wp_json_encode($data['config'] ?? array()),
             'styles' => wp_json_encode($data['styles'] ?? array()),
@@ -289,17 +291,12 @@ class CBD_Database {
     public static function duplicate_block($block_id) {
         global $wpdb;
 
-        error_log('[CBD Database] duplicate_block called with ID: ' . $block_id);
-
         $original = self::get_block($block_id);
 
         if (!$original) {
-            error_log('[CBD Database] Original block not found for ID: ' . $block_id);
             return false;
         }
 
-        error_log('[CBD Database] Original block loaded: ' . print_r($original, true));
-        
         // Generate unique name and slug
         $counter = 1;
         $new_name = $original['name'] . '_copy';
@@ -324,13 +321,10 @@ class CBD_Database {
             'status' => 'active' // Set duplicate to active so it's immediately usable
         );
         
-        error_log('[CBD Database] Duplicate data prepared: ' . print_r($duplicate_data, true));
-
         $result = self::save_block($duplicate_data);
 
-        if ($result) {
-            error_log('[CBD Database] Duplicate saved successfully with ID: ' . $result);
-        } else {
+        if (!$result) {
+            // Echter Fehlerfall: bewusst ungegatet loggen
             error_log('[CBD Database] Duplicate save failed. Last error: ' . $wpdb->last_error);
         }
 

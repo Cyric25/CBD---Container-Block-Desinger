@@ -488,13 +488,13 @@
             // Check for store methods that indicate API is loaded
             if (interactivityAPIActive || checkInteractivityAPI() ||
                 (window.wp && window.wp.interactivity && window.wp.interactivity.store)) {
-                console.log('[CBD Fallback] Skipping board mode - Interactivity API active');
+                window.cbdDebug && console.log('[CBD Fallback] Skipping board mode - Interactivity API active');
                 return;
             }
 
             // Prevent double-triggering by setting a flag
             if (this.dataset.cbdBoardOpening) {
-                console.log('[CBD Fallback] Board already opening, skipping');
+                window.cbdDebug && console.log('[CBD Fallback] Board already opening, skipping');
                 return;
             }
             this.dataset.cbdBoardOpening = 'true';

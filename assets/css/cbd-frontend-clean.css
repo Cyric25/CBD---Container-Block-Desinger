@@ -944,23 +944,25 @@
     pointer-events: auto;
 }
 
-/* Touch-optimized styles */
+/* Touch-optimized styles
+   Auf Touch-Geräten gibt es kein :hover und der Interactivity-API-Pfad
+   setzt keine .cbd-selected-Klasse — die Action-Buttons müssen daher
+   dauerhaft sichtbar sein. !important ist nötig, weil die Basisregeln
+   (.cbd-action-buttons, Zeile ~1033) selbst !important verwenden. */
 @media (hover: none) and (pointer: coarse) {
-    .cbd-selection-menu .cbd-menu-toggle {
-        width: 44px;
-        height: 44px;
+    .cbd-action-buttons {
+        opacity: 1 !important;
+        visibility: visible !important;
+        transform: none !important;
+        pointer-events: auto !important;
+        background: rgba(0, 0, 0, 0.06) !important;
     }
-    
-    .cbd-selection-menu .cbd-dropdown-item {
-        padding: 16px 18px;
-        font-size: 16px;
-        min-height: 48px;
-    }
-    
-    .cbd-selection-menu .cbd-dropdown-item .dashicons {
-        font-size: 18px;
-        width: 18px;
-        height: 18px;
+
+    /* Mindestgröße 44px für Touch-Ziele (Apple HIG / WCAG 2.5.5) */
+    .cbd-action-buttons button {
+        width: 44px !important;
+        height: 44px !important;
+        font-size: 18px !important;
     }
 }
 

@@ -196,8 +196,13 @@ class CBD_Service_Container {
         // ContainerBlockDesigner\Admin\AdminRouter, ContainerBlockDesigner\API\APIManager)
         // existieren nicht bzw. sind tot; ein get() hätte einen Fatal Error ausgelöst.
 
-        // Admin - Use existing singleton
+        // Admin - Use existing singleton.
+        // CBD_Admin wird nur bei is_admin() geladen — ohne Guard wäre ein
+        // get('admin') im Frontend ein Fatal Error (AP28).
         $this->register('admin', function($container, $config) {
+            if (!class_exists('CBD_Admin')) {
+                throw new Exception('CBD_Admin ist nur im Admin-Kontext verfügbar');
+            }
             return CBD_Admin::get_instance();
         });
     }

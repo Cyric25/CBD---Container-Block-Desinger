@@ -96,10 +96,11 @@ class CBD_LaTeX_Parser {
             return;
         }
 
-        // KaTeX CSS
+        // KaTeX - lokal gebündelt (DSGVO, AP23). Der fonts/-Ordner liegt
+        // relativ neben katex.min.css und wird von dort referenziert.
         wp_enqueue_style(
             'katex',
-            'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css',
+            CBD_PLUGIN_URL . 'assets/vendor/katex/katex.min.css',
             array(),
             '0.16.9'
         );
@@ -107,7 +108,7 @@ class CBD_LaTeX_Parser {
         // KaTeX JS
         wp_enqueue_script(
             'katex',
-            'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js',
+            CBD_PLUGIN_URL . 'assets/vendor/katex/katex.min.js',
             array(),
             '0.16.9',
             true
@@ -116,7 +117,7 @@ class CBD_LaTeX_Parser {
         // KaTeX Auto-render extension
         wp_enqueue_script(
             'katex-auto-render',
-            'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js',
+            CBD_PLUGIN_URL . 'assets/vendor/katex/contrib/auto-render.min.js',
             array('katex'),
             '0.16.9',
             true
@@ -369,6 +370,14 @@ class CBD_LaTeX_Parser {
      * @return string Rendered HTML
      */
     private function render_inline_formula($matches) {
+        // KaTeX-/Pandoc-Konvention (AP26): direkt nach dem öffnenden $ und
+        // direkt vor dem schließenden $ darf KEIN Whitespace stehen.
+        // Verhindert False Positives wie "Kosten: $5 bis $10" — echte
+        // Formeln ($x^2$, $a + b$) sind nicht betroffen.
+        if ($matches[1] === '' || preg_match('/^\s|\s$/u', $matches[1])) {
+            return $matches[0]; // unverändert lassen
+        }
+
         $formula = trim($matches[1]);
         $this->formula_counter++;
 

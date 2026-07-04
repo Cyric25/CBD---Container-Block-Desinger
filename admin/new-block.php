@@ -108,33 +108,8 @@ if (isset($_POST['cbd_save_block']) && isset($_POST['cbd_nonce']) && wp_verify_n
         )
     );
     
-    // Features sammeln - mit korrekten Feldnamen
-    $features = array(
-        'icon' => array(
-            'enabled' => isset($_POST['features']['icon']['enabled']) ? true : false,
-            'value' => sanitize_text_field($_POST['features']['icon']['value'] ?? 'dashicons-admin-generic')
-        ),
-        'collapse' => array(
-            'enabled' => isset($_POST['features']['collapse']['enabled']) ? true : false,
-            'defaultState' => sanitize_text_field($_POST['features']['collapse']['defaultState'] ?? 'expanded')
-        ),
-        'numbering' => array(
-            'enabled' => isset($_POST['features']['numbering']['enabled']) ? true : false,
-            'format' => sanitize_text_field($_POST['features']['numbering']['format'] ?? 'numeric')
-        ),
-        'copyText' => array(
-            'enabled' => isset($_POST['features']['copyText']['enabled']) ? true : false,
-            'buttonText' => sanitize_text_field($_POST['features']['copyText']['buttonText'] ?? 'Text kopieren')
-        ),
-        'screenshot' => array(
-            'enabled' => isset($_POST['features']['screenshot']['enabled']) ? true : false,
-            'buttonText' => sanitize_text_field($_POST['features']['screenshot']['buttonText'] ?? 'Screenshot')
-        ),
-        'boardMode' => array(
-            'enabled' => isset($_POST['features']['boardMode']['enabled']) ? true : false,
-            'boardColor' => sanitize_hex_color($_POST['features']['boardMode']['boardColor'] ?? '#ffffff') ?: '#ffffff'
-        )
-    );
+    // Features sammeln - zentrale Parsing-Funktion (AP13)
+    $features = cbd_parse_features_from_post($_POST);
 
     // Config sammeln
     $config = array(

@@ -2379,7 +2379,7 @@
                 // 6. Spezielle Block-Initialisierung (Molekülviewer, etc.)
                 self.initializeSpecialBlocks(container);
 
-                console.log('[CBD Board Mode] Interaktive Blöcke initialisiert:', scripts.length, 'Scripts ausgeführt');
+                window.cbdDebug && console.log('[CBD Board Mode] Interaktive Blöcke initialisiert:', scripts.length, 'Scripts ausgeführt');
             });
 
             } catch (e) {
@@ -2423,7 +2423,7 @@
             }
 
             // Dependencies laden
-            console.log('[CBD Board Mode] Lade externe Libraries:', dependencies.map(function(d) { return d.name; }).join(', '));
+            window.cbdDebug && console.log('[CBD Board Mode] Lade externe Libraries:', dependencies.map(function(d) { return d.name; }).join(', '));
 
             var loaded = 0;
             var total = dependencies.length;
@@ -2432,7 +2432,7 @@
                 var script = document.createElement('script');
                 script.src = dep.url;
                 script.onload = function() {
-                    console.log('[CBD Board Mode]', dep.name, 'erfolgreich geladen');
+                    window.cbdDebug && console.log('[CBD Board Mode]', dep.name, 'erfolgreich geladen');
                     loaded++;
                     if (loaded === total) {
                         // Alle Dependencies geladen, callback ausführen

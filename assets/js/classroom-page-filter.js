@@ -27,11 +27,11 @@
 
             // Only run if we have all required parameters
             if (!this.classroomId || !this.token || !this.pageId) {
-                console.log('CBD Classroom Page Filter: Missing parameters, skipping');
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Missing parameters, skipping');
                 return;
             }
 
-            console.log('CBD Classroom Page Filter: Initializing for page', this.pageId, 'classroom', this.classroomId);
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Initializing for page', this.pageId, 'classroom', this.classroomId);
             this.loadClassroomData();
         },
 
@@ -47,7 +47,7 @@
                 page_id: this.pageId
             }, function(response) {
                 if (response.success) {
-                    console.log('CBD Classroom Page Filter: Received data', response.data);
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Received data', response.data);
                     self.filterContainers(response.data);
                 } else {
                     console.error('CBD Classroom Page Filter: Error loading data', response.data.message);
@@ -67,8 +67,8 @@
             var treatedContainers = data.treated_containers || [];
             var drawings = data.drawings || {};
 
-            console.log('CBD Classroom Page Filter: Treated containers:', treatedContainers);
-            console.log('CBD Classroom Page Filter: Drawings:', Object.keys(drawings));
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Treated containers:', treatedContainers);
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Drawings:', Object.keys(drawings));
 
             // Navigationsleiste (mit "Verlassen"-Button) IMMER zuerst einfügen –
             // unabhängig davon, ob die Seite Container-Blöcke hat. Sonst säße der
@@ -80,7 +80,7 @@
             // Find all container blocks on the page
             // Try multiple selectors to catch all containers
             var $containers = $('[data-wp-interactive="container-block-designer"], [data-stable-id^="cbd-"]');
-            console.log('CBD Classroom Page Filter: Found', $containers.length, 'container blocks');
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Found', $containers.length, 'container blocks');
 
             // DEBUG: Log all found container stable IDs
             var foundStableIds = [];
@@ -90,8 +90,8 @@
                     foundStableIds.push(stableId);
                 }
             });
-            console.log('CBD Classroom Page Filter: All stable IDs found in DOM:', foundStableIds);
-            console.log('CBD Classroom Page Filter: Treated containers from server:', treatedContainers);
+            window.cbdDebug && console.log('CBD Classroom Page Filter: All stable IDs found in DOM:', foundStableIds);
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Treated containers from server:', treatedContainers);
 
             // Check for inconsistencies: containers in DB but not in DOM
             var missingContainers = [];
@@ -117,10 +117,10 @@
                 return foundStableIds.indexOf(containerId) !== -1;
             });
 
-            console.log('CBD Classroom Page Filter: Valid treated containers (intersection):', validTreatedContainers);
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Valid treated containers (intersection):', validTreatedContainers);
 
             if ($containers.length === 0) {
-                console.log('CBD Classroom Page Filter: No containers found on page');
+                window.cbdDebug && console.log('CBD Classroom Page Filter: No containers found on page');
                 return;
             }
 
@@ -129,16 +129,16 @@
                 var $container = $(this);
                 var stableId = $container.attr('data-stable-id');
 
-                console.log('CBD Classroom Page Filter: Processing container', stableId);
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Processing container', stableId);
 
                 if (!stableId || validTreatedContainers.indexOf(stableId) === -1) {
                     // Container is NOT treated OR doesn't exist in DB -> hide it
                     $container.hide();
-                    console.log('CBD Classroom Page Filter: Hiding non-treated container', stableId);
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Hiding non-treated container', stableId);
                 } else {
                     // Container IS treated AND exists in DOM -> show it and add drawings/badges
                     $container.show();
-                    console.log('CBD Classroom Page Filter: Showing treated container', stableId);
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Showing treated container', stableId);
 
                     // Add drawing and badge if available
                     if (drawings[stableId]) {
@@ -232,7 +232,7 @@
                                     $toggle.toggleClass('cbd-drawing-toggle-active', willBeVisible);
                                 });
 
-                                console.log('CBD Classroom Page Filter: Added drawing section to', stableId);
+                                window.cbdDebug && console.log('CBD Classroom Page Filter: Added drawing section to', stableId);
                             }
                         }
                     }
@@ -310,7 +310,7 @@
         cleanupInvalidContainers: function(invalidContainers) {
             var self = this;
 
-            console.log('CBD Classroom Page Filter: Cleaning up', invalidContainers.length, 'invalid containers');
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Cleaning up', invalidContainers.length, 'invalid containers');
 
             $.post(cbdClassroomPageData.ajaxUrl, {
                 action: 'cbd_cleanup_invalid_containers',
@@ -319,8 +319,8 @@
                 invalid_containers: invalidContainers
             }, function(response) {
                 if (response.success) {
-                    console.log('CBD Classroom Page Filter: Cleanup successful -', response.data.message);
-                    console.log('CBD Classroom Page Filter: Remaining treated containers:', response.data.remaining_count);
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Cleanup successful -', response.data.message);
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Remaining treated containers:', response.data.remaining_count);
 
                     if (response.data.remaining_count === 0) {
                         // No treated containers left - page should not be in TOC anymore

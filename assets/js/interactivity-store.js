@@ -723,7 +723,7 @@ store('container-block-designer', {
 
 			// Logging für Debug
 			if (window.CBD_DEBUG) {
-				console.log('[CBD Interactivity] Block initialized:', {
+				window.cbdDebug && console.log('[CBD Interactivity] Block initialized:', {
 					blockId: context.blockId,
 					containerId: context.containerId,
 					isCollapsed: context.isCollapsed

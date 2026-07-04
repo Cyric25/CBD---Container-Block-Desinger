@@ -46,7 +46,7 @@
             blockData.ajaxUrl = window.ajaxurl || '/wp-admin/admin-ajax.php';
         }
         
-        console.log('CBD: BlockData bereit:', {
+        window.cbdDebug && console.log('CBD: BlockData bereit:', {
             ajaxUrl: blockData.ajaxUrl,
             hasNonce: !!blockData.nonce,
             localBlocks: blockData.blocks ? blockData.blocks.length : 0
@@ -114,21 +114,21 @@
             useEffect(() => {
                 // Nur beim ersten Laden und wenn noch kein Block ausgewählt ist
                 if (!defaultLoaded && !selectedBlock && availableBlocks.length > 0) {
-                    console.log('CBD: Prüfe auf Standard-Block...', availableBlocks);
+                    window.cbdDebug && console.log('CBD: Prüfe auf Standard-Block...', availableBlocks);
 
                     // Finde Standard-Block
                     const defaultBlock = availableBlocks.find(block => {
-                        console.log('CBD: Block:', block.name, 'is_default:', block.is_default);
+                        window.cbdDebug && console.log('CBD: Block:', block.name, 'is_default:', block.is_default);
                         return block.is_default == 1 || block.is_default === true;
                     });
 
                     if (defaultBlock) {
                         const blockValue = defaultBlock.slug || defaultBlock.id;
-                        console.log('CBD: Standard-Block gefunden, wird automatisch geladen:', defaultBlock.name, 'Value:', blockValue);
+                        window.cbdDebug && console.log('CBD: Standard-Block gefunden, wird automatisch geladen:', defaultBlock.name, 'Value:', blockValue);
                         setAttributes({ selectedBlock: blockValue });
                         setDefaultLoaded(true);
                     } else {
-                        console.log('CBD: Kein Standard-Block gefunden');
+                        window.cbdDebug && console.log('CBD: Kein Standard-Block gefunden');
                         setDefaultLoaded(true); // Trotzdem als "geladen" markieren
                     }
                 }
