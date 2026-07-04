@@ -181,6 +181,24 @@ if (fs.existsSync(outputPath)) {
     console.log(`✓ Removed existing ZIP for version ${newVersion}`);
 }
 
+// KRITISCH: Autoloader ohne Dev-Pakete generieren, BEVOR gezippt wird.
+// Das ZIP schließt Dev-Pakete (phpunit, wpcs, ...) aus — ein mit Dev-Paketen
+// generierter Autoloader lädt aber z. B. phpunit/.../Functions.php fest ein
+// → Fatal Error / HTTP 500 auf der Zielinstallation (passiert bei v3.1.63-65).
+// Nach dem ZIP-Bau wird der Dev-Autoloader wiederhergestellt (siehe unten).
+const { execSync } = require('child_process');
+console.log(`\n🔧 Generiere Produktions-Autoloader (composer dump-autoload --no-dev)...`);
+execSync('composer dump-autoload --no-dev --optimize --quiet', { cwd: __dirname, stdio: 'inherit' });
+
+function restoreDevAutoloader() {
+    try {
+        execSync('composer dump-autoload --optimize --quiet', { cwd: __dirname, stdio: 'inherit' });
+        console.log('🔧 Dev-Autoloader wiederhergestellt.');
+    } catch (e) {
+        console.warn('⚠️  Dev-Autoloader konnte nicht wiederhergestellt werden — manuell: composer dump-autoload --optimize');
+    }
+}
+
 // Create ZIP archive
 console.log(`\n📦 Creating WordPress Plugin ZIP...`);
 console.log(`Plugin: ${pluginName}`);
@@ -219,10 +237,14 @@ output.on('close', function() {
     remainingZips.forEach(zip => console.log(`   - ${zip}`));
 
     console.log(`\n✨ Ready for WordPress upload!`);
+
+    // Lokalen Dev-Autoloader (mit phpunit etc.) wiederherstellen
+    restoreDevAutoloader();
 });
 
 output.on('error', function(err) {
     console.error('❌ Error creating ZIP:', err);
+    restoreDevAutoloader();
     process.exit(1);
 });
 
