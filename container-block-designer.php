@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://github.com/Cyric25/CBD---Container-Block-Desinger
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 3.1.67
+ * Version: 3.1.68
  * Author: Cyric25
  * Author URI: https://github.com/Cyric25
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '3.1.67');
+define('CBD_VERSION', '3.1.68');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -36,6 +36,32 @@ define('CBD_TABLE_BLOCKS', $wpdb->prefix . 'cbd_blocks');
 define('CBD_TABLE_CLASSES', $wpdb->prefix . 'cbd_classes');
 define('CBD_TABLE_CLASS_PAGES', $wpdb->prefix . 'cbd_class_pages');
 define('CBD_TABLE_DRAWINGS', $wpdb->prefix . 'cbd_drawings');
+
+// ============================================================================
+// TEMPORÄRE DEBUG-INSTRUMENTIERUNG (Fehlersuche: HTTP 500 auf Inhaltsseiten)
+// Schreibt Fatals nach wp-content/uploads/cbd-debug.log UND als HTML-Kommentar
+// ans Ende der abgebrochenen Seite. VOR dem nächsten regulären Release entfernen!
+// ============================================================================
+if (!function_exists('cbd_debug_write')) {
+    function cbd_debug_write($line) {
+        if (function_exists('wp_upload_dir')) {
+            $upload = wp_upload_dir();
+            @file_put_contents(
+                $upload['basedir'] . '/cbd-debug.log',
+                '[' . gmdate('Y-m-d H:i:s') . ' UTC] ' . $line . ' | URL: ' . ($_SERVER['REQUEST_URI'] ?? '?') . "\n",
+                FILE_APPEND
+            );
+        }
+    }
+}
+register_shutdown_function(function () {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], array(E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_RECOVERABLE_ERROR), true)) {
+        $info = 'FATAL: ' . $e['message'] . ' in ' . $e['file'] . ':' . $e['line'];
+        cbd_debug_write($info);
+        echo "\n<!-- CBD-DEBUG " . htmlspecialchars($info, ENT_QUOTES) . " -->\n";
+    }
+});
 
 // Load WordPress PHP 8.x compatibility layer early
 require_once CBD_PLUGIN_DIR . 'includes/php8-wordpress-compatibility.php';

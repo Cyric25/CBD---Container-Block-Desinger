@@ -756,6 +756,25 @@ class CBD_Block_Registration {
     private static $block_cache = array(); // Performance: Cache DB results
 
     public function render_block($attributes, $content) {
+        // TEMPORÄRER DEBUG-WRAPPER (Fehlersuche HTTP 500): fängt Throwables
+        // pro Block, loggt Block + Fundstelle nach uploads/cbd-debug.log und
+        // lässt die Seite weiterrendern. Vor dem nächsten Release entfernen.
+        try {
+            return $this->render_block_inner($attributes, $content);
+        } catch (\Throwable $e) {
+            if (self::$render_depth > 0) {
+                self::$render_depth--;
+            }
+            $selected = isset($attributes['selectedBlock']) ? $attributes['selectedBlock'] : '?';
+            $info = 'render_block(' . $selected . '): ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine();
+            if (function_exists('cbd_debug_write')) {
+                cbd_debug_write($info);
+            }
+            return "\n<!-- CBD-DEBUG " . esc_html($info) . " -->\n";
+        }
+    }
+
+    private function render_block_inner($attributes, $content) {
         // Track rendering depth to detect nested blocks
         self::$render_depth++;
 
