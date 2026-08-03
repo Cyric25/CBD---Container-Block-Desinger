@@ -4,7 +4,7 @@ Auftrag: Der Importer-Parser soll auch Abschnitte erkennen, denen **kein Style
 zugewiesen** ist bzw. für die **kein Style existiert** — und generell mit
 beliebigen Markdown-Strukturen funktionieren.
 
-Status: ✅ ERLEDIGT (AP43–AP47), ausgeliefert in CDB v3.1.73.
+Status: ✅ ERLEDIGT (AP43–AP47), ausgeliefert in CDB v3.1.74.
 
 ---
 
@@ -150,9 +150,27 @@ das Modal über den Viewport hinaus, untere Zeilen und die Aktionsleiste
 - Statusanzeige in der Aktionsleiste: „x/y Gruppen zugewiesen"; bei offenen
   Gruppen gelb mit Zusatz „Rest wird ohne Container eingefügt".
 
-**Verifikation:** JS-Syntax + Strukturprüfung (2 Steps / 2 Scrollbereiche /
-2 geschlossene Container / 2 Aktionsleisten balanciert), CSS-Klammerbilanz,
-ZIP-Inhalt geprüft.
+**Nachbesserung v3.1.74 (Scrolling ging nicht):** Der erste Versuch setzte
+`overflow: hidden` auf `.components-modal__content` und wollte über eine
+Flex-Höhenkette (`flex: 1 1 auto` + `min-height: 0` auf Frame → content →
+step → scroll) einen eigenen Scrollbereich aufbauen. Diese Kette hängt von
+der WP-/Gutenberg-Version ab; griff sie nicht, war der Inhalt einfach
+abgeschnitten — **gar kein Scrollen**.
+
+Robuste Lösung: kein eigener Scrollcontainer, kein `overflow: hidden`, keine
+Flex-Annahmen. Stattdessen scrollt der WordPress-eigene Container mit
+**expliziter** `max-height: calc(88vh - 120px)` + `overflow-y: auto !important`
+(Mobile: `calc(92vh - 90px)`). `.cbd-importer-scroll` bleibt als neutraler
+Wrapper ohne CSS-Wirkung; die Aktionsleiste ist `position: sticky; bottom: -1px`
+im scrollenden WP-Container.
+
+**Lehre:** In Gutenberg-Modals nie das eingebaute Scrolling von
+`.components-modal__content` abschalten — nur seine Höhe begrenzen.
+
+**Verifikation:** JS-Syntax + Strukturprüfung (2 Steps / 2 Wrapper /
+2 Aktionsleisten balanciert), CSS-Klammerbilanz, Regelblock-Analyse von
+`.components-modal__content` (kein `overflow: hidden`, `max-height` +
+`overflow-y: auto` gesetzt), ZIP-Inhalt geprüft.
 
 ---
 

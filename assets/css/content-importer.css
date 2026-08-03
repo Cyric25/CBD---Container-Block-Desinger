@@ -6,35 +6,34 @@
  */
 
 /* Modal — Höhe begrenzt, Inhalt scrollbar, Footer immer erreichbar.
-   Ohne das wuchs das Modal bei vielen Gruppen ins Unendliche und die
-   unteren Zuweisungszeilen samt Buttons waren nicht mehr erreichbar. */
+   Ohne Begrenzung wuchs das Modal bei vielen Gruppen über den Viewport
+   hinaus und die unteren Zuweisungszeilen samt Buttons waren unerreichbar.
+
+   WICHTIG: Gescrollt wird vom WordPress-eigenen Container
+   (.components-modal__content) mit EXPLIZITER max-height. Kein
+   overflow:hidden und keine Flex-Höhenkette — die ist von der
+   WP-/Gutenberg-Version abhängig und brach das Scrolling komplett. */
 .cbd-importer-modal {
     max-width: 860px !important;
-    max-height: 88vh !important;
 }
 
 .cbd-importer-modal .components-modal__content {
-    display: flex;
-    flex-direction: column;
+    /* 120px ≈ Modal-Header + Außenabstände */
+    max-height: calc(88vh - 120px);
+    overflow-y: auto !important;
+    overflow-x: hidden;
     padding-bottom: 0;
-    overflow: hidden; /* Scrolling übernimmt .cbd-importer-step */
 }
 
 /* Step Container */
 .cbd-importer-step {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
     padding: 20px 0 0;
 }
 
-/* Scrollbereich: alles außer Titel und Aktionsleiste */
+/* Neutraler Wrapper — das Scrolling macht .components-modal__content.
+   Kein eigenes overflow, sonst entstehen zwei Scrollbalken. */
 .cbd-importer-scroll {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-y: auto;
-    padding-right: 4px;
+    /* absichtlich ohne overflow/height */
 }
 
 .cbd-importer-step h2 {
@@ -273,21 +272,22 @@
     margin-bottom: 8px;
 }
 
-/* Actions — klebt am unteren Modalrand, damit "Blöcke einfügen" auch bei
-   vielen Zuweisungszeilen ohne Scrollen erreichbar bleibt. */
+/* Actions — klebt am unteren Rand des scrollenden Modal-Inhalts, damit
+   "Blöcke einfügen" auch bei vielen Zuweisungszeilen erreichbar bleibt.
+   sticky funktioniert hier, weil der Scroll-Vorfahre
+   .components-modal__content ist. */
 .cbd-importer-actions {
     display: flex;
     justify-content: flex-end;
     align-items: center;
     gap: 10px;
-    flex: 0 0 auto;
     margin-top: 0;
     padding: 16px 0;
     border-top: 1px solid #ddd;
     background: #fff;
     position: sticky;
-    bottom: 0;
-    z-index: 2;
+    bottom: -1px;
+    z-index: 10;
 }
 
 /* Fortschritts-/Statusanzeige links in der Aktionsleiste */
@@ -346,10 +346,27 @@
 
     .cbd-importer-actions {
         flex-direction: column;
+        align-items: stretch;
     }
 
     .cbd-importer-actions .components-button {
         width: 100%;
+    }
+
+    .cbd-importer-actions-status {
+        margin-right: 0;
+        margin-bottom: 6px;
+        text-align: center;
+    }
+
+    /* Auf kleinen Screens mehr Platz zum Scrollen */
+    .cbd-importer-modal .components-modal__content {
+        max-height: calc(92vh - 90px);
+    }
+
+    .cbd-importer-bulk {
+        flex-direction: column;
+        align-items: stretch;
     }
 }
 
