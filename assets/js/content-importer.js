@@ -62,6 +62,8 @@
         const [availableStyles, setAvailableStyles] = useState([]);
         const [hasStyles, setHasStyles] = useState(true);
         const [isDragging, setIsDragging] = useState(false);
+        // Auswahl für die Sammelzuweisung („alle offenen auf …")
+        const [bulkStyle, setBulkStyle] = useState('');
 
         // Lade verfügbare Styles beim Mount
         useEffect(function() {
@@ -384,6 +386,8 @@
             return el('div', { className: 'cbd-importer-step' },
                 el('h2', null, __('Schritt 1: Inhalt laden', 'container-block-designer')),
 
+                el('div', { className: 'cbd-importer-scroll' },
+
                 error && el(Notice, { status: 'error', isDismissible: false }, error),
 
                 el('div', {
@@ -422,7 +426,9 @@
                         value: fileContent,
                         onChange: function(e) { setFileContent(e.target.value); }
                     })
-                ),
+                )
+
+                ), // Ende .cbd-importer-scroll
 
                 el('div', { className: 'cbd-importer-actions' },
                     el(Button, {
@@ -454,8 +460,31 @@
                 return !g.suggestedStyle && g.key !== 'other';
             });
 
+            // Noch offene Zuweisungen (Select steht auf "ohne Container")
+            const openGroups = groups.filter(function(g) {
+                const v = styleMappings[g.key];
+                return !v || v === NO_CONTAINER;
+            });
+            const assignedCount = groups.length - openGroups.length;
+
+            // Nur echte Block-Designs für die Sammelzuweisung
+            const realStyles = availableStyles.filter(function(s) {
+                return s.value !== NO_CONTAINER;
+            });
+
+            // Setzt alle noch offenen Gruppen auf den gewählten Style
+            const assignAllOpen = function() {
+                if (!bulkStyle) { return; }
+                const next = Object.assign({}, styleMappings);
+                openGroups.forEach(function(g) { next[g.key] = bulkStyle; });
+                setStyleMappings(next);
+            };
+
             return el('div', { className: 'cbd-importer-step' },
                 el('h2', null, __('Schritt 2: Styles zuweisen', 'container-block-designer')),
+
+                // Scrollbereich — Aktionsleiste bleibt darunter immer sichtbar
+                el('div', { className: 'cbd-importer-scroll' },
 
                 error && el(Notice, { status: 'error', isDismissible: false }, error),
 
@@ -502,6 +531,26 @@
                     )
                 ),
 
+                // Sammelzuweisung: alle noch offenen Gruppen auf einmal setzen
+                openGroups.length > 0 && realStyles.length > 0 && el('div', { className: 'cbd-importer-bulk' },
+                    el('p', { className: 'cbd-importer-bulk-label' },
+                        openGroups.length + ' ' +
+                        __('Gruppe(n) noch ohne Style:', 'container-block-designer') + ' ' +
+                        openGroups.map(function(g) { return '„' + g.label + '“'; }).join(', ')
+                    ),
+                    el(SelectControl, {
+                        label: __('Allen offenen Gruppen zuweisen', 'container-block-designer'),
+                        value: bulkStyle,
+                        options: [{ value: '', label: __('— Style wählen —', 'container-block-designer') }].concat(realStyles),
+                        onChange: setBulkStyle
+                    }),
+                    el(Button, {
+                        variant: 'secondary',
+                        disabled: !bulkStyle,
+                        onClick: assignAllOpen
+                    }, __('Zuweisen', 'container-block-designer'))
+                ),
+
                 // Eine Zuweisungszeile je Gruppe — auch für eigene H2 wie
                 // "Übungen" oder "Hinweise" (mit automatischem Vorschlag).
                 el('div', { className: 'cbd-importer-mappings' },
@@ -521,9 +570,12 @@
                         } else {
                             hint = __('kein gleichnamiges Design gefunden — bitte selbst zuweisen', 'container-block-designer');
                         }
+                        const current = styleMappings[group.key];
+                        const isOpen = !current || current === NO_CONTAINER;
                         return el('div', {
                             key: 'map-' + group.key,
-                            className: 'cbd-importer-mapping-row cbd-importer-mapping-' + cssKeyFor(group)
+                            className: 'cbd-importer-mapping-row cbd-importer-mapping-' + cssKeyFor(group) +
+                                (isOpen ? ' is-unassigned' : '')
                         },
                             el('span', { className: 'cbd-importer-mapping-badge' }, badgeFor(group)),
                             el('div', { className: 'cbd-importer-mapping-control' },
@@ -561,9 +613,20 @@
                             );
                         })
                     )
-                ),
+                )
+
+                ), // Ende .cbd-importer-scroll
 
                 el('div', { className: 'cbd-importer-actions' },
+                    el('span', {
+                        className: 'cbd-importer-actions-status' + (openGroups.length > 0 ? ' is-incomplete' : '')
+                    },
+                        openGroups.length > 0
+                            ? assignedCount + '/' + groups.length + ' ' +
+                              __('Gruppen zugewiesen — Rest wird ohne Container eingefügt', 'container-block-designer')
+                            : groups.length + '/' + groups.length + ' ' +
+                              __('Gruppen zugewiesen', 'container-block-designer')
+                    ),
                     el(Button, {
                         variant: 'secondary',
                         onClick: function() { setStep(1); }

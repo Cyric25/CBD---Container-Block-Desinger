@@ -4,7 +4,7 @@ Auftrag: Der Importer-Parser soll auch Abschnitte erkennen, denen **kein Style
 zugewiesen** ist bzw. für die **kein Style existiert** — und generell mit
 beliebigen Markdown-Strukturen funktionieren.
 
-Status: ✅ ERLEDIGT (AP43–AP46), ausgeliefert in CDB v3.1.72.
+Status: ✅ ERLEDIGT (AP43–AP47), ausgeliefert in CDB v3.1.73.
 
 ---
 
@@ -125,6 +125,34 @@ brauchen aber je ihr eigenes Block-Design.
 Szenarien: mit vorhandenen Designs landen alle 6 Abschnitte im je richtigen
 Container; fehlen die Designs, gehen 0 Abschnitte verloren (5× ohne Container).
 Regression: 9 Strukturfälle und 272 Abschnitte über 33 echte Dateien unverändert.
+
+
+## AP47 — Import-Modal: alle Zuweisungen erreichbar (v3.1.73)
+
+**Meldung:** „Das Modal beim Import muss noch angepasst werden, damit ich
+dadurch alle nicht zugewiesenen Stile zuweisen kann."
+
+**Ursache:** `.cbd-importer-modal` hatte keine Höhenbegrenzung und keinen
+Scrollbereich. Je Gruppe entsteht eine Zuweisungszeile — bei vielen H2 wuchs
+das Modal über den Viewport hinaus, untere Zeilen und die Aktionsleiste
+(„Blöcke einfügen") waren nicht mehr erreichbar.
+
+**Umsetzung (CSS + JS)**
+- Modal: `max-height: 88vh`, Breite 700 → 860 px; Inhalt als Flex-Spalte.
+- Neuer Scrollbereich `.cbd-importer-scroll` in BEIDEN Schritten; die
+  Aktionsleiste ist `position: sticky; bottom: 0` und damit immer sichtbar.
+- Zuweisungszeilen kompakter (Padding 15 → 10 px, Margin 20 → 10 px), dadurch
+  passen deutlich mehr Gruppen gleichzeitig ins Bild.
+- Offene Zuweisungen sind gelb markiert (`.is-unassigned`).
+- **Sammelzuweisung** `.cbd-importer-bulk`: listet alle noch offenen Gruppen
+  namentlich und setzt sie per Select + „Zuweisen" auf einen Style — statt
+  jede Zeile einzeln anfassen zu müssen.
+- Statusanzeige in der Aktionsleiste: „x/y Gruppen zugewiesen"; bei offenen
+  Gruppen gelb mit Zusatz „Rest wird ohne Container eingefügt".
+
+**Verifikation:** JS-Syntax + Strukturprüfung (2 Steps / 2 Scrollbereiche /
+2 geschlossene Container / 2 Aktionsleisten balanciert), CSS-Klammerbilanz,
+ZIP-Inhalt geprüft.
 
 ---
 

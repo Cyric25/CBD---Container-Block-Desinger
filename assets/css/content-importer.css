@@ -5,18 +5,36 @@
  * @since 2.9.3
  */
 
-/* Modal */
+/* Modal — Höhe begrenzt, Inhalt scrollbar, Footer immer erreichbar.
+   Ohne das wuchs das Modal bei vielen Gruppen ins Unendliche und die
+   unteren Zuweisungszeilen samt Buttons waren nicht mehr erreichbar. */
 .cbd-importer-modal {
-    max-width: 700px !important;
+    max-width: 860px !important;
+    max-height: 88vh !important;
 }
 
 .cbd-importer-modal .components-modal__content {
-    padding-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 0;
+    overflow: hidden; /* Scrolling übernimmt .cbd-importer-step */
 }
 
 /* Step Container */
 .cbd-importer-step {
-    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 20px 0 0;
+}
+
+/* Scrollbereich: alles außer Titel und Aktionsleiste */
+.cbd-importer-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
 }
 
 .cbd-importer-step h2 {
@@ -177,11 +195,21 @@
 .cbd-importer-mapping-row {
     display: flex;
     align-items: flex-start;
-    gap: 15px;
-    margin-bottom: 20px;
-    padding: 15px;
+    gap: 12px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
     border-radius: 6px;
     border: 2px solid transparent;
+}
+
+/* Noch offene Zuweisung deutlich markieren */
+.cbd-importer-mapping-row.is-unassigned {
+    border-color: #dba617;
+    background: rgba(219, 166, 23, 0.08);
+}
+
+.cbd-importer-mapping-row .components-base-control {
+    margin-bottom: 0;
 }
 
 .cbd-importer-mapping-k1 {
@@ -215,7 +243,7 @@
     font-weight: 700;
     color: #fff;
     flex-shrink: 0;
-    margin-top: 24px; /* Align with SelectControl label */
+    margin-top: 20px; /* Align with SelectControl label */
 }
 
 .cbd-importer-mapping-k1 .cbd-importer-mapping-badge {
@@ -245,14 +273,33 @@
     margin-bottom: 8px;
 }
 
-/* Actions */
+/* Actions — klebt am unteren Modalrand, damit "Blöcke einfügen" auch bei
+   vielen Zuweisungszeilen ohne Scrollen erreichbar bleibt. */
 .cbd-importer-actions {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 10px;
-    margin-top: 20px;
-    padding-top: 20px;
+    flex: 0 0 auto;
+    margin-top: 0;
+    padding: 16px 0;
     border-top: 1px solid #ddd;
+    background: #fff;
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+}
+
+/* Fortschritts-/Statusanzeige links in der Aktionsleiste */
+.cbd-importer-actions-status {
+    margin-right: auto;
+    font-size: 13px;
+    color: #50575e;
+}
+
+.cbd-importer-actions-status.is-incomplete {
+    color: #996800;
+    font-weight: 600;
 }
 
 .cbd-importer-actions .components-button {
@@ -382,4 +429,30 @@
 .cbd-importer-mapping-control {
     flex: 1 1 auto;
     min-width: 0;
+}
+
+/* Sammelzuweisung: alle noch offenen Gruppen auf einmal setzen */
+.cbd-importer-bulk {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: #f0f6fc;
+    border: 1px solid #c5d9ed;
+    border-radius: 6px;
+}
+
+.cbd-importer-bulk .components-base-control {
+    flex: 1 1 auto;
+    margin-bottom: 0;
+    min-width: 0;
+}
+
+.cbd-importer-bulk-label {
+    flex: 0 0 100%;
+    margin: 0 0 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1d2327;
 }
