@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Container Block Designer is a WordPress plugin that creates customizable container blocks for the Gutenberg Block Editor. It allows users to create, manage, and apply styled container blocks with features like collapsible sections, copy-to-clipboard, screenshots, and automatic numbering.
 
-**Current Version:** 3.1.74
+**Current Version:** 3.1.75
 **WordPress Requirements:** 6.0+
 **PHP Requirements:** 7.4+ (rückwärtskompatibel; getestet auf 7.4.33)
 **Tested up to:** WordPress 6.4, PHP 8.4
@@ -237,7 +237,7 @@ PHP: `includes/class-cbd-content-importer.php`, UI: `assets/js/content-importer.
 | Markdown | Bedeutung |
 |---|---|
 | `# H1` | Thema (`topic`); dient als Titel-Fallback |
-| `## H2` | Kompetenzstufe über Schlüsselwörter (`$section_keywords`): k1/k2/k3/sources — **jede andere H2 bildet eine eigene Gruppe** (`h2-<slug>`) |
+| `## H2` | **Stilname.** Jede H2 bildet eine eigene Gruppe (`h2-<slug>`) = einen Stil-Slot im Dialog. Die Kompetenz-Schlüsselwörter (`$section_keywords`) steuern nur noch Badge-Farbe und den Legacy-Vorschlag, NICHT die Gruppierung |
 | `### H3` | Block-Titel (nicht im Inhalt) |
 | alles andere | Inhalt |
 
@@ -257,6 +257,18 @@ Name/Slug der aktiven Block-Designs:
 2. **Stammform** (`stem_key()`, Singular/Plural + Umlaut-Plural):
    „Hinweise" ≈ `hinweis`, „Merksätze" ≈ `merksatz`
 3. **Teilstring** (ab 4 Zeichen, längster Treffer): „Übungen zum Kapitel" ⊃ `uebungen`
+
+Vorschlagsreihenfolge: (1) exakter Name/Slug-Treffer → automatisch zuweisen;
+(2) klassische Kompetenz-Überschrift („## Basiswissen") ohne gleichnamiges
+Design → Legacy-Default `infotext_k1/k2/k3`/`quellen`; (3) nur unscharfer
+Treffer → Hinweis ohne Zuweisung.
+
+**Achtung Teilstring-Falle (Fix v3.1.75):** Schlüsselwörter werden nur erkannt,
+wenn sie die ganze Überschrift oder deren erstes Wort sind. Vorher matchte
+`strpos($heading,'k1')` auch `## aufgaben_k1` und `## hilfen_k1` → alle fielen
+mit `## infotext_k1` in eine Gruppe. Zusätzlich gilt: entspricht die H2 dem
+Namen/Slug eines Designs, ist sie immer eine Stil-Angabe.
+`hasSubheadings` je Gruppe zeigt, ob `###`-Unterabschnitte folgen.
 
 **Automatisch vorbelegt wird NUR Strategie 1 (exakte Namensgleichheit).**
 Unscharfe Treffer (2/3) erscheinen ausschließlich als Hinweis am Select

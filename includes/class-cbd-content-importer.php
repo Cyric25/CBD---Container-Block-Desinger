@@ -74,13 +74,18 @@ class CBD_Content_Importer {
         }
 
         try {
-            $parsed_data = $this->parse_markdown_content($content);
+            // Block-Designs einmal laden: der Parser braucht sie, um
+            // Überschriften wie "## infotext_k1" als bewusste Style-Angabe
+            // (eigene Gruppe) statt als Kompetenzstufe zu erkennen.
+            $designs = $this->get_active_designs();
+
+            $parsed_data = $this->parse_markdown_content($content, $designs);
 
             // Zu jeder Gruppe das passende Block-Design vorschlagen. Damit
             // werden auch H2-Überschriften wie "## Übungen" oder "## Hinweise"
             // automatisch dem gleichnamigen Design zugeordnet — nicht nur
             // die Kompetenzstufen K1/K2/K3.
-            $parsed_data['groups'] = $this->attach_style_suggestions($parsed_data['groups']);
+            $parsed_data['groups'] = $this->attach_style_suggestions($parsed_data['groups'], $designs);
 
             wp_send_json_success($parsed_data);
         } catch (Exception $e) {
@@ -94,18 +99,15 @@ class CBD_Content_Importer {
      * @param array $groups Gruppen aus parse_markdown_content()
      * @return array
      */
-    private function attach_style_suggestions($groups) {
-        global $wpdb;
-
-        $blocks = $wpdb->get_results(
-            "SELECT id, name, slug FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active' ORDER BY name ASC"
-        );
-        if (!is_array($blocks)) {
-            $blocks = array();
+    private function attach_style_suggestions($groups, $blocks = null) {
+        if ($blocks === null) {
+            $blocks = $this->get_active_designs();
         }
 
-        // Feste Vorschläge für die Kompetenzstufen (bisheriges Verhalten)
-        $fixed = array(
+        // Komfort-Fallback für die klassischen Kompetenz-Überschriften
+        // ("## Basiswissen" → infotext_k1). Greift nur, wenn KEIN Design den
+        // Namen der Überschrift trägt — der Namensabgleich hat Vorrang.
+        $legacy = array(
             'k1' => array('infotext_k1', 'k1'),
             'k2' => array('infotext_k2', 'k2'),
             'k3' => array('infotext_k3', 'k3'),
@@ -118,51 +120,36 @@ class CBD_Content_Importer {
         }
 
         foreach ($groups as $i => $group) {
-            $key = $group['key'];
-
-            if (isset($fixed[$key])) {
-                // 1. Exakter Standard-Slug
-                foreach ($fixed[$key] as $needle) {
-                    if (in_array($needle, $slugs, true)) {
-                        $groups[$i]['suggestedStyle'] = $needle;
-                        $groups[$i]['matchedBy'] = 'default';
-                        break;
-                    }
-                }
-                // 2. Sonst Design, dessen Name/Slug das Schlüsselwort enthält
-                if (empty($groups[$i]['suggestedStyle'])) {
-                    foreach ($blocks as $block) {
-                        $haystack = strtolower($block->name . ' ' . $block->slug);
-                        foreach ($fixed[$key] as $needle) {
-                            if (strpos($haystack, $needle) !== false) {
-                                $groups[$i]['suggestedStyle'] = $block->slug;
-                                $groups[$i]['matchedBy'] = 'keyword';
-                                break 2;
-                            }
-                        }
-                    }
-                }
-                continue;
+            if ($group['key'] === 'other') {
+                continue; // Abschnitte ohne Überschrift: kein Automatik-Vorschlag
             }
 
-            if ($key === 'other') {
-                continue; // kein sinnvoller Automatik-Vorschlag
-            }
-
-            // Eigenständige H2 → Namensabgleich mit den Block-Designs.
-            // WICHTIG: Automatisch zugewiesen wird NUR bei exakter
-            // Namensgleichheit. Unscharfe Treffer (Singular/Plural, Teilstring)
-            // werden lediglich als Hinweis angeboten — die Zuweisung bleibt
-            // bewusst beim Nutzer.
+            // 1. HAUPTWEG: Die H2-Überschrift IST der Stilname.
+            //    Automatisch zugewiesen wird nur bei exakter Namensgleichheit.
             $match = $this->match_style_for_label($group['label'], $blocks);
             if ($match['matchedBy'] === 'exact') {
                 $groups[$i]['suggestedStyle'] = $match['slug'];
                 $groups[$i]['matchedBy'] = 'exact';
-            } else {
-                $groups[$i]['suggestedStyle'] = null;
-                $groups[$i]['matchedBy'] = $match['matchedBy']; // stem|partial|null
-                $groups[$i]['similarStyle'] = $match['slug'];   // nur Vorschlag
+                continue;
             }
+
+            // 2. Klassische Kompetenz-Überschrift ohne gleichnamiges Design
+            //    (Rückwärtskompatibilität für ältere Lernmaterial-Dateien)
+            $competence = isset($group['competence']) ? $group['competence'] : 'other';
+            if (isset($legacy[$competence])) {
+                foreach ($legacy[$competence] as $needle) {
+                    if (in_array($needle, $slugs, true)) {
+                        $groups[$i]['suggestedStyle'] = $needle;
+                        $groups[$i]['matchedBy'] = 'default';
+                        continue 2;
+                    }
+                }
+            }
+
+            // 3. Nur unscharfer Treffer → als Hinweis anbieten, nicht zuweisen
+            $groups[$i]['suggestedStyle'] = null;
+            $groups[$i]['matchedBy'] = $match['matchedBy']; // stem|partial|null
+            $groups[$i]['similarStyle'] = $match['slug'];
         }
 
         return $groups;
@@ -284,7 +271,7 @@ class CBD_Content_Importer {
      * Kompetenzstufe landen in der Kategorie 'other' und können im UI
      * gemappt oder ohne Container importiert werden.
      */
-    public function parse_markdown_content($content) {
+    public function parse_markdown_content($content, $known_designs = array()) {
         // Normalisiere Zeilenumbrüche
         $content = str_replace("\r\n", "\n", $content);
         $content = str_replace("\r", "\n", $content);
@@ -333,7 +320,7 @@ class CBD_Content_Importer {
                     $current_heading, $current_title_source, $current_content, $current_section_heading);
 
                 $heading = trim($matches[1]);
-                $current_competence = $this->detect_competence_level($heading);
+                $current_competence = $this->detect_competence_level($heading, $known_designs);
                 // H2 bestimmt die Gruppe — bleibt auch über folgende H3 gültig
                 $current_section_heading = $heading;
 
@@ -406,6 +393,9 @@ class CBD_Content_Importer {
                     'label' => $section['groupLabel'],
                     'competence' => $section['competence'],
                     'count' => 0,
+                    // Folgt der H2 mindestens eine H3? Dann ist die H2 sicher
+                    // eine Stil-Angabe und die H3 sind die Blocktitel.
+                    'hasSubheadings' => false,
                     // Werden von ajax_parse_import_file() gefüllt (DB-Zugriff)
                     'suggestedStyle' => null, // nur bei exaktem Namenstreffer
                     'similarStyle' => null,   // unscharfer Treffer = Hinweis
@@ -413,18 +403,24 @@ class CBD_Content_Importer {
                 );
             }
             $groups[$key]['count']++;
+            if (isset($section['titleSource']) && $section['titleSource'] === 'h3') {
+                $groups[$key]['hasSubheadings'] = true;
+            }
         }
 
-        $order = array('k1' => 1, 'k2' => 2, 'k3' => 3, 'sources' => 4);
+        // Reihenfolge = Auftreten im Dokument (alle Gruppen sind gleichwertige
+        // Stil-Slots), 'other' zuletzt.
         $groups = array_values($groups);
-        usort($groups, function ($a, $b) use ($order) {
-            $pa = isset($order[$a['key']]) ? $order[$a['key']] : 50;
-            $pb = isset($order[$b['key']]) ? $order[$b['key']] : 50;
-            if ($pa === $pb) {
-                return strcmp($a['label'], $b['label']);
+        $others = array();
+        $ordered = array();
+        foreach ($groups as $g) {
+            if ($g['key'] === 'other') {
+                $others[] = $g;
+            } else {
+                $ordered[] = $g;
             }
-            return $pa - $pb;
-        });
+        }
+        $groups = array_merge($ordered, $others);
 
         return array
             (
@@ -440,6 +436,19 @@ class CBD_Content_Importer {
                 'other' => count($grouped['other'])
             )
         );
+    }
+
+    /**
+     * Lädt die aktiven Block-Designs (id, name, slug).
+     *
+     * @return array
+     */
+    private function get_active_designs() {
+        global $wpdb;
+        $blocks = $wpdb->get_results(
+            "SELECT id, name, slug FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active' ORDER BY name ASC"
+        );
+        return is_array($blocks) ? $blocks : array();
     }
 
     /**
@@ -532,14 +541,13 @@ class CBD_Content_Importer {
         // Ohne erkannte H2 gibt es keine Kompetenzstufe → 'other'
         $final_competence = $competence !== null ? $competence : 'other';
 
-        // Gruppenschlüssel: Kompetenzstufen behalten ihren Schlüssel (K1/K2/K3/
-        // Quellen). Jede ANDERE H2 bildet eine EIGENE Gruppe, damit ihr im UI
-        // ein eigenes Block-Design zugewiesen werden kann (z. B. "## Übungen",
-        // "## Hinweise") statt alle in einen Sammeltopf zu werfen.
-        if ($final_competence !== 'other') {
-            $group_key = $final_competence;
-            $group_label = $this->get_competence_label($final_competence);
-        } elseif ($section_heading !== null && trim($section_heading) !== '') {
+        // Gruppenschlüssel: JEDE H2 ist eine eigene Gruppe = ein Stil-Slot.
+        // Die H2-Überschrift wird konsequent als Stil-Angabe behandelt
+        // ("## infotext_k1", "## aufgaben_k1", "## Kontext" …). Die
+        // Kompetenzstufe dient nur noch der Farbgebung/Statistik, NICHT der
+        // Gruppierung — vorher fielen "aufgaben_k1" und "hilfen_k1" wegen des
+        // Teilstrings "k1" mit "infotext_k1" in einen Topf.
+        if ($section_heading !== null && trim($section_heading) !== '') {
             $normalized = $this->normalize_key($section_heading);
             $group_key = $normalized !== '' ? 'h2-' . $normalized : 'other';
             $group_label = trim($section_heading);
@@ -576,24 +584,84 @@ class CBD_Content_Importer {
     }
 
     /**
-     * Erkennt Kompetenzstufe aus H2-Überschrift
+     * Erkennt Kompetenzstufe aus H2-Überschrift.
      *
-     * @return string k1|k2|k3|sources|other ('other' = keine Kompetenzstufe erkennbar)
+     * WICHTIG (Fix v3.1.75): Ein Schlüsselwort zählt nur, wenn es das ERSTE
+     * Wort der Überschrift ist bzw. die Überschrift komplett ausmacht.
+     * Vorher wurde per Teilstring gesucht — dadurch landeten Überschriften wie
+     * `## aufgaben_k1`, `## hilfen_k1` und `## infotext_k1` alle in der Gruppe
+     * „k1" und waren nicht mehr einzeln zuweisbar.
+     *
+     * @param string $heading      H2-Text
+     * @param array  $known_designs Aktive Block-Designs (Objekte mit name/slug).
+     *                              Entspricht die Überschrift einem Design,
+     *                              bleibt sie IMMER eine eigene Gruppe.
+     * @return string k1|k2|k3|sources|other ('other' = keine Kompetenzstufe)
      */
-    private function detect_competence_level($heading) {
-        $heading_lower = strtolower(trim($heading));
+    private function detect_competence_level($heading, $known_designs = array()) {
+        // 1. Überschrift ist der Name/Slug eines Block-Designs
+        //    (z. B. "## infotext_k1") → eigene Gruppe, nicht Kompetenzstufe.
+        if ($this->heading_matches_design($heading, $known_designs)) {
+            return 'other';
+        }
+
+        // 2. Kompetenz-Schlüsselwörter — nur am Wortanfang der Überschrift
+        $normalized = $this->normalize_key($heading);          // "aufgaben-k1"
+        $tokens = $normalized === '' ? array() : explode('-', $normalized);
+        $first = isset($tokens[0]) ? $tokens[0] : '';
 
         foreach ($this->section_keywords as $level => $keywords) {
             foreach ($keywords as $keyword) {
-                if (strpos($heading_lower, $keyword) !== false) {
+                $key_norm = $this->normalize_key($keyword);    // "erweitertes-wissen"
+                if ($key_norm === '') {
+                    continue;
+                }
+                // Ganze Überschrift ist das Schlüsselwort ("Basiswissen", "K1")
+                if ($normalized === $key_norm) {
+                    return $level;
+                }
+                // Mehrwortiges Schlüsselwort am Anfang ("Erweitertes Wissen …")
+                if (strpos($key_norm, '-') !== false && strpos($normalized, $key_norm . '-') === 0) {
+                    return $level;
+                }
+                // Einwortiges Schlüsselwort als ERSTES Wort
+                // ("Basiswissen (K1)" ja — "aufgaben_k1" nein)
+                if (strpos($key_norm, '-') === false && $first === $key_norm) {
                     return $level;
                 }
             }
         }
 
-        // Keine Kompetenzstufe erkennbar: eigene Kategorie statt stillem
-        // K1-Fallback — im UI wird dafür separat ein Style gewählt.
+        // Keine Kompetenzstufe erkennbar: eigene Gruppe — im UI wird dafür
+        // separat ein Style gewählt.
         return 'other';
+    }
+
+    /**
+     * Prüft, ob eine Überschrift dem Namen oder Slug eines Block-Designs
+     * entspricht (normalisiert). Solche Überschriften sind bewusst gesetzte
+     * Style-Angaben und dürfen nie in eine Kompetenzstufe eingeordnet werden.
+     *
+     * @param string $heading
+     * @param array  $known_designs
+     * @return bool
+     */
+    private function heading_matches_design($heading, $known_designs) {
+        if (empty($known_designs)) {
+            return false;
+        }
+        $needle = $this->normalize_key($heading);
+        if ($needle === '') {
+            return false;
+        }
+        foreach ($known_designs as $design) {
+            $name = is_object($design) ? (isset($design->name) ? $design->name : '') : (isset($design['name']) ? $design['name'] : '');
+            $slug = is_object($design) ? (isset($design->slug) ? $design->slug : '') : (isset($design['slug']) ? $design['slug'] : '');
+            if ($this->normalize_key($name) === $needle || $this->normalize_key($slug) === $needle) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

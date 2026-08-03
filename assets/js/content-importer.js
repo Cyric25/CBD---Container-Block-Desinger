@@ -572,6 +572,11 @@
                         }
                         const current = styleMappings[group.key];
                         const isOpen = !current || current === NO_CONTAINER;
+                        // Bestätigungssignal: H2 mit ###-Unterabschnitten ist
+                        // sicher ein Stil-Container
+                        if (group.hasSubheadings) {
+                            hint += ' · ' + __('###-Unterabschnitte erkannt', 'container-block-designer');
+                        }
                         return el('div', {
                             key: 'map-' + group.key,
                             className: 'cbd-importer-mapping-row cbd-importer-mapping-' + cssKeyFor(group) +

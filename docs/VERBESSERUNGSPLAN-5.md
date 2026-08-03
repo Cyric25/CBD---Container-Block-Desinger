@@ -4,7 +4,7 @@ Auftrag: Der Importer-Parser soll auch Abschnitte erkennen, denen **kein Style
 zugewiesen** ist bzw. für die **kein Style existiert** — und generell mit
 beliebigen Markdown-Strukturen funktionieren.
 
-Status: ✅ ERLEDIGT (AP43–AP47), ausgeliefert in CDB v3.1.74.
+Status: ✅ ERLEDIGT (AP43–AP48), ausgeliefert in CDB v3.1.75.
 
 ---
 
@@ -171,6 +171,50 @@ im scrollenden WP-Container.
 2 Aktionsleisten balanciert), CSS-Klammerbilanz, Regelblock-Analyse von
 `.components-modal__content` (kein `overflow: hidden`, `max-height` +
 `overflow-y: auto` gesetzt), ZIP-Inhalt geprüft.
+
+
+## AP48 — Jede `##`-Überschrift ist ein Stilname (v3.1.75)
+
+**Meldung:** „In dieser Datei werden die Aufgaben und Hinweise nicht erkannt.
+Kontext wird aber erkannt." + Klarstellung: „Die Erkennung sollte so laufen,
+dass immer alles was nach ## steht als Stil erkannt wird — ich verwende das
+immer nur für Stile."
+
+**Ursache (bewiesen):** `detect_competence_level()` suchte die Schlüsselwörter
+per `strpos` als **Teilstring**. Die Datei nutzt Slugs als H2:
+
+| H2 | alt | Folge |
+|---|---|---|
+| `## infotext_k1` | k1 | alle drei landeten in EINER Gruppe „k1" … |
+| `## aufgaben_k1` | k1 | … und waren nicht einzeln zuweisbar |
+| `## hilfen_k1` | k1 | |
+| `## Kontext` | other | funktionierte nur, weil kein „k1/k2/k3" enthalten |
+
+**Umsetzung**
+- **Gruppierung: eine H2 = eine Gruppe = ein Stil-Slot.** Die Kompetenzstufe
+  steuert die Gruppierung NICHT mehr (nur noch Badge-Farbe/Statistik).
+  Reihenfolge = Auftreten im Dokument, `other` (Abschnitte ohne Überschrift)
+  zuletzt.
+- `detect_competence_level($heading, $known_designs)` verschärft: Schlüsselwort
+  zählt nur, wenn es die ganze Überschrift ist oder deren **erstes Wort**
+  („Basiswissen (K1)" ✓, „aufgaben_k1" ✗). Zusätzlich: entspricht die
+  Überschrift dem Namen/Slug eines Block-Designs (`heading_matches_design()`),
+  ist sie immer eine Stil-Angabe.
+- Block-Designs werden im AJAX-Handler EINMAL geladen (`get_active_designs()`)
+  und sowohl an den Parser als auch an `attach_style_suggestions()` gegeben.
+- Vorschlagslogik neu priorisiert: (1) exakter Name/Slug-Treffer → automatisch
+  zuweisen; (2) klassische Kompetenz-Überschrift ohne gleichnamiges Design →
+  Legacy-Default (`infotext_k1` …), damit ältere Dateien komfortabel bleiben;
+  (3) nur unscharfer Treffer → als Hinweis, keine Zuweisung.
+- Zusatzsignal auf Nutzerwunsch: `hasSubheadings` je Gruppe (folgt der H2
+  mindestens eine `###`?) — bestätigt im Dialog „###-Unterabschnitte erkannt",
+  dass die H2 ein Stil-Container ist.
+
+**Verifikation:** Reale Dateistruktur (11 H2) → 11 Gruppen, alle exakt
+zugewiesen, alle mit `###`-Erkennung. Regression: alte Dateien liefern
+„Basiswissen/Erweitertes Wissen/Vertiefendes Wissen/Quellenverzeichnis" mit
+Legacy-Defaults (infotext_k1/k2/k3, quellen); 33 Dateien / 272 Abschnitte /
+0 ohne Ergebnis.
 
 ---
 
