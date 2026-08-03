@@ -75,10 +75,97 @@ class CBD_Content_Importer {
 
         try {
             $parsed_data = $this->parse_markdown_content($content);
+
+            // Zu jeder Gruppe das passende Block-Design vorschlagen. Damit
+            // werden auch H2-Überschriften wie "## Übungen" oder "## Hinweise"
+            // automatisch dem gleichnamigen Design zugeordnet — nicht nur
+            // die Kompetenzstufen K1/K2/K3.
+            $parsed_data['groups'] = $this->attach_style_suggestions($parsed_data['groups']);
+
             wp_send_json_success($parsed_data);
         } catch (Exception $e) {
             wp_send_json_error(array('message' => $e->getMessage()));
         }
+    }
+
+    /**
+     * Ergänzt die Gruppen um Style-Vorschläge aus den aktiven Block-Designs.
+     *
+     * @param array $groups Gruppen aus parse_markdown_content()
+     * @return array
+     */
+    private function attach_style_suggestions($groups) {
+        global $wpdb;
+
+        $blocks = $wpdb->get_results(
+            "SELECT id, name, slug FROM " . CBD_TABLE_BLOCKS . " WHERE status = 'active' ORDER BY name ASC"
+        );
+        if (!is_array($blocks)) {
+            $blocks = array();
+        }
+
+        // Feste Vorschläge für die Kompetenzstufen (bisheriges Verhalten)
+        $fixed = array(
+            'k1' => array('infotext_k1', 'k1'),
+            'k2' => array('infotext_k2', 'k2'),
+            'k3' => array('infotext_k3', 'k3'),
+            'sources' => array('quellen', 'literatur', 'referenz', 'bibliographie')
+        );
+
+        $slugs = array();
+        foreach ($blocks as $block) {
+            $slugs[] = $block->slug;
+        }
+
+        foreach ($groups as $i => $group) {
+            $key = $group['key'];
+
+            if (isset($fixed[$key])) {
+                // 1. Exakter Standard-Slug
+                foreach ($fixed[$key] as $needle) {
+                    if (in_array($needle, $slugs, true)) {
+                        $groups[$i]['suggestedStyle'] = $needle;
+                        $groups[$i]['matchedBy'] = 'default';
+                        break;
+                    }
+                }
+                // 2. Sonst Design, dessen Name/Slug das Schlüsselwort enthält
+                if (empty($groups[$i]['suggestedStyle'])) {
+                    foreach ($blocks as $block) {
+                        $haystack = strtolower($block->name . ' ' . $block->slug);
+                        foreach ($fixed[$key] as $needle) {
+                            if (strpos($haystack, $needle) !== false) {
+                                $groups[$i]['suggestedStyle'] = $block->slug;
+                                $groups[$i]['matchedBy'] = 'keyword';
+                                break 2;
+                            }
+                        }
+                    }
+                }
+                continue;
+            }
+
+            if ($key === 'other') {
+                continue; // kein sinnvoller Automatik-Vorschlag
+            }
+
+            // Eigenständige H2 → Namensabgleich mit den Block-Designs.
+            // WICHTIG: Automatisch zugewiesen wird NUR bei exakter
+            // Namensgleichheit. Unscharfe Treffer (Singular/Plural, Teilstring)
+            // werden lediglich als Hinweis angeboten — die Zuweisung bleibt
+            // bewusst beim Nutzer.
+            $match = $this->match_style_for_label($group['label'], $blocks);
+            if ($match['matchedBy'] === 'exact') {
+                $groups[$i]['suggestedStyle'] = $match['slug'];
+                $groups[$i]['matchedBy'] = 'exact';
+            } else {
+                $groups[$i]['suggestedStyle'] = null;
+                $groups[$i]['matchedBy'] = $match['matchedBy']; // stem|partial|null
+                $groups[$i]['similarStyle'] = $match['slug'];   // nur Vorschlag
+            }
+        }
+
+        return $groups;
     }
 
     /**
@@ -213,6 +300,7 @@ class CBD_Content_Importer {
         $current_competence = null;   // null = noch keine H2 gesehen
         $current_heading = null;      // Überschrift des laufenden Abschnitts
         $current_title_source = null; // h3 | h2 | h1 | none
+        $current_section_heading = null; // letzte H2 (bestimmt die Gruppe)
         $current_content = array();
 
         foreach ($lines as $line) {
@@ -227,10 +315,11 @@ class CBD_Content_Importer {
             // H1: Neues Thema
             if (preg_match('/^#\s+(.+)$/', $trimmed, $matches)) {
                 $this->flush_section($sections, $current_topic, $current_competence,
-                    $current_heading, $current_title_source, $current_content);
+                    $current_heading, $current_title_source, $current_content, $current_section_heading);
 
                 $current_topic = trim($matches[1]);
                 $current_competence = null;
+                $current_section_heading = null;
                 // H1 dient als Titel-Fallback, falls direkt Inhalt ohne H2/H3 folgt
                 $current_heading = $current_topic;
                 $current_title_source = 'h1';
@@ -241,10 +330,12 @@ class CBD_Content_Importer {
             // H2: Kompetenzstufe (oder beliebige andere Gliederungsüberschrift)
             if (preg_match('/^##\s+(.+)$/', $trimmed, $matches)) {
                 $this->flush_section($sections, $current_topic, $current_competence,
-                    $current_heading, $current_title_source, $current_content);
+                    $current_heading, $current_title_source, $current_content, $current_section_heading);
 
                 $heading = trim($matches[1]);
                 $current_competence = $this->detect_competence_level($heading);
+                // H2 bestimmt die Gruppe — bleibt auch über folgende H3 gültig
+                $current_section_heading = $heading;
 
                 // H2 ist Titel-Fallback: greift für Quellenverzeichnisse (dort gibt
                 // es kein H3) und generell für Inhalt direkt unter H2.
@@ -257,7 +348,7 @@ class CBD_Content_Importer {
             // H3: Block-Titel (wird NUR als Block-Titel verwendet, nicht im Inhalt)
             if (preg_match('/^###\s+(.+)$/', $trimmed, $matches)) {
                 $this->flush_section($sections, $current_topic, $current_competence,
-                    $current_heading, $current_title_source, $current_content);
+                    $current_heading, $current_title_source, $current_content, $current_section_heading);
 
                 $current_heading = trim($matches[1]);
                 $current_title_source = 'h3';
@@ -274,7 +365,7 @@ class CBD_Content_Importer {
 
         // Speichere letzten Block
         $this->flush_section($sections, $current_topic, $current_competence,
-            $current_heading, $current_title_source, $current_content);
+            $current_heading, $current_title_source, $current_content, $current_section_heading);
 
         // Nummerierte Ersatztitel für Abschnitte ohne jede Überschrift
         $untitled = 0;
@@ -289,7 +380,7 @@ class CBD_Content_Importer {
             }
         }
 
-        // Gruppiere nach Kompetenzstufe für UI
+        // Gruppiere nach Kompetenzstufe für UI (Rückwärtskompatibilität)
         $grouped = array(
             'k1' => array(),
             'k2' => array(),
@@ -303,9 +394,43 @@ class CBD_Content_Importer {
             $grouped[$key][] = $section;
         }
 
-        return array(
+        // Gruppen für die Style-Zuweisung: Kompetenzstufen + jede eigenständige
+        // H2 (z. B. "Übungen", "Hinweise"). Reihenfolge = Auftreten im Dokument,
+        // Kompetenzstufen aber immer zuerst.
+        $groups = array();
+        foreach ($sections as $section) {
+            $key = $section['groupKey'];
+            if (!isset($groups[$key])) {
+                $groups[$key] = array(
+                    'key' => $key,
+                    'label' => $section['groupLabel'],
+                    'competence' => $section['competence'],
+                    'count' => 0,
+                    // Werden von ajax_parse_import_file() gefüllt (DB-Zugriff)
+                    'suggestedStyle' => null, // nur bei exaktem Namenstreffer
+                    'similarStyle' => null,   // unscharfer Treffer = Hinweis
+                    'matchedBy' => null       // exact|stem|partial|default|keyword
+                );
+            }
+            $groups[$key]['count']++;
+        }
+
+        $order = array('k1' => 1, 'k2' => 2, 'k3' => 3, 'sources' => 4);
+        $groups = array_values($groups);
+        usort($groups, function ($a, $b) use ($order) {
+            $pa = isset($order[$a['key']]) ? $order[$a['key']] : 50;
+            $pb = isset($order[$b['key']]) ? $order[$b['key']] : 50;
+            if ($pa === $pb) {
+                return strcmp($a['label'], $b['label']);
+            }
+            return $pa - $pb;
+        });
+
+        return array
+            (
             'sections' => $sections,
             'grouped' => $grouped,
+            'groups' => $groups,
             'stats' => array(
                 'total' => count($sections),
                 'k1' => count($grouped['k1']),
@@ -318,12 +443,83 @@ class CBD_Content_Importer {
     }
 
     /**
+     * Sucht zu einem Gruppen-Label (z. B. "Übungen") das passende Block-Design.
+     *
+     * Reihenfolge der Strategien:
+     *   1. exakter Treffer auf normalisiertem Namen/Slug ("Übungen" = "uebungen")
+     *   2. Stammform-Treffer (Singular/Plural: "Hinweise" ≈ "hinweis")
+     *   3. Teilstring in beide Richtungen ("Übungen zum Kapitel" ⊃ "uebungen")
+     *
+     * @param string $label  Anzeigename der Gruppe (H2-Text)
+     * @param array  $blocks Block-Zeilen mit ->name und ->slug
+     * @return array{slug: string|null, matchedBy: string|null}
+     */
+    private function match_style_for_label($label, $blocks) {
+        $needle = $this->normalize_key($label);
+        if ($needle === '' || empty($blocks)) {
+            return array('slug' => null, 'matchedBy' => null);
+        }
+        $needle_stem = $this->stem_key($needle);
+
+        $candidates = array();
+        foreach ($blocks as $block) {
+            $candidates[] = array(
+                'slug' => $block->slug,
+                'keys' => array(
+                    $this->normalize_key(isset($block->name) ? $block->name : ''),
+                    $this->normalize_key($block->slug)
+                )
+            );
+        }
+
+        // 1. Exakt
+        foreach ($candidates as $c) {
+            foreach ($c['keys'] as $k) {
+                if ($k !== '' && $k === $needle) {
+                    return array('slug' => $c['slug'], 'matchedBy' => 'exact');
+                }
+            }
+        }
+
+        // 2. Stammform (Singular/Plural)
+        foreach ($candidates as $c) {
+            foreach ($c['keys'] as $k) {
+                if ($k !== '' && $this->stem_key($k) === $needle_stem) {
+                    return array('slug' => $c['slug'], 'matchedBy' => 'stem');
+                }
+            }
+        }
+
+        // 3. Teilstring (nur bei aussagekräftiger Länge, längster Treffer gewinnt)
+        $best = null;
+        $best_len = 0;
+        foreach ($candidates as $c) {
+            foreach ($c['keys'] as $k) {
+                if (strlen($k) < 4) {
+                    continue;
+                }
+                if (strpos($needle, $k) !== false || strpos($k, $needle) !== false) {
+                    if (strlen($k) > $best_len) {
+                        $best = $c['slug'];
+                        $best_len = strlen($k);
+                    }
+                }
+            }
+        }
+        if ($best !== null) {
+            return array('slug' => $best, 'matchedBy' => 'partial');
+        }
+
+        return array('slug' => null, 'matchedBy' => null);
+    }
+
+    /**
      * Schreibt den laufenden Abschnitt in die Sections-Liste, sofern er
      * Inhalt hat. Ersetzt die früheren Vorbedingungen
      * (topic && competence && title), die Inhalt ohne vollständige
      * Überschriften-Hierarchie stillschweigend verworfen haben.
      */
-    private function flush_section(&$sections, $topic, $competence, $heading, $title_source, $content) {
+    private function flush_section(&$sections, $topic, $competence, $heading, $title_source, $content, $section_heading = null) {
         // Nur Whitespace? Dann gibt es nichts zu speichern.
         if (empty($content) || trim(implode('', $content)) === '') {
             return;
@@ -336,15 +532,47 @@ class CBD_Content_Importer {
         // Ohne erkannte H2 gibt es keine Kompetenzstufe → 'other'
         $final_competence = $competence !== null ? $competence : 'other';
 
+        // Gruppenschlüssel: Kompetenzstufen behalten ihren Schlüssel (K1/K2/K3/
+        // Quellen). Jede ANDERE H2 bildet eine EIGENE Gruppe, damit ihr im UI
+        // ein eigenes Block-Design zugewiesen werden kann (z. B. "## Übungen",
+        // "## Hinweise") statt alle in einen Sammeltopf zu werfen.
+        if ($final_competence !== 'other') {
+            $group_key = $final_competence;
+            $group_label = $this->get_competence_label($final_competence);
+        } elseif ($section_heading !== null && trim($section_heading) !== '') {
+            $normalized = $this->normalize_key($section_heading);
+            $group_key = $normalized !== '' ? 'h2-' . $normalized : 'other';
+            $group_label = trim($section_heading);
+        } else {
+            $group_key = 'other';
+            $group_label = __('Ohne Überschrift', 'container-block-designer');
+        }
+
         $sections[] = array(
             'topic' => $topic !== null ? $topic : '',
             'competence' => $final_competence,
             'blockTitle' => $heading !== null ? $heading : '',
+            // Gruppe für die Style-Zuweisung im UI
+            'groupKey' => $group_key,
+            'groupLabel' => $group_label,
             // Metadaten für das UI: Woher kommt der Titel, war die Stufe explizit?
             'titleSource' => $title_source !== null ? $title_source : 'none',
             'hasExplicitCompetence' => ($competence !== null && $competence !== 'other'),
             'content' => $html_content
         );
+    }
+
+    /**
+     * Anzeigename einer Kompetenzstufe
+     */
+    private function get_competence_label($competence) {
+        $labels = array(
+            'k1' => __('Basiswissen (K1)', 'container-block-designer'),
+            'k2' => __('Erweitertes Wissen (K2)', 'container-block-designer'),
+            'k3' => __('Vertiefendes Wissen (K3)', 'container-block-designer'),
+            'sources' => __('Quellenangaben', 'container-block-designer')
+        );
+        return isset($labels[$competence]) ? $labels[$competence] : $competence;
     }
 
     /**
@@ -366,6 +594,60 @@ class CBD_Content_Importer {
         // Keine Kompetenzstufe erkennbar: eigene Kategorie statt stillem
         // K1-Fallback — im UI wird dafür separat ein Style gewählt.
         return 'other';
+    }
+
+    /**
+     * Normalisiert Text zu einem Vergleichs-Schlüssel: kleingeschrieben,
+     * Umlaute/ß aufgelöst, Sonderzeichen zu Bindestrichen.
+     *
+     * "Übungen zum Kapitel" → "uebungen-zum-kapitel"
+     *
+     * @param string $text
+     * @return string
+     */
+    private function normalize_key($text) {
+        $text = trim((string) $text);
+
+        // Umlaute und Sonderzeichen auflösen (Groß- vor Kleinschreibung)
+        $map = array(
+            'Ä' => 'ae', 'Ö' => 'oe', 'Ü' => 'ue',
+            'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue',
+            'ß' => 'ss', 'É' => 'e', 'é' => 'e', 'è' => 'e', 'ê' => 'e',
+            'á' => 'a', 'à' => 'a', 'â' => 'a', 'í' => 'i', 'ì' => 'i',
+            'ó' => 'o', 'ò' => 'o', 'ô' => 'o', 'ú' => 'u', 'ù' => 'u',
+            'ç' => 'c', 'ñ' => 'n'
+        );
+        $text = str_replace(array_keys($map), array_values($map), $text);
+
+        $text = function_exists('mb_strtolower') ? mb_strtolower($text, 'UTF-8') : strtolower($text);
+
+        // Alles außer Buchstaben/Zahlen zu Bindestrich
+        $text = preg_replace('/[^a-z0-9]+/u', '-', $text);
+
+        return trim($text, '-');
+    }
+
+    /**
+     * Stammform für Singular/Plural-tolerante Vergleiche:
+     * "hinweise" → "hinweis", "uebungen" → "uebung"
+     *
+     * @param string $key Bereits normalisierter Schlüssel
+     * @return string
+     */
+    private function stem_key($key) {
+        // Umlaut-Plural auflösen (Merksätze → merksaetze → merksatze):
+        // die aus normalize_key() stammenden Digraphen zurückrollen, damit
+        // "Merksätze" und "Merksatz" auf dieselbe Stammform fallen.
+        $key = str_replace(array('ae', 'oe', 'ue'), array('a', 'o', 'u'), $key);
+
+        // Längere Endungen zuerst prüfen
+        foreach (array('nen', 'en', 'er', 'se', 'n', 'e', 's') as $suffix) {
+            $len = strlen($suffix);
+            if (strlen($key) > $len + 3 && substr($key, -$len) === $suffix) {
+                return substr($key, 0, -$len);
+            }
+        }
+        return $key;
     }
 
     /**

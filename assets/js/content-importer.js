@@ -23,17 +23,29 @@
     const NO_CONTAINER = '__none__';
 
     /**
-     * Kategorien in fester Reihenfolge, inkl. 'other' für Abschnitte ohne
-     * erkennbare Kompetenzstufe (H2 ohne K1/K2/K3-Schlüsselwort, Inhalt ohne
-     * Überschriften, Präambeln …).
+     * Feste Badges/CSS-Klassen für die bekannten Kompetenzstufen. Alle
+     * anderen Gruppen (eigenständige H2 wie "Übungen", "Hinweise") bekommen
+     * ein neutrales Badge und werden dynamisch aus den Parser-Daten erzeugt.
      */
-    const CATEGORIES = [
-        { key: 'k1', badge: 'K1', label: __('Style für Basiswissen', 'container-block-designer') },
-        { key: 'k2', badge: 'K2', label: __('Style für Erweitertes Wissen', 'container-block-designer') },
-        { key: 'k3', badge: 'K3', label: __('Style für Vertiefendes Wissen', 'container-block-designer') },
-        { key: 'sources', badge: '📚', label: __('Style für Quellenangaben', 'container-block-designer') },
-        { key: 'other', badge: '?', label: __('Style für Abschnitte ohne Kompetenzstufe', 'container-block-designer') }
-    ];
+    const KNOWN_BADGES = {
+        k1: 'K1',
+        k2: 'K2',
+        k3: 'K3',
+        sources: '📚',
+        other: '?'
+    };
+
+    const badgeFor = function(group) {
+        if (KNOWN_BADGES[group.key]) {
+            return KNOWN_BADGES[group.key];
+        }
+        // Erste zwei Buchstaben des H2-Titels als Kurzbadge
+        return (group.label || '?').replace(/[^\p{L}\p{N}]/gu, '').substring(0, 2).toUpperCase();
+    };
+
+    const cssKeyFor = function(group) {
+        return KNOWN_BADGES[group.key] ? group.key : 'custom';
+    };
 
     /**
      * Content Importer Modal Component
@@ -83,14 +95,13 @@
                     setAvailableStyles(styles);
                     setHasStyles(response.data.hasStyles !== false);
 
-                    // Auto-Suggest; ohne Vorschlag/ohne Designs: kein Container
+                    // Defaults für die Kompetenzstufen. Gruppen aus eigenen
+                    // H2-Überschriften werden später beim Parsen ergänzt
+                    // (Server-Vorschlag per Namensabgleich).
                     const suggestions = response.data.suggestions || {};
-                    const fallback = (response.data.styles && response.data.styles[0])
-                        ? response.data.styles[0].value
-                        : NO_CONTAINER;
                     const mappings = {};
-                    CATEGORIES.forEach(function(cat) {
-                        mappings[cat.key] = suggestions[cat.key] || fallback;
+                    Object.keys(KNOWN_BADGES).forEach(function(key) {
+                        mappings[key] = suggestions[key] || NO_CONTAINER;
                     });
                     setStyleMappings(mappings);
                 }
@@ -126,6 +137,26 @@
             .then(function(response) {
                 if (response.success) {
                     setParsedData(response.data);
+
+                    // Style-Zuweisung je Gruppe vorbelegen: Vorschlag des
+                    // Servers (Namensabgleich H2 ↔ Block-Design), sonst der
+                    // bereits geladene Kategorie-Default, sonst ohne Container.
+                    // Vorbelegt wird NUR bei exaktem Namenstreffer (bzw. bei den
+                    // Kompetenzstufen-Defaults). Unscharfe Treffer bleiben
+                    // unbelegt — die Zuweisung macht der Nutzer bewusst selbst.
+                    const groups = response.data.groups || [];
+                    setStyleMappings(function(prev) {
+                        const next = Object.assign({}, prev);
+                        groups.forEach(function(group) {
+                            if (group.suggestedStyle) {
+                                next[group.key] = group.suggestedStyle;
+                            } else if (!next[group.key]) {
+                                next[group.key] = NO_CONTAINER;
+                            }
+                        });
+                        return next;
+                    });
+
                     setStep(2);
                 } else {
                     setError(response.data.message || __('Fehler beim Parsen', 'container-block-designer'));
@@ -257,8 +288,10 @@
                 .filter(function(v) { return v !== NO_CONTAINER; });
 
             parsedData.sections.forEach(function(section) {
-                // Bestimme Style basierend auf Kategorie (k1/k2/k3/sources/other)
-                let selectedStyle = styleMappings[section.competence];
+                // Bestimme Style anhand der Gruppe (Kompetenzstufe ODER
+                // eigenständige H2 wie "Übungen"/"Hinweise")
+                const groupKey = section.groupKey || section.competence;
+                let selectedStyle = styleMappings[groupKey];
 
                 // Kein/unbekannter Style → ohne Container einfügen, statt den
                 // Abschnitt stillschweigend zu verwerfen (früheres Verhalten).
@@ -413,8 +446,13 @@
 
             const stats = parsedData.stats;
 
-            // Zähler je Kategorie (0 = Kategorie kommt in dieser Datei nicht vor)
-            const countFor = function(key) { return stats[key] || 0; };
+            // Gruppen kommen vom Parser: Kompetenzstufen + jede eigenständige H2
+            const groups = parsedData.groups || [];
+            const otherCount = stats.other || 0;
+            // Abschnitte in einer Gruppe ohne automatischen Style-Vorschlag
+            const unmatched = groups.filter(function(g) {
+                return !g.suggestedStyle && g.key !== 'other';
+            });
 
             return el('div', { className: 'cbd-importer-step' },
                 el('h2', null, __('Schritt 2: Styles zuweisen', 'container-block-designer')),
@@ -426,47 +464,81 @@
                     __('Es sind noch keine Block-Designs angelegt. Der Inhalt wird ohne Container eingefügt und kann später Containern zugewiesen werden.', 'container-block-designer')
                 ),
 
-                // Hinweis, wenn Abschnitte ohne erkennbare Kompetenzstufe dabei sind
-                countFor('other') > 0 && el(Notice, { status: 'info', isDismissible: false },
-                    countFor('other') + ' ' + __('Abschnitt(e) ohne erkennbare Kompetenzstufe gefunden (keine H2 mit „Basiswissen“/„Erweitertes Wissen“/„Vertiefendes Wissen“). Sie werden trotzdem importiert — Style unten wählbar.', 'container-block-designer')
+                // Hinweis, wenn Abschnitte ohne jede Überschrift dabei sind
+                otherCount > 0 && el(Notice, { status: 'info', isDismissible: false },
+                    otherCount + ' ' + __('Abschnitt(e) ohne eigene Überschrift gefunden. Sie werden trotzdem importiert — Style unten wählbar.', 'container-block-designer')
+                ),
+
+                // Gruppen ohne exakt gleichnamiges Design: bewusst NICHT
+                // vorbelegt — hier muss der Nutzer selbst zuweisen.
+                unmatched.length > 0 && el(Notice, { status: 'warning', isDismissible: false },
+                    __('Kein exakt gleichnamiges Block-Design für:', 'container-block-designer') +
+                    ' ' + unmatched.map(function(g) { return '„' + g.label + '“'; }).join(', ') +
+                    ' — ' + __('bitte unten selbst zuweisen (oder ohne Container importieren).', 'container-block-designer')
                 ),
 
                 el('div', { className: 'cbd-importer-stats' },
                     el('p', null,
                         __('Gefundene Blöcke:', 'container-block-designer'),
                         ' ',
-                        el('strong', null, stats.total)
+                        el('strong', null, stats.total),
+                        ' ',
+                        __('in', 'container-block-designer'),
+                        ' ',
+                        el('strong', null, groups.length),
+                        ' ',
+                        __('Gruppe(n)', 'container-block-designer')
                     ),
                     el('ul', null,
-                        CATEGORIES.filter(function(cat) { return countFor(cat.key) > 0; }).map(function(cat) {
+                        groups.map(function(group) {
                             return el('li', {
-                                key: 'stat-' + cat.key,
-                                className: 'cbd-importer-stat-' + cat.key
+                                key: 'stat-' + group.key,
+                                className: 'cbd-importer-stat-' + cssKeyFor(group)
                             },
-                                el('span', { className: 'cbd-importer-stat-badge' }, cat.badge),
-                                countFor(cat.key) + ' ' + __('Blöcke', 'container-block-designer')
+                                el('span', { className: 'cbd-importer-stat-badge' }, badgeFor(group)),
+                                group.label + ': ' + group.count + ' ' + __('Blöcke', 'container-block-designer')
                             );
                         })
                     )
                 ),
 
+                // Eine Zuweisungszeile je Gruppe — auch für eigene H2 wie
+                // "Übungen" oder "Hinweise" (mit automatischem Vorschlag).
                 el('div', { className: 'cbd-importer-mappings' },
-                    CATEGORIES.filter(function(cat) { return countFor(cat.key) > 0; }).map(function(cat) {
+                    groups.map(function(group) {
+                        // Hilfetext: exakt zugeordnet / ähnlicher Name gefunden
+                        // (nur Hinweis, keine Vorbelegung) / kein Treffer
+                        let hint;
+                        if (group.suggestedStyle) {
+                            hint = __('automatisch zugeordnet (Name stimmt überein)', 'container-block-designer');
+                        } else if (group.similarStyle) {
+                            const similarLabel = (availableStyles.filter(function(s) {
+                                return s.value === group.similarStyle;
+                            })[0] || {}).label || group.similarStyle;
+                            hint = __('kein exakt gleichnamiges Design — ähnlich:', 'container-block-designer') +
+                                ' „' + similarLabel + '“ (' +
+                                __('bitte selbst zuweisen', 'container-block-designer') + ')';
+                        } else {
+                            hint = __('kein gleichnamiges Design gefunden — bitte selbst zuweisen', 'container-block-designer');
+                        }
                         return el('div', {
-                            key: 'map-' + cat.key,
-                            className: 'cbd-importer-mapping-row cbd-importer-mapping-' + cat.key
+                            key: 'map-' + group.key,
+                            className: 'cbd-importer-mapping-row cbd-importer-mapping-' + cssKeyFor(group)
                         },
-                            el('span', { className: 'cbd-importer-mapping-badge' }, cat.badge),
-                            el(SelectControl, {
-                                label: cat.label,
-                                value: styleMappings[cat.key],
-                                options: availableStyles,
-                                onChange: function(value) {
-                                    const next = Object.assign({}, styleMappings);
-                                    next[cat.key] = value;
-                                    setStyleMappings(next);
-                                }
-                            })
+                            el('span', { className: 'cbd-importer-mapping-badge' }, badgeFor(group)),
+                            el('div', { className: 'cbd-importer-mapping-control' },
+                                el(SelectControl, {
+                                    label: group.label + ' (' + group.count + ')',
+                                    help: hint,
+                                    value: styleMappings[group.key] || NO_CONTAINER,
+                                    options: availableStyles,
+                                    onChange: function(value) {
+                                        const next = Object.assign({}, styleMappings);
+                                        next[group.key] = value;
+                                        setStyleMappings(next);
+                                    }
+                                })
+                            )
                         );
                     })
                 ),
@@ -476,10 +548,11 @@
                     el('summary', null, __('Erkannte Abschnitte anzeigen', 'container-block-designer')),
                     el('ul', { className: 'cbd-importer-preview-list' },
                         parsedData.sections.map(function(section, i) {
-                            const style = styleMappings[section.competence];
+                            const groupKey = section.groupKey || section.competence;
+                            const style = styleMappings[groupKey];
                             const noContainer = !style || style === NO_CONTAINER;
                             return el('li', { key: 'sec-' + i },
-                                el('code', null, section.competence.toUpperCase()),
+                                el('code', null, section.groupLabel || groupKey),
                                 ' ',
                                 el('strong', null, section.blockTitle || __('(ohne Titel)', 'container-block-designer')),
                                 noContainer

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Container Block Designer is a WordPress plugin that creates customizable container blocks for the Gutenberg Block Editor. It allows users to create, manage, and apply styled container blocks with features like collapsible sections, copy-to-clipboard, screenshots, and automatic numbering.
 
-**Current Version:** 3.1.61
+**Current Version:** 3.1.72
 **WordPress Requirements:** 6.0+
 **PHP Requirements:** 7.4+ (rückwärtskompatibel; getestet auf 7.4.33)
 **Tested up to:** WordPress 6.4, PHP 8.4
@@ -237,7 +237,7 @@ PHP: `includes/class-cbd-content-importer.php`, UI: `assets/js/content-importer.
 | Markdown | Bedeutung |
 |---|---|
 | `# H1` | Thema (`topic`); dient als Titel-Fallback |
-| `## H2` | Kompetenzstufe über Schlüsselwörter (`$section_keywords`): k1/k2/k3/sources — **sonst Kategorie `other`** |
+| `## H2` | Kompetenzstufe über Schlüsselwörter (`$section_keywords`): k1/k2/k3/sources — **jede andere H2 bildet eine eigene Gruppe** (`h2-<slug>`) |
 | `### H3` | Block-Titel (nicht im Inhalt) |
 | alles andere | Inhalt |
 
@@ -246,9 +246,25 @@ Präambeln vor der ersten Überschrift, Inhalt direkt unter H2 und Dateien
 **ganz ohne Überschriften** (früher gingen diese Fälle still verloren, weil
 `save_block()` `topic && competence && title` verlangte).
 
-**Kategorie `other`** = keine Kompetenzstufe erkennbar. Ersetzt den früheren
-stillen K1-Fallback: im UI eigene Zeile mit eigener Style-Wahl (Vorschlag =
-K1-Style, also verhaltensgleich, aber sichtbar).
+**Gruppen & automatische Style-Zuordnung (v3.1.71):** Jede H2, die keine
+Kompetenzstufe ist, wird zu einer eigenen Gruppe mit eigener Style-Zeile im
+Dialog — `## Übungen` und `## Hinweise` sind also getrennt zuweisbar, nicht
+mehr ein Sammeltopf. `attach_style_suggestions()` matcht den H2-Text gegen
+Name/Slug der aktiven Block-Designs:
+
+1. **exakt** normalisiert (`match_style_for_label()` → `normalize_key()`:
+   lowercase, Umlaute → ae/oe/ue, Sonderzeichen → `-`), z. B. „Übungen" = `uebungen`
+2. **Stammform** (`stem_key()`, Singular/Plural + Umlaut-Plural):
+   „Hinweise" ≈ `hinweis`, „Merksätze" ≈ `merksatz`
+3. **Teilstring** (ab 4 Zeichen, längster Treffer): „Übungen zum Kapitel" ⊃ `uebungen`
+
+**Automatisch vorbelegt wird NUR Strategie 1 (exakte Namensgleichheit).**
+Unscharfe Treffer (2/3) erscheinen ausschließlich als Hinweis am Select
+(`similarStyle`) — die Zuweisung macht der Nutzer bewusst selbst; das Select
+steht dann auf „ohne Container". Warn-Notice nennt alle Gruppen ohne exakten
+Treffer. `other` = Abschnitte ganz ohne Überschrift.
+`competence` bleibt für Farben/Rückwärtskompatibilität erhalten, für die
+Style-Zuweisung ist `groupKey` maßgeblich.
 
 **Import ohne (passendes) Block-Design:** Jedes Style-Select enthält
 „— ohne Container (nur Inhalt) —" (JS-Konstante `NO_CONTAINER = '__none__'`).

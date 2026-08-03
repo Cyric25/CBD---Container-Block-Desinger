@@ -4,7 +4,7 @@ Auftrag: Der Importer-Parser soll auch Abschnitte erkennen, denen **kein Style
 zugewiesen** ist bzw. für die **kein Style existiert** — und generell mit
 beliebigen Markdown-Strukturen funktionieren.
 
-Status: ✅ ERLEDIGT (AP43–AP45), ausgeliefert in CDB v3.1.70.
+Status: ✅ ERLEDIGT (AP43–AP46), ausgeliefert in CDB v3.1.72.
 
 ---
 
@@ -86,6 +86,45 @@ war unbrauchbar. Gleiches Risiko für `*`/`_` in LaTeX und Inline-Code.
 **Verifikation:** 10 Inline-Fälle (Bold, Kursiv, Listen-Marker, LaTeX inline/
 display, URL mit `__`, MD-Link, Inline-Code, chemische Formeln, Bold+URL) —
 alle korrekt; URL nachweislich intakt.
+
+
+## AP46 — Eigene H2-Überschriften als eigene Style-Gruppen (v3.1.71)
+
+**Meldung:** „`## Übungen` wird nicht als Blockstil erkannt, Hinweise auch nicht."
+
+Nach AP43/44 landeten alle H2 ohne Kompetenz-Schlüsselwort in EINER Kategorie
+`other` mit EINEM Style. Fachliche Gliederungen wie „Übungen" und „Hinweise"
+brauchen aber je ihr eigenes Block-Design.
+
+**Umsetzung**
+- Parser: jede eigenständige H2 bildet eine eigene Gruppe (`groupKey`
+  = `h2-<normalisiert>`, `groupLabel` = Original-H2). `other` bleibt nur für
+  Abschnitte ganz ohne Überschrift. `competence` bleibt für Farben/
+  Rückwärtskompatibilität erhalten; maßgeblich für die Zuweisung ist `groupKey`.
+- `parse_markdown_content()` liefert zusätzlich `groups`
+  (`key`, `label`, `competence`, `count`, `suggestedStyle`, `matchedBy`),
+  Kompetenzstufen zuerst, danach eigene H2 alphabetisch.
+- Neu `normalize_key()` (Umlaute → ae/oe/ue, ß → ss, Sonderzeichen → `-`),
+  `stem_key()` (Singular/Plural **inkl. Umlaut-Plural**: „Merksätze" ≈
+  „Merksatz") und `match_style_for_label()` (exakt → Stammform → Teilstring).
+- `attach_style_suggestions()` (im AJAX-Parse, mit DB-Zugriff) füllt
+  `suggestedStyle`/`matchedBy`; Kompetenzstufen behalten ihre festen Defaults.
+- **Nachschärfung (v3.1.72) auf Nutzerwunsch:** vorbelegt wird nur bei
+  **exakter** Namensgleichheit. Unscharfe Treffer landen in `similarStyle`
+  und erscheinen nur als Hinweis am Select („kein exakt gleichnamiges Design —
+  ähnlich: „Hinweis" (bitte selbst zuweisen)"); das Select bleibt auf „ohne
+  Container", damit keine falsche Automatik-Zuweisung passiert.
+- UI: Zuweisungszeilen werden aus `groups` generiert (statt fixer Liste), je
+  Zeile Anzahl + Hinweis „automatisch zugeordnet" / „kein gleichnamiges Design
+  gefunden"; Warn-Notice nennt alle Gruppen ohne Treffer; Vorschau zeigt die
+  Gruppe je Abschnitt. Neue CSS-Klassen `*-custom`.
+
+**Verifikation:** Matching-Tabelle (11 Fälle: „Übungen", „Übung", „uebungen",
+„Hinweise", „Hinweis", „Merksätze", „Beispiele", „Übungen zum Kapitel",
+„Wichtige Hinweise", „Zusammenfassung", „ÜBUNGEN") + E2E-Simulation in zwei
+Szenarien: mit vorhandenen Designs landen alle 6 Abschnitte im je richtigen
+Container; fehlen die Designs, gehen 0 Abschnitte verloren (5× ohne Container).
+Regression: 9 Strukturfälle und 272 Abschnitte über 33 echte Dateien unverändert.
 
 ---
 

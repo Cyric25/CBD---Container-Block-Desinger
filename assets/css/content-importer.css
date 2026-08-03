@@ -361,3 +361,25 @@
     font-size: 11px;
     text-align: center;
 }
+
+/* Eigenständige H2-Gruppen (z. B. "Übungen", "Hinweise") — neutrale Farbe */
+.cbd-importer-stat-custom .cbd-importer-stat-badge {
+    background: var(--color-ui-surface, #e24614);
+    font-size: 10px;
+}
+
+.cbd-importer-mapping-custom {
+    background: rgba(226, 70, 20, 0.06);
+    border-color: rgba(226, 70, 20, 0.25);
+}
+
+.cbd-importer-mapping-custom .cbd-importer-mapping-badge {
+    background: var(--color-ui-surface, #e24614);
+    font-size: 12px;
+}
+
+/* Select samt Hilfetext soll die Zeilenbreite nutzen */
+.cbd-importer-mapping-control {
+    flex: 1 1 auto;
+    min-width: 0;
+}
