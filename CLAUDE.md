@@ -227,6 +227,45 @@ nie manuell zippen. Verifikation nach dem Bau: ZIP entpacken und
 `php -r 'define("ABSPATH","/"); require ".../vendor/autoload.php";'` muss
 ohne Fatal laufen.
 
+## Content-Importer (Markdown → Container-Blöcke)
+
+Editor → Menü „⋮" → **Inhalt importieren (K1/K2/K3)**.
+PHP: `includes/class-cbd-content-importer.php`, UI: `assets/js/content-importer.js`.
+
+**Parser-Regeln (seit v3.1.70 strukturtolerant — es geht KEIN Inhalt verloren):**
+
+| Markdown | Bedeutung |
+|---|---|
+| `# H1` | Thema (`topic`); dient als Titel-Fallback |
+| `## H2` | Kompetenzstufe über Schlüsselwörter (`$section_keywords`): k1/k2/k3/sources — **sonst Kategorie `other`** |
+| `### H3` | Block-Titel (nicht im Inhalt) |
+| alles andere | Inhalt |
+
+Titel-Fallback-Kette: H3 → H2 → H1 → „Abschnitt N". Erfasst werden auch
+Präambeln vor der ersten Überschrift, Inhalt direkt unter H2 und Dateien
+**ganz ohne Überschriften** (früher gingen diese Fälle still verloren, weil
+`save_block()` `topic && competence && title` verlangte).
+
+**Kategorie `other`** = keine Kompetenzstufe erkennbar. Ersetzt den früheren
+stillen K1-Fallback: im UI eigene Zeile mit eigener Style-Wahl (Vorschlag =
+K1-Style, also verhaltensgleich, aber sichtbar).
+
+**Import ohne (passendes) Block-Design:** Jedes Style-Select enthält
+„— ohne Container (nur Inhalt) —" (JS-Konstante `NO_CONTAINER = '__none__'`).
+Ist kein Design zugewiesen ODER der Slug existiert nicht in der DB, fügt das
+UI den Abschnitt als Heading + Inhaltsblöcke ohne Container ein statt ihn zu
+verwerfen. Ein Container mit unbekanntem Slug wird bewusst NIE erzeugt (würde
+im Frontend „Block nicht gefunden" rendern).
+
+**Inline-Formatierung:** `markdown_to_html()` schützt Inline-Code, `$…$`/`$$…$$`
+und URLs per Platzhalter, BEVOR Bold/Italic-Regeln laufen. Ohne diesen Schutz
+zerstörte `__` in Quellen-URLs die Links (`…gaschromatographie__autor__.pdf`
+→ `<strong>`). Markdown-Links `[Text](URL)` werden zu `<a>` (nur
+http/https/www//#/mailto). Beim Anpassen dieser Methode: Testharness-Muster
+in `docs/VERBESSERUNGSPLAN-5.md` (Abschnitt AP43) verwenden — der Parser lässt
+sich mit wenigen Stubs (`add_action`, `__`, `esc_html`, `esc_url`) headless
+gegen die echten Dateien in `Inhalte/` ausführen.
+
 ## Debugging-Konventionen
 
 - **PHP:** Informations-Logs laufen über klasseneigene `debug_log()`-Helper

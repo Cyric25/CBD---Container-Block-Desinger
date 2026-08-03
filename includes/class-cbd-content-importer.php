@@ -107,7 +107,8 @@ class CBD_Content_Importer {
             'k1' => 'infotext_k1',
             'k2' => 'infotext_k2',
             'k3' => 'infotext_k3',
-            'sources' => null
+            'sources' => null,
+            'other' => null // wird unten auf den K1-Vorschlag gesetzt
         );
 
         // Validiere, ob die Standard-Styles existieren
@@ -163,14 +164,38 @@ class CBD_Content_Importer {
             }
         }
 
+        // Nur Slugs vorschlagen, die es wirklich gibt — sonst würde der
+        // Container im Frontend als "Block nicht gefunden" rendern.
+        foreach ($suggestions as $key => $slug) {
+            if ($slug !== null && !in_array($slug, $available_slugs, true)) {
+                $suggestions[$key] = null;
+            }
+        }
+
+        // Abschnitte ohne erkennbare Kompetenzstufe ('other'): denselben Style
+        // wie K1 vorschlagen (entspricht dem früheren stillen K1-Fallback),
+        // im UI aber separat wählbar.
+        if (empty($suggestions['other'])) {
+            $suggestions['other'] = $suggestions['k1'];
+        }
+
         wp_send_json_success(array(
             'styles' => $style_options,
-            'suggestions' => $suggestions
+            'suggestions' => $suggestions,
+            // Ohne angelegte Block-Designs ist Import trotzdem möglich
+            // (dann ohne Container) — das UI weist darauf hin.
+            'hasStyles' => !empty($style_options)
         ));
     }
 
     /**
      * Hauptparser: Markdown → Strukturierte Daten
+     *
+     * Robust gegenüber beliebigen Markdown-Strukturen: Es geht KEIN Inhalt
+     * verloren, auch wenn Überschriftenebenen fehlen (kein H1, kein H2,
+     * kein H3, Text vor der ersten Überschrift). Abschnitte ohne erkennbare
+     * Kompetenzstufe landen in der Kategorie 'other' und können im UI
+     * gemappt oder ohne Container importiert werden.
      */
     public function parse_markdown_content($content) {
         // Normalisiere Zeilenumbrüche
@@ -185,8 +210,9 @@ class CBD_Content_Importer {
 
         $sections = array();
         $current_topic = null;
-        $current_competence = null;
-        $current_block_title = null;
+        $current_competence = null;   // null = noch keine H2 gesehen
+        $current_heading = null;      // Überschrift des laufenden Abschnitts
+        $current_title_source = null; // h3 | h2 | h1 | none
         $current_content = array();
 
         foreach ($lines as $line) {
@@ -200,61 +226,67 @@ class CBD_Content_Importer {
 
             // H1: Neues Thema
             if (preg_match('/^#\s+(.+)$/', $trimmed, $matches)) {
-                // Speichere vorherigen Block
-                if ($current_topic && $current_competence && $current_block_title) {
-                    $this->save_block($sections, $current_topic, $current_competence, $current_block_title, $current_content);
-                }
+                $this->flush_section($sections, $current_topic, $current_competence,
+                    $current_heading, $current_title_source, $current_content);
 
                 $current_topic = trim($matches[1]);
                 $current_competence = null;
-                $current_block_title = null;
+                // H1 dient als Titel-Fallback, falls direkt Inhalt ohne H2/H3 folgt
+                $current_heading = $current_topic;
+                $current_title_source = 'h1';
                 $current_content = array();
                 continue;
             }
 
-            // H2: Kompetenzstufe
+            // H2: Kompetenzstufe (oder beliebige andere Gliederungsüberschrift)
             if (preg_match('/^##\s+(.+)$/', $trimmed, $matches)) {
-                // Speichere vorherigen Block
-                if ($current_topic && $current_competence && $current_block_title) {
-                    $this->save_block($sections, $current_topic, $current_competence, $current_block_title, $current_content);
-                }
+                $this->flush_section($sections, $current_topic, $current_competence,
+                    $current_heading, $current_title_source, $current_content);
 
                 $heading = trim($matches[1]);
                 $current_competence = $this->detect_competence_level($heading);
 
-                // SPECIAL: Für Quellenverzeichnis ist H2 der Block-Titel (kein H3 erforderlich)
-                if ($current_competence === 'sources') {
-                    $current_block_title = $heading;
-                } else {
-                    $current_block_title = null;
-                }
-
+                // H2 ist Titel-Fallback: greift für Quellenverzeichnisse (dort gibt
+                // es kein H3) und generell für Inhalt direkt unter H2.
+                $current_heading = $heading;
+                $current_title_source = 'h2';
                 $current_content = array();
                 continue;
             }
 
             // H3: Block-Titel (wird NUR als Block-Titel verwendet, nicht im Inhalt)
             if (preg_match('/^###\s+(.+)$/', $trimmed, $matches)) {
-                // Speichere vorherigen Block
-                if ($current_topic && $current_competence && $current_block_title) {
-                    $this->save_block($sections, $current_topic, $current_competence, $current_block_title, $current_content);
-                }
+                $this->flush_section($sections, $current_topic, $current_competence,
+                    $current_heading, $current_title_source, $current_content);
 
-                $current_block_title = trim($matches[1]);
+                $current_heading = trim($matches[1]);
+                $current_title_source = 'h3';
                 $current_content = array();
                 // H3 wird NICHT mehr zum Content hinzugefügt - nur als Block-Titel verwendet
                 continue;
             }
 
-            // Normaler Inhalt
-            if ($current_topic && $current_competence) {
-                $current_content[] = $line;
-            }
+            // Normaler Inhalt — wird IMMER gesammelt. Auch Text vor der ersten
+            // Überschrift (Präambel) oder in Dateien ganz ohne Überschriften
+            // ging früher verloren.
+            $current_content[] = $line;
         }
 
         // Speichere letzten Block
-        if ($current_topic && $current_competence && $current_block_title) {
-            $this->save_block($sections, $current_topic, $current_competence, $current_block_title, $current_content);
+        $this->flush_section($sections, $current_topic, $current_competence,
+            $current_heading, $current_title_source, $current_content);
+
+        // Nummerierte Ersatztitel für Abschnitte ohne jede Überschrift
+        $untitled = 0;
+        foreach ($sections as $i => $section) {
+            if ($section['blockTitle'] === '') {
+                $untitled++;
+                $sections[$i]['blockTitle'] = sprintf(
+                    /* translators: %d = laufende Nummer */
+                    __('Abschnitt %d', 'container-block-designer'),
+                    $untitled
+                );
+            }
         }
 
         // Gruppiere nach Kompetenzstufe für UI
@@ -262,11 +294,13 @@ class CBD_Content_Importer {
             'k1' => array(),
             'k2' => array(),
             'k3' => array(),
-            'sources' => array()
+            'sources' => array(),
+            'other' => array()
         );
 
         foreach ($sections as $section) {
-            $grouped[$section['competence']][] = $section;
+            $key = isset($grouped[$section['competence']]) ? $section['competence'] : 'other';
+            $grouped[$key][] = $section;
         }
 
         return array(
@@ -277,16 +311,21 @@ class CBD_Content_Importer {
                 'k1' => count($grouped['k1']),
                 'k2' => count($grouped['k2']),
                 'k3' => count($grouped['k3']),
-                'sources' => count($grouped['sources'])
+                'sources' => count($grouped['sources']),
+                'other' => count($grouped['other'])
             )
         );
     }
 
     /**
-     * Speichert einen Block in der Sections-Liste
+     * Schreibt den laufenden Abschnitt in die Sections-Liste, sofern er
+     * Inhalt hat. Ersetzt die früheren Vorbedingungen
+     * (topic && competence && title), die Inhalt ohne vollständige
+     * Überschriften-Hierarchie stillschweigend verworfen haben.
      */
-    private function save_block(&$sections, $topic, $competence, $block_title, $content) {
-        if (empty($content)) {
+    private function flush_section(&$sections, $topic, $competence, $heading, $title_source, $content) {
+        // Nur Whitespace? Dann gibt es nichts zu speichern.
+        if (empty($content) || trim(implode('', $content)) === '') {
             return;
         }
 
@@ -294,20 +333,24 @@ class CBD_Content_Importer {
         $html_content = $this->markdown_to_html($content_text);
         $html_content = $this->strip_unsafe_html($html_content);
 
-        // NEU: Block-Titel ist immer die H3-Überschrift (oder H2 bei Quellenverzeichnis)
-        // H1-Thema wird nicht mehr als Block-Titel verwendet
-        $final_block_title = $block_title;
+        // Ohne erkannte H2 gibt es keine Kompetenzstufe → 'other'
+        $final_competence = $competence !== null ? $competence : 'other';
 
         $sections[] = array(
-            'topic' => $topic,
-            'competence' => $competence,
-            'blockTitle' => $final_block_title,
+            'topic' => $topic !== null ? $topic : '',
+            'competence' => $final_competence,
+            'blockTitle' => $heading !== null ? $heading : '',
+            // Metadaten für das UI: Woher kommt der Titel, war die Stufe explizit?
+            'titleSource' => $title_source !== null ? $title_source : 'none',
+            'hasExplicitCompetence' => ($competence !== null && $competence !== 'other'),
             'content' => $html_content
         );
     }
 
     /**
      * Erkennt Kompetenzstufe aus H2-Überschrift
+     *
+     * @return string k1|k2|k3|sources|other ('other' = keine Kompetenzstufe erkennbar)
      */
     private function detect_competence_level($heading) {
         $heading_lower = strtolower(trim($heading));
@@ -320,8 +363,9 @@ class CBD_Content_Importer {
             }
         }
 
-        // Fallback: K1
-        return 'k1';
+        // Keine Kompetenzstufe erkennbar: eigene Kategorie statt stillem
+        // K1-Fallback — im UI wird dafür separat ein Style gewählt.
+        return 'other';
     }
 
     /**
@@ -357,18 +401,58 @@ class CBD_Content_Importer {
         // Einfacher Markdown-Parser (kann erweitert werden)
         $html = $markdown;
 
+        // ---------------------------------------------------------------
+        // SCHUTZPHASE: Bereiche sichern, in denen * _ ` KEINE Markdown-
+        // Formatierung sind. Ohne das zerstörte z. B. eine Quellen-URL
+        // wie ".../datei__autor__x.pdf" die Bold-Regel zu <strong> und die
+        // URL war unbrauchbar. Gleiches gilt für LaTeX ($a_1 \cdot b^*$).
+        // ---------------------------------------------------------------
+        $protected = array();
+        $protect = function ($matches) use (&$protected) {
+            $token = '@@CBDPROT' . count($protected) . '@@';
+            $protected[$token] = $matches[0];
+            return $token;
+        };
+
+        // 1. Inline-Code `...`
+        $html = preg_replace_callback('/`[^`\n]*`/', $protect, $html);
+        // 2. Display-LaTeX $$...$$ (vor Inline-LaTeX!)
+        $html = preg_replace_callback('/\$\$[^\$]{1,10000}?\$\$/s', $protect, $html);
+        // 3. Inline-LaTeX $...$ (kein Whitespace direkt hinter/vor dem $)
+        $html = preg_replace_callback('/\$(?!\s)[^\$\n]{1,500}?(?<!\s)\$/', $protect, $html);
+        // 4. URLs (http/https/www) bis zum nächsten Whitespace oder ) " '
+        $html = preg_replace_callback('#(?:https?://|www\.)[^\s<>"\')]+#i', $protect, $html);
+
         // H3-H6 (H1 und H2 sind bereits verwendet)
         $html = preg_replace('/^######\s+(.+)$/m', '<h6>$1</h6>', $html);
         $html = preg_replace('/^#####\s+(.+)$/m', '<h5>$1</h5>', $html);
         $html = preg_replace('/^####\s+(.+)$/m', '<h4>$1</h4>', $html);
         $html = preg_replace('/^###\s+(.+)$/m', '<h3>$1</h3>', $html);
 
+        // Markdown-Links [Text](URL) → <a>; URLs sind bereits geschützt,
+        // daher hier per Token-Auflösung im href.
+        $html = preg_replace_callback(
+            '/\[([^\]\n]+)\]\(\s*(\S+?)\s*\)/',
+            function ($m) use (&$protected) {
+                $href = isset($protected[$m[2]]) ? $protected[$m[2]] : $m[2];
+                // Nur unbedenkliche Schemata verlinken
+                if (!preg_match('#^(https?://|www\.|/|\#|mailto:)#i', $href)) {
+                    return $m[0]; // unverändert lassen
+                }
+                if (stripos($href, 'www.') === 0) {
+                    $href = 'https://' . $href;
+                }
+                return '<a href="' . esc_url($href) . '">' . $m[1] . '</a>';
+            },
+            $html
+        );
+
         // Fett: **text** oder __text__
         $html = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', $html);
         $html = preg_replace('/__(.+?)__/', '<strong>$1</strong>', $html);
 
-        // Kursiv: *text* oder _text_ (ABER NICHT in LaTeX-Formeln oder Tabellen)
-        $html = preg_replace('/\*(.+?)\*/', '<em>$1</em>', $html);
+        // Kursiv: *text* (nicht über Zeilengrenzen, nicht bei Listen-Markern)
+        $html = preg_replace('/(?<![\*\w])\*(?!\s)([^\*\n]+?)(?<!\s)\*(?!\*)/', '<em>$1</em>', $html);
         // Achtung: _ in Tabellen oder LaTeX sollte nicht kursiv werden
         // Deaktiviert für jetzt, da _ häufig in chemischen Formeln vorkommt
         // $html = preg_replace('/_(.+?)_/', '<em>$1</em>', $html);
@@ -492,8 +576,14 @@ class CBD_Content_Importer {
 
         $html = implode("\n", $paragraphs);
 
-        // LaTeX-Formeln bleiben unverändert ($...$ und $$...$$)
-        // KaTeX wird später im Frontend gerendert
+        // ---------------------------------------------------------------
+        // WIEDERHERSTELLUNG der geschützten Bereiche (Inline-Code, LaTeX,
+        // URLs). LaTeX-Formeln bleiben damit unverändert ($...$ und $$...$$),
+        // KaTeX rendert sie später im Frontend.
+        // ---------------------------------------------------------------
+        if (!empty($protected)) {
+            $html = str_replace(array_keys($protected), array_values($protected), $html);
+        }
 
         return $html;
     }

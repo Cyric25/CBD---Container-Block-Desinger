@@ -305,3 +305,59 @@
         width: 100%;
     }
 }
+
+/* ============================================
+   Abschnitte ohne erkennbare Kompetenzstufe ('other')
+   und Abschnitts-Vorschau (seit v3.1.70)
+   ============================================ */
+
+.cbd-importer-stat-other .cbd-importer-stat-badge {
+    background: #757575;
+}
+
+.cbd-importer-mapping-other {
+    background: rgba(117, 117, 117, 0.08);
+    border-color: rgba(117, 117, 117, 0.3);
+}
+
+.cbd-importer-mapping-other .cbd-importer-mapping-badge {
+    background: #757575;
+}
+
+/* Vorschau der erkannten Abschnitte */
+.cbd-importer-preview {
+    margin-bottom: 20px;
+    padding: 12px 15px;
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+    border-radius: 6px;
+}
+
+.cbd-importer-preview summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.cbd-importer-preview-list {
+    margin: 12px 0 0;
+    max-height: 220px;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
+.cbd-importer-preview-list li {
+    margin: 0 0 4px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #ebebeb;
+}
+
+.cbd-importer-preview-list code {
+    display: inline-block;
+    min-width: 58px;
+    padding: 1px 6px;
+    background: #e0e0e0;
+    border-radius: 3px;
+    font-size: 11px;
+    text-align: center;
+}

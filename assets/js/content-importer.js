@@ -16,6 +16,26 @@
     const { dispatch, select } = wp.data;
 
     /**
+     * Spezialwert: Abschnitt ohne Container-Block einfügen (nur Inhalt).
+     * Ermöglicht den Import auch dann, wenn für einen Abschnitt kein
+     * passendes Block-Design existiert oder noch keines angelegt wurde.
+     */
+    const NO_CONTAINER = '__none__';
+
+    /**
+     * Kategorien in fester Reihenfolge, inkl. 'other' für Abschnitte ohne
+     * erkennbare Kompetenzstufe (H2 ohne K1/K2/K3-Schlüsselwort, Inhalt ohne
+     * Überschriften, Präambeln …).
+     */
+    const CATEGORIES = [
+        { key: 'k1', badge: 'K1', label: __('Style für Basiswissen', 'container-block-designer') },
+        { key: 'k2', badge: 'K2', label: __('Style für Erweitertes Wissen', 'container-block-designer') },
+        { key: 'k3', badge: 'K3', label: __('Style für Vertiefendes Wissen', 'container-block-designer') },
+        { key: 'sources', badge: '📚', label: __('Style für Quellenangaben', 'container-block-designer') },
+        { key: 'other', badge: '?', label: __('Style für Abschnitte ohne Kompetenzstufe', 'container-block-designer') }
+    ];
+
+    /**
      * Content Importer Modal Component
      */
     const ContentImporterModal = function({ onClose }) {
@@ -24,8 +44,11 @@
         const [parsedData, setParsedData] = useState(null);
         const [loading, setLoading] = useState(false);
         const [error, setError] = useState(null);
-        const [styleMappings, setStyleMappings] = useState({ k1: '', k2: '', k3: '', sources: '' });
+        const [styleMappings, setStyleMappings] = useState({
+            k1: '', k2: '', k3: '', sources: '', other: ''
+        });
         const [availableStyles, setAvailableStyles] = useState([]);
+        const [hasStyles, setHasStyles] = useState(true);
         const [isDragging, setIsDragging] = useState(false);
 
         // Lade verfügbare Styles beim Mount
@@ -50,15 +73,26 @@
             .then(function(response) { return response.json(); })
             .then(function(response) {
                 if (response.success) {
-                    setAvailableStyles(response.data.styles);
-                    // Auto-Suggest
-                    const suggestions = response.data.suggestions;
-                    setStyleMappings({
-                        k1: suggestions.k1 || (response.data.styles[0] ? response.data.styles[0].value : ''),
-                        k2: suggestions.k2 || (response.data.styles[0] ? response.data.styles[0].value : ''),
-                        k3: suggestions.k3 || (response.data.styles[0] ? response.data.styles[0].value : ''),
-                        sources: suggestions.sources || (response.data.styles[0] ? response.data.styles[0].value : '')
+                    // Option "ohne Container" immer anbieten — damit lässt sich
+                    // Inhalt auch ohne (passendes) Block-Design importieren.
+                    const styles = (response.data.styles || []).slice();
+                    styles.push({
+                        value: NO_CONTAINER,
+                        label: __('— ohne Container (nur Inhalt) —', 'container-block-designer')
                     });
+                    setAvailableStyles(styles);
+                    setHasStyles(response.data.hasStyles !== false);
+
+                    // Auto-Suggest; ohne Vorschlag/ohne Designs: kein Container
+                    const suggestions = response.data.suggestions || {};
+                    const fallback = (response.data.styles && response.data.styles[0])
+                        ? response.data.styles[0].value
+                        : NO_CONTAINER;
+                    const mappings = {};
+                    CATEGORIES.forEach(function(cat) {
+                        mappings[cat.key] = suggestions[cat.key] || fallback;
+                    });
+                    setStyleMappings(mappings);
                 }
                 setLoading(false);
             }).catch(function(err) {
@@ -215,12 +249,21 @@
             const blocks = [];
             const editor = dispatch('core/block-editor');
 
-            parsedData.sections.forEach(function(section) {
-                // Bestimme Style basierend auf Kompetenzstufe
-                const selectedStyle = styleMappings[section.competence];
+            // Slugs, die es tatsächlich als Block-Design gibt — ein Container
+            // mit unbekanntem Slug würde im Frontend "Block nicht gefunden"
+            // rendern, daher fallen solche Abschnitte auf "ohne Container".
+            const knownSlugs = availableStyles
+                .map(function(s) { return s.value; })
+                .filter(function(v) { return v !== NO_CONTAINER; });
 
-                if (!selectedStyle) {
-                    return; // Überspringe wenn kein Style zugewiesen
+            parsedData.sections.forEach(function(section) {
+                // Bestimme Style basierend auf Kategorie (k1/k2/k3/sources/other)
+                let selectedStyle = styleMappings[section.competence];
+
+                // Kein/unbekannter Style → ohne Container einfügen, statt den
+                // Abschnitt stillschweigend zu verwerfen (früheres Verhalten).
+                if (!selectedStyle || knownSlugs.indexOf(selectedStyle) === -1) {
+                    selectedStyle = NO_CONTAINER;
                 }
 
                 // Konvertiere HTML zu Gutenberg-Blöcken
@@ -232,6 +275,20 @@
                         content: section.content
                     })
                 ];
+
+                if (selectedStyle === NO_CONTAINER) {
+                    // Ohne Container: Überschrift als Heading-Block voranstellen,
+                    // damit die Gliederung erhalten bleibt und der Abschnitt
+                    // später manuell in einen Container gepackt werden kann.
+                    if (section.blockTitle) {
+                        blocks.push(wp.blocks.createBlock('core/heading', {
+                            content: section.blockTitle,
+                            level: 3
+                        }));
+                    }
+                    finalInnerBlocks.forEach(function(b) { blocks.push(b); });
+                    return;
+                }
 
                 // Erstelle CDB Container Block mit modernen Gutenberg-Blöcken
                 const containerBlock = wp.blocks.createBlock(
@@ -356,8 +413,23 @@
 
             const stats = parsedData.stats;
 
+            // Zähler je Kategorie (0 = Kategorie kommt in dieser Datei nicht vor)
+            const countFor = function(key) { return stats[key] || 0; };
+
             return el('div', { className: 'cbd-importer-step' },
                 el('h2', null, __('Schritt 2: Styles zuweisen', 'container-block-designer')),
+
+                error && el(Notice, { status: 'error', isDismissible: false }, error),
+
+                // Hinweis, wenn noch keine Block-Designs angelegt sind
+                !hasStyles && el(Notice, { status: 'warning', isDismissible: false },
+                    __('Es sind noch keine Block-Designs angelegt. Der Inhalt wird ohne Container eingefügt und kann später Containern zugewiesen werden.', 'container-block-designer')
+                ),
+
+                // Hinweis, wenn Abschnitte ohne erkennbare Kompetenzstufe dabei sind
+                countFor('other') > 0 && el(Notice, { status: 'info', isDismissible: false },
+                    countFor('other') + ' ' + __('Abschnitt(e) ohne erkennbare Kompetenzstufe gefunden (keine H2 mit „Basiswissen“/„Erweitertes Wissen“/„Vertiefendes Wissen“). Sie werden trotzdem importiert — Style unten wählbar.', 'container-block-designer')
+                ),
 
                 el('div', { className: 'cbd-importer-stats' },
                     el('p', null,
@@ -366,63 +438,54 @@
                         el('strong', null, stats.total)
                     ),
                     el('ul', null,
-                        el('li', { className: 'cbd-importer-stat-k1' },
-                            el('span', { className: 'cbd-importer-stat-badge' }, 'K1'),
-                            stats.k1 + ' ' + __('Blöcke', 'container-block-designer')
-                        ),
-                        el('li', { className: 'cbd-importer-stat-k2' },
-                            el('span', { className: 'cbd-importer-stat-badge' }, 'K2'),
-                            stats.k2 + ' ' + __('Blöcke', 'container-block-designer')
-                        ),
-                        el('li', { className: 'cbd-importer-stat-k3' },
-                            el('span', { className: 'cbd-importer-stat-badge' }, 'K3'),
-                            stats.k3 + ' ' + __('Blöcke', 'container-block-designer')
-                        ),
-                        stats.sources > 0 && el('li', { className: 'cbd-importer-stat-sources' },
-                            el('span', { className: 'cbd-importer-stat-badge' }, '📚'),
-                            stats.sources + ' ' + __('Quellenangaben', 'container-block-designer')
-                        )
+                        CATEGORIES.filter(function(cat) { return countFor(cat.key) > 0; }).map(function(cat) {
+                            return el('li', {
+                                key: 'stat-' + cat.key,
+                                className: 'cbd-importer-stat-' + cat.key
+                            },
+                                el('span', { className: 'cbd-importer-stat-badge' }, cat.badge),
+                                countFor(cat.key) + ' ' + __('Blöcke', 'container-block-designer')
+                            );
+                        })
                     )
                 ),
 
                 el('div', { className: 'cbd-importer-mappings' },
-                    stats.k1 > 0 && el('div', { className: 'cbd-importer-mapping-row cbd-importer-mapping-k1' },
-                        el('span', { className: 'cbd-importer-mapping-badge' }, 'K1'),
-                        el(SelectControl, {
-                            label: __('Style für Basiswissen', 'container-block-designer'),
-                            value: styleMappings.k1,
-                            options: availableStyles,
-                            onChange: function(value) { setStyleMappings(Object.assign({}, styleMappings, { k1: value })); }
-                        })
-                    ),
+                    CATEGORIES.filter(function(cat) { return countFor(cat.key) > 0; }).map(function(cat) {
+                        return el('div', {
+                            key: 'map-' + cat.key,
+                            className: 'cbd-importer-mapping-row cbd-importer-mapping-' + cat.key
+                        },
+                            el('span', { className: 'cbd-importer-mapping-badge' }, cat.badge),
+                            el(SelectControl, {
+                                label: cat.label,
+                                value: styleMappings[cat.key],
+                                options: availableStyles,
+                                onChange: function(value) {
+                                    const next = Object.assign({}, styleMappings);
+                                    next[cat.key] = value;
+                                    setStyleMappings(next);
+                                }
+                            })
+                        );
+                    })
+                ),
 
-                    stats.k2 > 0 && el('div', { className: 'cbd-importer-mapping-row cbd-importer-mapping-k2' },
-                        el('span', { className: 'cbd-importer-mapping-badge' }, 'K2'),
-                        el(SelectControl, {
-                            label: __('Style für Erweitertes Wissen', 'container-block-designer'),
-                            value: styleMappings.k2,
-                            options: availableStyles,
-                            onChange: function(value) { setStyleMappings(Object.assign({}, styleMappings, { k2: value })); }
-                        })
-                    ),
-
-                    stats.k3 > 0 && el('div', { className: 'cbd-importer-mapping-row cbd-importer-mapping-k3' },
-                        el('span', { className: 'cbd-importer-mapping-badge' }, 'K3'),
-                        el(SelectControl, {
-                            label: __('Style für Vertiefendes Wissen', 'container-block-designer'),
-                            value: styleMappings.k3,
-                            options: availableStyles,
-                            onChange: function(value) { setStyleMappings(Object.assign({}, styleMappings, { k3: value })); }
-                        })
-                    ),
-
-                    stats.sources > 0 && el('div', { className: 'cbd-importer-mapping-row cbd-importer-mapping-sources' },
-                        el('span', { className: 'cbd-importer-mapping-badge' }, '📚'),
-                        el(SelectControl, {
-                            label: __('Style für Quellenangaben', 'container-block-designer'),
-                            value: styleMappings.sources,
-                            options: availableStyles,
-                            onChange: function(value) { setStyleMappings(Object.assign({}, styleMappings, { sources: value })); }
+                // Vorschau: welche Abschnitte wurden erkannt und wie werden sie eingefügt
+                el('details', { className: 'cbd-importer-preview' },
+                    el('summary', null, __('Erkannte Abschnitte anzeigen', 'container-block-designer')),
+                    el('ul', { className: 'cbd-importer-preview-list' },
+                        parsedData.sections.map(function(section, i) {
+                            const style = styleMappings[section.competence];
+                            const noContainer = !style || style === NO_CONTAINER;
+                            return el('li', { key: 'sec-' + i },
+                                el('code', null, section.competence.toUpperCase()),
+                                ' ',
+                                el('strong', null, section.blockTitle || __('(ohne Titel)', 'container-block-designer')),
+                                noContainer
+                                    ? ' — ' + __('ohne Container', 'container-block-designer')
+                                    : ' — ' + style
+                            );
                         })
                     )
                 ),
