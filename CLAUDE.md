@@ -239,7 +239,47 @@ PHP: `includes/class-cbd-content-importer.php`, UI: `assets/js/content-importer.
 | `# H1` | Thema (`topic`); dient als Titel-Fallback |
 | `## H2` | **Stilname.** Jede H2 bildet eine eigene Gruppe (`h2-<slug>`) = einen Stil-Slot im Dialog. Die Kompetenz-Schlüsselwörter (`$section_keywords`) steuern nur noch Badge-Farbe und den Legacy-Vorschlag, NICHT die Gruppierung |
 | `### H3` | Block-Titel (nicht im Inhalt) |
+| `<!-- accordion: … -->` | **Accordion-Direktive** für die gesamte laufende H2-Gruppe (siehe unten) |
 | alles andere | Inhalt |
+
+### Accordion-Import (seit v3.1.76)
+
+Eine Zeile der Form `<!-- accordion: level=3, numbering=true, multiple=false, openFirst=false, expandAll=false -->`
+unter einer H2 bedeutet: Die `###`-Abschnitte dieser Gruppe werden **nicht** als
+einzelne Container-Blöcke eingefügt, sondern als **ein** Block
+`modular-blocks/accordion` (Plugin „Eigene WP Blocks"), in dem jeder Abschnitt
+eine Klappzeile bildet — Abschnittstitel wird zur Überschrift der Ebene `level`,
+Abschnittsinhalt zum Zeileninhalt. Ohne Optionen (`<!-- accordion -->`) gelten
+die Defaults; `level` außerhalb 2–5 fällt auf 3 zurück; Wahrheitswerte werden
+tolerant gelesen (`true`/`1`/`ja`/`yes`).
+
+Die Direktivzeile wird aus dem Inhalt entfernt — sonst entstünde ein
+Extra-Abschnitt, dessen Inhalt nur aus dem HTML-Kommentar besteht. Die Direktive
+ist **gruppen-, nicht abschnittsgebunden** und wird bei der nächsten H2 (und bei
+H1) zurückgesetzt.
+
+Datenweg: `parse_accordion_directive()` → `$groups[$key]['accordion']`
+(`null` oder Objekt mit `enabled`/`level`/`multiple`/`numbering`/`openFirst`/`expandAll`)
+→ AJAX-Antwort unter `response.data.groups[i].accordion` → Einfüge-Zweig in
+`assets/js/content-importer.js`.
+
+**Kreuz-Plugin-Abhängigkeit (wichtig):** Der Zielblock stammt aus einem anderen
+Plugin. Das JS erzeugt ihn nur, wenn `wp.blocks.getBlockType('modular-blocks/accordion')`
+ihn kennt; fehlt er (Plugin nicht aktiv oder Block in „Einstellungen → Modulare
+Blöcke" abgeschaltet), greift das alte Verhalten und der Dialog zeigt eine
+erklärende Warnung. Niemals einen unregistrierten Blocktyp erzeugen — das ergibt
+im Editor „Block enthält unerwarteten Inhalt".
+
+**Kombination mit Stil:** Ist der Gruppe zusätzlich ein Container-Design
+zugewiesen, liegt das Accordion **innerhalb** des Containers (Container außen,
+`blockTitle` = H2-Text). Ohne Zuweisung kommt es direkt in die Seite.
+
+Im Dialog zeigt jede Direktiv-Gruppe „Wird als Accordion importiert – N
+Klappzeilen" plus eine vorbelegte Checkbox; Abwählen erzwingt das alte
+Verhalten. Die Direktive ist also ein Vorschlag, keine Zwangsjacke.
+
+Beim Ausrollen zählt die Reihenfolge: **erst** das Block-ZIP `accordion.zip`
+(damit der Blocktyp existiert), **dann** das CDB-Plugin-ZIP.
 
 Titel-Fallback-Kette: H3 → H2 → H1 → „Abschnitt N". Erfasst werden auch
 Präambeln vor der ersten Überschrift, Inhalt direkt unter H2 und Dateien

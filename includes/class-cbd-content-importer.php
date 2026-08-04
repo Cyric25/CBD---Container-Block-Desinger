@@ -289,6 +289,8 @@ class CBD_Content_Importer {
         $current_title_source = null; // h3 | h2 | h1 | none
         $current_section_heading = null; // letzte H2 (bestimmt die Gruppe)
         $current_content = array();
+        $current_accordion = null;    // Accordion-Direktive der aktuellen H2-Gruppe (oder null)
+        $group_accordions = array();  // Gruppenschlüssel => Accordion-Optionen (für alle Gruppen des Dokuments)
 
         foreach ($lines as $line) {
             $trimmed = trim($line);
@@ -307,6 +309,7 @@ class CBD_Content_Importer {
                 $current_topic = trim($matches[1]);
                 $current_competence = null;
                 $current_section_heading = null;
+                $current_accordion = null; // H1 beendet auch die Accordion-Gruppe der vorherigen H2
                 // H1 dient als Titel-Fallback, falls direkt Inhalt ohne H2/H3 folgt
                 $current_heading = $current_topic;
                 $current_title_source = 'h1';
@@ -323,6 +326,9 @@ class CBD_Content_Importer {
                 $current_competence = $this->detect_competence_level($heading, $known_designs);
                 // H2 bestimmt die Gruppe — bleibt auch über folgende H3 gültig
                 $current_section_heading = $heading;
+                // Neue H2 = neue Gruppe: eine Accordion-Direktive der vorherigen
+                // Gruppe darf nicht in die neue Gruppe "durchsickern".
+                $current_accordion = null;
 
                 // H2 ist Titel-Fallback: greift für Quellenverzeichnisse (dort gibt
                 // es kein H3) und generell für Inhalt direkt unter H2.
@@ -341,6 +347,25 @@ class CBD_Content_Importer {
                 $current_title_source = 'h3';
                 $current_content = array();
                 // H3 wird NICHT mehr zum Content hinzugefügt - nur als Block-Titel verwendet
+                continue;
+            }
+
+            // Accordion-Direktive: "<!-- accordion: level=3, numbering=true, ... -->"
+            // Gilt für die GESAMTE aktuelle H2-Gruppe (nicht nur den laufenden
+            // ###-Abschnitt) und darf NIE im Inhalt landen — sonst entsteht ein
+            // Extra-Abschnitt, dessen Inhalt nur aus dem HTML-Kommentar besteht.
+            if (preg_match('/^<!--\s*accordion\s*:?\s*(.*?)\s*-->$/i', $trimmed, $matches)) {
+                $current_accordion = $this->parse_accordion_directive($matches[1]);
+
+                // Gruppenschlüssel exakt wie in flush_section() bilden, damit die
+                // Direktive später beim Aufbau von $groups wiedergefunden wird.
+                if ($current_section_heading !== null && trim($current_section_heading) !== '') {
+                    $normalized_group = $this->normalize_key($current_section_heading);
+                    $accordion_group_key = $normalized_group !== '' ? 'h2-' . $normalized_group : 'other';
+                } else {
+                    $accordion_group_key = 'other';
+                }
+                $group_accordions[$accordion_group_key] = $current_accordion;
                 continue;
             }
 
@@ -399,7 +424,11 @@ class CBD_Content_Importer {
                     // Werden von ajax_parse_import_file() gefüllt (DB-Zugriff)
                     'suggestedStyle' => null, // nur bei exaktem Namenstreffer
                     'similarStyle' => null,   // unscharfer Treffer = Hinweis
-                    'matchedBy' => null       // exact|stem|partial|default|keyword
+                    'matchedBy' => null,      // exact|stem|partial|default|keyword
+                    // Accordion-Direktive dieser Gruppe (siehe parse_accordion_directive()),
+                    // oder null ohne Direktive — das UI soll sich auf dieses Feld
+                    // verlassen können, es wird daher nie weggelassen.
+                    'accordion' => isset($group_accordions[$key]) ? $group_accordions[$key] : null
                 );
             }
             $groups[$key]['count']++;
@@ -436,6 +465,92 @@ class CBD_Content_Importer {
                 'other' => count($grouped['other'])
             )
         );
+    }
+
+    /**
+     * Parst die Optionen der Accordion-Direktive
+     * ("<!-- accordion: level=3, numbering=true, multiple=false,
+     * openFirst=false, expandAll=false -->").
+     *
+     * Die Direktive gilt für die gesamte aktuelle H2-Gruppe: Ihre Abschnitte
+     * sollen im UI nicht als einzelne Container, sondern als EIN
+     * Accordion-Block eingefügt werden (jeder ###-Abschnitt = eine
+     * Klappzeile). Diese Methode erkennt nur die Optionen — das Einfügen
+     * selbst erledigt das UI (assets/js/content-importer.js).
+     *
+     * Fehlt die Optionsliste ganz ("<!-- accordion -->"), gelten alle
+     * Defaults. Unbekannte Schlüssel werden stillschweigend ignoriert,
+     * ungültige Werte fallen auf den jeweiligen Default zurück.
+     *
+     * @param string $options_string Text zwischen "accordion[:]" und "-->"
+     *                                (kann leer sein)
+     * @return array{enabled: bool, level: int, numbering: bool, multiple: bool, openFirst: bool, expandAll: bool}
+     */
+    private function parse_accordion_directive($options_string) {
+        $result = array(
+            'enabled'   => true,
+            'level'     => 3,
+            'numbering' => false,
+            'multiple'  => false,
+            'openFirst' => false,
+            'expandAll' => false
+        );
+
+        $options_string = trim((string) $options_string);
+        if ($options_string === '') {
+            return $result;
+        }
+
+        $pairs = explode(',', $options_string);
+        foreach ($pairs as $pair) {
+            $pair = trim($pair);
+            if ($pair === '' || strpos($pair, '=') === false) {
+                continue; // kein Schlüssel=Wert-Paar → ignorieren, nicht abbrechen
+            }
+
+            $parts = explode('=', $pair, 2);
+            $key = strtolower(trim($parts[0]));
+            $value = trim($parts[1]);
+
+            switch ($key) {
+                case 'level':
+                    $level = (int) $value;
+                    // Nur 2–5 sind gültige Verschachtelungstiefen für Klapp-
+                    // Überschriften; alles andere fällt auf den Default zurück.
+                    $result['level'] = ($level >= 2 && $level <= 5) ? $level : 3;
+                    break;
+                case 'numbering':
+                    $result['numbering'] = $this->parse_bool_option($value);
+                    break;
+                case 'multiple':
+                    $result['multiple'] = $this->parse_bool_option($value);
+                    break;
+                case 'openfirst':
+                    $result['openFirst'] = $this->parse_bool_option($value);
+                    break;
+                case 'expandall':
+                    $result['expandAll'] = $this->parse_bool_option($value);
+                    break;
+                default:
+                    // Unbekannter Schlüssel: bewusst ignorieren, nicht abbrechen.
+                    break;
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Liest einen Wahrheitswert aus einer Accordion-Option tolerant:
+     * "true", "1", "ja", "yes" (Groß-/Kleinschreibung egal) gelten als wahr,
+     * jeder andere Wert (auch ein leerer) als falsch.
+     *
+     * @param string $value
+     * @return bool
+     */
+    private function parse_bool_option($value) {
+        $normalized = strtolower(trim((string) $value));
+        return in_array($normalized, array('true', '1', 'ja', 'yes'), true);
     }
 
     /**

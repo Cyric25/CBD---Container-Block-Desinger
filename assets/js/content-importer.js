@@ -10,7 +10,7 @@
 (function() {
     const { registerPlugin } = wp.plugins;
     const { PluginMoreMenuItem } = wp.editor || wp.editPost; // WordPress 6.6+ compatibility
-    const { Modal, Button, Spinner, Notice, SelectControl, DropZone } = wp.components;
+    const { Modal, Button, Spinner, Notice, SelectControl, CheckboxControl, DropZone } = wp.components;
     const { useState, useEffect, createElement: el } = wp.element;
     const { __ } = wp.i18n;
     const { dispatch, select } = wp.data;
@@ -48,6 +48,19 @@
     };
 
     /**
+     * Prüft, ob der Accordion-Block aus dem Plugin "Eigene WP Blocks"
+     * registriert ist. Der Block ist optional (anderes Plugin, kann
+     * deinstalliert/deaktiviert oder in dessen Einstellungen abgeschaltet
+     * sein) — ohne ihn fällt der Import für Accordion-Gruppen auf das
+     * bisherige Verhalten (Container/Einzelabschnitte) zurück. Niemals
+     * einen nicht registrierten Blocktyp erzeugen (ergäbe im Editor
+     * "Block enthält unerwarteten Inhalt").
+     */
+    const isAccordionBlockAvailable = function() {
+        return !!(wp.blocks.getBlockType && wp.blocks.getBlockType('modular-blocks/accordion'));
+    };
+
+    /**
      * Content Importer Modal Component
      */
     const ContentImporterModal = function({ onClose }) {
@@ -59,6 +72,12 @@
         const [styleMappings, setStyleMappings] = useState({
             k1: '', k2: '', k3: '', sources: '', other: ''
         });
+        // Analog zu styleMappings: pro Gruppe mit Accordion-Direktive hält
+        // dies fest, ob sie tatsächlich als EIN Accordion-Block importiert
+        // werden soll (Checkbox im Dialog). Gruppen ohne Direktive haben
+        // hier bewusst keinen Eintrag. true = Vorschlag der Direktive
+        // übernehmen, false = Nutzer hat abgewählt → bisheriges Verhalten.
+        const [accordionMappings, setAccordionMappings] = useState({});
         const [availableStyles, setAvailableStyles] = useState([]);
         const [hasStyles, setHasStyles] = useState(true);
         const [isDragging, setIsDragging] = useState(false);
@@ -154,6 +173,19 @@
                                 next[group.key] = group.suggestedStyle;
                             } else if (!next[group.key]) {
                                 next[group.key] = NO_CONTAINER;
+                            }
+                        });
+                        return next;
+                    });
+
+                    // Accordion-Direktive: Checkbox vorbelegt mit "aktiv".
+                    // Nutzer kann im Dialog abwählen — dann greift für diese
+                    // Gruppe wieder das bisherige Verhalten.
+                    setAccordionMappings(function(prev) {
+                        const next = Object.assign({}, prev);
+                        groups.forEach(function(group) {
+                            if (group.accordion && group.accordion.enabled && typeof next[group.key] === 'undefined') {
+                                next[group.key] = true;
                             }
                         });
                         return next;
@@ -289,10 +321,99 @@
                 .map(function(s) { return s.value; })
                 .filter(function(v) { return v !== NO_CONTAINER; });
 
+            // Ob der Accordion-Block ("Eigene WP Blocks") überhaupt
+            // registriert ist. Fehlt er, fällt jede Accordion-Gruppe
+            // automatisch auf Container/Einzelabschnitte zurück (siehe
+            // Warn-Notice in renderStep2()).
+            const hasAccordion = isAccordionBlockAvailable();
+
+            const groupsByKey = {};
+            (parsedData.groups || []).forEach(function(g) { groupsByKey[g.key] = g; });
+
+            // Verhindert Mehrfach-Einfügung einer Accordion-Gruppe: ihre
+            // Abschnitte werden gesammelt eingefügt, sobald ihr erster
+            // Abschnitt an der Reihe ist — weitere Abschnitte derselben
+            // Gruppe werden danach übersprungen (siehe useAccordion-Zweig).
+            const handledAccordionGroups = {};
+
             parsedData.sections.forEach(function(section) {
                 // Bestimme Style anhand der Gruppe (Kompetenzstufe ODER
                 // eigenständige H2 wie "Übungen"/"Hinweise")
                 const groupKey = section.groupKey || section.competence;
+                const group = groupsByKey[groupKey];
+
+                // Accordion-Direktive vorhanden, vom Nutzer nicht abgewählt
+                // UND Blocktyp verfügbar → Gruppe als EIN Accordion-Block
+                // einfügen statt als einzelne Container/Abschnitte.
+                const useAccordion = hasAccordion && !!(group && group.accordion && group.accordion.enabled) &&
+                    accordionMappings[groupKey] !== false;
+
+                if (useAccordion) {
+                    // Diese Gruppe wurde beim ersten ihrer Abschnitte bereits
+                    // vollständig als Accordion eingefügt.
+                    if (handledAccordionGroups[groupKey]) {
+                        return;
+                    }
+                    handledAccordionGroups[groupKey] = true;
+
+                    // Alle Abschnitte dieser Gruppe (nicht nur den aktuellen)
+                    // in Dokumentreihenfolge sammeln — das Accordion steht an
+                    // der Stelle des ersten Abschnitts dieser Gruppe.
+                    const groupSections = parsedData.sections.filter(function(s) {
+                        return (s.groupKey || s.competence) === groupKey;
+                    });
+
+                    // Pro Abschnitt: Überschrift der eingestellten Ebene als
+                    // Zeilentitel, danach der Inhalt über die bestehende
+                    // HTML-zu-Blöcke-Konvertierung (inkl. Freeform-Fallback).
+                    const accordionInnerBlocks = [];
+                    groupSections.forEach(function(s) {
+                        accordionInnerBlocks.push(wp.blocks.createBlock('core/heading', {
+                            content: s.blockTitle,
+                            level: group.accordion.level
+                        }));
+
+                        const sectionBlocks = htmlToGutenbergBlocks(s.content);
+                        const finalSectionBlocks = sectionBlocks.length > 0 ? sectionBlocks : [
+                            wp.blocks.createBlock('core/freeform', {
+                                content: s.content
+                            })
+                        ];
+                        finalSectionBlocks.forEach(function(b) { accordionInnerBlocks.push(b); });
+                    });
+
+                    const accordionBlock = wp.blocks.createBlock('modular-blocks/accordion', {
+                        headingLevel: group.accordion.level,
+                        allowMultiple: group.accordion.multiple,
+                        openFirst: group.accordion.openFirst,
+                        showNumbering: group.accordion.numbering,
+                        showExpandAll: group.accordion.expandAll
+                    }, accordionInnerBlocks);
+
+                    // Container-Design zusätzlich zugewiesen? Dann kommt das
+                    // Accordion ALS EINZIGER Innenblock in den Container,
+                    // sonst wird es direkt eingefügt.
+                    let accordionStyle = styleMappings[groupKey];
+                    if (!accordionStyle || knownSlugs.indexOf(accordionStyle) === -1) {
+                        accordionStyle = NO_CONTAINER;
+                    }
+
+                    if (accordionStyle === NO_CONTAINER) {
+                        blocks.push(accordionBlock);
+                    } else {
+                        blocks.push(wp.blocks.createBlock(
+                            'container-block-designer/container',
+                            {
+                                selectedBlock: accordionStyle,
+                                blockTitle: group.label
+                            },
+                            [accordionBlock]
+                        ));
+                    }
+
+                    return;
+                }
+
                 let selectedStyle = styleMappings[groupKey];
 
                 // Kein/unbekannter Style → ohne Container einfügen, statt den
@@ -472,6 +593,13 @@
                 return s.value !== NO_CONTAINER;
             });
 
+            // Gruppen mit Accordion-Direktive (unabhängig vom Checkbox-
+            // Zustand) — für Hinweistext und die Verfügbarkeits-Warnung.
+            const accordionGroups = groups.filter(function(g) {
+                return g.accordion && g.accordion.enabled;
+            });
+            const hasAccordion = isAccordionBlockAvailable();
+
             // Setzt alle noch offenen Gruppen auf den gewählten Style
             const assignAllOpen = function() {
                 if (!bulkStyle) { return; }
@@ -504,6 +632,17 @@
                     __('Kein exakt gleichnamiges Block-Design für:', 'container-block-designer') +
                     ' ' + unmatched.map(function(g) { return '„' + g.label + '“'; }).join(', ') +
                     ' — ' + __('bitte unten selbst zuweisen (oder ohne Container importieren).', 'container-block-designer')
+                ),
+
+                // Accordion-Direktive(n) gefunden, aber der Block ist nicht
+                // registriert (anderes Plugin "Eigene WP Blocks" fehlt,
+                // ist deaktiviert, oder der Block dort abgeschaltet) — die
+                // betroffenen Gruppen fallen automatisch auf Container/
+                // Einzelabschnitte zurück (siehe insertBlocks()).
+                !hasAccordion && accordionGroups.length > 0 && el(Notice, { status: 'warning', isDismissible: false },
+                    __('Der Block „Accordion – Aufklappbare Zeilen“ ist nicht verfügbar (Plugin „Eigene WP Blocks“ nicht installiert/aktiviert oder der Block dort deaktiviert). Folgende Gruppen enthalten eine Accordion-Direktive und werden stattdessen wie gewohnt importiert:', 'container-block-designer') +
+                    ' ' + accordionGroups.map(function(g) { return '„' + g.label + '“'; }).join(', ') +
+                    '. ' + __('Um sie als Accordion zu importieren, den Block „Accordion – Aufklappbare Zeilen“ installieren und aktivieren.', 'container-block-designer')
                 ),
 
                 el('div', { className: 'cbd-importer-stats' },
@@ -594,7 +733,26 @@
                                         next[group.key] = value;
                                         setStyleMappings(next);
                                     }
-                                })
+                                }),
+                                // Nur bei Gruppen mit Accordion-Direktive: Hinweis
+                                // + Checkbox. Ohne Direktive kein zusätzliches
+                                // Element (kein Rauschen im Dialog).
+                                group.accordion && group.accordion.enabled && el('div', { className: 'cbd-importer-accordion-row' },
+                                    el('p', { className: 'cbd-importer-accordion-hint' },
+                                        __('Wird als Accordion importiert', 'container-block-designer') +
+                                        ' – ' + group.count + ' ' + __('Klappzeilen', 'container-block-designer')
+                                    ),
+                                    el(CheckboxControl, {
+                                        label: __('Als Accordion importieren', 'container-block-designer'),
+                                        checked: accordionMappings[group.key] !== false,
+                                        disabled: !hasAccordion,
+                                        onChange: function(checked) {
+                                            const next = Object.assign({}, accordionMappings);
+                                            next[group.key] = checked;
+                                            setAccordionMappings(next);
+                                        }
+                                    })
+                                )
                             )
                         );
                     })
