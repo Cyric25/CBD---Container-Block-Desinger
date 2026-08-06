@@ -139,6 +139,40 @@
         }
     };
 
+    /**
+     * Eigene SVG-Kacheln.
+     *
+     * Anders als die vier Font-Bibliotheken oben ist diese Liste NICHT im Code
+     * gepflegt: PHP scannt assets/icons/ (plus das Override-Verzeichnis in
+     * uploads/cbd-icons/) und reicht das Ergebnis über wp_localize_script als
+     * window.cbdIconLibrary herein. Neue oder ersetzte SVG-Dateien erscheinen
+     * dadurch ohne Code-Änderung im Picker.
+     */
+    const customIconData = (window.cbdIconLibrary && window.cbdIconLibrary.categories) || {};
+    const customIconUrls = {};
+
+    if (Object.keys(customIconData).length) {
+        const customCategories = {};
+
+        Object.keys(customIconData).forEach(function(key) {
+            const group = customIconData[key];
+            customCategories[key] = group.icons.map(function(icon) {
+                customIconUrls[icon.value] = icon.url;
+                return icon.value;
+            });
+        });
+
+        iconLibraries.custom = {
+            name: (window.cbdIconLibrary && window.cbdIconLibrary.label) || 'Eigene Icons',
+            type: 'custom',
+            categories: customCategories,
+            labels: Object.keys(customIconData).reduce(function(acc, key) {
+                acc[key] = customIconData[key].label;
+                return acc;
+            }, {})
+        };
+    }
+
     let currentLibrary = 'dashicons';
     let currentCategory = 'all';
     let selectedIcon = null;
@@ -218,62 +252,15 @@
         $('.cbd-library-tab').removeClass('active');
         $(`.cbd-library-tab[data-library="${library}"]`).addClass('active');
 
-        // Show/hide emoji picker
-        if (library === 'emoji') {
-            $('.cbd-icon-search').hide();
-            $('.cbd-icon-categories').hide();
-            $('.cbd-icon-grid').hide();
-            $('.cbd-emoji-picker-container').show();
+        // Der Emoji-Zweig ist entfallen (v3.1.77) — die zugehörige Bibliothek
+        // kam von einem CDN. Bereits gespeicherte Emoji-Icons rendert das
+        // Frontend weiterhin, nur neu auswählen lassen sie sich nicht mehr.
+        $('.cbd-icon-search').show();
+        $('.cbd-icon-categories').show();
+        $('.cbd-icon-grid').show();
 
-            // Initialize emoji picker
-            initEmojiPicker();
-        } else {
-            $('.cbd-icon-search').show();
-            $('.cbd-icon-categories').show();
-            $('.cbd-icon-grid').show();
-            $('.cbd-emoji-picker-container').hide();
-
-            // Populate categories
-            populateCategories();
-            populateIconGrid();
-        }
-    }
-
-    // Initialize Emoji Picker
-    function initEmojiPicker() {
-        const emojiPicker = document.querySelector('emoji-picker');
-
-        if (!emojiPicker) {
-            console.error('CBD: emoji-picker element not found');
-            return;
-        }
-
-        // Remove old event listener if exists
-        const oldListener = emojiPicker._cbdEmojiListener;
-        if (oldListener) {
-            emojiPicker.removeEventListener('emoji-click', oldListener);
-        }
-
-        // Create new event listener
-        const newListener = function(event) {
-            selectedIcon = {
-                type: 'emoji',
-                value: event.detail.unicode
-            };
-
-            // Show selected emoji in grid
-            $('.cbd-icon-grid').empty().append(
-                `<div class="cbd-icon-item selected" style="font-size: 48px; padding: 20px; text-align: center;">${event.detail.unicode}</div>`
-            );
-
-            window.cbdDebug && console.log('CBD: Emoji selected:', event.detail.unicode);
-        };
-
-        // Store listener reference for cleanup
-        emojiPicker._cbdEmojiListener = newListener;
-
-        // Add event listener
-        emojiPicker.addEventListener('emoji-click', newListener);
+        populateCategories();
+        populateIconGrid();
     }
 
     // Populate Category Buttons
@@ -289,8 +276,9 @@
         $categories.append(`<button type="button" class="cbd-icon-category active" data-category="all">Alle</button>`);
 
         // Add category buttons
+        const labels = iconLibraries[currentLibrary].labels || {};
         Object.keys(categories).forEach(category => {
-            const label = category.charAt(0).toUpperCase() + category.slice(1);
+            const label = labels[category] || (category.charAt(0).toUpperCase() + category.slice(1));
             $categories.append(`<button type="button" class="cbd-icon-category" data-category="${category}">${label}</button>`);
         });
     }
@@ -347,6 +335,12 @@
                 iconHTML = `<i class="lucide lucide-${icon}"></i>`;
                 $item.attr('data-icon', icon);
                 break;
+
+            case 'custom':
+                iconHTML = `<img class="cbd-custom-icon-preview" src="${customIconUrls[icon] || ''}" alt="" loading="lazy">`;
+                // Suchbar über den reinen Namen ohne Gruppenpräfix
+                $item.attr('title', icon.split('/').pop());
+                break;
         }
 
         $item.html(iconHTML);
@@ -400,7 +394,7 @@
 
         // Update preview
         const $selectedIcon = $('.cbd-selected-icon');
-        $selectedIcon.find('.dashicons, .fa-solid, .fa-regular, .fa-brands, .material-icons, .lucide, .cbd-emoji-icon').remove();
+        $selectedIcon.find('.dashicons, .fa-solid, .fa-regular, .fa-brands, .material-icons, .lucide, .cbd-emoji-icon, .cbd-custom-icon-preview').remove();
 
         let iconHTML = '';
         switch (iconData.type) {
@@ -416,8 +410,8 @@
             case 'lucide':
                 iconHTML = `<i class="lucide lucide-${iconData.value}"></i>`;
                 break;
-            case 'emoji':
-                iconHTML = `<span class="cbd-emoji-icon" style="font-size: 1.2em;">${iconData.value}</span>`;
+            case 'custom':
+                iconHTML = `<img class="cbd-custom-icon-preview" src="${customIconUrls[iconData.value] || ''}" alt="">`;
                 break;
         }
 

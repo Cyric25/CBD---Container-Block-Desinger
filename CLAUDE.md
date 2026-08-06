@@ -334,6 +334,183 @@ in `docs/VERBESSERUNGSPLAN-5.md` (Abschnitt AP43) verwenden — der Parser läss
 sich mit wenigen Stubs (`add_action`, `__`, `esc_html`, `esc_url`) headless
 gegen die echten Dateien in `Inhalte/` ausführen.
 
+## Eigene Icon-Bibliothek (SVG-Kacheln, seit v3.1.77)
+
+Sechste Bibliothek im Icon-Picker neben Dashicons, Font Awesome, Material,
+Lucide und Emoji — mehrfarbige SVG-Kacheln (Verlauf + Plastik-Effekt,
+Basisfarbe `#e24614` = Theme-UI-Farbe).
+
+**Der Bestand steht NICHT im Code.** `CBD_Icon_Library` (`includes/class-cbd-icon-library.php`)
+scannt zur Laufzeit das Dateisystem. Ein Icon hinzufügen oder ersetzen heißt
+also: SVG-Datei ablegen bzw. überschreiben — kein Code-Update, kein
+Rebuild.
+
+| Gruppe | Ordner | Verwendung |
+|---|---|---|
+| `kategorien` | `assets/icons/kategorien/` | Block-Icons (informationen, hinweise, experimente, aufgaben, kontext) |
+| `zahlen` | `assets/icons/zahlen/` | Nummerierungs-Feature, 1–100 |
+| `ui` | `assets/icons/ui/` | allgemeine Symbole |
+
+**Zwei Quellen, Override gewinnt:**
+
+1. `assets/icons/<gruppe>/<name>.svg` — mit dem Plugin ausgeliefert
+2. `wp-content/uploads/cbd-icons/<gruppe>/<name>.svg` — überschreibt gleichnamige
+   Plugin-Icons und kann neue ergänzen, **ohne neues Plugin-ZIP**
+
+Weitere Quellen über den Filter `cbd_icon_library_sources`.
+
+### Upload-Seite (Container Designer → Icons)
+
+`CBD_Icon_Manager` (`includes/class-cbd-icon-manager.php`) + View in
+`admin/icon-manager.php`. Schreibt **ausschließlich** nach
+`uploads/cbd-icons/`; die Plugin-Icons unter `assets/icons/` werden nie
+verändert. Löscht man ein hochgeladenes Icon, gilt wieder das Original —
+der Button heißt in dem Fall „Original wiederherstellen".
+
+Aktionen laufen über `admin-post.php` (`cbd_icon_upload`, `cbd_icon_delete`,
+`cbd_icon_flush`), jeweils mit Nonce und Capability `cbd_admin_blocks`.
+
+**Sicherheitskette pro Upload — nicht abkürzen:**
+
+1. Capability + Nonce
+2. Endung muss `.svg` sein, `is_uploaded_file()`
+3. `sanitize_icon_name()` normalisiert auf `[a-z0-9_-]` (verhindert
+   Verzeichnis-Ausbruch; `../../../wp-config` wird zu `wp-config`)
+4. `CBD_SVG_Sanitizer::sanitize()` — **Whitelist**, keine Blacklist
+5. Geschrieben wird das Ergebnis des Sanitizers, **nie** die Originaldatei
+   (kein `move_uploaded_file`)
+6. `.htaccess` im Zielverzeichnis verweigert ausführbare Endungen
+
+Was der Sanitizer entfernt bzw. ablehnt, meldet die Seite dem Nutzer
+zurück — ein stillschweigend kaputtes Icon wäre sonst schwer zu erklären.
+
+**Warum überhaupt ein eigener Sanitizer:** SVG ist XML und darf `<script>`,
+`on*`-Handler, `xlink:href` auf fremde Dokumente und `<foreignObject>`
+enthalten. Beim direkten Aufruf der Datei-URL führt der Browser das aus —
+deshalb blockiert WordPress SVG-Uploads standardmäßig. DOCTYPE/ENTITY werden
+komplett abgelehnt (XXE), nicht repariert.
+
+Tests: `php tools/test-svg-sanitizer.php` (36 Prüfungen: Angriffsmuster raus,
+legitime Kacheln inkl. Verlauf/Filter heil) und
+`php tools/test-icon-manager.php` (Dateinamen-Normalisierung, Ausbruchsversuche,
+Rundlauf mit `parse_value()`).
+
+**Cache:** Transient (1 Tag), Key enthält `CBD_VERSION`. Im Admin wird der
+Cache bewusst umgangen und dabei neu geschrieben — ein Aufruf der
+Block-Verwaltung macht neue Icons also auch im Frontend sichtbar. Manuell:
+`CBD_Icon_Library::flush_cache()`. Cache-Busting pro Datei über `filemtime()`
+als `?ver=`.
+
+**Speicherformat:** wie die anderen Bibliotheken JSON im `features`-Feld —
+`{"type":"custom","value":"kategorien/experimente"}`. Der Wert ist
+`<gruppe>/<name>`; `parse_value()` lässt nur bekannte Gruppen und
+`[a-z0-9_-]`-Namen durch (Schutz vor Verzeichnis-Traversal).
+
+**Immer als `<img>`, nie inline.** Die generierten SVGs verwenden feste
+IDs (`bg`, `gloss`, `plastic`, `lift`). Inline eingebunden würden sich
+mehrere Kacheln auf einer Seite gegenseitig Verläufe und Filter überschreiben.
+Als `<img>` ist jede Kachel ein eigenes Dokument. Konsequenz: `currentColor`
+funktioniert nicht — die Farbe steckt in der Datei.
+
+### Nummerierung als Kachel
+
+Das `numbering`-Feature rendert Zahlenkacheln statt der schwarzen Textblase.
+Die eigentliche Nummer setzt weiterhin `assets/js/block-numbering.js` im
+Browser (WordPress rendert Blöcke nicht in Dokumentreihenfolge); PHP liefert
+nur ein `<img>` ohne `src` plus die Daten in `window.cbdNumberIcons`.
+
+Zwei Rückfallebenen, beide automatisch:
+- Format `roman`/`alphabetic` → Textblase wie bisher (dafür gibt es keine Kacheln)
+- mehr Blöcke als Kacheln → JS setzt `.cbd-number-fallback`, CSS reaktiviert die Textblase
+
+Mehr Kacheln erzeugen: `python generate_iconset_local.py --max-number 200 --out …`
+(Generator liegt in `Website/Icons/`).
+
+**CSS-Fallstrick:** Die Ursprungsregeln für `.cbd-outside-number` in
+`cbd-frontend-clean.css` arbeiten mit `!important` (u. a. `z-index: -1`).
+`assets/css/custom-icons.css` neutralisiert sie deshalb ebenfalls mit
+`!important` und ist per Handle von `cbd-frontend-clean` abhängig — die
+Reihenfolge ist zwingend.
+
+### Icons neu erzeugen
+
+Generator: `Website/Icons/generate_iconset_local.py` (Python, braucht
+`svgelements` + `pillow`, kein Cairo).
+
+```bash
+cd Website/Icons
+python generate_iconset_local.py --out "../Plugins/CDB-Designer/assets/icons"
+python generate_iconset_local.py --color "#71230a" --out …   # andere Basisfarbe
+```
+
+Prüfen: `php tools/test-icon-library.php` (Standalone-Harness ohne WordPress,
+testet Bestand, Sortierung, URL-Bildung, Traversal-Schutz, Admin-Vorschau).
+
+## Icon-Wert: kanonisches Parsen (Fix v3.1.78)
+
+`CBD_Icon_Library::parse_stored_value()` ist die **einzige** Stelle, die das
+Speicherformat des Icon-Werts interpretiert. `CBD_Block_Registration::parse_icon_value()`
+und die Admin-Vorschau delegieren dorthin.
+
+**Der Bug, der dahintersteckt:** `cbd_parse_features_from_post()` speicherte den
+Wert mit `sanitize_text_field()` — aber ohne `wp_unslash()`. WordPress versieht
+`$_POST` mit Slashes, in der DB landete also `{\"type\":\"custom\",…}`.
+`json_decode` scheiterte, der Code fiel auf den Legacy-Zweig zurück und baute
+daraus einen Dashicon-Klassennamen: `<span class="dashicons dashicons-{\"type\"…">`
+— ein leeres Span. Betroffen war **jede** Bibliothek außer Dashicons (die haben
+keine Anführungszeichen), also Font Awesome, Material, Lucide und die eigenen
+Kacheln.
+
+Zwei Konsequenzen, beide behoben:
+
+1. Speichern läuft jetzt über `cbd_sanitize_icon_value()` — `wp_unslash()`,
+   Typ-Whitelist, kanonisches Neukodieren
+2. `parse_stored_value()` repariert **Altbestände** beim Lesen: schlägt
+   `json_decode` fehl, folgt ein zweiter Versuch mit `stripslashes()`. Bereits
+   gespeicherte Designs rendern dadurch wieder korrekt, ohne neu gespeichert
+   werden zu müssen.
+
+Nebenwirkung des Bugs war außerdem, dass `get_required_icon_libraries()` den Typ
+`custom` nie sah und `custom-icons.css` deshalb nicht eingebunden wurde.
+
+Test: `php tools/test-icon-value.php` (Rundlauf Picker → `$_POST` mit Slashes →
+Speichern → Lesen → Rendern, plus Reparatur von Altbeständen).
+
+## Designs exportieren / importieren (v3.1.78)
+
+Container Designer → **Export / Import**. `CBD_Design_Transfer`
+(`includes/class-cbd-design-transfer.php`) + View in `admin/design-transfer.php`.
+
+Ersetzt die in v3.1.50 abgeschaltete Seite `admin/import-export.php` (die
+Datei liegt noch im Repo, ist aber nirgends verlinkt). Bewusst **nur ein**
+Eingabeweg: eine hochgeladene JSON-Datei. Kein URL-Abruf (SSRF), kein ZIP —
+genau die Gründe, warum die alte Seite entfernt wurde.
+
+**Zweistufig:** Datei prüfen → Vorschau mit Konfliktliste → Import ausführen.
+Ein Import kann bestehende Designs überschreiben, deshalb wird vorher gezeigt,
+was passiert.
+
+**Konfliktbehandlung** bei gleichem Slug: überspringen (Default), überschreiben
+oder als Kopie mit neuem Slug anlegen.
+
+**Format:** `{"format":"cbd-designs","formatVersion":1,"designs":[…]}`.
+Exportiert werden `name, title, description, config, styles, features, status,
+is_default` — **ohne** `id` und Zeitstempel, damit nichts kollidiert.
+`config`/`styles`/`features` liegen in der Datei als echte Objekte statt als
+JSON-in-JSON, also lesbar und diff-bar.
+
+**Der Slug entscheidet.** Seiten referenzieren ihr Design über `name`. Import
+unter abweichendem Slug lässt bestehende Container ungestylt — die Seite weist
+darauf hin.
+
+Nach dem Import werden Style- und Blocklisten-Cache geleert
+(`CBD_Block_Registration::clear_blocks_cache()`), sonst greifen neue Designs
+erst nach Ablauf der Transients.
+
+Test: `php tools/test-design-transfer.php` (Ablehnung ungültiger Dateien,
+Slug-Normalisierung inkl. Traversal, doppelte Slugs, Markup-Entschärfung,
+Verwerfen unbekannter Felder, Export→Import-Rundlauf).
+
 ## Debugging-Konventionen
 
 - **PHP:** Informations-Logs laufen über klasseneigene `debug_log()`-Helper

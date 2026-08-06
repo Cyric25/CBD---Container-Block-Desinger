@@ -102,6 +102,55 @@ if (!function_exists('cbd_has_service')) {
  * @param array $post Der komplette $_POST-Array
  * @return array Kanonische Feature-Struktur (für wp_json_encode in DB-Spalte features)
  */
+/**
+ * Sanitisiert den Icon-Wert aus $_POST.
+ *
+ * Der Wert ist entweder ein Legacy-Dashicons-Klassenname ("dashicons-star")
+ * oder ein JSON-Objekt {"type":"custom","value":"kategorien/experimente"}.
+ * Beide Formen müssen den Weg in die DB unbeschadet überstehen:
+ *
+ *   1. wp_unslash() — WordPress slasht $_POST; ohne das wird das JSON ungültig
+ *   2. Typ gegen die Whitelist prüfen (CBD_Icon_Library::TYPES)
+ *   3. kanonisch neu kodieren, statt den Eingabestring durchzureichen
+ *
+ * @param mixed $raw Rohwert aus $_POST
+ * @return string Speicherfertiger Wert
+ */
+if (!function_exists('cbd_sanitize_icon_value')) {
+    function cbd_sanitize_icon_value($raw) {
+        $raw = wp_unslash((string) $raw);
+
+        $decoded = json_decode($raw, true);
+
+        if (is_array($decoded) && isset($decoded['type'], $decoded['value'])) {
+            $types = class_exists('CBD_Icon_Library')
+                ? CBD_Icon_Library::TYPES
+                : array('dashicons', 'fontawesome', 'material', 'lucide', 'custom', 'emoji');
+
+            if (!in_array($decoded['type'], $types, true)) {
+                return 'dashicons-admin-generic';
+            }
+
+            // Emoji darf nicht durch sanitize_text_field, das würde je nach
+            // Zeichen Teile der Sequenz zerlegen; alle anderen Typen schon.
+            $value = ('emoji' === $decoded['type'])
+                ? wp_kses((string) $decoded['value'], array())
+                : sanitize_text_field((string) $decoded['value']);
+
+            if ('' === $value) {
+                return 'dashicons-admin-generic';
+            }
+
+            return wp_json_encode(array('type' => $decoded['type'], 'value' => $value));
+        }
+
+        // Legacy-Pfad: Dashicons-Klassenname
+        $class = sanitize_html_class($raw);
+
+        return ('' !== $class) ? $class : 'dashicons-admin-generic';
+    }
+}
+
 if (!function_exists('cbd_parse_features_from_post')) {
     function cbd_parse_features_from_post($post) {
         $f = (isset($post['features']) && is_array($post['features'])) ? $post['features'] : array();
@@ -109,7 +158,13 @@ if (!function_exists('cbd_parse_features_from_post')) {
         return array(
             'icon' => array(
                 'enabled' => isset($f['icon']['enabled']),
-                'value' => sanitize_text_field($f['icon']['value'] ?? 'dashicons-admin-generic'),
+                // NICHT sanitize_text_field() allein: der Wert ist bei allen
+                // Bibliotheken außer Dashicons ein JSON-Objekt, und WordPress
+                // versieht $_POST mit Slashes. Ohne wp_unslash() landete
+                // {\"type\":\"custom\",…} in der DB -> json_decode scheitert
+                // -> Fallback auf einen Dashicon-Klassennamen aus dem rohen
+                // JSON -> gar kein Icon sichtbar (Fix v3.1.78).
+                'value' => cbd_sanitize_icon_value($f['icon']['value'] ?? 'dashicons-admin-generic'),
                 'position' => sanitize_text_field($f['icon']['position'] ?? 'top-left')
             ),
             'collapse' => array(

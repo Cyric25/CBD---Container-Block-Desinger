@@ -121,18 +121,10 @@
     color: #fff;
 }
 
-/* Emoji Picker */
-.cbd-emoji-picker-container {
-    padding: 16px;
-    display: flex;
-    justify-content: center;
-}
-
-.cbd-emoji-picker-container emoji-picker {
-    width: 100%;
-    max-width: 500px;
-    --border-radius: 8px;
-}
+/* Der Emoji-Picker ist entfallen (v3.1.77, CDN-Abhängigkeit).
+   Die Regel für .cbd-emoji-icon weiter unten bleibt bewusst bestehen:
+   Block-Designs mit bereits gespeichertem Emoji zeigen dieses im Formular
+   weiterhin an. */
 
 /* Selected Icon Display */
 .cbd-selected-icon {

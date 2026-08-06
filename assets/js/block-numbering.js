@@ -35,9 +35,50 @@
         // Renumber only top-level blocks
         topLevelNumbers.forEach(function(element, index) {
             const blockNumber = index + 1;
-            element.textContent = blockNumber;
             element.setAttribute('data-number', blockNumber);
+
+            if (element.classList.contains('cbd-number-as-icon')) {
+                applyNumberIcon(element, blockNumber);
+            } else {
+                element.textContent = blockNumber;
+            }
         });
+    }
+
+    /**
+     * Setzt die Zahlen-Kachel. Gibt es für die Zahl kein Icon (z. B. mehr
+     * Blöcke als Kacheln), fällt das Element auf die Textblase zurück.
+     */
+    function applyNumberIcon(element, blockNumber) {
+        const config = window.cbdNumberIcons || {};
+        const img = element.querySelector('.cbd-number-icon');
+        const label = element.querySelector('.screen-reader-text');
+        const max = parseInt(config.max, 10) || 0;
+
+        if (!img || !config.base || blockNumber > max) {
+            // Fallback: Textblase. Die Klasse schaltet die Icon-Styles ab.
+            element.classList.add('cbd-number-fallback');
+            if (img) {
+                img.remove();
+            }
+            element.textContent = blockNumber;
+            return;
+        }
+
+        element.classList.remove('cbd-number-fallback');
+
+        let src = config.base + blockNumber + '.svg';
+        if (config.ver) {
+            src += '?ver=' + encodeURIComponent(config.ver);
+        }
+
+        if (img.getAttribute('src') !== src) {
+            img.setAttribute('src', src);
+        }
+
+        if (label) {
+            label.textContent = blockNumber;
+        }
     }
 
     /**

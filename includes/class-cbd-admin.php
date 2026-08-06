@@ -240,6 +240,26 @@ class CBD_Admin {
                 array($this, 'render_blocks_list_page')
             );
 
+            // Untermenü: Icons verwalten - eigene SVG-Kacheln hochladen
+            add_submenu_page(
+                'container-block-designer',
+                __('Icons verwalten', 'container-block-designer'),
+                __('Icons', 'container-block-designer'),
+                CBD_Icon_Manager::CAPABILITY,
+                CBD_Icon_Manager::PAGE_SLUG,
+                array($this, 'render_icon_manager_page')
+            );
+
+            // Untermenü: Designs exportieren/importieren (JSON)
+            add_submenu_page(
+                'container-block-designer',
+                __('Designs exportieren / importieren', 'container-block-designer'),
+                __('Export / Import', 'container-block-designer'),
+                CBD_Design_Transfer::CAPABILITY,
+                CBD_Design_Transfer::PAGE_SLUG,
+                array($this, 'render_design_transfer_page')
+            );
+
             // Untermenü: Import/Export - AUSGEBLENDET (v3.1.50)
             // Die Seite verarbeitete Uploads serverseitig nie und bündelte drei
             // riskante Eingabewege (Datei-Upload inkl. ZIP, JSON-Paste, URL-Fetch/
@@ -425,25 +445,16 @@ class CBD_Admin {
                     CBD_VERSION
                 );
 
-                // Emoji Picker Library (ES Module)
-                wp_enqueue_script(
-                    'emoji-picker-element',
-                    'https://cdn.jsdelivr.net/npm/emoji-picker-element@1.21.0/index.js',
-                    array(),
-                    '1.21.0',
-                    array(
-                        'strategy' => 'defer',
-                        'in_footer' => true
-                    )
-                );
-
-                // Mark as module type
-                add_filter('script_loader_tag', function($tag, $handle) {
-                    if ('emoji-picker-element' === $handle) {
-                        return str_replace(' src', ' type="module" src', $tag);
-                    }
-                    return $tag;
-                }, 10, 2);
+                // Emoji-Picker entfernt (v3.1.77): Die Bibliothek wurde von
+                // cdn.jsdelivr.net nachgeladen — unvereinbar mit der
+                // Entscheidung, aus DSGVO-Gründen alles lokal zu bündeln
+                // (siehe Font Awesome, Material Icons und Lucide unter
+                // assets/vendor/). Die Auswahl entfällt; bereits gespeicherte
+                // Emoji-Icons werden weiterhin gerendert (Legacy-Zweig in
+                // CBD_Block_Registration::render_icon()).
+                //
+                // Offen: assets/js/html2pdf-loader.js und assets/js/board-mode.js
+                // laden weiterhin von CDNs (html2pdf, Plotly, 3Dmol).
 
                 wp_enqueue_script(
                     'cbd-block-editor',
@@ -460,6 +471,22 @@ class CBD_Admin {
                     array('jquery'),
                     CBD_VERSION,
                     true
+                );
+
+                // Eigene SVG-Kacheln: Bestand aus dem Dateisystem an den
+                // Picker durchreichen (siehe CBD_Icon_Library) — dadurch
+                // braucht ein neues oder ersetztes Icon kein Code-Update.
+                $cbd_icon_data          = CBD_Icon_Library::get_picker_data();
+                $cbd_icon_data['label'] = __('Eigene Icons', 'container-block-designer');
+
+                wp_localize_script('cbd-icon-picker', 'cbdIconLibrary', $cbd_icon_data);
+
+                // Styles der Kachel-Vorschau im Picker
+                wp_enqueue_style(
+                    'cbd-custom-icons',
+                    CBD_PLUGIN_URL . 'assets/css/custom-icons.css',
+                    array('cbd-icon-picker'),
+                    CBD_VERSION
                 );
 
                 // Admin.js für Style-Preview
@@ -942,6 +969,34 @@ class CBD_Admin {
     /**
      * Neue Block-Seite rendern
      */
+    /**
+     * Seite "Icons verwalten" ausgeben.
+     */
+    /**
+     * Seite "Designs exportieren / importieren" ausgeben.
+     */
+    public function render_design_transfer_page() {
+        $file_path = CBD_PLUGIN_DIR . 'admin/design-transfer.php';
+
+        if (file_exists($file_path)) {
+            include $file_path;
+        } else {
+            echo '<div class="wrap"><h1>' . esc_html__('Designs exportieren / importieren', 'container-block-designer') . '</h1>';
+            echo '<p>' . esc_html__('Die Seite konnte nicht geladen werden.', 'container-block-designer') . '</p></div>';
+        }
+    }
+
+    public function render_icon_manager_page() {
+        $file_path = CBD_PLUGIN_DIR . 'admin/icon-manager.php';
+
+        if (file_exists($file_path)) {
+            include $file_path;
+        } else {
+            echo '<div class="wrap"><h1>' . esc_html__('Icons verwalten', 'container-block-designer') . '</h1>';
+            echo '<p>' . esc_html__('Die Seite konnte nicht geladen werden.', 'container-block-designer') . '</p></div>';
+        }
+    }
+
     public function render_new_block_page() {
         $file_path = CBD_PLUGIN_DIR . 'admin/new-block.php';
         

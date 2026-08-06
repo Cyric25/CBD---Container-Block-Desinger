@@ -516,6 +516,15 @@ class CBD_Block_Registration {
                 CBD_VERSION,
                 true
             );
+
+            // Zahlen-Kacheln: das Script setzt die Nummer erst im Browser und
+            // braucht dafür Basis-URL, Cache-Buster und die höchste
+            // verfügbare Kachel (darüber fällt es auf Text zurück).
+            wp_localize_script(
+                'cbd-block-numbering',
+                'cbdNumberIcons',
+                CBD_Icon_Library::get_number_assets()
+            );
         }
 
         // ==============================================
@@ -571,6 +580,23 @@ class CBD_Block_Registration {
                 CBD_PLUGIN_URL . 'assets/vendor/lucide/lucide.css',
                 array(),
                 '0.454.0'
+            );
+        }
+
+        // Eigene SVG-Kacheln: gebraucht für Block-Icons vom Typ 'custom' UND
+        // für die Nummerierung, die ebenfalls Kacheln verwendet.
+        $needs_custom_icons = !empty($icon_libs['custom'])
+            || ($this->any_active_block_has_feature('numbering') && CBD_Icon_Library::get_max_number() > 0);
+
+        if ($needs_custom_icons) {
+            // Abhängigkeit von cbd-frontend-clean ist wichtig: die dortigen
+            // !important-Regeln für .cbd-outside-number müssen VORHER stehen,
+            // sonst gewinnen sie gegen die Neutralisierung hier.
+            wp_enqueue_style(
+                'cbd-custom-icons',
+                CBD_PLUGIN_URL . 'assets/css/custom-icons.css',
+                array('cbd-frontend-clean'),
+                CBD_VERSION
             );
         }
 
@@ -1028,10 +1054,27 @@ class CBD_Block_Registration {
         $show_number = (self::$render_depth == 1) && !empty($features['numbering']['enabled']);
 
         if ($show_number) {
-            // Add a marker class for JavaScript to find and renumber
-            $html .= "<div class=\"cbd-container-number cbd-outside-number cbd-needs-numbering\" data-number=\"0\" style=\"position: absolute !important; top: -40px !important; left: -40px !important; background: rgba(0,0,0,0.9) !important; color: white !important; width: 34px !important; height: 34px !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 15px !important; font-weight: bold !important; z-index: -1 !important; border: 2px solid white !important;\">";
-            $html .= '?'; // Placeholder - will be replaced by JavaScript
-            $html .= '</div>';
+            $number_format = isset($features['numbering']['format']) ? $features['numbering']['format'] : 'numeric';
+
+            // Zahlen-Kacheln gibt es nur für das numerische Format; römisch und
+            // alphabetisch bleiben Text (AP: Numbering auf Icons umgestellt).
+            $use_number_icons = ('numeric' === $number_format)
+                && CBD_Icon_Library::get_max_number() > 0;
+
+            if ($use_number_icons) {
+                // Die eigentliche Nummer setzt block-numbering.js — WordPress
+                // rendert die Blöcke nicht in Dokumentreihenfolge. Das <img>
+                // startet ohne src und bekommt sie dort zugewiesen.
+                $html .= '<div class="cbd-container-number cbd-outside-number cbd-needs-numbering cbd-number-as-icon" data-number="0">';
+                $html .= '<img class="cbd-number-icon" src="" alt="" width="34" height="34" decoding="async" aria-hidden="true">';
+                $html .= '<span class="screen-reader-text"></span>';
+                $html .= '</div>';
+            } else {
+                // Add a marker class for JavaScript to find and renumber
+                $html .= "<div class=\"cbd-container-number cbd-outside-number cbd-needs-numbering\" data-number=\"0\" style=\"position: absolute !important; top: -40px !important; left: -40px !important; background: rgba(0,0,0,0.9) !important; color: white !important; width: 34px !important; height: 34px !important; border-radius: 50% !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: 15px !important; font-weight: bold !important; z-index: -1 !important; border: 2px solid white !important;\">";
+                $html .= '?'; // Placeholder - will be replaced by JavaScript
+                $html .= '</div>';
+            }
         }
         
         // Content wrapper div for collapse functionality
@@ -1170,7 +1213,7 @@ class CBD_Block_Registration {
                 $icon_value = $features['icon']['value'] ?? 'dashicons-admin-generic';
                 $icon_color = !empty($features['icon']['color']) ? $features['icon']['color'] : 'inherit';
 
-                $html .= '<span class="cbd-header-icon">';
+                $html .= '<span class="cbd-header-icon' . $this->custom_icon_class($icon_value) . '">';
                 $html .= $this->render_icon($icon_value, $icon_color);
                 $html .= '</span>';
             }
@@ -1255,7 +1298,7 @@ class CBD_Block_Registration {
         if (!empty($features['icon']['enabled'])) {
             $icon_value = $features['icon']['value'] ?? 'dashicons-admin-generic';
             $icon_color = $features['icon']['color'] ?? 'inherit';
-            $html .= '<div class="cbd-container-icon">';
+            $html .= '<div class="cbd-container-icon' . $this->custom_icon_class($icon_value) . '">';
             $html .= $this->render_icon($icon_value, $icon_color, array('aria-hidden' => 'true'));
             $html .= '</div>';
         }
@@ -1267,10 +1310,23 @@ class CBD_Block_Registration {
             
             $format = $features['numbering']['format'] ?? 'numeric';
             $number = $this->format_number($numbering_counter, $format);
-            
-            $html .= '<div class="cbd-container-number" data-number="' . esc_attr($numbering_counter) . '">';
-            $html .= esc_html($number);
-            $html .= '</div>';
+
+            // Zahlen-Kachel statt Textblase, sofern es eine für diese Zahl gibt.
+            $number_icon = ('numeric' === $format)
+                ? CBD_Icon_Library::get_number_icon_url($numbering_counter)
+                : '';
+
+            if ('' !== $number_icon) {
+                $html .= '<div class="cbd-container-number cbd-number-as-icon" data-number="' . esc_attr($numbering_counter) . '">';
+                $html .= '<img class="cbd-number-icon" src="' . esc_url($number_icon) . '"'
+                    . ' alt="" width="34" height="34" loading="lazy" decoding="async" aria-hidden="true">';
+                $html .= '<span class="screen-reader-text">' . esc_html($number) . '</span>';
+                $html .= '</div>';
+            } else {
+                $html .= '<div class="cbd-container-number" data-number="' . esc_attr($numbering_counter) . '">';
+                $html .= esc_html($number);
+                $html .= '</div>';
+            }
         }
         
         // Action Buttons - DISABLED: All buttons now in dropdown menu only
@@ -1931,6 +1987,21 @@ class CBD_Block_Registration {
         return $libraries;
     }
 
+    /**
+     * Zusatz-Klasse für Icon-Wrapper, wenn eine eigene SVG-Kachel drinsteckt.
+     *
+     * Wird serverseitig gesetzt statt per CSS :has() ermittelt — die
+     * Positionierungs-Styles zeichnen sonst einen blauen Kreis um die Kachel.
+     *
+     * @param string $icon_value
+     * @return string '' oder ' cbd-has-custom-icon'
+     */
+    private function custom_icon_class($icon_value) {
+        $icon_data = $this->parse_icon_value($icon_value);
+
+        return ('custom' === $icon_data['type']) ? ' cbd-has-custom-icon' : '';
+    }
+
     private function render_icon($icon_value, $color = 'inherit', $attributes = array()) {
         if (empty($icon_value)) {
             return '';
@@ -1951,6 +2022,20 @@ class CBD_Block_Registration {
 
         // Render based on type
         switch ($type) {
+            case 'custom':
+                // Eigene SVG-Kachel: <img src="…/kategorien/experimente.svg">
+                // Bewusst als <img> und nicht inline — die SVGs verwenden feste
+                // IDs (bg/gloss/plastic/lift); inline würden sich mehrere Icons
+                // auf einer Seite gegenseitig die Verläufe und Filter klauen.
+                $icon_url = CBD_Icon_Library::get_icon_url($value);
+                if ('' === $icon_url) {
+                    return '';
+                }
+                // Kein color:-Style — die Kacheln bringen ihre Farbe selbst mit.
+                return '<img class="cbd-custom-icon" src="' . esc_url($icon_url) . '"'
+                    . ' alt="" width="24" height="24" loading="lazy" decoding="async"'
+                    . $attr_string . '>';
+
             case 'fontawesome':
                 // Font Awesome: <i class="fa-solid fa-star"></i>
                 return '<i class="' . esc_attr($value) . '" style="' . $style . '"' . $attr_string . '></i>';
@@ -1964,8 +2049,12 @@ class CBD_Block_Registration {
                 return '<i class="lucide lucide-' . esc_attr($value) . '" style="' . $style . '"' . $attr_string . '></i>';
 
             case 'emoji':
-                // Emoji: <span>😀</span>
-                return '<span class="cbd-emoji-icon" style="' . $style . ' font-size: 1.2em;"' . $attr_string . '>' . $value . '</span>';
+                // LEGACY (seit v3.1.77): Der Emoji-Picker wurde entfernt, weil
+                // seine Bibliothek von einem CDN kam. Neue Emoji-Icons lassen
+                // sich nicht mehr auswählen — dieser Zweig bleibt, damit
+                // Block-Designs, die vorher eines gespeichert haben, weiterhin
+                // korrekt rendern statt auf einen kaputten Dashicon zu fallen.
+                return '<span class="cbd-emoji-icon" style="' . $style . ' font-size: 1.2em;"' . $attr_string . '>' . esc_html($value) . '</span>';
 
             case 'dashicons':
             default:
@@ -1982,26 +2071,8 @@ class CBD_Block_Registration {
      * @return array ['type' => 'dashicons', 'value' => 'star-filled']
      */
     private function parse_icon_value($icon_value) {
-        // Try to parse as JSON
-        $decoded = json_decode($icon_value, true);
-
-        if (is_array($decoded) && isset($decoded['type']) && isset($decoded['value'])) {
-            return $decoded;
-        }
-
-        // Legacy format: dashicons class name
-        // Examples: "dashicons-admin-generic" or "admin-generic"
-        if (strpos($icon_value, 'dashicons-') === 0) {
-            return array(
-                'type' => 'dashicons',
-                'value' => $icon_value
-            );
-        }
-
-        // Default to dashicons
-        return array(
-            'type' => 'dashicons',
-            'value' => 'dashicons-' . $icon_value
-        );
+        // Delegiert an die kanonische Implementierung — inklusive Reparatur
+        // von Werten, die vor v3.1.77 mit Slashes gespeichert wurden.
+        return CBD_Icon_Library::parse_stored_value($icon_value);
     }
 }

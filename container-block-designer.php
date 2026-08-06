@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://github.com/Cyric25/CBD---Container-Block-Desinger
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 3.1.76
+ * Version: 3.1.78
  * Author: Cyric25
  * Author URI: https://github.com/Cyric25
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '3.1.76');
+define('CBD_VERSION', '3.1.78');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -103,6 +103,7 @@ class ContainerBlockDesigner {
         require_once CBD_PLUGIN_DIR . 'includes/functions.php';
 
         // Kern-Klassen
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-icon-library.php';
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-database.php';
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-style-loader.php';
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-registration.php';
@@ -134,6 +135,17 @@ class ContainerBlockDesigner {
         if (is_admin()) {
             require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-organizer.php';
             require_once CBD_PLUGIN_DIR . 'includes/class-cbd-admin.php';
+
+            // Icon-Upload: Sanitizer + Verwaltung. Nur im Backend nötig —
+            // admin-post.php läuft ebenfalls im Admin-Kontext.
+            require_once CBD_PLUGIN_DIR . 'includes/class-cbd-svg-sanitizer.php';
+            require_once CBD_PLUGIN_DIR . 'includes/class-cbd-icon-manager.php';
+            CBD_Icon_Manager::init();
+
+            // Design-Export/Import als JSON (ersetzt die in v3.1.50
+            // abgeschaltete Import/Export-Seite)
+            require_once CBD_PLUGIN_DIR . 'includes/class-cbd-design-transfer.php';
+            CBD_Design_Transfer::init();
         }
 
         // Frontend-Renderer - DISABLED to prevent conflicts with block registration

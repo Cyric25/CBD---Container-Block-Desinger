@@ -1,0 +1,161 @@
+/**
+ * Eigene SVG-Kachel-Icons (Bibliothek "Eigene Icons")
+ *
+ * Gilt für zwei Einsatzorte:
+ *   1. Block-Icon im Header  -> img.cbd-custom-icon
+ *   2. Nummerierung          -> .cbd-container-number.cbd-number-as-icon > img.cbd-number-icon
+ *
+ * Die Kacheln bringen Farbe, Verlauf und Schlagschatten selbst mit. Deshalb
+ * müssen die bestehenden Regeln, die eine farbige Blase bzw. einen Kreis
+ * zeichnen, hier gezielt abgeschaltet werden. Das geht nur mit !important,
+ * weil die Ursprungsregeln (cbd-frontend-clean.css, unified-frontend.css)
+ * ihrerseits !important verwenden.
+ *
+ * @package ContainerBlockDesigner
+ * @since 3.1.77
+ */
+
+/* ============================================
+   1. Block-Icon
+   ============================================ */
+
+.cbd-custom-icon {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    /* SVG bringt bereits abgerundete Ecken mit — kein border-radius nötig */
+    object-fit: contain;
+    /* Neutralisiert Theme-Regeln, die allen Inhalts-Bildern Rahmen geben */
+    border: none;
+    box-shadow: none;
+    background: none;
+}
+
+.cbd-header-icon .cbd-custom-icon,
+.cbd-container-icon .cbd-custom-icon {
+    width: 32px;
+    height: 32px;
+}
+
+@media (max-width: 768px) {
+    .cbd-header-icon .cbd-custom-icon,
+    .cbd-container-icon .cbd-custom-icon {
+        width: 28px;
+        height: 28px;
+    }
+}
+
+@media (max-width: 480px) {
+    .cbd-header-icon .cbd-custom-icon,
+    .cbd-container-icon .cbd-custom-icon {
+        width: 24px;
+        height: 24px;
+    }
+}
+
+/* Positionierte Icons: der blaue Kreis der Positionierungs-Styles würde die
+   Kachel einrahmen — hier wird er entfernt. Die Klasse setzt PHP
+   (CBD_Block_Registration::custom_icon_class()), nicht CSS :has(). */
+.cbd-container-icon.cbd-has-custom-icon,
+.cbd-container-icon.cbd-positioned.cbd-has-custom-icon {
+    background: none;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+/* ============================================
+   1b. Vorschau im Icon-Picker (Admin)
+   ============================================ */
+
+.cbd-icon-item .cbd-custom-icon-preview {
+    width: 32px;
+    height: 32px;
+    display: block;
+}
+
+/* Der Auswahl-Zustand färbt sonst den Hintergrund blau hinter die Kachel */
+.cbd-icon-item.selected .cbd-custom-icon-preview {
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.9));
+}
+
+.cbd-selected-icon .cbd-custom-icon-preview {
+    width: 28px;
+    height: 28px;
+    display: block;
+}
+
+/* ============================================
+   2. Nummerierung als Kachel
+   ============================================ */
+
+/* :not(.cbd-number-fallback) — sobald das JS mangels passender Kachel auf
+   Text zurückfällt, greifen wieder die ursprünglichen Blasen-Styles. */
+.cbd-container-number.cbd-number-as-icon:not(.cbd-number-fallback) {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    width: 34px !important;
+    height: 34px !important;
+    padding: 0 !important;
+    color: inherit !important;
+    /* Die Ursprungsregel setzt z-index: -1 und schiebt die Nummer damit
+       hinter den Container — für eine sichtbare Kachel unbrauchbar. */
+    z-index: 10 !important;
+}
+
+.cbd-container-number.cbd-number-as-icon:not(.cbd-number-fallback) .cbd-number-icon {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: none;
+    box-shadow: none;
+    background: none;
+}
+
+/* Ohne src (vor dem Lauf von block-numbering.js) nichts anzeigen —
+   sonst blitzt kurz das Broken-Image-Symbol auf. */
+.cbd-number-icon:not([src]),
+.cbd-number-icon[src=""] {
+    visibility: hidden;
+}
+
+.cbd-container-number.cbd-number-as-icon.cbd-number-fallback .cbd-number-icon {
+    display: none;
+}
+
+/* Außenliegende Nummer: etwas näher an den Container als die Textblase,
+   weil die Kachel optisch schwerer wiegt. */
+.cbd-container-number.cbd-outside-number.cbd-number-as-icon:not(.cbd-number-fallback) {
+    top: -14px !important;
+    left: -14px !important;
+}
+
+@media (max-width: 480px) {
+    .cbd-container-number.cbd-number-as-icon:not(.cbd-number-fallback) {
+        width: 28px !important;
+        height: 28px !important;
+    }
+
+    .cbd-container-number.cbd-outside-number.cbd-number-as-icon:not(.cbd-number-fallback) {
+        top: -10px !important;
+        left: -10px !important;
+    }
+}
+
+/* Screenreader-Text (die Kachel selbst ist aria-hidden).
+   Eigene Definition, weil das Theme .screen-reader-text nicht garantiert. */
+.cbd-container-number .screen-reader-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}

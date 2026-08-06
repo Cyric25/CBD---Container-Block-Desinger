@@ -98,6 +98,10 @@ updatePluginVersion(newVersion);
 const includePaths = [
     'admin',
     'assets',
+    'blocks',  // IMPORTANT: block-reference wird zur Laufzeit aus
+               // CBD_PLUGIN_DIR . 'blocks/block-reference/block.json' registriert
+               // (includes/class-cbd-block-reference.php). Fehlte bis v3.1.76 im
+               // ZIP -> der Block existierte auf Produktivinstallationen nicht.
     'includes',
     'vendor',  // IMPORTANT: Composer dependencies (mPDF + TCPDF fallback)
     'languages',

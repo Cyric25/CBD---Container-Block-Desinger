@@ -376,12 +376,14 @@ $config = $block['config'] ?: array(
                                     </label>
                                     <br><br>
                                     <div class="cbd-icon-picker">
-                                        <input type="hidden" name="features[icon][value]" value="<?php echo esc_attr($features['icon']['value'] ?? 'dashicons-admin-generic'); ?>">
-                                        
+                                        <?php $cbd_icon_raw = $features['icon']['value'] ?? 'dashicons-admin-generic'; ?>
+                                        <!-- id ist Pflicht: icon-picker.js schreibt die Auswahl nach #icon_value -->
+                                        <input type="hidden" id="icon_value" name="features[icon][value]" value="<?php echo esc_attr($cbd_icon_raw); ?>">
+
                                         <!-- Selected Icon Display -->
                                         <div class="cbd-selected-icon">
-                                            <span class="dashicons <?php echo esc_attr($features['icon']['value'] ?? 'dashicons-admin-generic'); ?>"></span>
-                                            <span class="cbd-icon-name"><?php echo esc_html($features['icon']['value'] ?? 'dashicons-admin-generic'); ?></span>
+                                            <?php echo CBD_Icon_Library::get_admin_preview_html($cbd_icon_raw); ?>
+                                            <span class="cbd-icon-name"><?php echo esc_html(CBD_Icon_Library::get_admin_label($cbd_icon_raw)); ?></span>
                                             <button type="button" class="cbd-open-icon-picker button"><?php _e('Icon ändern', 'container-block-designer'); ?></button>
                                         </div>
                                         
@@ -404,6 +406,12 @@ $config = $block['config'] ?: array(
 
                                                     <!-- Library Tabs -->
                                                     <div class="cbd-icon-library-tabs">
+                                                        <?php if (CBD_Icon_Library::get_max_number() > 0 || !empty(CBD_Icon_Library::get_index()['kategorien'])) : ?>
+                                                        <button type="button" class="cbd-library-tab" data-library="custom">
+                                                            <span class="dashicons dashicons-art"></span>
+                                                            <?php _e('Eigene Icons', 'container-block-designer'); ?>
+                                                        </button>
+                                                        <?php endif; ?>
                                                         <button type="button" class="cbd-library-tab active" data-library="dashicons">
                                                             <span class="dashicons dashicons-wordpress"></span>
                                                             <?php _e('Dashicons', 'container-block-designer'); ?>
@@ -420,10 +428,6 @@ $config = $block['config'] ?: array(
                                                             <i class="lucide lucide-zap"></i>
                                                             <?php _e('Lucide', 'container-block-designer'); ?>
                                                         </button>
-                                                        <button type="button" class="cbd-library-tab" data-library="emoji">
-                                                            <span style="font-size: 20px;">😀</span>
-                                                            <?php _e('Emojis', 'container-block-designer'); ?>
-                                                        </button>
                                                     </div>
 
                                                     <!-- Search -->
@@ -439,11 +443,6 @@ $config = $block['config'] ?: array(
                                                     <!-- Icon Grid -->
                                                     <div class="cbd-icon-grid">
                                                         <!-- Icons will be populated by JavaScript -->
-                                                    </div>
-
-                                                    <!-- Emoji Picker Container (only visible when emoji tab is active) -->
-                                                    <div class="cbd-emoji-picker-container" style="display: none;">
-                                                        <emoji-picker></emoji-picker>
                                                     </div>
 
                                                     <div class="cbd-icon-picker-footer">
