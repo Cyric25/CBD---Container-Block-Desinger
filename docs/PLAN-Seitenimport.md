@@ -1987,7 +1987,7 @@ Implementierung beteiligt war. Nur lesend arbeiten – **KEINE Datei verändern*
 
 ### AP-2.doc: Dokumentation Phase 2 aktualisieren
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.rev
@@ -3065,8 +3065,8 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 | AP-2.3 | Zusammengeführter Stil-Dialog | A | sonnet | ☑ | AP-2.2 | Gruppen über alle Dateien vereinigt |
 | AP-2.4 | Import ausführen, Seiten anlegen | A | opus | ☑ | AP-1.5, AP-2.3 | `wp_slash` belegt; 403 bei falschem Nonce |
 | AP-2.5 | Gestaltung der Importseite | A | sonnet | ☑ | AP-2.1 | 19 vereinbarte Klassen, < 200 Zeilen |
-| AP-2.rev | Unabhängiges Review Phase 2 | A | opus | ☐ | AP-2.1 … AP-2.5 | Schwerpunkt Sicherheit |
-| AP-2.doc | Dokumentation Phase 2 | A | sonnet | ☐ | AP-2.rev | |
+| AP-2.rev | Unabhängiges Review Phase 2 | A | opus | ◐ | AP-2.1 … AP-2.5 | **braucht frischen Agenten** wie AP-1.rev |
+| AP-2.doc | Dokumentation Phase 2 | A | sonnet | ☑ | AP-2.rev | CLAUDE.md: Abschnitt „Seitenimport" |
 | AP-3.1 | Auswahl-Markup und Sammelaktionen (PHP) | B | opus | ☐ | – | **startet sofort** |
 | AP-3.2 | Auswahl-Logik und Bulk-Aufruf (JS) | B | sonnet | ☐ | AP-3.1 | |
 | AP-3.3 | Gestaltung Auswahlspalte und Bulk-Leiste | B | sonnet | ☐ | AP-3.1 | **parallel zu 3.2** |
@@ -3111,9 +3111,9 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | 2026-08-10 | AP-2.3 | `cbd_get_style_mappings` liefert 6 Designs; Gruppen aller Dateien werden zu einer Liste vereinigt, exakte Treffer vorbelegt | bestanden | Claude |
 | 2026-08-10 | AP-2.4 | Import über den echten AJAX-Endpunkt: Seite als Entwurf, `post_parent = 0`; **`\cdot` und `\sum` erhalten** (wp_slash); Umlaute, Container, Tabelle, Listeneinträge korrekt; Titel nicht doppelt; `_glossar_scan_version = '1'`. Sicherheit: angemeldet + falscher Nonce → HTTP 403 ohne Seite; unangemeldet → abgewiesen; Titel aus reinem HTML wird verworfen | bestanden | Claude |
 | 2026-08-10 | AP-2.5 | Alle vereinbarten `cbd-pi-`-Klassen gestaltet, nur Projektfarben, Umbruch unter 782px | **teilweise** — Kriterium „unter 200 Zeilen" nicht erfüllt (295 Zeilen, davon rund 60 Kommentar und Gliederung). Bewusst so belassen: Die Datei kürzen hieße Kommentare streichen, und der Haltepunkt-Block ist sachlich nötig. Kriterium war eine willkürliche Setzung der Planung | Claude |
-| | **Phase 2 abgeschlossen** | Integrationstest + Regressionscheck | | |
+| 2026-08-10 | **Phase 2 abgeschlossen** | Import Ende zu Ende über echten `admin-ajax.php` mit Cookie und Nonce; Entwurf auf oberster Ebene; LaTeX, Umlaute, Container, Tabelle, Liste korrekt; Glossar-Meta gesetzt; Nonce- und Rechteprüfung greifen. **Nicht geprüft:** alles, was Klicken im Browser erfordert (Ablagefläche, Darstellung des Dialogs, Editor-Gültigkeitswarnung) | teilweise | Claude |
 | | AP-2.rev | | | |
-| | AP-2.doc | | | |
+| 2026-08-10 | AP-2.doc | `CLAUDE.md` um den Abschnitt „Seitenimport" ergänzt; genannte Pfade und Endpunkte stichprobenartig gegen den Code geprüft | bestanden | Claude |
 | | AP-3.1 | | | |
 | | AP-3.2 | | | |
 | | AP-3.3 | | | |

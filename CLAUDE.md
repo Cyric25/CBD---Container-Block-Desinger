@@ -404,6 +404,76 @@ Container-Blöcken ausführen, es liest `getEditedPostContent()` aus. Danach
 Gruppen: Fragmentebene, Dokumentebene, Markup-Treue gegen die Fixture,
 Delimiter-Bilanz).
 
+## Seitenimport (Markdown → Seiten, seit v3.1.86)
+
+**Seitenmanager → Seiten importieren** (`admin.php?page=cbd-page-import`),
+Capability `edit_pages` — also auch für die Rolle Block-Redakteur.
+`includes/class-cbd-page-importer.php`, Ansicht in `admin/page-import.php`,
+Oberfläche in `assets/js/page-importer.js`.
+
+Ablauf: Mehrere `.md`-Dateien wählen oder ablegen → alle werden geparst und
+ihre H2-Gruppen zu **einer** Liste zusammengeführt → **ein** Stil-Dialog für
+alle Dateien → je Datei ein Seitenentwurf auf oberster Ebene.
+
+**Seitentitel** ist die erste `# `-Zeile; fehlt sie, der Dateiname ohne
+Endung. Entspricht die erste Überschrift dem Seitentitel, entfällt sie im
+Inhalt (sonst stünde der Titel doppelt).
+
+**Dubletten** werden vor dem Import aufgelistet und sind abwählbar, aber
+**nie überschrieben** — es entsteht ein weiterer Entwurf. Die Prüfung nutzt
+`get_posts()`, nicht das seit WordPress 6.2 veraltete `get_page_by_title()`.
+
+### Das Menü hängt am Theme
+
+Der Eintrag wird per `add_submenu_page('page-manager', …)` unter das
+Seitenmanager-Menü des Themes gehängt — der Slug `page-manager` ist damit
+eine **öffentliche Schnittstelle des Themes**. Wird er dort umbenannt, greift
+hier der Rückfall und der Eintrag landet unter „Container Designer".
+
+Registriert wird auf `admin_menu` mit **Priorität 20**. Das ist nicht
+kosmetisch: Die Fallunterscheidung
+`isset($GLOBALS['admin_page_hooks']['page-manager'])` entscheidet über
+Elternmenü oder Rückfall und braucht dafür ein bereits registriertes
+Theme-Menü. (`add_submenu_page()` selbst ist unkritisch — es prüft das
+Elternmenü nie und gibt `false` nur bei fehlender Capability zurück. Eine
+frühere Annahme, es scheitere hier stillschweigend, wurde am 2026-08-10
+widerlegt.)
+
+### Der Server parst neu — bewusst
+
+`cbd_import_pages` bekommt den **Markdown-Rohtext**, nicht die im Browser
+geparste Struktur, und ruft `parse_markdown_content()` selbst auf. Damit
+gelangt kein clientseitig erzeugtes HTML in `post_content`. Das Parsen im
+Browser dient nur der Vorschau und dem Stil-Dialog.
+
+### Endpunkte
+
+| Aktion | Nonce | Zweck |
+|---|---|---|
+| `cbd_parse_import_file` | `cbd_content_import` | **bestehend**, unverändert mitbenutzt — Markdown parsen |
+| `cbd_get_style_mappings` | `cbd_content_import` | **bestehend** — Liste der Block-Designs |
+| `cbd_check_page_titles` | `cbd_page_import` | neu — welche Titel existieren schon |
+| `cbd_import_pages` | `cbd_page_import` | neu — eine Datei importieren |
+
+**Ein Aufruf je Datei**, nicht ein Sammelaufruf: Der Fortschritt bleibt
+sichtbar, ein PHP-Timeout bei vielen Dateien ist ausgeschlossen, und ein
+Fehler betrifft nur eine Datei.
+
+### Zwei Fallen beim Schreiben
+
+1. **`wp_slash()` beim `wp_insert_post()`.** Ohne die Maskierung entfernt
+   WordPress jeden Backslash — `\cdot` wird zu `cdot`, jede LaTeX-Formel wäre
+   still zerstört.
+2. **`wp_unslash()` vor jedem `json_decode()`.** `$_POST` kommt maskiert an;
+   ohne Entfernen scheitert das Dekodieren stillschweigend. Genau dieser
+   Fehler hat schon einmal die Icon-Werte zerstört (Abschnitt „Icon-Wert:
+   kanonisches Parsen").
+
+Der Markdown-Rohtext selbst wird **nur** durch `wp_unslash()` geführt — kein
+`wp_kses_post()`, kein `sanitize_textarea_field()`, beide würden LaTeX
+zerstören. Die Entschärfung des erzeugten HTML leistet der Parser über
+`strip_unsafe_html()`.
+
 ## Eigene Icon-Bibliothek (SVG-Kacheln, seit v3.1.77)
 
 Sechste Bibliothek im Icon-Picker neben Dashicons, Font Awesome, Material,
