@@ -227,9 +227,132 @@ Alle Dateipfade in Phase 1 und 2 sind relativ zu diesem Verzeichnis.
 
 ---
 
+### AP-1.0.fix1: WordPress-Testinstallation aufsetzen
+
+**Status:** ☑ erledigt (2026-08-10)
+**Umfang:** M
+**Modell:** — (Nachtrag während der Ausführung, siehe Abschnitt 0, Regel 17)
+**Abhängigkeiten:** keine
+
+**Warum dieses AP nachträglich entstand:**
+Abschnitt 3 des Plans nannte als Testumgebung „Lokale WordPress-Installation
+unter `C:\allinkl-testserver`". Beim Start von AP-1.2 zeigte sich: Dort liegt
+zwar ein vollständiger All-inkl-Nachbau (Apache, PHP 8.3.32, MariaDB 10.11,
+phpMyAdmin), aber **kein WordPress** — nur einige Probe-Skripte. Auch sonst
+gab es auf dem Rechner keine WordPress-Installation (kein Local by Flywheel,
+kein XAMPP, kein WP-CLI). Damit waren AP-1.2 sowie sämtliche Browser-Tests der
+Phasen 2 und 3 blockiert. Die Annahme war schlicht falsch.
+
+**Was eingerichtet wurde:**
+
+| Gegenstand | Wert |
+|---|---|
+| Adresse | `http://fos.localhost:8080` (eigener VHost über `tools\kas-add-domain.cmd fos`) |
+| Verzeichnis | `C:\allinkl-testserver\www\htdocs\w0000001\fos` |
+| WordPress | **7.0.3**, Sprache de_DE |
+| PHP | 8.3.32 (Stack), CLI daneben 8.5.1 |
+| Datenbank | `d0000001`, Präfix `wp_` |
+| Anmeldung | `admin` / `admin123!` |
+| WP-CLI | `wp-cli.phar` 2.12.0 im Scratchpad, aufzurufen mit dem Stack-PHP |
+| Theme | `fos-online-schulbuch` 1.5.75, aktiv |
+| Plugins | `container-block-designer` 3.1.85 und `modular-blocks-plugin` 1.1.8, beide aktiv |
+| Debug | `WP_DEBUG` und `WP_DEBUG_LOG` an, `WP_DEBUG_DISPLAY` aus |
+
+Theme und Plugins wurden aus dem Projekt kopiert (ohne `node_modules`, `.git`,
+`dist`-Zwischenstände), **nicht** aus ZIPs — die ZIP-Prüfung bleibt AP-4.3
+vorbehalten.
+
+**Nachgewiesen:** `container-block-designer/container`,
+`modular-blocks/accordion` und `fos/inhaltsverzeichnis` sind registriert
+(damit ist auch der Accordion-Zweig des Serializers testbar). Tabelle
+`wp_cbd_blocks` wurde angelegt. `debug.log` enthält ausschließlich
+Infomeldungen des Modular-Plugins, keine Fehler oder Warnungen.
+
+**Sechs Container-Designs angelegt**, benannt wie im echten Projekt, damit die
+automatische Namenszuordnung des Importers realistisch prüfbar ist:
+`infotext_k1`, `infotext_k2`, `infotext_k3`, `uebungen`, `hinweise`,
+`quellen`.
+
+**Dabei gefunden — offene Frage an den Nutzer (blockiert AP-1.2):**
+Die Tabelle `wp_cbd_blocks` hat laut `CBD_Schema_Manager` die Spalten `name`
+und `title`, **aber keine Spalte `slug`**; der Schema-Manager benennt eine
+vorgefundene Spalte `slug` sogar nach `name` um. Mehrere Abfragen im Plugin
+verlangen aber eine Spalte `slug`. Empirisch belegt auf der frischen
+Installation:
+`SELECT id, name, slug FROM wp_cbd_blocks WHERE status='active'`
+→ `Unknown column 'slug' in 'SELECT'`, 0 Zeilen.
+
+Betroffene Fundstellen:
+- `includes/class-cbd-content-importer.php:174` und `:564` (Stilliste und
+  Designs für den Parser — ohne sie bietet der Importer **keine** Designs an)
+- `includes/class-cbd-block-registration.php:854`
+  (`WHERE (name = %s OR slug = %s)` — die Nachschlage-Abfrage beim **Rendern**
+  eines Containers)
+- `includes/class-cbd-admin.php:2801`
+
+Erschwerend: Die Codebasis ist uneinig, **welche** Spalte der Bezeichner ist.
+`class-cbd-design-transfer.php` und `CLAUDE.md` behandeln `name` als Slug
+(„Seiten referenzieren ihr Design über `name`"), während
+`class-cbd-admin.php:2806` protokolliert „Block name changed … but slug
+stays" — dort ist `name` die Anzeige und `slug` der Bezeichner. Aus dem Code
+allein ist nicht entscheidbar, wie die Produktivdatenbank aussieht.
+
+**Auflösung (2026-08-10, aus dem Code selbst):** Die Frage, welche Spalte der
+Bezeichner ist, beantwortet `CBD_Admin::handle_database_repair()`:
+
+- Zeile 2440 legt bei Bedarf `slug varchar(100)` an.
+- **Zeile 2469: `UPDATE … SET slug = name WHERE slug = '' OR slug IS NULL`** —
+  `slug` ist also eine **Kopie von `name`**. `name` ist der Bezeichner, `slug`
+  ein redundantes Zweitfeld. Die Log-Meldung in `class-cbd-admin.php:2806`
+  („name changed … but slug stays") ist Altlast aus der Zeit davor.
+
+Zudem **diagnostiziert das Plugin den Fehler selbst**: Die Seite
+*Container Designer → Datenbank reparieren* (`admin.php?page=cbd-database-repair`)
+gibt „Aktuelle Spalten" aus und meldet auf einer frischen Installation
+„❌ Fehlende Spalten: slug" samt Reparaturschaltfläche. Die Reparaturseite und
+`CBD_Schema_Manager` widersprechen sich also: Der Schema-Manager legt `slug`
+nicht an, die Reparaturseite führt sie als Pflichtspalte.
+
+**Achtung bei der Reparaturschaltfläche:** `handle_database_repair()` setzt in
+Zeile 2473 `cbd_db_version` auf `'2.9.0'` zurück, obwohl
+`CBD_Schema_Manager::DB_VERSION` bei `3.1.61` steht. Ein Klick stuft die
+Versionsangabe also herunter und lässt beim nächsten Laden Migrationen erneut
+anlaufen. Auf der Produktivinstallation deshalb **nicht** blind klicken.
+
+**Testinstallation angeglichen:** Die Spalte wurde mit derselben SQL wie die
+Reparatur angelegt und aus `name` befüllt — aber **ohne** die
+Versions-Rückstufung. `cbd_db_version` steht weiterhin auf `3.1.61`. Die
+Originalabfrage des Importers (`SELECT id, name, slug …`) liefert jetzt alle
+sechs Designs. Damit ist AP-1.2 nicht mehr durch die Spalte blockiert.
+
+**Konsolenskript für die Produktivinstallation:** `docs/pruefung-produktiv.js`
+(neu). Es liest im Adminbereich WordPress-Version, Tabellenspalten,
+Beispieldesigns und Plugin-Version aus, im Blockeditor zusätzlich die
+tatsächliche Antwort von `cbd_get_style_mappings`. Rein lesend, löst die
+Reparatur **nicht** aus. Das Parsen der Reparaturseite wurde gegen die echte
+Ausgabe geprüft (`<td><strong>Aktuelle Spalten:</strong></td><td>…</td>`).
+
+**Bleibt offen:** die produktive WordPress-Version (Risiko R1) und die Frage,
+ob die Produktivdatenbank die Spalte `slug` bereits hat. Beides liefert das
+Konsolenskript.
+
+**Kandidat für einen Korrektur-AP (nicht Teil dieses Plans, Entscheidung des
+Nutzers):** Entweder `CBD_Schema_Manager` legt `slug` mit an, oder die vier
+Abfragen verzichten darauf. Solange beides nebeneinander steht, ist jede
+frische Installation kaputt — Importer ohne Designs und Container, die beim
+Rendern nicht auflösen.
+
+**Zweite offene Frage:** Die Testinstallation läuft auf **WordPress 7.0.3**.
+Welche Version läuft produktiv? Weicht sie ab, kodiert die in AP-1.2 zu
+erhebende Fixture das falsche Zielmarkup — genau das Risiko R1. Gegebenenfalls
+wird die Testinstallation per `wp core update --version=<x>` auf die
+Produktivversion gesetzt.
+
+---
+
 ### AP-1.1: Ausgangszustand sichern und Phasen-Branch anlegen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** keine
@@ -275,12 +398,60 @@ fremde Änderungen in den Branch oder gehen verloren.
   festhalten, welche Dateien gesichert wurden.
 
 **Übergabenotiz:**
+Erledigt am 2026-08-10.
+
+**Ausgangszustand** (`git status --porcelain` auf `main`, 17 Einträge):
+14 geänderte Dateien — `CLAUDE.md`, `admin/design-transfer.php`,
+`admin/settings.php`, `assets/css/cbd-frontend-clean.css`,
+`assets/css/classroom-frontend.css`, `assets/css/custom-icons.css`,
+`assets/js/floating-pdf-button.js`, `container-block-designer.php`,
+`includes/class-cbd-admin.php`, `includes/class-cbd-block-registration.php`,
+`includes/class-cbd-classroom.php`, `includes/class-cbd-design-transfer.php`,
+`includes/functions.php`, `tools/test-design-transfer.php`.
+3 unversionierte — `docs/ERWEITERUNGSANALYSE-Seitenimport.md`,
+`docs/PLAN-Seitenimport.md`, `tools/test-icon-scale.php`.
+
+**Inhalt der Sicherung:** Der letzte Commit auf `main` war v3.1.78
+(`a4545f3`), im Hauptfile stand aber bereits Version **3.1.85**. Die
+unversionierten Änderungen sind also die Arbeit von v3.1.79 bis v3.1.85:
+Markdown-Format für den Design-Export/-Import, die über die Einstellungen
+regelbare Icon-Größe (`--cbd-icon-scale`), der plastische Look für
+PDF-Button und PDF-Werkzeugleiste sowie die Klassenraum-Gestaltung. Das ist
+**fremde Arbeit**, die nichts mit diesem Vorhaben zu tun hat — sie wurde
+unverändert und vollständig committet, nicht verändert und nicht
+auseinandergenommen.
+
+**Commit:** `35fdc0f` „Zwischenstand v3.1.79-3.1.85 gesichert (vor Vorhaben
+Seitenimport)", 17 Dateien, 5082 Einfügungen, 140 Löschungen. Nach `main`
+gepusht (`a4545f3..35fdc0f`).
+
+**Prüfung auf unerwünschte Dateien:** `git show --stat HEAD` enthält weder
+`dist/`, `node_modules/`, `vendor/`-Neuzugänge noch `*.zip`. `.gitignore`
+deckte `dist/` und `node_modules/` bereits ab und musste nicht ergänzt
+werden. `vendor/` ist in diesem Projekt bewusst versioniert (mPDF wird mit
+dem ZIP ausgeliefert) und wies keine Änderungen auf.
+
+**Branch:** `phase-1-block-serializer` von `35fdc0f` abgezweigt und mit
+`-u` zum Remote gepusht. `git ls-remote --heads origin phase-1-block-serializer`
+liefert `35fdc0f7c29c0120f05f7230bf506d47547ce7f9`. Arbeitsbaum sauber.
+
+**Für Folge-APs relevant:**
+- Die Plugin-Version steht auf **3.1.85**. `create-plugin-zip.js` erhöht sie
+  beim Bau selbstständig — in AP-4.3 wird das ZIP also 3.1.86 oder höher
+  heißen.
+- Git meldet beim Anfassen mehrerer Dateien `LF will be replaced by CRLF`.
+  Das ist die Zeilenendenbehandlung von Git unter Windows und harmlos, aber
+  es bedeutet: `git diff` kann bei Dateien, die nur neu geschrieben wurden,
+  Änderungen zeigen, die inhaltlich keine sind. Beim Review-Kriterium
+  „`tools/test-block-serializer.php` ist unverändert" deshalb `git diff -w`
+  oder den Vergleich der Dateiinhalte heranziehen, nicht blind dem Diff
+  vertrauen.
 
 ---
 
 ### AP-1.2: Referenzmarkup aus dem Editor erheben (Grundwahrheit)
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.1
@@ -383,7 +554,7 @@ wird es einmal an der echten Installation gemessen und als Fixture abgelegt.
 
 ### AP-1.3: Testharness mit allen Testfällen anlegen (TDD, rot committen)
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.2
@@ -571,7 +742,7 @@ array(
 
 ### AP-1.4: HTML-Fragment in Kernblöcke umwandeln
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** opus (Markup-Treue, DOM-Verarbeitung mit mehreren Fallstricken)
 **Abhängigkeiten:** AP-1.3
@@ -675,7 +846,7 @@ Nach diesem AP sind die Testfälle T1–T11 und T23 aus
 
 ### AP-1.5: Abschnitte und Stil-Zuweisungen zu `post_content` zusammensetzen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** opus (Abbildungslogik mit mehreren Sonderfällen und Rückfällen)
 **Abhängigkeiten:** AP-1.4
@@ -865,6 +1036,33 @@ Reines Ausführen der Harnesse zum Nachvollziehen ist erlaubt.
 - entfällt (Review-AP; das Ergebnis ist der Bericht).
 
 **Übergabenotiz:**
+**Nur Selbstreview, keine unabhängige Prüfung** (2026-08-10). Die
+implementierende Instanz hat auch geprüft — die vom AP geforderte
+Unabhängigkeit ist damit **nicht** erfüllt. Das AP bleibt auf ◐, bis ein
+frischer Agent oder `/code-review` darübergelaufen ist.
+
+Mechanisch prüfbare Punkte aus Schritt 2, alle mit Beleg:
+
+| Prüfung | Ergebnis |
+|---|---|
+| `tools/test-block-serializer.php` seit dem AP-1.3-Commit unverändert | ja — `git diff ecfab2c HEAD` für die Datei ist leer |
+| `'values'` im Serializer | 0 Fundstellen |
+| Accordion ohne Verfügbarkeitsprüfung erzeugt | nein — `nutzt_accordion()` steigt bei `accordion_available === false` sofort aus, Testfall T16 belegt den Rückfall |
+| Container mit ungeprüftem Slug | nein — `block_container()` wird nur nach `ermittle_slug()` aufgerufen, das gegen `known_slugs` prüft; Testfall T14 |
+| PHP-8.0-Syntax | keine — `php tools/check-php74.php` meldet 557 Dateien kompatibel |
+| `ABSPATH`-Schutz in der neuen Datei | vorhanden |
+| Nicht-Ziele verletzt | nein — `git diff --name-only 35fdc0f HEAD` enthält weder `class-cbd-content-importer.php` noch `content-importer.js` noch `block-editor.js`; auch `container-block-designer.php` wurde nicht angefasst (die Verdrahtung gehört planmäßig in AP-2.1) |
+| Phasen-Endzustand erreicht | ja — 71 Prüfungen, 0 Fehler |
+
+Geänderte Dateien der Phase: `CLAUDE.md`, `docs/PLAN-Seitenimport.md`,
+`docs/pruefung-blockmarkup.js`, `docs/pruefung-produktiv.js`,
+`includes/class-cbd-block-serializer.php`, `tools/fixtures/*`,
+`tools/test-block-serializer.php`. Alle innerhalb des Scopes.
+
+**Was ein unabhängiges Review noch ansehen sollte** (von mir nicht
+verlässlich selbst beurteilbar): die Tabellenumwandlung in `block_table()`
+(nur T5 deckt sie ab, und in der Fixture kam keine Tabelle vor), sowie das
+Verhalten von `lade_html()` bei stark verschachteltem oder kaputtem HTML.
 
 ---
 
@@ -1500,11 +1698,11 @@ bei vielen Dateien ausgeschlossen ist und ein Fehler nur eine Datei betrifft.
        )
    );
    ```
-5. Seite anlegen:
+5. Seite anlegen. **`wp_slash()` ist zwingend** — siehe Kasten unten:
    ```php
    $page_id = wp_insert_post(array(
        'post_title'   => $titel,
-       'post_content' => $post_content,
+       'post_content' => wp_slash($post_content),
        'post_type'    => 'page',
        'post_status'  => 'draft',
        'post_parent'  => 0,
@@ -1513,6 +1711,18 @@ bei vielen Dateien ausgeschlossen ist und ein Fehler nur eine Datei betrifft.
    ```
    Zweiter Parameter `true`, damit ein `WP_Error` zurückkommt statt einer 0.
    Bei `is_wp_error($page_id)` mit der Fehlermeldung antworten.
+
+   > **`wp_slash()` niemals weglassen.** `wp_insert_post()` erwartet
+   > maskierte Daten und ruft intern `wp_unslash()` auf. Wird der Inhalt
+   > unmaskiert übergeben, verschwindet **jeder Backslash** — gemessen am
+   > 2026-08-10 auf der Testinstallation:
+   > `\cdot` wird zu `cdot`, `\sum` wird zu `sum`, und ein doppelter
+   > Backslash wird zu einem einfachen.
+   > Damit wäre in jeder importierten Seite **jede LaTeX-Formel zerstört**,
+   > ohne Fehlermeldung. Mit `wp_slash()` ist der Rundlauf zeichengleich.
+   > Dieselbe Fehlerfamilie wie beim Icon-Wert (siehe `CLAUDE.md`,
+   > „Icon-Wert: kanonisches Parsen") — dort fehlte `wp_unslash()` beim
+   > Lesen, hier fehlte `wp_slash()` beim Schreiben.
 6. Antwort:
    ```php
    wp_send_json_success(array(
@@ -1565,6 +1775,12 @@ bei vielen Dateien ausgeschlossen ist und ein Fehler nur eine Datei betrifft.
       abgewiesen (Antwort `-1` bzw. Fehler), ohne dass eine Seite entsteht.
 - [ ] Im Quelltext von `ajax_seiten_importieren()` steht `wp_unslash()` vor
       **jedem** `json_decode()`.
+- [ ] Der Aufruf von `wp_insert_post()` übergibt `wp_slash($post_content)`.
+- [ ] **Backslash-Nachweis:** Eine Testdatei mit `$a_1 \cdot b$` und
+      `$$\sum x_i$$` importieren; im gespeicherten `post_content` stehen
+      beide Formeln zeichengenau (in phpMyAdmin oder über
+      `get_post_field('post_content', $id)` prüfen). Ohne `wp_slash()`
+      stünde dort `cdot` und `sum`.
 - [ ] `php tools/check-php74.php` ohne Befunde.
 - [ ] Datei-Map-Zeilen in der Übergabenotiz aktualisiert.
 
@@ -2820,13 +3036,14 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 
 | AP | Titel | Spur | Modell | Status | Abhängig von | Notiz |
 |---|---|---|---|---|---|---|
-| AP-1.1 | Ausgangszustand sichern und Phasen-Branch anlegen | A | sonnet | ☐ | – | |
-| AP-1.2 | Referenzmarkup aus dem Editor erheben | A | sonnet | ☐ | AP-1.1 | **Nutzeraktion nötig** |
-| AP-1.3 | Testharness mit allen Testfällen (TDD, rot) | A | sonnet | ☐ | AP-1.2 | rote Tests committen |
-| AP-1.4 | HTML-Fragment in Kernblöcke umwandeln | A | opus | ☐ | AP-1.3 | macht T1–T11, T23 grün |
-| AP-1.5 | Abschnitte zu `post_content` zusammensetzen | A | opus | ☐ | AP-1.4 | macht T12–T22 grün |
-| AP-1.rev | Unabhängiges Review Phase 1 | A | opus | ☐ | AP-1.1 … AP-1.5 | frischer Agent, nur lesend |
-| AP-1.doc | Dokumentation Phase 1 | A | sonnet | ☐ | AP-1.rev | |
+| AP-1.0.fix1 | WordPress-Testinstallation aufsetzen | A+B | – | ☑ | – | Nachtrag: Testumgebung fehlte. `http://fos.localhost:8080`, WP 7.0.3 |
+| AP-1.1 | Ausgangszustand sichern und Phasen-Branch anlegen | A | sonnet | ☑ | – | Commit `35fdc0f`, Branch `phase-1-block-serializer` |
+| AP-1.2 | Referenzmarkup aus dem Editor erheben | A | sonnet | ☑ | AP-1.1, AP-1.0.fix1 | Grundwahrheit aus Produktivseite 4770; WP 7.0.3 beidseitig |
+| AP-1.3 | Testharness mit allen Testfällen (TDD, rot) | A | sonnet | ☑ | AP-1.2 | rot committet `ecfab2c`, seither unverändert |
+| AP-1.4 | HTML-Fragment in Kernblöcke umwandeln | A | opus | ☑ | AP-1.3 | T1–T11, T23 grün |
+| AP-1.5 | Abschnitte zu `post_content` zusammensetzen | A | opus | ☑ | AP-1.4 | 71 Prüfungen, 0 Fehler |
+| AP-1.rev | Unabhängiges Review Phase 1 | A | opus | ◐ | AP-1.1 … AP-1.5 | **braucht frischen Agenten** — siehe Hinweis unter der Tabelle |
+| AP-1.doc | Dokumentation Phase 1 | A | sonnet | ☑ | AP-1.rev | CLAUDE.md: Abschnitt „Block-Serializer" |
 | AP-2.1 | Untermenü, Seitengerüst, Assets | A | sonnet | ☐ | AP-1.doc | Menüpriorität 20 |
 | AP-2.2 | Dateiauswahl, Parsen, Dublettenprüfung | A | sonnet | ☐ | AP-2.1 | |
 | AP-2.3 | Zusammengeführter Stil-Dialog | A | sonnet | ☐ | AP-2.2 | |
@@ -2845,6 +3062,13 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 | AP-4.rev | Abschlussreview des Gesamtvorhabens | A+B | opus | ☐ | AP-4.1 … AP-4.3 | phasenübergreifend |
 | AP-4.doc | Plan abschließen, offene Punkte | A+B | sonnet | ☐ | AP-4.rev | Abschnitt 11 anlegen |
 
+> **Zu AP-1.rev:** Der Plan verlangt einen Agenten, der keines der APs der
+> Phase implementiert hat. Diese Unabhängigkeit war in der laufenden Sitzung
+> nicht herstellbar — dieselbe Instanz hat implementiert. Durchgeführt wurde
+> stattdessen ein **Selbstreview** der mechanisch prüfbaren Punkte
+> (Übergabenotiz bei AP-1.rev). Für das echte unabhängige Review empfiehlt
+> sich `/code-review` oder eine frische Sitzung; bis dahin bleibt das AP auf ◐.
+
 **Kritischer Pfad:** AP-1.1 → AP-1.2 → AP-1.3 → AP-1.4 → AP-1.5 → AP-1.rev →
 AP-1.doc → AP-2.1 → AP-2.2 → AP-2.3 → AP-2.4 → AP-2.rev → AP-2.doc → AP-4.1 →
 AP-4.2 → AP-4.3 → AP-4.rev → AP-4.doc.
@@ -2857,12 +3081,13 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
-| | AP-1.1 | | | |
-| | AP-1.2 | | | |
-| | AP-1.3 | | | |
-| | AP-1.4 | | | |
-| | AP-1.5 | | | |
-| | **Phase 1 abgeschlossen** | Integrationstest + Regressionscheck | | |
+| 2026-08-10 | AP-1.1 | `git status` sauber; `git show --stat HEAD` frei von `dist/`, `node_modules/`, `vendor/`, `*.zip`; Branch auf dem Remote nachgewiesen | bestanden | Claude |
+| 2026-08-10 | AP-1.0.fix1 | WordPress 7.0.3 + Theme + beide Plugins aktiviert; Blocktypen registriert; `debug.log` ohne Fehler | bestanden | Claude |
+| 2026-08-10 | AP-1.2 | Fixture aus Produktivseite 4770 erhoben; Editor meldete keine ungültigen Blöcke; WP- und Plugin-Version beidseitig gleich | bestanden | Claude |
+| 2026-08-10 | AP-1.3 | `php -l` ohne Fehler; Harness bricht mangels Klasse ab (gewollter roter Zustand); T1–T23 lückenlos vorhanden | bestanden | Claude |
+| 2026-08-10 | AP-1.4 | T1–T11 und T23 grün (UTF-8, LaTeX, Inline-Auszeichnung, Listen ohne `values`) | bestanden | Claude |
+| 2026-08-10 | AP-1.5 | 71 Prüfungen, 0 Fehler — inkl. C1/C2 zeichengleich mit dem Produktivmarkup und Delimiter-Bilanz | bestanden | Claude |
+| 2026-08-10 | **Phase 1 abgeschlossen** | Harness grün · `check-php74` ohne Befund · alle 6 übrigen Harnesse grün · Vollkette Markdown→Parser→Serializer→`wp_insert_post`→Rundlauf zeichengleich, `parse_blocks()` erkennt alle 7 Blocktypen · `_glossar_scan_version` gesetzt (R4) | bestanden | Claude |
 | | AP-1.rev | | | |
 | | AP-1.doc | | | |
 | | AP-2.1 | | | |
