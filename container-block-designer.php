@@ -124,6 +124,9 @@ class ContainerBlockDesigner {
 
         // Content Importer - Markdown to CDB blocks
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-content-importer.php';
+        // Seitenimport: Serializer zuerst, der Importer nutzt ihn.
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-serializer.php';
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-page-importer.php';
 
         // Classroom System (Klassen-System) - optionales Feature
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-classroom.php';

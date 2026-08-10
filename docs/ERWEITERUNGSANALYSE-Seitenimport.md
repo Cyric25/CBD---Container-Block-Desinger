@@ -93,13 +93,26 @@ einer eigenen kleinen Klasse. Damit erscheint der Import **im Seitenmanager-Men�
 ohne dass das Theme angefasst werden muss — der gesamte Seitenimport liegt in
 einem Repo und wird mit einem ZIP ausgeliefert.
 
-**Falle, die zwingend beachtet werden muss:** Plugins laden **vor** der
-`functions.php` des Themes. CDBs `admin_menu`-Callback wird deshalb zuerst
-registriert und läuft zuerst — zu diesem Zeitpunkt existiert das Menü
-`page-manager` noch nicht und `add_submenu_page()` scheitert **stillschweigend**
-(kein Fehler, der Eintrag fehlt einfach). Die Registrierung muss daher auf
-`admin_menu` mit **Priorität 20** (oder höher) laufen. Fehlt der Seitenmanager
-ganz (Theme gewechselt), fällt der Eintrag auf das Menü
+> **Korrektur vom 2026-08-10 (gemessen, nicht vermutet).** Die ursprünglich
+> hier beschriebene Falle — `add_submenu_page()` scheitere stillschweigend,
+> wenn das Elternmenü noch nicht existiert — **stimmt nicht**. Der Blick in
+> `wp-admin/includes/plugin.php` zeigt: Die Funktion gibt `false`
+> ausschließlich zurück, wenn `current_user_can($capability)` scheitert. Das
+> Elternmenü wird nie geprüft; der Eintrag landet einfach in
+> `$submenu[$parent_slug]`, die Registrierungsreihenfolge ist gleichgültig.
+> Die Gegenprobe auf der Testinstallation bestätigt das: Auch mit
+> Priorität 10 erscheint der Eintrag korrekt unter dem Seitenmanager.
+>
+> **Priorität 20 bleibt trotzdem richtig**, aber aus einem anderen Grund:
+> Nicht `add_submenu_page()` braucht das Elternmenü, sondern die eigene
+> Prüfung `isset($GLOBALS['admin_page_hooks']['page-manager'])`, die über
+> Elternmenü oder Rückfall entscheidet. Liefe sie zu früh, griffe der
+> Rückfall grundlos und der Eintrag landete unter „Container Designer",
+> obwohl der Seitenmanager vorhanden ist. Die Priorität sichert also die
+> Fallunterscheidung ab, nicht die Registrierung.
+
+Die Registrierung läuft auf `admin_menu` mit **Priorität 20**. Fehlt der
+Seitenmanager ganz (Theme gewechselt), fällt der Eintrag auf das Menü
 `container-block-designer` zurück.
 
 ### 3.3 Andockpunkt der Bulk-Optionen

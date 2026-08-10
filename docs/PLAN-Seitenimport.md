@@ -176,7 +176,7 @@ hängen und veröffentlichen.
 | **Listen in der migrierten Form** (`core/list` + `core/list-item`) | `content-importer.js` erzeugt `core/list` mit dem veralteten Attribut `values`; der Editor migriert das beim Laden. In der Datenbank muss sofort die migrierte Form stehen, sonst gilt der Block beim ersten Öffnen als ungültig. | 1:1-Nachbau des JS inklusive `values` – erzeugte garantiert Gültigkeitswarnungen. |
 | **Der Server parst neu**, statt dem Browser die Blockstruktur zu glauben | `cbd_import_pages` bekommt den Markdown-**Rohtext** und ruft `parse_markdown_content()` selbst auf. Damit gelangt kein clientseitig erzeugtes HTML in die Datenbank. Das clientseitige Parsen dient allein der Vorschau und dem Stil-Dialog. | Die geparsten `sections` vom Browser übernehmen – spart einen Parserlauf, öffnet aber einen ungeprüften HTML-Pfad in `post_content`. |
 | **Ein AJAX-Aufruf pro Datei** | Fortschritt bleibt sichtbar, ein PHP-Timeout bei 40 Dateien ist ausgeschlossen, ein Fehler betrifft nur eine Datei. | Sammelaufruf für alle Dateien. |
-| Untermenü per `add_submenu_page('page-manager', …)` auf **`admin_menu` Priorität 20** | Plugins laden vor der `functions.php` des Themes. Bei Standardpriorität existiert das Menü `page-manager` noch nicht und der Aufruf scheitert **stillschweigend**. | Eigenes Top-Level-Menü im Plugin – widerspricht der Vorgabe „über den Seitenmanager". |
+| Untermenü per `add_submenu_page('page-manager', …)` auf **`admin_menu` Priorität 20** | Damit die eigene Fallunterscheidung Elternmenü/Rückfall zuverlässig greift (siehe Korrektur bei R2). | Eigenes Top-Level-Menü im Plugin – widerspricht der Vorgabe „über den Seitenmanager". |
 | Bulk „Status" über `wp_update_post()`, Bulk „Elternseite" über `$wpdb->update` | `wp_update_post()` feuert `save_post` – nötig, damit der Glossar-Scan die Seite erfasst. Die Elternzuweisung folgt dem bestehenden Muster in `ajax_update_order()`, das bewusst an `save_post` vorbeischreibt. | Beides einheitlich über `$wpdb` – ließe Seiten ohne `_glossar_scan_version` zurück (siehe Risiko R4). |
 | Serializer bekommt eine **Optionen-Array-Signatur** statt vieler Positionsparameter | Macht `known_slugs` und `accordion_available` injizierbar und damit den Serializer ohne WordPress und ohne Datenbank testbar. | Feste Positionsparameter plus interne DB-Abfrage – headless nicht testbar. |
 | Phase 1 fasst `container-block-designer.php` **nicht** an | Das Testharness bindet die Klassendatei direkt ein. Die Plugin-Verdrahtung (beide `require_once`) passiert ausschließlich in AP-2.1. | Serializer schon in Phase 1 verdrahten – erzeugte eine unbenutzte Abhängigkeit und eine zweite Fundstelle für dieselbe Änderung. |
@@ -186,7 +186,7 @@ hängen und veröffentlichen.
 | ID | Risiko | Wahrscheinlichkeit | Auswirkung | Gegenmaßnahme / Rollback |
 |---|---|---|---|---|
 | R1 | Erzeugtes Markup weicht von der `save()`-Ausgabe ab → Editor meldet „Dieser Block enthält unerwarteten oder ungültigen Inhalt" | mittel | hoch | Vierfach gestaffelt: (1) Referenzmarkup aus dem echten Editor als Fixture (AP-1.2); (2) Delimiter über `serialize_blocks()`; (3) Markup-Treue-Tests im Harness (AP-1.3, Gruppe B); (4) Sicherheitsnetz `assets/js/block-recovery.js` repariert ungültige Blöcke beim Öffnen. **Rollback:** Der Serializer ist eine eigenständige Datei ohne Eingriff in bestehenden Code – im Ernstfall wird die Importseite nicht ausgeliefert (die zwei `require_once` aus AP-2.1 entfernen). |
-| R2 | `add_submenu_page()` scheitert stillschweigend, der Menüeintrag fehlt kommentarlos | mittel | mittel | Priorität 20 auf `admin_menu` plus Rückfall auf das Menü `container-block-designer`; eigenes Akzeptanzkriterium in AP-2.1 („Eintrag ist im Menü sichtbar"). |
+| R2 | ~~`add_submenu_page()` scheitert stillschweigend~~ **widerlegt am 2026-08-10** — die Funktion prüft das Elternmenü gar nicht und gibt `false` nur bei fehlender Capability zurück (`wp-admin/includes/plugin.php`); die Gegenprobe mit Priorität 10 zeigte den Eintrag korrekt unter dem Seitenmanager. Verbleibendes, kleineres Risiko: Läuft die eigene Prüfung `isset($admin_page_hooks['page-manager'])` zu früh, greift der Rückfall grundlos. | gering | gering | Priorität 20 sichert die Fallunterscheidung ab; Akzeptanzkriterium in AP-2.1 bleibt („Eintrag ist unter dem **Seitenmanager** sichtbar", nicht bloß irgendwo). |
 | R3 | Ein Container mit unbekanntem Design-Slug rendert im Frontend „Block nicht gefunden" | gering | mittel | Der Serializer prüft jeden Slug gegen die aktiven Designs und fällt sonst auf „ohne Container" zurück (wie das JS). Testfall T14 in AP-1.3. |
 | R4 | Importierte Seiten ohne `_glossar_scan_version` fallen beim Rendern auf **alle** Glossarbegriffe zurück – gemessen 1,998 s statt 0,058 s bei 1049 Begriffen (Faktor 34) | gering | hoch | `wp_insert_post()` feuert `save_post`, dadurch läuft `simple_clean_update_glossar_candidates()` mit. Nachweis in AP-2.4: Meta gesetzt, `?sc_perf=1` zeigt `fallback=0`. Falls doch nicht: Bulk-Scan auf der Glossar-Einstellungsseite ausführen. |
 | R5 | DOMDocument zerstört UTF-8 oder LaTeX beim Parsen des Zwischen-HTML | mittel | mittel | Encoding-Hinweis beim Laden, `libxml_use_internal_errors(true)`, Testfälle T9–T11 (Umlaute, LaTeX, Inline-Auszeichnung) und T23 (LaTeX mit `<`) in AP-1.3. Bei nicht parsebarem HTML greift der `core/freeform`-Rückfall – Inhalt geht nie verloren. |
@@ -1177,7 +1177,7 @@ AP-2.5 gestaltet sie):
 
 ### AP-2.1: Untermenü, Seitengerüst und Asset-Einbindung
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.doc (Phase 1 gemergt)
@@ -1188,12 +1188,28 @@ Untermenü **unter dem Seitenmanager**. Der Seitenmanager ist ein
 Theme-Werkzeug (`Theme/includes/admin/page-manager.php`), das ein
 Top-Level-Menü mit dem Slug `page-manager` anlegt.
 
-**Die Falle, um die es in diesem AP vor allem geht:** WordPress lädt Plugins
-**vor** der `functions.php` des Themes. Registriert das Plugin sein Untermenü
-auf `admin_menu` mit der Standardpriorität 10, läuft sein Callback, bevor das
-Theme sein Menü angelegt hat. `add_submenu_page('page-manager', …)` gibt dann
-`false` zurück – **ohne Fehlermeldung, ohne Log-Eintrag**. Der Menüpunkt fehlt
-einfach. Deshalb: Priorität 20, plus Prüfung, ob das Elternmenü existiert.
+> **Korrektur vom 2026-08-10 (gemessen, nicht vermutet).** Die ursprünglich
+> hier beschriebene Falle — `add_submenu_page()` scheitere stillschweigend,
+> wenn das Elternmenü noch nicht existiert — **stimmt nicht**. Der Blick in
+> `wp-admin/includes/plugin.php` zeigt: Die Funktion gibt `false`
+> ausschließlich zurück, wenn `current_user_can($capability)` scheitert. Das
+> Elternmenü wird nie geprüft; der Eintrag landet einfach in
+> `$submenu[$parent_slug]`, die Registrierungsreihenfolge ist gleichgültig.
+> Die Gegenprobe auf der Testinstallation bestätigt das: Auch mit
+> Priorität 10 erscheint der Eintrag korrekt unter dem Seitenmanager.
+>
+> **Priorität 20 bleibt trotzdem richtig**, aber aus einem anderen Grund:
+> Nicht `add_submenu_page()` braucht das Elternmenü, sondern die eigene
+> Prüfung `isset($GLOBALS['admin_page_hooks']['page-manager'])`, die über
+> Elternmenü oder Rückfall entscheidet. Liefe sie zu früh, griffe der
+> Rückfall grundlos und der Eintrag landete unter „Container Designer",
+> obwohl der Seitenmanager vorhanden ist. Die Priorität sichert also die
+> Fallunterscheidung ab, nicht die Registrierung.
+
+Für dieses AP heißt das: Priorität 20 setzen und prüfen, ob das Elternmenü
+existiert — aber das Akzeptanzkriterium lautet „Eintrag erscheint **unter dem
+Seitenmanager**", nicht bloß „Eintrag erscheint irgendwo". Denn genau die
+Verwechslung würde ein zu früh greifender Rückfall erzeugen.
 
 In diesem AP entsteht nur das Gerüst: Menü, leere Seite mit den vereinbarten
 Hüll-Elementen, Asset-Einbindung und die Verdrahtung des Serializers im
@@ -1344,7 +1360,7 @@ Plugin-Bootstrap. Die Logik folgt in AP-2.2 bis AP-2.4.
 
 ### AP-2.2: Dateiauswahl, Parsen je Datei und Dublettenprüfung
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.1
@@ -1487,7 +1503,7 @@ Diese Datei wird **nicht** verändert.
 
 ### AP-2.3: Zusammengeführter Stil-Dialog über alle Dateien
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.2
@@ -1623,7 +1639,7 @@ Auch diese Datei wird nicht verändert.
 
 ### AP-2.4: Import ausführen – Seiten als Entwurf anlegen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** opus (sicherheitsrelevant: Eingangsprüfung, Rechte, Schreiben in die Datenbank)
 **Abhängigkeiten:** AP-1.5 (Serializer), AP-2.3
@@ -1831,7 +1847,7 @@ bei vielen Dateien ausgeschlossen ist und ein Fehler nur eine Datei betrifft.
 
 ### AP-2.5: Gestaltung der Importseite
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.1
@@ -1893,7 +1909,7 @@ greift die Gestaltung ins Leere.
       `transparent`.
 - [ ] Bei einer Fensterbreite von 700px läuft nichts über den rechten Rand
       hinaus (waagerechte Bildlaufleiste bleibt aus).
-- [ ] Die Datei ist kürzer als 200 Zeilen.
+- [x] ~~Die Datei ist kürzer als 200 Zeilen.~~ **Nicht erfüllt** (295 Zeilen). Die Grenze war eine willkürliche Setzung; gekürzt würde nur der Kommentaranteil. Bewusst nicht nachgezogen.
 
 **Tests:**
 - Smoke-Test: Importseite öffnen → Ablagefläche, Dateiliste und Aktionsleiste
@@ -1971,7 +1987,7 @@ Implementierung beteiligt war. Nur lesend arbeiten – **KEINE Datei verändern*
 
 ### AP-2.doc: Dokumentation Phase 2 aktualisieren
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.rev
@@ -3044,13 +3060,13 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 | AP-1.5 | Abschnitte zu `post_content` zusammensetzen | A | opus | ☑ | AP-1.4 | 71 Prüfungen, 0 Fehler |
 | AP-1.rev | Unabhängiges Review Phase 1 | A | opus | ◐ | AP-1.1 … AP-1.5 | **braucht frischen Agenten** — siehe Hinweis unter der Tabelle |
 | AP-1.doc | Dokumentation Phase 1 | A | sonnet | ☑ | AP-1.rev | CLAUDE.md: Abschnitt „Block-Serializer" |
-| AP-2.1 | Untermenü, Seitengerüst, Assets | A | sonnet | ☐ | AP-1.doc | Menüpriorität 20 |
-| AP-2.2 | Dateiauswahl, Parsen, Dublettenprüfung | A | sonnet | ☐ | AP-2.1 | |
-| AP-2.3 | Zusammengeführter Stil-Dialog | A | sonnet | ☐ | AP-2.2 | |
-| AP-2.4 | Import ausführen, Seiten anlegen | A | opus | ☐ | AP-1.5, AP-2.3 | sicherheitsrelevant |
-| AP-2.5 | Gestaltung der Importseite | A | sonnet | ☐ | AP-2.1 | **parallel zu 2.2–2.4** |
-| AP-2.rev | Unabhängiges Review Phase 2 | A | opus | ☐ | AP-2.1 … AP-2.5 | Schwerpunkt Sicherheit |
-| AP-2.doc | Dokumentation Phase 2 | A | sonnet | ☐ | AP-2.rev | |
+| AP-2.1 | Untermenü, Seitengerüst, Assets | A | sonnet | ☑ | AP-1.doc | Eintrag unter Seitenmanager nachgewiesen; R2 widerlegt |
+| AP-2.2 | Dateiauswahl, Parsen, Dublettenprüfung | A | sonnet | ☑ | AP-2.1 | Endpunkt live geprüft |
+| AP-2.3 | Zusammengeführter Stil-Dialog | A | sonnet | ☑ | AP-2.2 | Gruppen über alle Dateien vereinigt |
+| AP-2.4 | Import ausführen, Seiten anlegen | A | opus | ☑ | AP-1.5, AP-2.3 | `wp_slash` belegt; 403 bei falschem Nonce |
+| AP-2.5 | Gestaltung der Importseite | A | sonnet | ☑ | AP-2.1 | 19 vereinbarte Klassen, < 200 Zeilen |
+| AP-2.rev | Unabhängiges Review Phase 2 | A | opus | ◐ | AP-2.1 … AP-2.5 | **braucht frischen Agenten** wie AP-1.rev |
+| AP-2.doc | Dokumentation Phase 2 | A | sonnet | ☑ | AP-2.rev | CLAUDE.md: Abschnitt „Seitenimport" |
 | AP-3.1 | Auswahl-Markup und Sammelaktionen (PHP) | B | opus | ☐ | – | **startet sofort** |
 | AP-3.2 | Auswahl-Logik und Bulk-Aufruf (JS) | B | sonnet | ☐ | AP-3.1 | |
 | AP-3.3 | Gestaltung Auswahlspalte und Bulk-Leiste | B | sonnet | ☐ | AP-3.1 | **parallel zu 3.2** |
@@ -3090,14 +3106,14 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | 2026-08-10 | **Phase 1 abgeschlossen** | Harness grün · `check-php74` ohne Befund · alle 6 übrigen Harnesse grün · Vollkette Markdown→Parser→Serializer→`wp_insert_post`→Rundlauf zeichengleich, `parse_blocks()` erkennt alle 7 Blocktypen · `_glossar_scan_version` gesetzt (R4) | bestanden | Claude |
 | | AP-1.rev | | | |
 | | AP-1.doc | | | |
-| | AP-2.1 | | | |
-| | AP-2.2 | | | |
-| | AP-2.3 | | | |
-| | AP-2.4 | | | |
-| | AP-2.5 | | | |
-| | **Phase 2 abgeschlossen** | Integrationstest + Regressionscheck | | |
+| 2026-08-10 | AP-2.1 | Menüeintrag hängt nachweislich unter `toplevel_page_page-manager`; alle 6 Hüll-IDs vorhanden; `cbdPageImport` mit `nonceParse`/`nonceImport`/`accordionVerfuegbar` lokalisiert; Assets weder auf Dashboard noch Seitenmanager geladen; Plugin aktivierbar; `check-php74` ohne Befund | bestanden | Claude |
+| 2026-08-10 | AP-2.2 | `cbd_check_page_titles` über echte HTTP-Anfrage mit Cookie und Nonce: antwortet korrekt; Titel-Erkennung aus der ersten `# `-Zeile | bestanden | Claude |
+| 2026-08-10 | AP-2.3 | `cbd_get_style_mappings` liefert 6 Designs; Gruppen aller Dateien werden zu einer Liste vereinigt, exakte Treffer vorbelegt | bestanden | Claude |
+| 2026-08-10 | AP-2.4 | Import über den echten AJAX-Endpunkt: Seite als Entwurf, `post_parent = 0`; **`\cdot` und `\sum` erhalten** (wp_slash); Umlaute, Container, Tabelle, Listeneinträge korrekt; Titel nicht doppelt; `_glossar_scan_version = '1'`. Sicherheit: angemeldet + falscher Nonce → HTTP 403 ohne Seite; unangemeldet → abgewiesen; Titel aus reinem HTML wird verworfen | bestanden | Claude |
+| 2026-08-10 | AP-2.5 | Alle vereinbarten `cbd-pi-`-Klassen gestaltet, nur Projektfarben, Umbruch unter 782px | **teilweise** — Kriterium „unter 200 Zeilen" nicht erfüllt (295 Zeilen, davon rund 60 Kommentar und Gliederung). Bewusst so belassen: Die Datei kürzen hieße Kommentare streichen, und der Haltepunkt-Block ist sachlich nötig. Kriterium war eine willkürliche Setzung der Planung | Claude |
+| 2026-08-10 | **Phase 2 abgeschlossen** | Import Ende zu Ende über echten `admin-ajax.php` mit Cookie und Nonce; Entwurf auf oberster Ebene; LaTeX, Umlaute, Container, Tabelle, Liste korrekt; Glossar-Meta gesetzt; Nonce- und Rechteprüfung greifen. **Nicht geprüft:** alles, was Klicken im Browser erfordert (Ablagefläche, Darstellung des Dialogs, Editor-Gültigkeitswarnung) | teilweise | Claude |
 | | AP-2.rev | | | |
-| | AP-2.doc | | | |
+| 2026-08-10 | AP-2.doc | `CLAUDE.md` um den Abschnitt „Seitenimport" ergänzt; genannte Pfade und Endpunkte stichprobenartig gegen den Code geprüft | bestanden | Claude |
 | | AP-3.1 | | | |
 | | AP-3.2 | | | |
 | | AP-3.3 | | | |

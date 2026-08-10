@@ -1,0 +1,295 @@
+/**
+ * Container Block Designer – Gestaltung des Seitenimporters
+ *
+ * Gehört zu admin/page-import.php. Angelehnt an content-importer.css, damit
+ * Importdialog und Importseite als eine Familie erkennbar sind — anders als
+ * der Dialog ist dies aber eine vollflächige Adminseite, kein Modal.
+ *
+ * Farben ausschließlich aus der Projektpalette:
+ *   #e24614 UI-Oberfläche · #c93d12 dunkler · #f5ede9 hell
+ *   #71230a Spezialtext   · #e0e0e0 Rahmen
+ *
+ * @package ContainerBlockDesigner
+ */
+
+.cbd-pi-wrap #cbd-page-import-app {
+    max-width: 900px;
+}
+
+/* --- Ablagefläche ------------------------------------------------- */
+
+.cbd-pi-dropzone {
+    border: 2px dashed #e0e0e0;
+    border-radius: 6px;
+    background-color: #fff;
+    padding: 28px 20px;
+    text-align: center;
+    margin: 16px 0;
+    transition: background-color .15s, border-color .15s;
+}
+
+.cbd-pi-dropzone--aktiv {
+    border-color: #e24614;
+    background-color: #f5ede9;
+}
+
+.cbd-pi-dropzone-icon {
+    font-size: 32px;
+    margin: 0 0 4px;
+    line-height: 1;
+}
+
+.cbd-pi-dropzone-text {
+    margin: 0 0 4px;
+    font-weight: 600;
+}
+
+.cbd-pi-dropzone-or {
+    margin: 0 0 10px;
+    color: #666;
+}
+
+.cbd-pi-dateibutton {
+    cursor: pointer;
+}
+
+/* --- Dateiliste --------------------------------------------------- */
+
+.cbd-pi-zusammenfassung {
+    font-weight: 600;
+    margin: 16px 0 4px;
+}
+
+.cbd-pi-datei {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #e0e0e0;
+    background-color: #fff;
+}
+
+.cbd-pi-datei:first-of-type {
+    border-top: 1px solid #e0e0e0;
+}
+
+.cbd-pi-datei input[type="checkbox"] {
+    margin-top: 3px;
+    flex-shrink: 0;
+}
+
+.cbd-pi-datei-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.cbd-pi-datei-titel {
+    font-weight: 600;
+    word-break: break-word;
+}
+
+.cbd-pi-datei-meta {
+    color: #666;
+    font-size: 12px;
+}
+
+.cbd-pi-datei--dublette {
+    border-left: 4px solid #e24614;
+    padding-left: 8px;
+}
+
+.cbd-pi-datei--abgewaehlt {
+    opacity: .55;
+}
+
+.cbd-pi-warnung {
+    color: #71230a;
+    font-size: 12px;
+}
+
+.cbd-pi-warnung a {
+    margin-left: 4px;
+}
+
+/* --- Gruppen und Zuweisung ---------------------------------------- */
+
+.cbd-pi-gruppen {
+    margin-top: 24px;
+}
+
+.cbd-pi-gruppen h2 {
+    margin-bottom: 2px;
+}
+
+.cbd-pi-notice {
+    margin: 10px 0;
+    padding: 8px 12px;
+}
+
+.cbd-pi-sammelzuweisung {
+    background-color: #f5ede9;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin: 12px 0 16px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.cbd-pi-sammel-label {
+    flex-basis: 100%;
+    margin: 0 0 4px;
+    color: #71230a;
+}
+
+.cbd-pi-gruppe {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    background-color: #fff;
+    margin-bottom: 8px;
+}
+
+.cbd-pi-gruppe--offen {
+    border-left: 4px solid #e24614;
+}
+
+.cbd-pi-badge {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    line-height: 30px;
+    text-align: center;
+    border-radius: 50%;
+    background-color: #e24614;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.cbd-pi-gruppe-inhalt {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.cbd-pi-gruppe-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.cbd-pi-gruppe-inhalt select {
+    max-width: 100%;
+}
+
+.cbd-pi-hinweis {
+    margin: 4px 0 0;
+    color: #666;
+    font-size: 12px;
+}
+
+.cbd-pi-accordion {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cbd-pi-accordion label {
+    font-size: 12px;
+}
+
+/* --- Fortschritt und Ergebnis ------------------------------------- */
+
+.cbd-pi-fortschritt {
+    margin: 16px 0;
+}
+
+.cbd-pi-fortschritt p {
+    margin: 0 0 4px;
+}
+
+.cbd-pi-fortschritt-leiste {
+    height: 6px;
+    background-color: #e0e0e0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.cbd-pi-fortschritt-balken {
+    height: 100%;
+    width: 0;
+    background-color: #e24614;
+    transition: width .2s;
+}
+
+.cbd-pi-ergebnis {
+    margin-top: 20px;
+}
+
+.cbd-pi-ergebnis-zeile {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 10px;
+    border-bottom: 1px solid #e0e0e0;
+    background-color: #fff;
+}
+
+.cbd-pi-ergebnis-zeile--fehler {
+    color: #71230a;
+    background-color: #f5ede9;
+}
+
+.cbd-pi-summe {
+    font-weight: 600;
+    margin: 12px 0 8px;
+}
+
+/* --- Aktionsleiste ------------------------------------------------ */
+
+.cbd-pi-aktionen {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 12px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.cbd-pi-status {
+    color: #666;
+}
+
+.cbd-pi-status.is-incomplete {
+    color: #71230a;
+}
+
+/* --- Schmale Fenster (WordPress-Haltepunkt) ----------------------- */
+
+@media screen and (max-width: 782px) {
+    .cbd-pi-gruppe,
+    .cbd-pi-sammelzuweisung,
+    .cbd-pi-aktionen {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .cbd-pi-badge {
+        align-self: flex-start;
+    }
+
+    .cbd-pi-ergebnis-zeile {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
