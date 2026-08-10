@@ -1360,7 +1360,7 @@ Plugin-Bootstrap. Die Logik folgt in AP-2.2 bis AP-2.4.
 
 ### AP-2.2: Dateiauswahl, Parsen je Datei und Dublettenprüfung
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.1
@@ -1503,7 +1503,7 @@ Diese Datei wird **nicht** verändert.
 
 ### AP-2.3: Zusammengeführter Stil-Dialog über alle Dateien
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.2
@@ -1639,7 +1639,7 @@ Auch diese Datei wird nicht verändert.
 
 ### AP-2.4: Import ausführen – Seiten als Entwurf anlegen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** opus (sicherheitsrelevant: Eingangsprüfung, Rechte, Schreiben in die Datenbank)
 **Abhängigkeiten:** AP-1.5 (Serializer), AP-2.3
@@ -1847,7 +1847,7 @@ bei vielen Dateien ausgeschlossen ist und ein Fehler nur eine Datei betrifft.
 
 ### AP-2.5: Gestaltung der Importseite
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.1
@@ -3061,10 +3061,10 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 | AP-1.rev | Unabhängiges Review Phase 1 | A | opus | ◐ | AP-1.1 … AP-1.5 | **braucht frischen Agenten** — siehe Hinweis unter der Tabelle |
 | AP-1.doc | Dokumentation Phase 1 | A | sonnet | ☑ | AP-1.rev | CLAUDE.md: Abschnitt „Block-Serializer" |
 | AP-2.1 | Untermenü, Seitengerüst, Assets | A | sonnet | ☑ | AP-1.doc | Eintrag unter Seitenmanager nachgewiesen; R2 widerlegt |
-| AP-2.2 | Dateiauswahl, Parsen, Dublettenprüfung | A | sonnet | ☐ | AP-2.1 | |
-| AP-2.3 | Zusammengeführter Stil-Dialog | A | sonnet | ☐ | AP-2.2 | |
-| AP-2.4 | Import ausführen, Seiten anlegen | A | opus | ☐ | AP-1.5, AP-2.3 | sicherheitsrelevant |
-| AP-2.5 | Gestaltung der Importseite | A | sonnet | ☐ | AP-2.1 | **parallel zu 2.2–2.4** |
+| AP-2.2 | Dateiauswahl, Parsen, Dublettenprüfung | A | sonnet | ☑ | AP-2.1 | Endpunkt live geprüft |
+| AP-2.3 | Zusammengeführter Stil-Dialog | A | sonnet | ☑ | AP-2.2 | Gruppen über alle Dateien vereinigt |
+| AP-2.4 | Import ausführen, Seiten anlegen | A | opus | ☑ | AP-1.5, AP-2.3 | `wp_slash` belegt; 403 bei falschem Nonce |
+| AP-2.5 | Gestaltung der Importseite | A | sonnet | ☑ | AP-2.1 | 19 vereinbarte Klassen, < 200 Zeilen |
 | AP-2.rev | Unabhängiges Review Phase 2 | A | opus | ☐ | AP-2.1 … AP-2.5 | Schwerpunkt Sicherheit |
 | AP-2.doc | Dokumentation Phase 2 | A | sonnet | ☐ | AP-2.rev | |
 | AP-3.1 | Auswahl-Markup und Sammelaktionen (PHP) | B | opus | ☐ | – | **startet sofort** |
@@ -3107,10 +3107,10 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | | AP-1.rev | | | |
 | | AP-1.doc | | | |
 | 2026-08-10 | AP-2.1 | Menüeintrag hängt nachweislich unter `toplevel_page_page-manager`; alle 6 Hüll-IDs vorhanden; `cbdPageImport` mit `nonceParse`/`nonceImport`/`accordionVerfuegbar` lokalisiert; Assets weder auf Dashboard noch Seitenmanager geladen; Plugin aktivierbar; `check-php74` ohne Befund | bestanden | Claude |
-| | AP-2.2 | | | |
-| | AP-2.3 | | | |
-| | AP-2.4 | | | |
-| | AP-2.5 | | | |
+| 2026-08-10 | AP-2.2 | `cbd_check_page_titles` über echte HTTP-Anfrage mit Cookie und Nonce: antwortet korrekt; Titel-Erkennung aus der ersten `# `-Zeile | bestanden | Claude |
+| 2026-08-10 | AP-2.3 | `cbd_get_style_mappings` liefert 6 Designs; Gruppen aller Dateien werden zu einer Liste vereinigt, exakte Treffer vorbelegt | bestanden | Claude |
+| 2026-08-10 | AP-2.4 | Import über den echten AJAX-Endpunkt: Seite als Entwurf, `post_parent = 0`; **`\cdot` und `\sum` erhalten** (wp_slash); Umlaute, Container, Tabelle, Listeneinträge korrekt; Titel nicht doppelt; `_glossar_scan_version = '1'`. Sicherheit: angemeldet + falscher Nonce → HTTP 403 ohne Seite; unangemeldet → abgewiesen; Titel aus reinem HTML wird verworfen | bestanden | Claude |
+| 2026-08-10 | AP-2.5 | Alle vereinbarten `cbd-pi-`-Klassen gestaltet, nur Projektfarben, Umbruch unter 782px | bestanden | Claude |
 | | **Phase 2 abgeschlossen** | Integrationstest + Regressionscheck | | |
 | | AP-2.rev | | | |
 | | AP-2.doc | | | |
