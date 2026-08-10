@@ -944,6 +944,10 @@ Recent fixes:
 
 ## Additional Documentation
 
+- **`reference_file_map.md`** — Datei-Map des Plugins: welche Datei wofür
+  zuständig ist, inklusive der drei toten CSS-Dateien und der Hinweise zum
+  ZIP-Bau. Navigationshilfe; die fachlichen Details stehen in dieser Datei.
+
 - **`docs/VERBESSERUNGSPLAN.md` bis `-4.md`** — Review-Runden 2026-07 über das
   gesamte Website-Projekt (CDB, Modular-Plugin, Theme): 42 Arbeitspakete mit
   Problem, Fundstelle, Lösung, Verifikation und Erledigt-Status; inkl.

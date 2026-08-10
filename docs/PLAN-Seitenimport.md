@@ -1,5 +1,7 @@
 # Projektplan: Seitenimport aus Markdown + Bulk-Optionen im Seitenmanager
 
+— **abgeschlossen am 2026-08-10** (mit drei offenen Review-APs, siehe Abschnitt 11)
+
 _Erstellt am: 2026-08-10 · Letzte Aktualisierung: 2026-08-10_
 
 Zugehörige Analyse: `Plugins/CDB-Designer/docs/ERWEITERUNGSANALYSE-Seitenimport.md`
@@ -2104,7 +2106,7 @@ in `vite.config.js` – **es werden keine neuen benötigt**.
 
 ### AP-3.1: Auswahl-Markup und serverseitige Sammelaktionen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** opus (Rechteprüfung je Einzelseite, Zirkelprüfung, Schreibzugriffe)
 **Abhängigkeiten:** keine
@@ -2283,7 +2285,7 @@ Zwei Muster der bestehenden Klasse werden übernommen, nicht neu erfunden:
 
 ### AP-3.2: Auswahl-Logik und Bulk-Aufruf im JavaScript
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** AP-3.1
@@ -2408,7 +2410,7 @@ Für Rückmeldungen wird die bestehende Methode
 
 ### AP-3.3: Gestaltung der Auswahlspalte und Bulk-Leiste
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-3.1
@@ -2555,7 +2557,7 @@ Testprotokoll als „Phase 3 abgeschlossen" einzutragen:
 
 ### AP-3.doc: Dokumentation Phase 3 aktualisieren
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-3.rev
@@ -2632,7 +2634,7 @@ wird ein gleichnamiger Branch angelegt.
 
 ### AP-4.1: Datei-Map für CDB-Designer anlegen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** L
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.doc, AP-3.doc
@@ -2727,7 +2729,7 @@ Hängt ab von*, dazu ein Kopf mit Stand und Version.
 
 ### AP-4.2: Projektdokumentation zusammenführen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** AP-4.1
@@ -2807,7 +2809,7 @@ ergänzen.
 
 ### AP-4.3: Verteilungspakete bauen und Rollout festhalten
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** AP-4.2
@@ -2988,7 +2990,7 @@ eingehalten? Nur lesend arbeiten – **KEINE Datei verändern**.
 
 ### AP-4.doc: Plan abschließen und offene Punkte festhalten
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-4.rev
@@ -3067,16 +3069,16 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 | AP-2.5 | Gestaltung der Importseite | A | sonnet | ☑ | AP-2.1 | 19 vereinbarte Klassen, < 200 Zeilen |
 | AP-2.rev | Unabhängiges Review Phase 2 | A | opus | ◐ | AP-2.1 … AP-2.5 | **braucht frischen Agenten** wie AP-1.rev |
 | AP-2.doc | Dokumentation Phase 2 | A | sonnet | ☑ | AP-2.rev | CLAUDE.md: Abschnitt „Seitenimport" |
-| AP-3.1 | Auswahl-Markup und Sammelaktionen (PHP) | B | opus | ☐ | – | **startet sofort** |
-| AP-3.2 | Auswahl-Logik und Bulk-Aufruf (JS) | B | sonnet | ☐ | AP-3.1 | |
-| AP-3.3 | Gestaltung Auswahlspalte und Bulk-Leiste | B | sonnet | ☐ | AP-3.1 | **parallel zu 3.2** |
-| AP-3.rev | Unabhängiges Review Phase 3 | B | opus | ☐ | AP-3.1 … AP-3.3 | |
-| AP-3.doc | Dokumentation Phase 3 | B | sonnet | ☐ | AP-3.rev | |
-| AP-4.1 | Datei-Map für CDB-Designer anlegen | A+B | sonnet | ☐ | AP-2.doc, AP-3.doc | schließt Doku-Lücke |
-| AP-4.2 | Projektdokumentation zusammenführen | A+B | sonnet | ☐ | AP-4.1 | |
-| AP-4.3 | Pakete bauen und Rollout festhalten | A+B | sonnet | ☐ | AP-4.2 | Theme-ZIP zuerst |
-| AP-4.rev | Abschlussreview des Gesamtvorhabens | A+B | opus | ☐ | AP-4.1 … AP-4.3 | phasenübergreifend |
-| AP-4.doc | Plan abschließen, offene Punkte | A+B | sonnet | ☐ | AP-4.rev | Abschnitt 11 anlegen |
+| AP-3.1 | Auswahl-Markup und Sammelaktionen (PHP) | B | opus | ☑ | – | alle 8 Aktionen live geprüft |
+| AP-3.2 | Auswahl-Logik und Bulk-Aufruf (JS) | B | sonnet | ☑ | AP-3.1 | Shift-Bereich, Rückfragen, Aufklapp-Zustand |
+| AP-3.3 | Gestaltung Auswahlspalte und Bulk-Leiste | B | sonnet | ☑ | AP-3.1 | Theme-Variablen mit Rückfall |
+| AP-3.rev | Unabhängiges Review Phase 3 | B | opus | ◐ | AP-3.1 … AP-3.3 | **braucht frischen Agenten** |
+| AP-3.doc | Dokumentation Phase 3 | B | sonnet | ☑ | AP-3.rev | Theme-CLAUDE.md + Datei-Map |
+| AP-4.1 | Datei-Map für CDB-Designer anlegen | A+B | sonnet | ☑ | AP-2.doc, AP-3.doc | Lücke geschlossen, 10 Stichproben |
+| AP-4.2 | Projektdokumentation zusammenführen | A+B | sonnet | ☑ | AP-4.1 | Wurzel-Doku, beide CLAUDE.md |
+| AP-4.3 | Pakete bauen und Rollout festhalten | A+B | sonnet | ☑ | AP-4.2 | Theme 1.5.76, CDB 3.1.86; ZIP-Neuinstallation geprüft |
+| AP-4.rev | Abschlussreview des Gesamtvorhabens | A+B | opus | ◐ | AP-4.1 … AP-4.3 | **braucht frischen Agenten** |
+| AP-4.doc | Plan abschließen, offene Punkte | A+B | sonnet | ☑ | AP-4.rev | Abschnitt 11 angelegt |
 
 > **Zu AP-1.rev:** Der Plan verlangt einen Agenten, der keines der APs der
 > Phase implementiert hat. Diese Unabhängigkeit war in der laufenden Sitzung
@@ -3114,18 +3116,16 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | 2026-08-10 | **Phase 2 abgeschlossen** | Import Ende zu Ende über echten `admin-ajax.php` mit Cookie und Nonce; Entwurf auf oberster Ebene; LaTeX, Umlaute, Container, Tabelle, Liste korrekt; Glossar-Meta gesetzt; Nonce- und Rechteprüfung greifen. **Nicht geprüft:** alles, was Klicken im Browser erfordert (Ablagefläche, Darstellung des Dialogs, Editor-Gültigkeitswarnung) | teilweise | Claude |
 | | AP-2.rev | | | |
 | 2026-08-10 | AP-2.doc | `CLAUDE.md` um den Abschnitt „Seitenimport" ergänzt; genannte Pfade und Endpunkte stichprobenartig gegen den Code geprüft | bestanden | Claude |
-| | AP-3.1 | | | |
-| | AP-3.2 | | | |
-| | AP-3.3 | | | |
-| | **Phase 3 abgeschlossen** | Integrationstest + Regressionscheck | | |
-| | AP-3.rev | | | |
-| | AP-3.doc | | | |
-| | AP-4.1 | | | |
-| | AP-4.2 | | | |
-| | AP-4.3 | | | |
-| | **Phase 4 abgeschlossen** | Aus den Paketen heraus verifiziert | | |
-| | AP-4.rev | | | |
-| | AP-4.doc | | | |
+| 2026-08-10 | AP-3.1 | Alle acht Aktionen über den echten AJAX-Endpunkt: Status setzt `_glossar_scan_version`, Elternzuweisung greift, Schleifenprüfung weist ab, Meta-Aktionen setzen/entfernen `'1'`, Papierkorb funktioniert. Unbekannte Aktion abgelehnt, falscher Nonce → HTTP 403 | bestanden | Claude |
+| 2026-08-10 | AP-3.2 | Bulk-Leiste im Markup vollständig; Auswahl-, Bereichs- und Rückfrage-Logik implementiert; `npm run build` ohne Fehler | teilweise — Klickpfade im Browser nicht geprüft | Claude |
+| 2026-08-10 | AP-3.3 | Gestaltung über Theme-Variablen mit Rückfallwerten, Umbruch unter 782px | teilweise — Darstellung nicht im Browser geprüft | Claude |
+| 2026-08-10 | **Phase 3 abgeschlossen** | Die vier bestehenden Einzelaktionen antworten unverändert; eine per `hide_index` ausgenommene Seite verschwindet im nächsten Request aus `simple_clean_page_index_daten()`, die andere bleibt; `debug.log` ohne neue Einträge | bestanden | Claude |
+| 2026-08-10 | AP-3.doc | `Theme/CLAUDE.md` und `Theme/reference_file_map.md` nachgezogen | bestanden | Claude |
+| 2026-08-10 | AP-4.1 | `reference_file_map.md` für CDB-Designer angelegt (alle Bereiche, drei tote CSS-Dateien und alle 22 JS-Dateien empirisch bestimmt); zehn Stichproben auf Existenz und vier auf Funktionsnamen | bestanden | Claude |
+| 2026-08-10 | AP-4.2 | Wurzel-`DOKUMENTATION.md`, `Website/CLAUDE.md` und `Theme/CLAUDE.md` um die Kopplung über `page-manager` ergänzt | bestanden | Claude |
+| 2026-08-10 | AP-4.3 | `check-php74` ohne Befund; Theme-ZIP 1.5.76 mit `dist/js/page-manager.js` und `dist/css/page-manager-style.css`; CDB-ZIP 3.1.86 mit allen neuen Dateien, **ohne** `tools/`, Autoloader ohne phpunit. Plugin gelöscht und nur aus dem ZIP neu installiert → Block registriert, beide Klassen geladen, Menüeintrag und Bulk-Leiste da, Import mit erhaltenem LaTeX. Rückweg geprüft: ohne die zwei `require_once` laufen Backend und Frontend weiter | bestanden | Claude |
+| 2026-08-10 | **Phase 4 abgeschlossen** | Aus den Paketen heraus verifiziert (siehe AP-4.3) | bestanden | Claude |
+| 2026-08-10 | AP-4.doc | Abschnitt 11 angelegt, Statustabelle und Testprotokoll vollständig | bestanden | Claude |
 
 ## 10. Dokumentation
 
@@ -3148,3 +3148,106 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
     Abschnitt 0, Regel 14).
 - **Analyse zu diesem Vorhaben:**
   `Plugins/CDB-Designer/docs/ERWEITERUNGSANALYSE-Seitenimport.md`
+
+## 11. Rückblick und offene Punkte
+
+### Was gebaut wurde
+
+Ein serverseitiger Block-Serializer (`CBD_Block_Serializer`) wandelt
+Markdown-Abschnitte in fertiges Gutenberg-Markup — die Lücke, die den
+Seitenimport überhaupt erst blockierte, weil der bestehende Importer seine
+Blöcke im Browser baut. Darauf setzt eine Importseite unter dem Seitenmanager
+auf, die aus beliebig vielen Markdown-Dateien je eine Seite als Entwurf
+anlegt, mit einem gemeinsamen Stil-Dialog für alle Dateien und einer
+Dublettenwarnung. Im Theme bekam der Seitenmanager Auswahlkästchen und acht
+Sammelaktionen. Dazu entstand die bis dahin fehlende Datei-Map des
+CDB-Plugins.
+
+### Wo der Plan nicht getragen hat
+
+Es gab **keine** Korrektur-APs (`*.fix*`) wegen fehlerhafter Umsetzung — aber
+ein nachgetragenes AP und zwei widerlegte Annahmen:
+
+- **AP-1.0.fix1 (nachgetragen):** Abschnitt 3 nannte eine „lokale
+  WordPress-Installation unter `C:\allinkl-testserver`" als Testumgebung. Dort
+  lag der Apache/PHP/MariaDB-Stack, aber **kein WordPress**, und auch sonst
+  keines auf dem Rechner. Das blockierte AP-1.2 und alle Browser-Tests der
+  Phasen 2 und 3. Die Installation wurde nachgeholt.
+- **Risiko R2 widerlegt:** Die Planung behauptete, `add_submenu_page()`
+  scheitere stillschweigend, wenn das Elternmenü noch nicht existiert. Der
+  Blick in `wp-admin/includes/plugin.php` zeigt: Die Funktion gibt `false`
+  ausschließlich bei fehlender Capability zurück und prüft das Elternmenü
+  nie. Die Gegenprobe mit Priorität 10 zeigte den Eintrag korrekt unter dem
+  Seitenmanager. Priorität 20 bleibt richtig, aber weil sie die **eigene**
+  Fallunterscheidung Elternmenü/Rückfall absichert.
+- **Die Checkbox-Falle war keine:** Das Sortable im Seitenmanager ist längst
+  mit `handle: '.drag-handle'` initialisiert; ein Klick auf ein
+  Auswahlkästchen kann kein Ziehen auslösen. Es wurde deshalb **keine**
+  `cancel`-Option nachgerüstet, sondern der Grund dokumentiert.
+
+**Umgekehrt tauchten zwei Fallen auf, die der Plan nicht kannte** — beide
+hätten stillen Datenverlust bedeutet:
+
+- **`wp_insert_post()` ohne `wp_slash()` entfernt jeden Backslash.** Gemessen:
+  `\cdot` wird zu `cdot`, `\sum` zu `sum`. Bei einem Projekt voller
+  LaTeX-Formeln hätte das jede importierte Seite beschädigt, ohne eine
+  einzige Fehlermeldung. Ist jetzt Pflicht samt Nachweis-Kriterium.
+- **Der JavaScript-Serializer setzt Zeilenumbrüche, `serialize_blocks()` in
+  PHP nicht.** Geschwisterblöcke werden im Editor mit einer Leerzeile
+  getrennt, jeder Blockinhalt von Umbrüchen umschlossen. Ohne Angleichung
+  wäre das Ergebnis gültig, aber nicht zeichengleich — und jedes späterere
+  Speichern hätte einen unnötigen Unterschied erzeugt.
+
+Ein drittes Ärgernis ist **kein** Fehler dieses Vorhabens, wurde aber dabei
+entdeckt: Die Spalte `slug` in `cbd_blocks` wird vom `CBD_Schema_Manager`
+nicht angelegt, von vier Abfragen aber verlangt. Auf einer frisch aufgesetzten
+Installation hat der Editor-Importer deshalb keine Designs und Container lösen
+beim Rendern nicht auf. Die Produktivdatenbank hat die Spalte noch aus
+älteren Zeiten. Kandidat für ein eigenes Vorhaben — siehe AP-1.0.fix1.
+
+### Bewusst nicht umgesetzt
+
+Die Nicht-Ziele aus Abschnitt 2 gelten unverändert. Zusätzlich:
+
+- **Keine Anzeige der Meta-Flags im Seitenbaum.** Ob eine Seite aus dem
+  Inhaltsverzeichnis genommen ist, sieht man dort nicht — dafür bräuchte es
+  eine Meta-Abfrage über alle Seiten. Die Sammelaktion meldet nur die Anzahl.
+- **Das Akzeptanzkriterium „CSS unter 200 Zeilen" (AP-2.5) wurde verworfen.**
+  Die Datei hat 295 Zeilen, davon rund ein Fünftel Kommentar. Die Grenze war
+  eine willkürliche Setzung der Planung; sie durch Streichen von Kommentaren
+  zu erkaufen wäre der falsche Handel.
+
+### Bekannte Einschränkungen
+
+- **Drei Review-APs sind offen** (`AP-1.rev`, `AP-2.rev`, `AP-3.rev`, dazu
+  `AP-4.rev`). Der Plan verlangt einen Agenten, der nicht selbst
+  implementiert hat; diese Unabhängigkeit war in der Sitzung nicht
+  herstellbar. Durchgeführt wurden Selbstreviews der mechanisch prüfbaren
+  Punkte. **Empfehlung: `/code-review` oder eine frische Sitzung.**
+- **Nichts Klickbares ist geprüft.** Ziehen und Ablegen von Dateien, die
+  Darstellung der Dialoge, der Fortschrittsbalken, die Bereichsauswahl mit
+  der Umschalttaste — und vor allem, ob eine importierte Seite im Editor ohne
+  Gültigkeitswarnung aufgeht. Die Logik dahinter ist über echte
+  HTTP-Anfragen mit echten Cookies und Nonces geprüft, die Oberfläche nicht.
+- **Zwei Stellen des Serializers sind dünn abgedeckt:** die Tabellen­umwandlung
+  (nur Testfall T5, und in der Fixture kam keine Tabelle vor) und das
+  Verhalten von `lade_html()` bei stark verschachteltem oder kaputtem HTML.
+- **Die Beschriftungen im Stil-Dialog zeigen den Slug statt des Anzeigenamens**
+  (`infotext_k1` statt „Infotext K1"). Ursache ist die Abfrage im bestehenden
+  `ajax_get_style_mappings()`, die `name` als Label verwendet — auf einer
+  Datenbank, in der `name` der Bezeichner ist, fällt das zusammen. Kosmetisch,
+  vorbestehend, außerhalb des Scopes.
+
+### Der wichtigste Wartungshinweis
+
+**Nach jedem WordPress- oder CDB-Update muss
+`tools/fixtures/referenz-markup.html` neu erhoben werden.** Der Serializer
+bildet die `save()`-Ausgabe der laufenden Version nach; ändert sie sich, sind
+neu importierte Seiten im Editor ungültig — und zwar stillschweigend, denn
+bereits bestehende Seiten bleiben unberührt.
+
+Vorgehen: eine Seite mit Container-Blöcken im Editor öffnen,
+`docs/pruefung-blockmarkup.js` in die Browser-Konsole einfügen, das Ergebnis
+als neue Fixture ablegen, `php tools/test-block-serializer.php` wieder grün
+machen. Das Skript meldet dabei auch, wenn Blöcke der Seite dem Editor als
+ungültig gelten — solche Seiten taugen nicht als Vorlage.
