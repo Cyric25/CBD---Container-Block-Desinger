@@ -232,6 +232,11 @@ ohne Fatal laufen.
 Editor → Menü „⋮" → **Inhalt importieren (K1/K2/K3)**.
 PHP: `includes/class-cbd-content-importer.php`, UI: `assets/js/content-importer.js`.
 
+> Es gibt **zwei Wege in denselben Parser**: diesen Dialog im Editor und den
+> Seitenimport (Abschnitt „Block-Serializer" weiter unten), der ganze Seiten
+> aus Markdown-Dateien anlegt. `parse_markdown_content()` ist geteilt und darf
+> nicht einseitig geändert werden — jede Änderung trifft beide Wege.
+
 **Parser-Regeln (seit v3.1.70 strukturtolerant — es geht KEIN Inhalt verloren):**
 
 | Markdown | Bedeutung |

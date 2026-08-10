@@ -1036,6 +1036,33 @@ Reines Ausführen der Harnesse zum Nachvollziehen ist erlaubt.
 - entfällt (Review-AP; das Ergebnis ist der Bericht).
 
 **Übergabenotiz:**
+**Nur Selbstreview, keine unabhängige Prüfung** (2026-08-10). Die
+implementierende Instanz hat auch geprüft — die vom AP geforderte
+Unabhängigkeit ist damit **nicht** erfüllt. Das AP bleibt auf ◐, bis ein
+frischer Agent oder `/code-review` darübergelaufen ist.
+
+Mechanisch prüfbare Punkte aus Schritt 2, alle mit Beleg:
+
+| Prüfung | Ergebnis |
+|---|---|
+| `tools/test-block-serializer.php` seit dem AP-1.3-Commit unverändert | ja — `git diff ecfab2c HEAD` für die Datei ist leer |
+| `'values'` im Serializer | 0 Fundstellen |
+| Accordion ohne Verfügbarkeitsprüfung erzeugt | nein — `nutzt_accordion()` steigt bei `accordion_available === false` sofort aus, Testfall T16 belegt den Rückfall |
+| Container mit ungeprüftem Slug | nein — `block_container()` wird nur nach `ermittle_slug()` aufgerufen, das gegen `known_slugs` prüft; Testfall T14 |
+| PHP-8.0-Syntax | keine — `php tools/check-php74.php` meldet 557 Dateien kompatibel |
+| `ABSPATH`-Schutz in der neuen Datei | vorhanden |
+| Nicht-Ziele verletzt | nein — `git diff --name-only 35fdc0f HEAD` enthält weder `class-cbd-content-importer.php` noch `content-importer.js` noch `block-editor.js`; auch `container-block-designer.php` wurde nicht angefasst (die Verdrahtung gehört planmäßig in AP-2.1) |
+| Phasen-Endzustand erreicht | ja — 71 Prüfungen, 0 Fehler |
+
+Geänderte Dateien der Phase: `CLAUDE.md`, `docs/PLAN-Seitenimport.md`,
+`docs/pruefung-blockmarkup.js`, `docs/pruefung-produktiv.js`,
+`includes/class-cbd-block-serializer.php`, `tools/fixtures/*`,
+`tools/test-block-serializer.php`. Alle innerhalb des Scopes.
+
+**Was ein unabhängiges Review noch ansehen sollte** (von mir nicht
+verlässlich selbst beurteilbar): die Tabellenumwandlung in `block_table()`
+(nur T5 deckt sie ab, und in der Fixture kam keine Tabelle vor), sowie das
+Verhalten von `lade_html()` bei stark verschachteltem oder kaputtem HTML.
 
 ---
 
@@ -3011,12 +3038,12 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 |---|---|---|---|---|---|---|
 | AP-1.0.fix1 | WordPress-Testinstallation aufsetzen | A+B | – | ☑ | – | Nachtrag: Testumgebung fehlte. `http://fos.localhost:8080`, WP 7.0.3 |
 | AP-1.1 | Ausgangszustand sichern und Phasen-Branch anlegen | A | sonnet | ☑ | – | Commit `35fdc0f`, Branch `phase-1-block-serializer` |
-| AP-1.2 | Referenzmarkup aus dem Editor erheben | A | sonnet | ✗ | AP-1.1, AP-1.0.fix1 | **blockiert:** `slug`-Spalte und WP-Version zu klären |
-| AP-1.3 | Testharness mit allen Testfällen (TDD, rot) | A | sonnet | ☐ | AP-1.2 | rote Tests committen |
-| AP-1.4 | HTML-Fragment in Kernblöcke umwandeln | A | opus | ☐ | AP-1.3 | macht T1–T11, T23 grün |
-| AP-1.5 | Abschnitte zu `post_content` zusammensetzen | A | opus | ☐ | AP-1.4 | macht T12–T22 grün |
-| AP-1.rev | Unabhängiges Review Phase 1 | A | opus | ☐ | AP-1.1 … AP-1.5 | frischer Agent, nur lesend |
-| AP-1.doc | Dokumentation Phase 1 | A | sonnet | ☐ | AP-1.rev | |
+| AP-1.2 | Referenzmarkup aus dem Editor erheben | A | sonnet | ☑ | AP-1.1, AP-1.0.fix1 | Grundwahrheit aus Produktivseite 4770; WP 7.0.3 beidseitig |
+| AP-1.3 | Testharness mit allen Testfällen (TDD, rot) | A | sonnet | ☑ | AP-1.2 | rot committet `ecfab2c`, seither unverändert |
+| AP-1.4 | HTML-Fragment in Kernblöcke umwandeln | A | opus | ☑ | AP-1.3 | T1–T11, T23 grün |
+| AP-1.5 | Abschnitte zu `post_content` zusammensetzen | A | opus | ☑ | AP-1.4 | 71 Prüfungen, 0 Fehler |
+| AP-1.rev | Unabhängiges Review Phase 1 | A | opus | ◐ | AP-1.1 … AP-1.5 | **braucht frischen Agenten** — siehe Hinweis unter der Tabelle |
+| AP-1.doc | Dokumentation Phase 1 | A | sonnet | ☑ | AP-1.rev | CLAUDE.md: Abschnitt „Block-Serializer" |
 | AP-2.1 | Untermenü, Seitengerüst, Assets | A | sonnet | ☐ | AP-1.doc | Menüpriorität 20 |
 | AP-2.2 | Dateiauswahl, Parsen, Dublettenprüfung | A | sonnet | ☐ | AP-2.1 | |
 | AP-2.3 | Zusammengeführter Stil-Dialog | A | sonnet | ☐ | AP-2.2 | |
@@ -3035,6 +3062,13 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 | AP-4.rev | Abschlussreview des Gesamtvorhabens | A+B | opus | ☐ | AP-4.1 … AP-4.3 | phasenübergreifend |
 | AP-4.doc | Plan abschließen, offene Punkte | A+B | sonnet | ☐ | AP-4.rev | Abschnitt 11 anlegen |
 
+> **Zu AP-1.rev:** Der Plan verlangt einen Agenten, der keines der APs der
+> Phase implementiert hat. Diese Unabhängigkeit war in der laufenden Sitzung
+> nicht herstellbar — dieselbe Instanz hat implementiert. Durchgeführt wurde
+> stattdessen ein **Selbstreview** der mechanisch prüfbaren Punkte
+> (Übergabenotiz bei AP-1.rev). Für das echte unabhängige Review empfiehlt
+> sich `/code-review` oder eine frische Sitzung; bis dahin bleibt das AP auf ◐.
+
 **Kritischer Pfad:** AP-1.1 → AP-1.2 → AP-1.3 → AP-1.4 → AP-1.5 → AP-1.rev →
 AP-1.doc → AP-2.1 → AP-2.2 → AP-2.3 → AP-2.4 → AP-2.rev → AP-2.doc → AP-4.1 →
 AP-4.2 → AP-4.3 → AP-4.rev → AP-4.doc.
@@ -3048,11 +3082,12 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
 | 2026-08-10 | AP-1.1 | `git status` sauber; `git show --stat HEAD` frei von `dist/`, `node_modules/`, `vendor/`, `*.zip`; Branch auf dem Remote nachgewiesen | bestanden | Claude |
-| | AP-1.2 | | | |
-| | AP-1.3 | | | |
-| | AP-1.4 | | | |
-| | AP-1.5 | | | |
-| | **Phase 1 abgeschlossen** | Integrationstest + Regressionscheck | | |
+| 2026-08-10 | AP-1.0.fix1 | WordPress 7.0.3 + Theme + beide Plugins aktiviert; Blocktypen registriert; `debug.log` ohne Fehler | bestanden | Claude |
+| 2026-08-10 | AP-1.2 | Fixture aus Produktivseite 4770 erhoben; Editor meldete keine ungültigen Blöcke; WP- und Plugin-Version beidseitig gleich | bestanden | Claude |
+| 2026-08-10 | AP-1.3 | `php -l` ohne Fehler; Harness bricht mangels Klasse ab (gewollter roter Zustand); T1–T23 lückenlos vorhanden | bestanden | Claude |
+| 2026-08-10 | AP-1.4 | T1–T11 und T23 grün (UTF-8, LaTeX, Inline-Auszeichnung, Listen ohne `values`) | bestanden | Claude |
+| 2026-08-10 | AP-1.5 | 71 Prüfungen, 0 Fehler — inkl. C1/C2 zeichengleich mit dem Produktivmarkup und Delimiter-Bilanz | bestanden | Claude |
+| 2026-08-10 | **Phase 1 abgeschlossen** | Harness grün · `check-php74` ohne Befund · alle 6 übrigen Harnesse grün · Vollkette Markdown→Parser→Serializer→`wp_insert_post`→Rundlauf zeichengleich, `parse_blocks()` erkennt alle 7 Blocktypen · `_glossar_scan_version` gesetzt (R4) | bestanden | Claude |
 | | AP-1.rev | | | |
 | | AP-1.doc | | | |
 | | AP-2.1 | | | |
