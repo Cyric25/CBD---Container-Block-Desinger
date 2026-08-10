@@ -297,10 +297,50 @@ Erschwerend: Die Codebasis ist uneinig, **welche** Spalte der Bezeichner ist.
 stays" — dort ist `name` die Anzeige und `slug` der Bezeichner. Aus dem Code
 allein ist nicht entscheidbar, wie die Produktivdatenbank aussieht.
 
-**Nächster Schritt:** Struktur und eine Beispielzeile der Tabelle
-`wp_cbd_blocks` auf der Produktivinstallation ansehen. Danach die
-Testinstallation daran angleichen und entscheiden, ob ein Korrektur-AP für
-den `slug`-Fehler nötig ist.
+**Auflösung (2026-08-10, aus dem Code selbst):** Die Frage, welche Spalte der
+Bezeichner ist, beantwortet `CBD_Admin::handle_database_repair()`:
+
+- Zeile 2440 legt bei Bedarf `slug varchar(100)` an.
+- **Zeile 2469: `UPDATE … SET slug = name WHERE slug = '' OR slug IS NULL`** —
+  `slug` ist also eine **Kopie von `name`**. `name` ist der Bezeichner, `slug`
+  ein redundantes Zweitfeld. Die Log-Meldung in `class-cbd-admin.php:2806`
+  („name changed … but slug stays") ist Altlast aus der Zeit davor.
+
+Zudem **diagnostiziert das Plugin den Fehler selbst**: Die Seite
+*Container Designer → Datenbank reparieren* (`admin.php?page=cbd-database-repair`)
+gibt „Aktuelle Spalten" aus und meldet auf einer frischen Installation
+„❌ Fehlende Spalten: slug" samt Reparaturschaltfläche. Die Reparaturseite und
+`CBD_Schema_Manager` widersprechen sich also: Der Schema-Manager legt `slug`
+nicht an, die Reparaturseite führt sie als Pflichtspalte.
+
+**Achtung bei der Reparaturschaltfläche:** `handle_database_repair()` setzt in
+Zeile 2473 `cbd_db_version` auf `'2.9.0'` zurück, obwohl
+`CBD_Schema_Manager::DB_VERSION` bei `3.1.61` steht. Ein Klick stuft die
+Versionsangabe also herunter und lässt beim nächsten Laden Migrationen erneut
+anlaufen. Auf der Produktivinstallation deshalb **nicht** blind klicken.
+
+**Testinstallation angeglichen:** Die Spalte wurde mit derselben SQL wie die
+Reparatur angelegt und aus `name` befüllt — aber **ohne** die
+Versions-Rückstufung. `cbd_db_version` steht weiterhin auf `3.1.61`. Die
+Originalabfrage des Importers (`SELECT id, name, slug …`) liefert jetzt alle
+sechs Designs. Damit ist AP-1.2 nicht mehr durch die Spalte blockiert.
+
+**Konsolenskript für die Produktivinstallation:** `docs/pruefung-produktiv.js`
+(neu). Es liest im Adminbereich WordPress-Version, Tabellenspalten,
+Beispieldesigns und Plugin-Version aus, im Blockeditor zusätzlich die
+tatsächliche Antwort von `cbd_get_style_mappings`. Rein lesend, löst die
+Reparatur **nicht** aus. Das Parsen der Reparaturseite wurde gegen die echte
+Ausgabe geprüft (`<td><strong>Aktuelle Spalten:</strong></td><td>…</td>`).
+
+**Bleibt offen:** die produktive WordPress-Version (Risiko R1) und die Frage,
+ob die Produktivdatenbank die Spalte `slug` bereits hat. Beides liefert das
+Konsolenskript.
+
+**Kandidat für einen Korrektur-AP (nicht Teil dieses Plans, Entscheidung des
+Nutzers):** Entweder `CBD_Schema_Manager` legt `slug` mit an, oder die vier
+Abfragen verzichten darauf. Solange beides nebeneinander steht, ist jede
+frische Installation kaputt — Importer ohne Designs und Container, die beim
+Rendern nicht auflösen.
 
 **Zweite offene Frage:** Die Testinstallation läuft auf **WordPress 7.0.3**.
 Welche Version läuft produktiv? Weicht sie ab, kodiert die in AP-1.2 zu
