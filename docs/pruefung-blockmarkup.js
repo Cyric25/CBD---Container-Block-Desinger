@@ -116,21 +116,33 @@
     // Ausgabe
     // ----------------------------------------------------------------
     console.log('%c' + kopf, 'font-family:monospace;font-size:12px');
-    console.log('%c(Der Inhalt selbst steht in der Zwischenablage — er ist zu lang für die Konsole.)',
+    console.log('%c(Der Inhalt selbst ist zu lang für die Konsole und steht deshalb unten bereit.)',
         'color:#666');
 
     if (ungueltige.length) {
         console.warn('Es gibt ungültige Blöcke auf dieser Seite, siehe oben.');
     }
 
+    // Immer zuerst global ablegen. `navigator.clipboard.writeText()` scheitert
+    // zuverlässig mit „Document is not focused", solange die Konsole den Fokus
+    // hat — und genau von dort wird dieses Skript ausgeführt. Der
+    // DevTools-Befehl `copy()` kennt diese Einschränkung nicht.
+    window.cbdMarkup = block;
+
+    console.log(
+        '%cJetzt diesen Befehl in die Konsole tippen und Enter drücken:\n\n    copy(window.cbdMarkup)\n\n' +
+        'Danach steht der vollständige Text in der Zwischenablage.',
+        'color:#2a7d2a;font-weight:bold;font-family:monospace'
+    );
+
+    // Zusätzlicher Versuch über die Web-API — klappt nur, wenn die Seite
+    // (nicht die Konsole) den Fokus hat. Schlägt er fehl, ist das kein
+    // Problem: Der Weg über copy() steht ohnehin schon da.
     try {
         await navigator.clipboard.writeText(block);
-        console.log('%cIn die Zwischenablage kopiert – einfach einfügen.',
-            'color:#2a7d2a;font-weight:bold');
+        console.log('%c… hat sich sogar schon von selbst kopiert. copy() ist dann nicht nötig.',
+            'color:#2a7d2a');
     } catch (fehler) {
-        console.log('%cZwischenablage nicht freigegeben (' + fehler.message +
-            '). Ersatzweise steht der vollständige Text jetzt als window.cbdMarkup bereit — ' +
-            'mit copy(window.cbdMarkup) kopieren.', 'color:#8a6d00');
-        window.cbdMarkup = block;
+        // bewusst still — der Hinweis auf copy() steht bereits oben
     }
 })();
