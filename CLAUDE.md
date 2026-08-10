@@ -334,6 +334,71 @@ in `docs/VERBESSERUNGSPLAN-5.md` (Abschnitt AP43) verwenden — der Parser läss
 sich mit wenigen Stubs (`add_action`, `__`, `esc_html`, `esc_url`) headless
 gegen die echten Dateien in `Inhalte/` ausführen.
 
+## Block-Serializer (Markdown → post_content, seit v3.1.86)
+
+`includes/class-cbd-block-serializer.php`. Gegenstück zum Content-Importer
+oben: Der **baut Blöcke im geöffneten Editor** (JavaScript,
+`assets/js/content-importer.js`, `insertBlocks()`), der Serializer baut
+dieselben Blöcke **serverseitig** für Seiten, bei denen kein Editor offen ist —
+Grundlage des Seitenimports.
+
+Nur statische Methoden, kein Singleton:
+
+```php
+CBD_Block_Serializer::html_to_blocks($html) : array
+CBD_Block_Serializer::to_block_array($sections, $groups, $style_mappings, $optionen = []) : array
+CBD_Block_Serializer::to_post_content($sections, $groups, $style_mappings, $optionen = []) : string
+```
+
+`$sections` und `$groups` kommen unverändert aus
+`CBD_Content_Importer::parse_markdown_content()`. `$optionen` kennt fünf
+Schlüssel, alle mit Vorgabewert: `accordion_opt_out`, `page_title`,
+`known_slugs` (null = aus der Datenbank), `accordion_available` (null = über
+die Registry) und `stable_id_factory` (nur für Tests).
+
+**Die Regeln, die vom JavaScript abweichen — alle mit Grund:**
+
+| Regel | Warum |
+|---|---|
+| Listen als `core/list` + `core/list-item`, **nie** mit `values` | Das JS nutzt das veraltete Attribut und verlässt sich auf die Migration beim Laden. In der Datenbank muss sofort die migrierte Form stehen, sonst gilt der Block beim ersten Öffnen als ungültig |
+| `modular-blocks/accordion` nur bei registriertem Blocktyp | Ein unregistrierter Blocktyp ergibt „Block enthält unerwarteten Inhalt" |
+| Unbekannter Design-Slug → „ohne Container" | Ein Container mit unbekanntem Slug rendert im Frontend „Block nicht gefunden" |
+| Erste H1-Überschrift entfällt, wenn sie dem Seitentitel gleicht | Sonst stünde der Titel doppelt auf der Seite |
+| `stableId` wird selbst vergeben | Fehlt sie, ergänzt der Editor sie beim Öffnen und markiert die Seite sofort als geändert |
+| Der Bezeichner wird aus der Spalte **`name`** gelesen | `slug` ist auf Altbeständen nur eine Kopie davon und fehlt frisch angelegten Tabellen ganz (siehe `CBD_Admin::handle_database_repair()`, Zeile 2469) |
+
+**Zeilenumbrüche — der Unterschied, der leicht übersehen wird.** Der
+JavaScript-Serializer setzt je einen Umbruch nach dem öffnenden und vor dem
+schließenden Kommentar-Trenner und trennt Geschwisterblöcke mit einer
+Leerzeile. `serialize_blocks()` in PHP tut beides **nicht** — es verkettet
+`innerContent` roh. Der Serializer legt die Umbrüche deshalb selbst in
+`innerContent` ab, und `serialisiere()` fügt die oberste Ebene mit `\n\n`
+zusammen. Für die Gültigkeit wäre das gleichgültig, für ein zeichengleiches
+Ergebnis nicht — sonst erzeugte jedes spätere Speichern einen Unterschied.
+
+**`wp_slash()` beim Schreiben nicht vergessen.** `wp_insert_post()` erwartet
+maskierte Daten und ruft intern `wp_unslash()` auf. Wer den Inhalt unmaskiert
+übergibt, verliert **jeden Backslash**: `\cdot` wird zu `cdot`, `\sum` zu
+`sum`. Jede LaTeX-Formel wäre still zerstört. Der Serializer selbst maskiert
+bewusst nicht — das gehört an die Datenbankgrenze, also in den Aufrufer.
+Dieselbe Fehlerfamilie wie beim Icon-Wert weiter unten, nur in der anderen
+Richtung.
+
+**Das Zielmarkup ist gemessen, nicht abgeleitet.**
+`tools/fixtures/referenz-markup.html` stammt aus einer echten
+Editor-Speicherung der Produktivseite; `tools/fixtures/referenz-umgebung.md`
+hält fest, was daraus abgelesen wurde (unter anderem: Der Container hängt die
+generierte Blockklasse **nicht** zusätzlich an, lässt `data-features` bei
+leeren Features weg und führt im Attribut-JSON nur Nicht-Standardwerte).
+
+**Nach jedem WordPress- oder Plugin-Update:** Fixture neu erheben, sonst
+erzeugt der Serializer stillschweigend ungültige Blöcke. Dafür gibt es
+`docs/pruefung-blockmarkup.js` — im Blockeditor einer Seite mit
+Container-Blöcken ausführen, es liest `getEditedPostContent()` aus. Danach
+`php tools/test-block-serializer.php` wieder grün machen (71 Prüfungen in vier
+Gruppen: Fragmentebene, Dokumentebene, Markup-Treue gegen die Fixture,
+Delimiter-Bilanz).
+
 ## Eigene Icon-Bibliothek (SVG-Kacheln, seit v3.1.77)
 
 Sechste Bibliothek im Icon-Picker neben Dashicons, Font Awesome, Material,
