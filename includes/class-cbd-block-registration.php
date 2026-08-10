@@ -539,6 +539,28 @@ class CBD_Block_Registration {
             CBD_VERSION
         );
 
+        // Icon-Größe aus den Einstellungen (Einstellungen → Icon-Größe).
+        // Überschreibt den :root-Wert aus der CSS-Datei.
+        //
+        // Bewusst IMMER ausgegeben, auch beim Standardwert: sonst müssten
+        // der Standard in cbd_icon_scale_bounds() und die 1.1 in
+        // cbd-frontend-clean.css dauerhaft übereinstimmen, und eine Änderung
+        // an einer der beiden Stellen würde still danebenlaufen. So ist PHP
+        // die einzige Quelle, der Wert in der CSS-Datei nur noch Rückfall
+        // für den Fall, dass diese Zeile nicht läuft.
+        //
+        // Inline und nicht über den Style-Loader-Transient: die Größe soll
+        // sofort nach dem Speichern greifen, ohne Cache-Leerung.
+        //
+        // Alle Breakpoints (32/28/24px) hängen an derselben Variablen — die
+        // Handy-Ansicht skaliert also mit und bleibt proportional kleiner.
+        if (function_exists('cbd_get_icon_scale_css')) {
+            wp_add_inline_style(
+                'cbd-frontend-clean',
+                ':root{--cbd-icon-scale:' . cbd_get_icon_scale_css() . '}'
+            );
+        }
+
         // Interactivity API specific styles
         wp_enqueue_style(
             'cbd-interactivity-api',
@@ -2054,7 +2076,12 @@ class CBD_Block_Registration {
                 // sich nicht mehr auswählen — dieser Zweig bleibt, damit
                 // Block-Designs, die vorher eines gespeichert haben, weiterhin
                 // korrekt rendern statt auf einen kaputten Dashicon zu fallen.
-                return '<span class="cbd-emoji-icon" style="' . $style . ' font-size: 1.2em;"' . $attr_string . '>' . esc_html($value) . '</span>';
+                //
+                // Die Skalierung steht hier und nicht im CSS, weil ein
+                // Inline-Style externes CSS schlägt — eine Regel in
+                // cbd-frontend-clean.css käme gegen font-size hier nicht an.
+                // Fallback 1, falls die Variable mal nicht geladen ist.
+                return '<span class="cbd-emoji-icon" style="' . $style . ' font-size: calc(1.2em * var(--cbd-icon-scale, 1));"' . $attr_string . '>' . esc_html($value) . '</span>';
 
             case 'dashicons':
             default:

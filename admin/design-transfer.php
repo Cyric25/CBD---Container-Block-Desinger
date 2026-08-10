@@ -65,6 +65,9 @@ $cbd_errors = array(
             <strong><?php esc_html_e('Der Slug entscheidet:', 'container-block-designer'); ?></strong>
             <?php esc_html_e('Bestehende Seiten verweisen über den Slug auf ihr Design. Wird ein Design unter einem anderen Slug importiert, bleiben diese Container ungestylt.', 'container-block-designer'); ?>
         </p>
+        <p class="description">
+            <?php esc_html_e('Standardformat ist Markdown (.md): lesbar, versionierbar und von Hand änderbar. JSON funktioniert unverändert weiter — beim Import erkennt die Seite am Inhalt, welches Format vorliegt.', 'container-block-designer'); ?>
+        </p>
     </div>
 
     <?php if ($cbd_preview) : ?>
@@ -191,7 +194,14 @@ $cbd_errors = array(
                 </tbody>
             </table>
 
-            <?php submit_button(__('Als JSON herunterladen', 'container-block-designer'), 'secondary'); ?>
+            <p class="submit">
+                <button type="submit" name="cbd_format" value="md" class="button button-primary">
+                    <?php esc_html_e('Als Markdown herunterladen', 'container-block-designer'); ?>
+                </button>
+                <button type="submit" name="cbd_format" value="json" class="button">
+                    <?php esc_html_e('Als JSON herunterladen', 'container-block-designer'); ?>
+                </button>
+            </p>
         </form>
     <?php endif; ?>
 
@@ -205,11 +215,11 @@ $cbd_errors = array(
 
         <table class="form-table" role="presentation">
             <tr>
-                <th scope="row"><label for="cbd_import_file"><?php esc_html_e('JSON-Datei', 'container-block-designer'); ?></label></th>
+                <th scope="row"><label for="cbd_import_file"><?php esc_html_e('Datei (.md oder .json)', 'container-block-designer'); ?></label></th>
                 <td>
-                    <input type="file" name="cbd_import_file" id="cbd_import_file" accept=".json,application/json" required>
+                    <input type="file" name="cbd_import_file" id="cbd_import_file" accept=".md,.markdown,.txt,.json,text/markdown,application/json" required>
                     <p class="description">
-                        <?php esc_html_e('Eine zuvor hier exportierte Datei. Nach dem Hochladen erscheint eine Vorschau — erst danach wird etwas geschrieben.', 'container-block-designer'); ?>
+                        <?php esc_html_e('Eine zuvor hier exportierte oder eine selbst geschriebene Markdown-Datei. Nach dem Hochladen erscheint eine Vorschau — erst danach wird etwas geschrieben.', 'container-block-designer'); ?>
                     </p>
                 </td>
             </tr>
@@ -217,6 +227,42 @@ $cbd_errors = array(
 
         <?php submit_button(__('Datei prüfen', 'container-block-designer'), 'secondary'); ?>
     </form>
+
+    <details class="cbd-transfer-format">
+        <summary><?php esc_html_e('Aufbau der Markdown-Datei', 'container-block-designer'); ?></summary>
+        <ul class="cbd-transfer-rules">
+            <li><?php esc_html_e('Jede Überschrift der Ebene 2 ist ein Design. Fehlt die Zeile „Slug", wird er aus der Überschrift gebildet.', 'container-block-designer'); ?></li>
+            <li><?php esc_html_e('Werte stehen als Punkt-Pfade. Schlüssel dürfen nur Buchstaben, Ziffern, Bindestrich, Unterstrich und Punkt enthalten — Zeilen mit anderen Zeichen werden übergangen.', 'container-block-designer'); ?></li>
+            <li><?php esc_html_e('true/false (auch ja/nein) sind Wahrheitswerte, reine Zahlen sind Zahlen, alles andere ist Text. Anführungszeichen erzwingen Text: "true" bleibt das Wort.', 'container-block-designer'); ?></li>
+            <li><?php esc_html_e('Überschreiben ersetzt das Design vollständig: Was nicht in der Datei steht, ist danach nicht mehr gesetzt.', 'container-block-designer'); ?></li>
+            <li><?php esc_html_e('„Standard" wird gelesen, aber nicht übernommen — welches Design das Standarddesign ist, bleibt Sache dieser Installation.', 'container-block-designer'); ?></li>
+        </ul>
+        <pre><code>## Info-Box
+
+- **Slug:** `info-box`
+- **Status:** aktiv
+- **Standard:** nein
+
+Hinweiskasten für Merksätze.
+
+### Konfiguration
+
+- `allowInnerBlocks`: true
+- `maxWidth`: 900px
+
+### Stile
+
+- `background.color`: #f5ede9
+- `border.width`: 2
+- `border.color`: #e24614
+- `padding.top`: 20
+
+### Funktionen
+
+- `icon.enabled`: true
+- `icon.value`: {"type":"custom","value":"kategorien/hinweise"}
+- `collapse.enabled`: false</code></pre>
+    </details>
 </div>
 
 <style>
@@ -231,4 +277,20 @@ $cbd_errors = array(
 .cbd-design-transfer .cbd-conflict { color: #b53810; font-weight: 600; }
 .cbd-design-transfer .cbd-new { color: #1e7a1e; }
 .cbd-design-transfer h2 { margin-top: 28px; }
+.cbd-transfer-format {
+    max-width: 900px;
+    margin: 16px 0 24px;
+    padding: 12px 16px;
+    background: #fff;
+    border: 1px solid #c3c4c7;
+}
+.cbd-transfer-format summary { cursor: pointer; font-weight: 600; }
+.cbd-transfer-rules { margin: 12px 0; list-style: disc; padding-left: 20px; color: #50575e; }
+.cbd-transfer-format pre {
+    margin: 0;
+    padding: 12px;
+    overflow-x: auto;
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+}
 </style>

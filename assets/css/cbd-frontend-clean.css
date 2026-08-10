@@ -8,6 +8,25 @@
  */
 
 /* ============================================
+   ICON-GRÖSSEN — EIN REGLER
+   ============================================ */
+
+/**
+ * Alle Icongrößen im Frontend hängen an dieser Zahl. Für "alle Icons X %
+ * größer" nur hier ändern; die Basiswerte in den calc() bleiben stehen,
+ * damit erkennbar bleibt, wovon skaliert wird.
+ *
+ * Gilt auch für custom-icons.css — die Datei hängt im Frontend per Handle an
+ * cbd-frontend-clean und sieht die Variable deshalb. Im Admin (Icon-Picker)
+ * wird sie allein geladen; dort greift dort der Fallback var(…, 1).
+ *
+ * Fundstellen-Karte aller Icongrößen: CLAUDE.md, Abschnitt "Icon-Größen".
+ */
+:root {
+    --cbd-icon-scale: 1.1;
+}
+
+/* ============================================
    WRAPPER STYLES - COMPLETELY TRANSPARENT
    ============================================ */
 
@@ -467,8 +486,8 @@
 .cbd-icon {
     position: absolute;
     z-index: 3;
-    width: 24px;
-    height: 24px;
+    width: calc(24px * var(--cbd-icon-scale));
+    height: calc(24px * var(--cbd-icon-scale));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -494,12 +513,21 @@
     right: 10px;
 }
 
-.cbd-icon .dashicons {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
+.cbd-icon .dashicons,
+.cbd-icon .material-icons {
+    font-size: calc(18px * var(--cbd-icon-scale));
+    width: calc(18px * var(--cbd-icon-scale));
+    height: calc(18px * var(--cbd-icon-scale));
     opacity: 0.7;
     transition: opacity 0.3s ease;
+}
+
+.cbd-icon .lucide,
+.cbd-icon i[class*="fa-"],
+.cbd-icon-inside .lucide,
+.cbd-icon-inside i[class*="fa-"] {
+    font-size: calc(1em * var(--cbd-icon-scale));
+    line-height: 1;
 }
 
 .cbd-container:hover .cbd-icon .dashicons {
@@ -974,8 +1002,8 @@
 .cbd-icon-inside {
     position: absolute;
     z-index: 5;
-    width: 24px;
-    height: 24px;
+    width: calc(24px * var(--cbd-icon-scale));
+    height: calc(24px * var(--cbd-icon-scale));
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1131,8 +1159,8 @@
     display: inline-flex !important; /* Always visible */
     align-items: center;
     justify-content: center;
-    width: 32px; /* Larger icon container */
-    height: 32px; /* Larger icon container */
+    width: calc(32px * var(--cbd-icon-scale)); /* Larger icon container */
+    height: calc(32px * var(--cbd-icon-scale)); /* Larger icon container */
     flex-shrink: 0;
     margin-right: 12px; /* More space between icon and title */
     vertical-align: baseline; /* Align with text baseline */
@@ -1140,9 +1168,31 @@
 }
 
 .cbd-header-icon .dashicons {
-    font-size: 24px; /* Larger icon */
-    width: 24px;
-    height: 24px;
+    font-size: calc(24px * var(--cbd-icon-scale)); /* Larger icon */
+    width: calc(24px * var(--cbd-icon-scale));
+    height: calc(24px * var(--cbd-icon-scale));
+}
+
+/**
+ * Die übrigen Icon-Bibliotheken bekommen ihre Größe NICHT von CDB:
+ * Material aus dem Vendor-CSS (24px), Font Awesome und Lucide erben sie.
+ * Ohne diese Regeln würden bei einer Skalierung nur Dashicons und die
+ * eigenen Kacheln wachsen — die anderen blieben stehen.
+ *
+ * FA und Lucide werden bewusst RELATIV skaliert (1em = geerbte Größe).
+ * Ein fester px-Wert wäre keine prozentuale Vergrößerung, sondern eine
+ * Neufestlegung ihrer Größe.
+ */
+.cbd-header-icon .material-icons {
+    font-size: calc(24px * var(--cbd-icon-scale));
+    width: calc(24px * var(--cbd-icon-scale));
+    height: calc(24px * var(--cbd-icon-scale));
+}
+
+.cbd-header-icon .lucide,
+.cbd-header-icon i[class*="fa-"] {
+    font-size: calc(1em * var(--cbd-icon-scale));
+    line-height: 1;
 }
 
 /* Block title - larger and inline with icon */
@@ -1169,15 +1219,16 @@
         font-size: 18px; /* Still large on tablets */
     }
     .cbd-header-icon {
-        width: 28px;
-        height: 28px;
+        width: calc(28px * var(--cbd-icon-scale));
+        height: calc(28px * var(--cbd-icon-scale));
         margin-right: 10px;
         transform: translateY(-4px); /* Higher adjustment for tablets */
     }
-    .cbd-header-icon .dashicons {
-        font-size: 20px;
-        width: 20px;
-        height: 20px;
+    .cbd-header-icon .dashicons,
+    .cbd-header-icon .material-icons {
+        font-size: calc(20px * var(--cbd-icon-scale));
+        width: calc(20px * var(--cbd-icon-scale));
+        height: calc(20px * var(--cbd-icon-scale));
     }
 }
 
@@ -1186,14 +1237,15 @@
         font-size: 16px; /* Smaller on mobile but still larger than before */
     }
     .cbd-header-icon {
-        width: 24px;
-        height: 24px;
+        width: calc(24px * var(--cbd-icon-scale));
+        height: calc(24px * var(--cbd-icon-scale));
         margin-right: 8px;
         transform: translateY(-3px); /* Higher adjustment for mobile */
     }
-    .cbd-header-icon .dashicons {
-        font-size: 18px;
-        width: 18px;
-        height: 18px;
+    .cbd-header-icon .dashicons,
+    .cbd-header-icon .material-icons {
+        font-size: calc(18px * var(--cbd-icon-scale));
+        width: calc(18px * var(--cbd-icon-scale));
+        height: calc(18px * var(--cbd-icon-scale));
     }
 }

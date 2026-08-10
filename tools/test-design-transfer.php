@@ -1,11 +1,11 @@
 <?php
 /**
- * Standalone-Harness für CBD_Design_Transfer::parse_payload() und
- * ::sanitize_slug() — läuft OHNE WordPress und ohne Datenbank.
+ * Standalone-Harness für CBD_Design_Transfer — läuft OHNE WordPress und
+ * ohne Datenbank.
  *
- * Geprüft wird die Eingangsvalidierung des Imports: Was darf hinein, was
- * wird abgelehnt, und bleibt ein exportiertes Design beim Wiedereinlesen
- * unverändert.
+ * Geprüft wird die Eingangsvalidierung des Imports (JSON und Markdown):
+ * Was darf hinein, was wird abgelehnt, und bleibt ein exportiertes Design
+ * beim Wiedereinlesen unverändert.
  *
  * Aufruf:  php tools/test-design-transfer.php
  *
@@ -181,6 +181,237 @@ check('Slug identisch', $original['name'] === $d['name']);
 check('config identisch', $original['config'] === json_decode($d['config'], true), json_decode($d['config'], true));
 check('styles identisch', $original['styles'] === json_decode($d['styles'], true), json_decode($d['styles'], true));
 check('features identisch', $original['features'] === json_decode($d['features'], true), json_decode($d['features'], true));
+
+// =====================================================================
+//  Markdown
+// =====================================================================
+
+function md_rejects($label, $md) {
+    $r = CBD_Design_Transfer::parse_markdown($md);
+    check($label, '' !== $r['error'] && empty($r['designs']), $r['error']);
+}
+
+/** Ein Design in der Form, die to_markdown() erwartet (dekodierte Felder). */
+function design($overrides = array()) {
+    return array_merge(array(
+        'name' => 'info-box', 'title' => 'Info-Box', 'description' => '',
+        'config' => array(), 'styles' => array(), 'features' => array(),
+        'status' => 'active', 'is_default' => 0,
+    ), $overrides);
+}
+
+echo "\n== Markdown: Ablehnung ==\n";
+md_rejects('leere Datei', "   \n  ");
+md_rejects('Text ohne H2', "# Nur eine Ueberschrift\n\nEtwas Fliesstext.");
+md_rejects('H2 ohne brauchbaren Slug', "## ---\n\n- **Slug:** `!!!`");
+
+echo "\n== Markdown: Grundgeruest ==\n";
+$md = <<<'MD'
+# Container-Designs
+
+## Info-Box
+
+- **Slug:** `info-box`
+- **Status:** inaktiv
+- **Standard:** ja
+
+Hinweiskasten fuer Merksaetze.
+
+### Konfiguration
+
+- `allowInnerBlocks`: true
+- `maxWidth`: 900px
+
+### Stile
+
+- `background.color`: #f5ede9
+- `border.width`: 2
+- `padding.top`: 20
+
+### Funktionen
+
+- `icon.enabled`: true
+- `icon.value`: {"type":"custom","value":"kategorien/hinweise"}
+- `collapse.enabled`: false
+MD;
+$r = CBD_Design_Transfer::parse_markdown($md);
+check('akzeptiert', '' === $r['error'], $r['error']);
+check('ein Design', 1 === count($r['designs']), count($r['designs']));
+$d = $r['designs'][0];
+check('Slug aus Stammdaten', 'info-box' === $d['name'], $d['name']);
+check('Titel aus H2', 'Info-Box' === $d['title'], $d['title']);
+check('Status inaktiv', 'inactive' === $d['status'], $d['status']);
+check('Standard erkannt', 1 === $d['is_default'], $d['is_default']);
+check('Beschreibung aus Fliesstext', 'Hinweiskasten fuer Merksaetze.' === $d['description'], $d['description']);
+
+$config = json_decode($d['config'], true);
+$styles = json_decode($d['styles'], true);
+$features = json_decode($d['features'], true);
+check('Wahrheitswert bleibt bool', true === $config['allowInnerBlocks'], $config['allowInnerBlocks']);
+check('Text bleibt Text', '900px' === $config['maxWidth'], $config['maxWidth']);
+check('Punkt-Pfad wird verschachtelt', '#f5ede9' === $styles['background']['color'], $styles);
+check('Zahl wird Zahl', 2 === $styles['border']['width'], $styles['border']['width']);
+check('zweite Zahl', 20 === $styles['padding']['top'], $styles['padding']['top']);
+check('Icon-Wert mit Doppelpunkten ueberlebt',
+    '{"type":"custom","value":"kategorien/hinweise"}' === $features['icon']['value'],
+    $features['icon']['value']);
+check('false bleibt false (nicht truthy!)', false === $features['collapse']['enabled'],
+    var_export($features['collapse']['enabled'], true));
+
+echo "\n== Markdown: Rundlauf Export -> Import ==\n";
+$original = design(array(
+    'name' => 'merksatz', 'title' => 'Merksatz', 'description' => "Zeile eins\nZeile zwei",
+    'config' => array('allowInnerBlocks' => true, 'maxWidth' => '900px'),
+    'styles' => array(
+        'border' => array('width' => 2, 'color' => '#e24614', 'style' => 'solid'),
+        'effects' => array('glassmorphism' => array('enabled' => false, 'opacity' => 0.1)),
+        'text' => array('alignment' => 'left'),
+    ),
+    'features' => array(
+        'icon' => array('enabled' => true, 'value' => '{"type":"custom","value":"kategorien/hinweise"}'),
+        'numbering' => array('enabled' => true, 'format' => 'numeric'),
+        'copyText' => array('enabled' => false, 'buttonText' => 'Text kopieren'),
+    ),
+    'status' => 'inactive',
+));
+$roundtrip = CBD_Design_Transfer::parse_markdown(CBD_Design_Transfer::to_markdown(array($original)));
+check('Rundlauf akzeptiert', '' === $roundtrip['error'], $roundtrip['error']);
+$d = $roundtrip['designs'][0];
+check('Slug identisch', 'merksatz' === $d['name'], $d['name']);
+check('Titel identisch', 'Merksatz' === $d['title'], $d['title']);
+check('Status identisch', 'inactive' === $d['status'], $d['status']);
+check('mehrzeilige Beschreibung erhalten', "Zeile eins\nZeile zwei" === $d['description'], $d['description']);
+check('config identisch', $original['config'] === json_decode($d['config'], true), json_decode($d['config'], true));
+check('styles identisch', $original['styles'] === json_decode($d['styles'], true), json_decode($d['styles'], true));
+check('features identisch', $original['features'] === json_decode($d['features'], true), json_decode($d['features'], true));
+
+echo "\n== Markdown: heikle Werte ==\n";
+$tricky = design(array(
+    'name' => 'tricky',
+    'styles' => array(
+        'leer'      => '',
+        'wortJa'    => 'ja',
+        'wortTrue'  => 'true',
+        'zahlAlsText' => '007',
+        'raute'     => '#e24614',
+        'backtick'  => '`code`',
+        'anfuehrung' => '"zitat"',
+        'doppelpunkt' => 'a: b: c',
+    ),
+));
+$r = CBD_Design_Transfer::parse_markdown(CBD_Design_Transfer::to_markdown(array($tricky)));
+$s = json_decode($r['designs'][0]['styles'], true);
+check('leerer Text bleibt leer', '' === $s['leer'], var_export($s['leer'], true));
+check('"ja" bleibt Text', 'ja' === $s['wortJa'], var_export($s['wortJa'], true));
+check('"true" bleibt Text', 'true' === $s['wortTrue'], var_export($s['wortTrue'], true));
+check('"007" bleibt Text', '007' === $s['zahlAlsText'], var_export($s['zahlAlsText'], true));
+check('Farbwert unveraendert', '#e24614' === $s['raute'], $s['raute']);
+check('Backticks im Wert erhalten', '`code`' === $s['backtick'], $s['backtick']);
+check('Anfuehrungszeichen im Wert erhalten', '"zitat"' === $s['anfuehrung'], $s['anfuehrung']);
+check('Doppelpunkte im Wert erhalten', 'a: b: c' === $s['doppelpunkt'], $s['doppelpunkt']);
+
+echo "\n== Markdown: Zahlen (bewusste Typaenderung) ==\n";
+// Aus $_POST kommt alles als Zeichenkette. Die Datei schreibt solche Werte
+// unquotiert, beim Import werden daraus echte Zahlen — gewollt, damit die
+// Datei lesbar bleibt. Fuer die CSS-Erzeugung ist "20" dasselbe wie 20.
+$zahlen = design(array('name' => 'zahlen', 'styles' => array(
+    'padding' => array('top' => '20'),
+    'border'  => array('width' => 2, 'radius' => '4'),
+    'effects' => array('opacity' => '0.1', 'genau' => '0.10'),
+    'gross'   => '999999999999999999999999',
+)));
+$md = CBD_Design_Transfer::to_markdown(array($zahlen));
+check('Zahl steht unquotiert in der Datei', false !== strpos($md, '`padding.top`: 20'), $md);
+$s = json_decode(CBD_Design_Transfer::parse_markdown($md)['designs'][0]['styles'], true);
+check('"20" wird zur Zahl 20', 20 === $s['padding']['top'], var_export($s['padding']['top'], true));
+check('echte Zahl bleibt Zahl', 2 === $s['border']['width'], var_export($s['border']['width'], true));
+check('"0.1" wird Kommazahl', 0.1 === $s['effects']['opacity'], var_export($s['effects']['opacity'], true));
+check('"0.10" bleibt Text (kein Praezisionsverlust)', '0.10' === $s['effects']['genau'], var_export($s['effects']['genau'], true));
+check('ueberlange Ziffernfolge bleibt Text', '999999999999999999999999' === $s['gross'], var_export($s['gross'], true));
+
+echo "\n== Markdown: Beschreibung mit Sonderzeichen ==\n";
+$hashy = design(array('name' => 'hashy', 'description' => "# Keine Ueberschrift\n- kein Stammdatum"));
+$r = CBD_Design_Transfer::parse_markdown(CBD_Design_Transfer::to_markdown(array($hashy)));
+check('ein Design (Raute zerschneidet nicht)', 1 === count($r['designs']), count($r['designs']));
+check('Beschreibung unveraendert',
+    "# Keine Ueberschrift\n- kein Stammdatum" === $r['designs'][0]['description'],
+    $r['designs'][0]['description']);
+
+echo "\n== Markdown: handgeschrieben, minimal ==\n";
+$r = CBD_Design_Transfer::parse_markdown("## Meine Box\n\n### Stile\n\n- background.color: #fff\n");
+check('akzeptiert ohne Stammdaten', '' === $r['error'], $r['error']);
+check('Slug aus der Ueberschrift', 'meine-box' === $r['designs'][0]['name'], $r['designs'][0]['name']);
+check('Wert ohne Backticks gelesen', '#fff' === json_decode($r['designs'][0]['styles'], true)['background']['color'],
+    $r['designs'][0]['styles']);
+check('Status faellt auf active', 'active' === $r['designs'][0]['status'], $r['designs'][0]['status']);
+
+echo "\n== Markdown: mehrere Designs, doppelte Slugs ==\n";
+$r = CBD_Design_Transfer::parse_markdown(
+    "## Erste\n\n- **Slug:** `box`\n\n## Zweite\n\n- **Slug:** `box`\n\n## Dritte\n\n- **Slug:** `andere`\n"
+);
+check('zwei Designs bleiben', 2 === count($r['designs']), count($r['designs']));
+check('der erste gewinnt', 'Erste' === $r['designs'][0]['title'], $r['designs'][0]['title']);
+
+echo "\n== Markdown: Traversal und Muell in Schluesseln ==\n";
+// Schluessel duerfen nur [A-Za-z0-9_-] je Segment enthalten. Zeilen, die das
+// verletzen, werden komplett verworfen — es wird KEIN bereinigter Schluessel
+// erfunden, sonst landete unter einem Namen ein Wert, den niemand geschrieben
+// hat. Die Segment-Bereinigung in unflatten() ist die zweite Schranke.
+$r = CBD_Design_Transfer::parse_markdown(
+    "## Boese\n\n- **Slug:** `boese`\n\n### Stile\n"
+    . "- `../../etc.passwd`: x\n"
+    . "- `a.<script>.b`: y\n"
+    . "- `.....`: z\n"
+    . "- `background.color`: #fff\n"
+);
+$s = json_decode($r['designs'][0]['styles'], true);
+check('Traversal-Zeile verworfen', !isset($s['etc']) && !isset($s['..']), array_keys($s));
+check('Markup-Zeile verworfen', !isset($s['a']), array_keys($s));
+check('reine Punkte ergeben nichts', !isset($s['']), array_keys($s));
+check('gueltige Zeile daneben bleibt erhalten', '#fff' === $s['background']['color'], $s);
+
+echo "\n== Markdown: boesartige Inhalte ==\n";
+$r = CBD_Design_Transfer::parse_markdown(
+    "## <script>alert(1)</script>\n\n- **Slug:** `evil`\n\n"
+    . "<img src=x onerror=alert(1)>\n\n"
+    . "### Stile\n\n- `background.color`: <script>alert(1)</script>\n"
+);
+$d = $r['designs'][0];
+check('Titel entschaerft', false === strpos($d['title'], '<'), $d['title']);
+check('Beschreibung entschaerft', false === strpos($d['description'], '<'), $d['description']);
+check('Style-Wert entschaerft', false === strpos($d['styles'], '<script'), $d['styles']);
+
+echo "\n== Formatweiche parse_file() ==\n";
+$r = CBD_Design_Transfer::parse_file(payload(array(array('name' => 'aus-json', 'title' => 'JSON'))));
+check('JSON erkannt', '' === $r['error'] && 'aus-json' === $r['designs'][0]['name'], $r['error']);
+$r = CBD_Design_Transfer::parse_file("## Aus MD\n\n- **Slug:** `aus-md`\n");
+check('Markdown erkannt', '' === $r['error'] && 'aus-md' === $r['designs'][0]['name'], $r['error']);
+$r = CBD_Design_Transfer::parse_file("\xEF\xBB\xBF## Mit BOM\n\n- **Slug:** `mit-bom`\n");
+check('BOM stoert nicht', '' === $r['error'] && 'mit-bom' === $r['designs'][0]['name'], $r['error']);
+$r = CBD_Design_Transfer::parse_file('   ');
+check('leere Datei abgelehnt', '' !== $r['error'], $r['error']);
+
+echo "\n== Markdown: JSON-Export -> Markdown-Export -> Import ==\n";
+$json_designs = CBD_Design_Transfer::parse_payload(payload(array(
+    array(
+        'name' => 'quelle', 'title' => 'Quelle', 'description' => 'Aus JSON',
+        'config' => array('allowInnerBlocks' => false),
+        'styles' => array('padding' => array('top' => 20, 'left' => 20)),
+        'features' => array('numbering' => array('enabled' => true, 'countingMode' => 'same-design')),
+        'status' => 'active',
+    ),
+)));
+// Wie handle_export(): fuer die Datei werden die Spalten wieder dekodiert.
+$for_file = $json_designs['designs'][0];
+foreach (array('config', 'styles', 'features') as $field) {
+    $for_file[$field] = json_decode($for_file[$field], true);
+}
+$r = CBD_Design_Transfer::parse_markdown(CBD_Design_Transfer::to_markdown(array($for_file)));
+check('Formatwechsel verlustfrei',
+    $json_designs['designs'][0]['config'] === $r['designs'][0]['config']
+    && $json_designs['designs'][0]['styles'] === $r['designs'][0]['styles']
+    && $json_designs['designs'][0]['features'] === $r['designs'][0]['features'],
+    array($r['designs'][0]['styles'], $r['designs'][0]['features']));
 
 $fails = $GLOBALS['fails'];
 echo "\n" . (0 === $fails ? "ALLE TESTS BESTANDEN\n" : "$fails FEHLER\n");

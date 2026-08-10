@@ -250,7 +250,7 @@ class CBD_Admin {
                 array($this, 'render_icon_manager_page')
             );
 
-            // Untermenü: Designs exportieren/importieren (JSON)
+            // Untermenü: Designs exportieren/importieren (Markdown, alternativ JSON)
             add_submenu_page(
                 'container-block-designer',
                 __('Designs exportieren / importieren', 'container-block-designer'),

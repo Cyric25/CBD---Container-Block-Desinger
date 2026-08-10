@@ -109,38 +109,129 @@
     display: none;
 }
 
+/* Klassenheader im plastischen Look der Icon-Kacheln:
+   Verlauf 135 Grad Basisfarbe -> 20 % dunkler, radialer Glanz oben links,
+   Innenkante oben dunkel / unten hell, Schlagschatten.
+
+   Die Farbstufen werden hier aus --color-ui-surface abgeleitet und NICHT aus
+   den --plastic-*-Variablen des Themes geholt: die stehen in dessen style.css,
+   das Plugin muss aber auch unter einem anderen Theme funktionieren. Fallback
+   #e24614 ist die Projektfarbe.
+
+   background-image statt der Kurzschreibweise background: waere der Verlauf
+   ungueltig (Browser ohne color-mix()), setzte die Kurzschreibweise auch
+   background-color zurueck und die Leiste waere durchsichtig statt einfarbig. */
 .cbd-classroom-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
     margin-bottom: 32px;
-    padding-bottom: 16px;
-    border-bottom: 2px solid #e0e0e0;
+    padding: 14px 20px;
+    border-radius: 8px;
+    background-color: var(--color-ui-surface, #e24614);
+    background-image:
+        radial-gradient(75% 75% at 30% 22%,
+            rgba(255, 255, 255, 0.35) 0%,
+            rgba(255, 255, 255, 0.08) 45%,
+            rgba(255, 255, 255, 0) 100%),
+        linear-gradient(135deg,
+            var(--color-ui-surface, #e24614) 0%,
+            color-mix(in srgb, var(--color-ui-surface, #e24614) 80%, #000) 100%);
+    box-shadow:
+        inset 0 2px 2px -1px color-mix(in srgb, var(--color-ui-surface, #e24614) 34%, transparent),
+        inset 0 -2px 2px -1px rgba(255, 255, 255, 0.5),
+        0 4px 10px color-mix(in srgb, var(--color-ui-surface, #e24614) 25%, transparent);
 }
 
 .cbd-classroom-class-name {
     font-size: 24px;
-    font-weight: 600;
-    color: #1a1a1a;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
+/* Umkehr-Knopf auf farbigem Grund — dieselbe Machart wie die Schaltflaechen
+   der PDF-Werkzeugleiste. Bewusst NICHT plastisch-orange: auf dem orangen
+   Band wuerde er darin verschwinden.
+
+   ACHTUNG Selektor: Das Markup ist
+   <button id="cbd-class-logout" class="button">, NICHT .cbd-classroom-logout.
+   Diese Klasse stand hier jahrelang im CSS, ohne dass ein Element sie trug —
+   die Regeln liefen ins Leere und der Knopf bekam die .button-Styles des
+   Themes. Die ID gewinnt zuverlaessig gegen diese; .cbd-classroom-logout
+   bleibt nur fuer den Fall, dass die Klasse irgendwo nachgereicht wird. */
+/* Quadratischer Schliessen-Knopf.
+
+   WICHTIG — das X ist GEZEICHNET, kein Schriftzeichen. Erst stand hier das
+   Wort "Abmelden", dann ein &times;: beides blieb unsichtbar, obwohl der
+   Knopfrahmen zu sehen war. Irgendeine Regel des Themes unterdrueckt den
+   Textinhalt von .button (font-size, color oder text-indent) — dagegen
+   anzuschreiben waere Raten.
+
+   Zwei gedrehte Balken aus background-color sind davon nicht betroffen:
+   sie haengen weder an der Schriftgroesse noch an der Textfarbe. font-size: 0
+   blendet einen etwaigen Textinhalt zusaetzlich sauber aus.
+   Die Beschriftung fuer Screenreader steckt im aria-label des Buttons
+   (siehe class-cbd-classroom.php). */
+.cbd-classroom-header #cbd-class-logout,
+.cbd-classroom-header .button,
 .cbd-classroom-logout {
-    padding: 8px 16px;
-    border: 2px solid #e0e0e0;
+    position: relative;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 2px solid rgba(255, 255, 255, 0.6);
     border-radius: 6px;
-    background: #fff;
-    color: #666;
-    font-size: 14px;
-    font-weight: 500;
+    background: transparent;
+    color: #fff;
+    font-size: 0;
+    line-height: 1;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
     text-decoration: none;
+    overflow: hidden;
 }
 
+.cbd-classroom-header #cbd-class-logout::before,
+.cbd-classroom-header #cbd-class-logout::after,
+.cbd-classroom-header .button::before,
+.cbd-classroom-header .button::after,
+.cbd-classroom-logout::before,
+.cbd-classroom-logout::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 17px;
+    height: 2px;
+    background-color: #fff;
+    border-radius: 1px;
+}
+
+.cbd-classroom-header #cbd-class-logout::before,
+.cbd-classroom-header .button::before,
+.cbd-classroom-logout::before {
+    transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.cbd-classroom-header #cbd-class-logout::after,
+.cbd-classroom-header .button::after,
+.cbd-classroom-logout::after {
+    transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.cbd-classroom-header #cbd-class-logout:hover,
+.cbd-classroom-header .button:hover,
 .cbd-classroom-logout:hover {
-    border-color: #999;
-    background: #f5f5f5;
-    color: #333;
+    border-color: #fff;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
 }
 
 /* =============================================
@@ -289,9 +380,31 @@
    CLASSROOM NAVIGATION BAR (Normal Pages)
    ============================================= */
 
+/* Klassen-Modus-Leiste im plastischen Look der Icon-Kacheln.
+   Wie die PDF-Werkzeugleiste ein BAND, kein Knopf: keine seitliche
+   Innenkante und keine Eckenrundung, weil sie ueber die volle Breite laeuft.
+
+   Farbstufen aus --color-ui-surface abgeleitet (Fallback #e24614), NICHT aus
+   den --plastic-*-Variablen des Themes — das Plugin muss auch unter einem
+   anderen Theme funktionieren.
+
+   background-image statt der Kurzschreibweise background: waere der Verlauf
+   ungueltig (Browser ohne color-mix()), setzte die Kurzschreibweise auch
+   background-color zurueck und die Leiste waere durchsichtig statt einfarbig. */
 .cbd-classroom-nav-header {
     background-color: var(--color-ui-surface, #e24614);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    background-image:
+        radial-gradient(75% 75% at 30% 22%,
+            rgba(255, 255, 255, 0.35) 0%,
+            rgba(255, 255, 255, 0.08) 45%,
+            rgba(255, 255, 255, 0) 100%),
+        linear-gradient(135deg,
+            var(--color-ui-surface, #e24614) 0%,
+            color-mix(in srgb, var(--color-ui-surface, #e24614) 80%, #000) 100%);
+    box-shadow:
+        inset 0 3px 3px -1px color-mix(in srgb, var(--color-ui-surface, #e24614) 34%, transparent),
+        inset 0 -2px 2px -1px rgba(255, 255, 255, 0.5),
+        0 3px 10px rgba(0, 0, 0, 0.25);
     position: sticky;
     top: 0;
     z-index: 1100;
@@ -440,21 +553,33 @@
     flex-shrink: 0;
 }
 
+/* Der Knopf sitzt AUF dem plastischen Band und muss sich davon absetzen.
+   Deshalb kein zweiter oranger Verlauf (er wuerde im Band verschwinden),
+   sondern die dunkle Flaeche wie bisher — nur mit der plastischen Kante:
+   heller Rand oben, dunkler unten. Also derselbe Effekt wie bei den Kacheln,
+   nur eingedrueckt statt erhaben, wie es sich fuer einen Knopf gehoert. */
 .cbd-classroom-nav-leave {
     padding: 6px 14px;
-    background: rgba(0, 0, 0, 0.2);
+    background-color: rgba(0, 0, 0, 0.2);
+    background-image: linear-gradient(135deg,
+        rgba(255, 255, 255, 0.12) 0%,
+        rgba(0, 0, 0, 0.12) 100%);
     border: 1px solid rgba(255, 255, 255, 0.35);
     border-radius: 6px;
+    box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.3),
+        inset 0 -1px 1px rgba(0, 0, 0, 0.25);
     color: #fff;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
     white-space: nowrap;
 }
 
 .cbd-classroom-nav-leave:hover {
-    background: rgba(0, 0, 0, 0.35);
+    background-color: rgba(0, 0, 0, 0.35);
     border-color: rgba(255, 255, 255, 0.6);
 }
 

@@ -1000,7 +1000,19 @@ class CBD_Classroom {
             <div class="cbd-classroom-content" id="cbd-classroom-content" style="display:none;">
                 <div class="cbd-classroom-header">
                     <span class="cbd-classroom-class-name" id="cbd-classroom-class-name"></span>
-                    <button type="button" id="cbd-class-logout" class="button"><?php _e('Abmelden', 'container-block-designer'); ?></button>
+                    <?php
+                    // Nur ein X statt des Wortes "Abmelden": das Wort wurde in
+                    // der Praxis nicht angezeigt (der Knopf blieb leer), und im
+                    // farbigen Band reicht das Symbol. Der Text bleibt als
+                    // aria-label/title erhalten — sonst haette der Knopf fuer
+                    // Screenreader und beim Ueberfahren gar keine Beschriftung.
+                    // Die Klasse cbd-classroom-logout ist wichtig: das CSS
+                    // stylt darueber (und ueber die ID), vorher trug sie kein
+                    // Element und die Regeln liefen ins Leere.
+                    ?>
+                    <button type="button" id="cbd-class-logout" class="button cbd-classroom-logout"
+                            aria-label="<?php esc_attr_e('Abmelden', 'container-block-designer'); ?>"
+                            title="<?php esc_attr_e('Abmelden', 'container-block-designer'); ?>"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <div class="cbd-classroom-pages" id="cbd-classroom-pages"></div>
             </div>

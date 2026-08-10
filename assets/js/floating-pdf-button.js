@@ -35,28 +35,73 @@
         // Floating Action Button
         // =====================================================================
 
+        // Plastischer Look wie die Icon-Kacheln (Rezeptur aus
+        // Website/Icons/generate_iconset_local.py bzw. assets/icons/**/*.svg):
+        // Verlauf 135 Grad Basisfarbe -> 20 % dunkler, radialer Glanz oben
+        // links, Innenkante oben dunkel / unten hell, Schlagschatten in
+        // stark abgedunkelter Basisfarbe.
+        //
+        // color-mix() statt fester Hexwerte, damit die Customizer-Farbe
+        // durchschlaegt. themeColor kommt aus --color-ui-surface (siehe oben),
+        // ist also selbst schon der eingestellte Wert.
+        var plasticDark = 'color-mix(in srgb, ' + themeColor + ' 80%, #000)';
+        var plasticShadow = 'color-mix(in srgb, ' + themeColor + ' 45%, #000)';
+        var glossLayer = 'radial-gradient(75% 75% at 30% 22%,' +
+            'rgba(255,255,255,.35) 0%,rgba(255,255,255,.08) 45%,rgba(255,255,255,0) 100%)';
+
+        function plasticBackground(from, to) {
+            return glossLayer + ',linear-gradient(135deg,' + from + ' 0%,' + to + ' 100%)';
+        }
+
+        var plasticShadowStack =
+            'inset 0 2px 2px -1px color-mix(in srgb, ' + plasticShadow + ' 75%, transparent),' +
+            'inset 0 -2px 2px -1px rgba(255,255,255,.5),' +
+            'inset -1px 0 1px color-mix(in srgb, ' + plasticShadow + ' 25%, transparent),' +
+            '0 4px 10px color-mix(in srgb, ' + plasticShadow + ' 55%, transparent)';
+
         var $pdfButton = $('<div id="cbd-pdf-export-fab">PDF</div>');
         $pdfButton.css({
             position: 'fixed',
             bottom: '30px',
             right: '30px',
             zIndex: '999999',
-            background: themeColor,
+            // backgroundImage statt background: die Kurzschreibweise wuerde
+            // bei einem ungueltigen Verlauf (Browser ohne color-mix()) auch
+            // backgroundColor zuruecksetzen — der Knopf waere dann durchsichtig
+            // statt einfarbig. So ueberlebt die Farbe als Rueckfall.
+            backgroundColor: themeColor,
+            backgroundImage: plasticBackground(themeColor, plasticDark),
             color: 'white',
+            textShadow: '0 1px 2px rgba(0,0,0,.35)',
             borderRadius: '12px',
             padding: '15px',
             cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            boxShadow: plasticShadowStack,
             fontSize: '14px',
             fontWeight: 'bold',
             textAlign: 'center',
             minWidth: '60px',
-            transition: 'all 0.2s ease'
+            transition: 'transform 0.2s ease, box-shadow 0.2s ease'
         });
         $pdfButton.attr('title', 'Container-Bl\u00f6cke als PDF exportieren');
+        // Beim Hover den ganzen Verlauf austauschen, nicht nur background:
+        // eine einzelne Farbe wuerde die Verlaufsschichten ueberschreiben und
+        // den plastischen Look beim Ueberfahren flach machen.
         $pdfButton.hover(
-            function () { $(this).css({ transform: 'scale(1.05)', background: themeColorDark }); },
-            function () { $(this).css({ transform: 'scale(1)', background: themeColor }); }
+            function () {
+                $(this).css({
+                    transform: 'scale(1.05)',
+                    backgroundColor: themeColorDark,
+                    backgroundImage: plasticBackground(themeColorDark, plasticDark)
+                });
+            },
+            function () {
+                $(this).css({
+                    transform: 'scale(1)',
+                    backgroundColor: themeColor,
+                    backgroundImage: plasticBackground(themeColor, plasticDark)
+                });
+            }
         );
 
         $pdfButton.on('click', function () {
@@ -92,12 +137,20 @@
 
             var css =
                 /* Toolbar */
+                // Dieselbe plastische Rezeptur wie der FAB und die Kopfleiste
+                // des Themes — die Werkzeugleiste ist ein Band, kein Knopf,
+                // deshalb ohne seitliche Innenkante.
                 '.cbd-pdf-toolbar{' +
                   'position:fixed;top:0;left:0;right:0;z-index:999999;' +
-                  'background:' + themeColor + ';color:#fff;' +
+                  'background-color:' + themeColor + ';' +
+                  'background-image:' + plasticBackground(themeColor, plasticDark) + ';' +
+                  'color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);' +
                   'padding:10px 20px;display:flex;align-items:center;' +
                   'gap:10px;flex-wrap:wrap;font-size:14px;' +
-                  'box-shadow:0 2px 10px rgba(0,0,0,.3);' +
+                  'box-shadow:' +
+                    'inset 0 3px 3px -1px color-mix(in srgb,' + plasticShadow + ' 75%,transparent),' +
+                    'inset 0 -2px 2px -1px rgba(255,255,255,.5),' +
+                    '0 3px 10px color-mix(in srgb,' + plasticShadow + ' 55%,transparent);' +
                   'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif' +
                 '}' +
                 'body.admin-bar .cbd-pdf-toolbar{top:32px}' +

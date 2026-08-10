@@ -61,6 +61,11 @@ if (isset($_POST['cbd_save_settings']) && wp_verify_nonce($_POST['cbd_settings_n
     update_option('cbd_classroom_enabled', isset($_POST['classroom_enabled']) ? 1 : 0);
     update_option('cbd_html_annotation', isset($_POST['html_annotation']) ? 1 : 0);
 
+    // Icon-Größe: Begrenzung und Standardwert stecken in
+    // cbd_sanitize_icon_scale() (includes/functions.php) — dieselbe Funktion
+    // nutzt der Frontend-Enqueue, damit beide nie auseinanderlaufen.
+    update_option('cbd_icon_scale', cbd_sanitize_icon_scale($_POST['icon_scale'] ?? ''));
+
     // Personal Notes Manager Einstellungen
     $notes_manager_mode = sanitize_text_field($_POST['notes_manager_mode'] ?? 'disabled');
     update_option('cbd_personal_notes_manager', $notes_manager_mode);
@@ -103,6 +108,9 @@ $classroom_enabled = get_option('cbd_classroom_enabled', 0);
 $html_annotation = get_option('cbd_html_annotation', 1);
 $notes_manager_mode = get_option('cbd_personal_notes_manager', 'disabled');
 $notes_manager_pages = get_option('cbd_notes_manager_pages', array());
+$icon_scale = cbd_get_icon_scale_percent();
+$icon_scale_bounds = cbd_icon_scale_bounds();
+$icon_scale_preview = cbd_icon_scale_preview($icon_scale);
 
 // Datenbank-Status prüfen
 global $wpdb;
@@ -246,6 +254,40 @@ $needs_migration = !$is_default_exists || !$classroom_tables_exist || version_co
                             <?php _e('HTML-Kommentare für KI-Lesbarkeit aktivieren', 'container-block-designer'); ?>
                         </label>
                         <p class="description"><?php _e('Fügt Kommentare wie <code>&lt;!-- ═══ CBD-Block: "Titel" [name] ═══ --&gt;</code> um jeden Block ein. Erleichtert das Auslesen von Inhalten durch KI. Standardmäßig aktiv.', 'container-block-designer'); ?></p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row"><label for="cbd_icon_scale"><?php _e('Icon-Größe', 'container-block-designer'); ?></label></th>
+                    <td>
+                        <input type="number" id="cbd_icon_scale" name="icon_scale"
+                               value="<?php echo esc_attr($icon_scale); ?>"
+                               min="<?php echo esc_attr($icon_scale_bounds['min']); ?>"
+                               max="<?php echo esc_attr($icon_scale_bounds['max']); ?>"
+                               step="5" class="small-text"> %
+                        <p class="description">
+                            <?php
+                            printf(
+                                /* translators: 1: Minimum, 2: Maximum, 3: Standardwert */
+                                esc_html__('Vergrößert oder verkleinert alle Icons im Frontend — Block-Icons, Nummerierungs-Kacheln und positionierte Icons. Erlaubt sind %1$d bis %2$d %%, Standard ist %3$d %%.', 'container-block-designer'),
+                                (int) $icon_scale_bounds['min'],
+                                (int) $icon_scale_bounds['max'],
+                                (int) $icon_scale_bounds['default']
+                            );
+                            ?>
+                        </p>
+                        <p class="description">
+                            <strong><?php esc_html_e('Die Handy-Ansicht bleibt angepasst.', 'container-block-designer'); ?></strong>
+                            <?php esc_html_e('Kleinere Bildschirme haben eigene Ausgangsgrößen, die mit demselben Faktor mitwachsen — Icons bleiben dort also weiterhin kleiner als am Desktop. Beim aktuellen Wert ergibt das:', 'container-block-designer'); ?>
+                        </p>
+                        <ul style="margin:4px 0 0 2px; color:#50575e;">
+                            <?php foreach ($icon_scale_preview as $cbd_label => $cbd_px) : ?>
+                                <li><?php echo esc_html($cbd_label . ': ' . $cbd_px . ' px'); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                        <p class="description">
+                            <?php esc_html_e('Gilt nur für die öffentliche Website, nicht für den Editor. Änderungen wirken sofort nach dem Speichern.', 'container-block-designer'); ?>
+                        </p>
                     </td>
                 </tr>
 

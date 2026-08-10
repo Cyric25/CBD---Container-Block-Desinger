@@ -11,6 +11,13 @@
  * weil die Ursprungsregeln (cbd-frontend-clean.css, unified-frontend.css)
  * ihrerseits !important verwenden.
  *
+ * Größen: alle Frontend-Werte hier sind calc(<Basis> * var(--cbd-icon-scale)).
+ * Der Regler steht in cbd-frontend-clean.css (:root) — im Frontend hängt
+ * diese Datei per Handle daran. Im Admin (Icon-Picker) wird sie allein
+ * geladen; deshalb überall der Fallback var(--cbd-icon-scale, 1), sonst
+ * fiele die Deklaration dort ersatzlos aus. Die Picker-Vorschau (Abschnitt
+ * 1b) bleibt bewusst unskaliert — das ist Admin-UI.
+ *
  * @package ContainerBlockDesigner
  * @since 3.1.77
  */
@@ -34,23 +41,23 @@
 
 .cbd-header-icon .cbd-custom-icon,
 .cbd-container-icon .cbd-custom-icon {
-    width: 32px;
-    height: 32px;
+    width: calc(32px * var(--cbd-icon-scale, 1));
+    height: calc(32px * var(--cbd-icon-scale, 1));
 }
 
 @media (max-width: 768px) {
     .cbd-header-icon .cbd-custom-icon,
     .cbd-container-icon .cbd-custom-icon {
-        width: 28px;
-        height: 28px;
+        width: calc(28px * var(--cbd-icon-scale, 1));
+        height: calc(28px * var(--cbd-icon-scale, 1));
     }
 }
 
 @media (max-width: 480px) {
     .cbd-header-icon .cbd-custom-icon,
     .cbd-container-icon .cbd-custom-icon {
-        width: 24px;
-        height: 24px;
+        width: calc(24px * var(--cbd-icon-scale, 1));
+        height: calc(24px * var(--cbd-icon-scale, 1));
     }
 }
 
@@ -98,8 +105,8 @@
     border: none !important;
     box-shadow: none !important;
     border-radius: 0 !important;
-    width: 34px !important;
-    height: 34px !important;
+    width: calc(34px * var(--cbd-icon-scale, 1)) !important;
+    height: calc(34px * var(--cbd-icon-scale, 1)) !important;
     padding: 0 !important;
     color: inherit !important;
     /* Die Ursprungsregel setzt z-index: -1 und schiebt die Nummer damit
@@ -128,21 +135,22 @@
 }
 
 /* Außenliegende Nummer: etwas näher an den Container als die Textblase,
-   weil die Kachel optisch schwerer wiegt. */
+   weil die Kachel optisch schwerer wiegt. Der Überstand skaliert mit —
+   sonst rutschte die wachsende Kachel weiter über den Containerrand. */
 .cbd-container-number.cbd-outside-number.cbd-number-as-icon:not(.cbd-number-fallback) {
-    top: -14px !important;
-    left: -14px !important;
+    top: calc(-14px * var(--cbd-icon-scale, 1)) !important;
+    left: calc(-14px * var(--cbd-icon-scale, 1)) !important;
 }
 
 @media (max-width: 480px) {
     .cbd-container-number.cbd-number-as-icon:not(.cbd-number-fallback) {
-        width: 28px !important;
-        height: 28px !important;
+        width: calc(28px * var(--cbd-icon-scale, 1)) !important;
+        height: calc(28px * var(--cbd-icon-scale, 1)) !important;
     }
 
     .cbd-container-number.cbd-outside-number.cbd-number-as-icon:not(.cbd-number-fallback) {
-        top: -10px !important;
-        left: -10px !important;
+        top: calc(-10px * var(--cbd-icon-scale, 1)) !important;
+        left: calc(-10px * var(--cbd-icon-scale, 1)) !important;
     }
 }
 

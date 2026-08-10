@@ -12,6 +12,113 @@ if (!defined('ABSPATH')) {
 }
 
 /**
+ * Icon-Skalierung im Frontend (Einstellungen → Icon-Größe).
+ *
+ * Gespeichert wird ein Prozentwert (110 = Standard), zurückgegeben der
+ * Faktor für die CSS-Variable --cbd-icon-scale. Beide Seiten — das
+ * Speichern in admin/settings.php und das Ausspielen beim Enqueue — gehen
+ * durch diese Funktionen, damit Begrenzung und Standardwert nicht
+ * auseinanderlaufen können.
+ *
+ * Die Grenzen sind bewusst eng: unter 50 % sind Icons kaum noch erkennbar,
+ * über 200 % sprengen sie auf dem Handy die Kopfzeile — dort ist die Basis
+ * 24px und der Titel nur 16px, ein Icon von 48px+ verdrängt ihn.
+ *
+ * WICHTIG — die Handy-Ansicht bleibt in jedem Fall angepasst: die
+ * Breakpoints in cbd-frontend-clean.css behalten ihre eigenen Basiswerte
+ * (32px Desktop / 28px Tablet / 24px Handy) und werden alle mit demselben
+ * Faktor multipliziert. Das Verhältnis bleibt also erhalten, egal was hier
+ * eingestellt ist; skaliert wird die ganze Treppe, nicht nur der Desktopwert.
+ *
+ * @since 3.1.80
+ */
+if (!function_exists('cbd_icon_scale_bounds')) {
+    function cbd_icon_scale_bounds() {
+        return array('min' => 50, 'max' => 200, 'default' => 110);
+    }
+}
+
+/**
+ * Errechnete Icon-Größen je Breakpoint — für die Anzeige in den
+ * Einstellungen, damit sichtbar ist, was auf dem Handy ankommt.
+ *
+ * Basiswerte gespiegelt aus .cbd-header-icon in cbd-frontend-clean.css.
+ * Ändern sich die dort, muss diese Liste mitgezogen werden (siehe
+ * CLAUDE.md, Abschnitt "Icon-Größen").
+ *
+ * @param int|null $percent
+ * @return array Beschriftung => Pixelwert (gerundet)
+ */
+if (!function_exists('cbd_icon_scale_preview')) {
+    function cbd_icon_scale_preview($percent = null) {
+        if (null === $percent) {
+            $percent = cbd_get_icon_scale_percent();
+        }
+
+        $factor = $percent / 100;
+
+        return array(
+            __('Desktop', 'container-block-designer') => (int) round(32 * $factor),
+            __('Tablet', 'container-block-designer')  => (int) round(28 * $factor),
+            __('Handy', 'container-block-designer')   => (int) round(24 * $factor),
+        );
+    }
+}
+
+/**
+ * Prozentwert auf den erlaubten Bereich bringen.
+ *
+ * @param mixed $raw
+ * @return int
+ */
+if (!function_exists('cbd_sanitize_icon_scale')) {
+    function cbd_sanitize_icon_scale($raw) {
+        $bounds = cbd_icon_scale_bounds();
+
+        // Komma als Dezimaltrenner ist in deutschsprachiger Eingabe normal;
+        // (int) "1,5" wäre sonst 1 statt 15 bzw. der Wert würde stillschweigend
+        // auf das Minimum fallen.
+        $value = str_replace(',', '.', trim((string) wp_unslash($raw)));
+
+        if ('' === $value || !is_numeric($value)) {
+            return $bounds['default'];
+        }
+
+        $value = (int) round((float) $value);
+
+        return max($bounds['min'], min($bounds['max'], $value));
+    }
+}
+
+/**
+ * Gespeicherter Prozentwert.
+ *
+ * @return int
+ */
+if (!function_exists('cbd_get_icon_scale_percent')) {
+    function cbd_get_icon_scale_percent() {
+        $bounds = cbd_icon_scale_bounds();
+
+        return cbd_sanitize_icon_scale(get_option('cbd_icon_scale', $bounds['default']));
+    }
+}
+
+/**
+ * Faktor für die CSS-Variable, z. B. "1.1".
+ *
+ * Bewusst ohne number_format()/Locale: in CSS ist der Dezimaltrenner immer
+ * der Punkt, eine locale-abhängige Ausgabe ergäbe "1,1" und damit ein
+ * ungültiges calc().
+ *
+ * @return string
+ */
+if (!function_exists('cbd_get_icon_scale_css')) {
+    function cbd_get_icon_scale_css() {
+        return rtrim(rtrim(sprintf('%.2F', cbd_get_icon_scale_percent() / 100), '0'), '.');
+    }
+}
+
+/**
  * Kanonische Capability-Definition der Rolle "Block-Redakteur".
  * EINZIGE Quelle der Wahrheit – von allen Erstellungs-/Reparaturpfaden genutzt,
  * damit die Rolle unabhängig vom Codepfad immer dieselben Rechte erhält.

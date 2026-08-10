@@ -446,6 +446,135 @@ python generate_iconset_local.py --color "#71230a" --out …   # andere Basisfar
 Prüfen: `php tools/test-icon-library.php` (Standalone-Harness ohne WordPress,
 testet Bestand, Sortierung, URL-Bildung, Traversal-Schutz, Admin-Vorschau).
 
+## Icon-Größen: wo sie stehen (Fundstellen-Karte)
+
+Die Größen liegen verstreut, und **daneben liegen tote CSS-Dateien mit
+denselben Selektoren**. Wer dort ändert, sieht nichts passieren. Diese Karte
+existiert, damit das nicht nochmal jemandem passiert.
+
+### Der eine Regler
+
+Alle Frontend-Icongrößen sind `calc(<Basiswert> * var(--cbd-icon-scale))`.
+Die Basiswerte bleiben stehen, damit erkennbar bleibt, wovon skaliert wird.
+
+**Eingestellt wird der Faktor seit v3.1.80 in der Oberfläche:**
+Container Designer → Einstellungen → **Icon-Größe**, Prozentwert,
+50–200 %, Standard 110 %.
+
+Kette und Zuständigkeiten:
+
+| Stelle | Aufgabe |
+|---|---|
+| `includes/functions.php` | `cbd_icon_scale_bounds()` (Grenzen + Standard), `cbd_sanitize_icon_scale()`, `cbd_get_icon_scale_percent()`, `cbd_get_icon_scale_css()`, `cbd_icon_scale_preview()` |
+| `admin/settings.php` | Feld `icon_scale`, Speichern über `cbd_sanitize_icon_scale()` |
+| `class-cbd-block-registration.php` (nach dem `cbd-frontend-clean`-Enqueue) | `wp_add_inline_style(':root{--cbd-icon-scale:…}')` |
+| `assets/css/cbd-frontend-clean.css` (`:root`) | nur noch **Rückfallwert** (`1.1`) |
+
+**PHP ist die einzige Quelle.** Das Inline-CSS wird immer ausgegeben, auch
+beim Standardwert. Andernfalls müssten der Standard in
+`cbd_icon_scale_bounds()` und die `1.1` in der CSS-Datei dauerhaft
+übereinstimmen — eine Änderung an nur einer der beiden Stellen liefe still
+daneben. Der Wert in der CSS-Datei greift nur, falls der Enqueue-Zweig nicht
+läuft.
+
+Inline (nicht über den Style-Loader-Transient), damit die neue Größe sofort
+nach dem Speichern wirkt, ohne Cache-Leerung.
+
+**Die Handy-Ansicht bleibt angepasst.** Jeder Breakpoint hat seinen eigenen
+Basiswert (32px Desktop / 28px Tablet / 24px Handy), und alle hängen an
+derselben Variablen. Skaliert wird die ganze Treppe, nicht nur der
+Desktopwert — Handy < Tablet < Desktop gilt auf jeder Stufe. Deshalb ist das
+Maximum 200 %: darüber verdrängt das Icon auf dem Handy den nur 16px großen
+Titel. `cbd_icon_scale_preview()` spiegelt die drei Basiswerte, um in den
+Einstellungen die errechneten Pixelgrößen anzuzeigen — **ändern sich die
+Basiswerte im CSS, muss diese Funktion mitgezogen werden.**
+
+`custom-icons.css` nutzt `var(--cbd-icon-scale, 1)` mit Fallback: im Frontend
+hängt die Datei per Handle an `cbd-frontend-clean` (Variable ist da), im Admin
+wird sie für den Icon-Picker allein geladen — dort greift der Fallback 1.
+
+Test: `php tools/test-icon-scale.php` (Bereinigung inkl. deutschem Komma und
+Unsinnseingaben, Kappung, gültiges CSS über den ganzen Wertebereich, kaputte
+Option in der DB, und die Zusicherung Handy < Tablet < Desktop auf jeder
+Stufe).
+
+### Lebende Dateien (Frontend)
+
+| Was | Datei | Selektor | Basis |
+|---|---|---|---|
+| Kopfzeilen-Icon, Rahmen | `cbd-frontend-clean.css` | `.cbd-header-icon` | 32px (≤768px: 28px) |
+| … Dashicons darin | `cbd-frontend-clean.css` | `.cbd-header-icon .dashicons` | 24px (≤768px: 20px) |
+| … Material/FA/Lucide/Emoji darin | `cbd-frontend-clean.css` | `.cbd-header-icon .material-icons` u. a. | siehe unten |
+| Eigene SVG-Kacheln | `custom-icons.css` | `.cbd-header-icon .cbd-custom-icon` | 32/28/24px |
+| Nummerierungs-Kacheln | `custom-icons.css` | `.cbd-container-number.cbd-number-as-icon` | 34px (≤480px: 28px) |
+| … deren Überstand | `custom-icons.css` | `.cbd-outside-number.cbd-number-as-icon` | top/left −14px (≤480px: −10px) |
+| Positionierte Icons | `cbd-frontend-clean.css` | `.cbd-icon`, `.cbd-icon-inside` | 24px, Dashicons 18px |
+
+### Tote Dateien — nicht anfassen
+
+`assets/css/frontend-positioning.css`, `assets/css/unified-frontend.css` und
+`assets/css/frontend.css` sind in **keinem** `wp_enqueue_style()` referenziert
+(geprüft über alle `*.php`). Sie enthalten trotzdem `.cbd-header-icon
+.dashicons { font-size: 18px }` (unified-frontend.css:157) und
+`.cbd-container-icon.cbd-positioned { width: 32px }`
+(frontend-positioning.css:28) — reine Attrappen.
+
+### Jede Bibliothek wird anders groß
+
+`CBD_Block_Registration::render_icon()` (Zeile ~2005) erzeugt je nach Typ
+anderes Markup, und die Größe kommt entsprechend woanders her:
+
+| Typ | Markup | Größe kam ursprünglich von |
+|---|---|---|
+| `dashicons` | `<span class="dashicons …">` | CDB-Regel (24px) |
+| `custom` | `<img class="cbd-custom-icon">` | CDB-Regel (32px); die `width/height="24"`-Attribute im HTML sind nur Layout-Shift-Hinweis, CSS gewinnt |
+| `material` | `<span class="material-icons">` | **Vendor-CSS** `material-icons.css:19` (24px) |
+| `fontawesome` | `<i class="fa-solid fa-…">` | **geerbte** `font-size` — keine CDB-Regel |
+| `lucide` | `<i class="lucide lucide-…">` | `lucide.css:13` = `font-size: inherit` |
+| `emoji` | `<span class="cbd-emoji-icon" style="…">` | **Inline-Style** in `render_icon()` (`1.2em`) |
+
+Konsequenz: Eine Skalierung, die nur die CDB-Regeln anfasst, vergrößert
+Dashicons und Kacheln — Font Awesome, Lucide, Material und Emoji blieben
+gleich. Deshalb gibt es in `cbd-frontend-clean.css` jetzt für jede Bibliothek
+eine eigene Regel im Kopfzeilen-Kontext. Die erbenden Bibliotheken (FA,
+Lucide) werden **relativ** skaliert (`calc(1em * var(--cbd-icon-scale))`),
+nicht auf einen festen px-Wert gesetzt — sonst wäre es keine
+10-%-Vergrößerung, sondern eine Neufestlegung.
+
+Emoji ist der Sonderfall: Inline-Styles schlagen externes CSS. Der `calc()`
+steht deshalb in `render_icon()` selbst, mit Fallback `var(--cbd-icon-scale, 1)`.
+
+### Nicht mitskaliert
+
+- `.cbd-header-icon { transform: translateY(-6px) }` — manuelle
+  Grundlinien-Ausrichtung zum Titel, kein Größenwert. Bei stark abweichenden
+  Prozentwerten kann die Ausrichtung zum Titel leicht verrutschen.
+- Icon-Picker im Admin (`.cbd-icon-item .cbd-custom-icon-preview`, 32px) und
+  Board-Modus-Werkzeugleiste (`board-mode.css`, 16–22px): Admin-UI.
+- Gutenberg-Editor: `block-editor.css` ist eine eigene Datei; die
+  Frontend-Skalierung erreicht ihn nicht.
+
+## Plastischer Look von PDF-Button und PDF-Werkzeugleiste (v3.1.80)
+
+Beide übernehmen die Optik der Icon-Kacheln (Verlauf 135°, radialer Glanz oben
+links, Innenkante oben dunkel / unten hell, Schlagschatten). **Die Rezeptur und
+die vollständige Fundstellen-Liste stehen in `Theme/CLAUDE.md`, Abschnitt
+„Plastischer Look"** — dort liegt auch die Kopfleiste, die denselben Look hat.
+
+Besonderheit hier: `assets/js/floating-pdf-button.js` stylt **inline per
+jQuery**, nicht über eine CSS-Datei. Die Farbstufen werden als
+`color-mix()`-Strings gebaut (`plasticDark`, `plasticShadow`,
+`plasticBackground()`), damit die Customizer-Farbe durchschlägt.
+
+**Falle beim Hover:** Der frühere Hover setzte `background` auf eine einzelne
+Farbe. Bei einem Verlaufshintergrund löscht das die Verlaufsschichten und der
+Knopf wird beim Überfahren flach — deshalb tauscht der Hover jetzt den ganzen
+Verlauf aus statt nur die Farbe.
+
+Die weiße `.cbd-pdf-go`-Schaltfläche in der Werkzeugleiste bleibt bewusst flach:
+sie ist ein Umkehr-Knopf auf farbigem Grund und würde mit dem orangen
+Kachel-Look in der Leiste verschwinden.
+
 ## Icon-Wert: kanonisches Parsen (Fix v3.1.78)
 
 `CBD_Icon_Library::parse_stored_value()` ist die **einzige** Stelle, die das
@@ -476,14 +605,14 @@ Nebenwirkung des Bugs war außerdem, dass `get_required_icon_libraries()` den Ty
 Test: `php tools/test-icon-value.php` (Rundlauf Picker → `$_POST` mit Slashes →
 Speichern → Lesen → Rendern, plus Reparatur von Altbeständen).
 
-## Designs exportieren / importieren (v3.1.78)
+## Designs exportieren / importieren (v3.1.78, Markdown seit v3.1.79)
 
 Container Designer → **Export / Import**. `CBD_Design_Transfer`
 (`includes/class-cbd-design-transfer.php`) + View in `admin/design-transfer.php`.
 
 Ersetzt die in v3.1.50 abgeschaltete Seite `admin/import-export.php` (die
 Datei liegt noch im Repo, ist aber nirgends verlinkt). Bewusst **nur ein**
-Eingabeweg: eine hochgeladene JSON-Datei. Kein URL-Abruf (SSRF), kein ZIP —
+Eingabeweg: eine hochgeladene Datei. Kein URL-Abruf (SSRF), kein ZIP —
 genau die Gründe, warum die alte Seite entfernt wurde.
 
 **Zweistufig:** Datei prüfen → Vorschau mit Konfliktliste → Import ausführen.
@@ -493,23 +622,97 @@ was passiert.
 **Konfliktbehandlung** bei gleichem Slug: überspringen (Default), überschreiben
 oder als Kopie mit neuem Slug anlegen.
 
-**Format:** `{"format":"cbd-designs","formatVersion":1,"designs":[…]}`.
-Exportiert werden `name, title, description, config, styles, features, status,
-is_default` — **ohne** `id` und Zeitstempel, damit nichts kollidiert.
-`config`/`styles`/`features` liegen in der Datei als echte Objekte statt als
-JSON-in-JSON, also lesbar und diff-bar.
+Exportiert werden in beiden Formaten `name, title, description, config, styles,
+features, status, is_default` — **ohne** `id` und Zeitstempel, damit nichts
+kollidiert.
+
+### Markdown (Standard)
+
+Ein `##`-Abschnitt je Design, Werte als flache Punkt-Pfade:
+
+```markdown
+## Info-Box
+
+- **Slug:** `info-box`
+- **Status:** aktiv
+- **Standard:** nein
+
+Hinweiskasten für Merksätze.
+
+### Stile
+
+- `background.color`: #f5ede9
+- `border.width`: 2
+
+### Funktionen
+
+- `icon.enabled`: true
+- `icon.value`: {"type":"custom","value":"kategorien/hinweise"}
+```
+
+Regeln (`to_markdown()` / `parse_markdown()`):
+
+- `###`-Überschriften werden über Schlüsselwörter zugeordnet
+  (`konfig|config` → config, `stil|style` → styles, `funktion|feature` →
+  features); unbekannte Abschnitte werden übergangen.
+- **Stammdaten erkennt der Parser an der Fettschrift** (`- **Slug:** …`).
+  Alles andere im Kopfbereich ist Beschreibung — dadurch überlebt eine
+  Beschreibung, die selbst mit `- ` beginnt. Führende `#` in der Beschreibung
+  werden beim Schreiben als `\#` maskiert, sonst zerschnitte die Zeile beim
+  Wiedereinlesen den Abschnitt.
+- **Der Wert ist der ganze Zeilenrest**, auch mit Doppelpunkten — sonst
+  überlebte `icon.value: {"type":"custom",…}` den Rundlauf nicht.
+- **Schreiben und Lesen können nicht auseinanderlaufen:** `md_write_value()`
+  schreibt roh und setzt genau dann Anführungszeichen, wenn
+  `md_read_value()` daraus nicht exakt denselben Text machen würde. Die Regel
+  steht also nur einmal im Code.
+- Typen: `true`/`false` (auch `ja`/`nein`) → bool, reine Zahlen → int/float,
+  Rest → Text; `"true"` erzwingt Text. **Wichtig:** bool muss echt bool
+  bleiben — der String `"false"` wäre in PHP truthy und würde ein
+  abgeschaltetes Feature einschalten.
+- **Bewusste Typänderung:** Zahlen, die in der DB als String liegen (aus
+  `$_POST` kommt alles als String), stehen unquotiert in der Datei und kommen
+  als echte Zahl zurück. `padding.top: "20"` wäre in einer lesbaren Datei nur
+  Lärm; für die CSS-Erzeugung sind `"20"` und `20` dasselbe. Der Rückweg
+  prüft trotzdem auf Exaktheit (`(string) $zahl === $text`), damit `"0.10"`
+  Text bleibt; `filter_var` statt `(int)`, weil der Cast einer zu großen
+  Ziffernfolge ab PHP 8.1 warnt.
+- Schlüsselsegmente dürfen nur `[A-Za-z0-9_-]` enthalten. Zeilen, die das
+  verletzen, werden **verworfen statt bereinigt** — sonst stünde unter einem
+  Namen ein Wert, den niemand geschrieben hat. `unflatten()` bereinigt
+  zusätzlich je Segment (Traversal-Schutz).
+
+### JSON (weiterhin unterstützt)
+
+`{"format":"cbd-designs","formatVersion":1,"designs":[…]}`, unverändert seit
+3.1.78. `config`/`styles`/`features` liegen als echte Objekte statt als
+JSON-in-JSON in der Datei.
+
+**Die Formatweiche stellt der Inhalt, nicht die Endung** (`parse_file()`):
+beginnt die Datei mit `{`, wird sie als JSON gelesen, sonst als Markdown.
+Beide Wege münden in dieselbe Normalisierung (`normalize_designs()`) — die
+Eingangsprüfung ist für beide Formate identisch, es gibt keinen zweiten,
+schwächeren Weg in die Datenbank.
+
+### Sonstiges
 
 **Der Slug entscheidet.** Seiten referenzieren ihr Design über `name`. Import
 unter abweichendem Slug lässt bestehende Container ungestylt — die Seite weist
 darauf hin.
 
+**`is_default` wird exportiert, aber nie geschrieben.** Pro Installation darf
+es nur ein Standard-Design geben (`CBD_Ajax_Handler` setzt beim Wechsel alle
+anderen auf 0); welches das ist, entscheidet die Zielinstallation. Die Angabe
+in der Datei ist reine Information.
+
 Nach dem Import werden Style- und Blocklisten-Cache geleert
 (`CBD_Block_Registration::clear_blocks_cache()`), sonst greifen neue Designs
 erst nach Ablauf der Transients.
 
-Test: `php tools/test-design-transfer.php` (Ablehnung ungültiger Dateien,
-Slug-Normalisierung inkl. Traversal, doppelte Slugs, Markup-Entschärfung,
-Verwerfen unbekannter Felder, Export→Import-Rundlauf).
+Test: `php tools/test-design-transfer.php` (beide Formate: Ablehnung
+ungültiger Dateien, Slug-Normalisierung inkl. Traversal, doppelte Slugs,
+Markup-Entschärfung, Verwerfen unbekannter Felder, Rundläufe Export→Import
+und JSON→Markdown, heikle Werte, Zahlentypen).
 
 ## Debugging-Konventionen
 
