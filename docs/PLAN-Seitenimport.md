@@ -451,7 +451,7 @@ liefert `35fdc0f7c29c0120f05f7230bf506d47547ce7f9`. Arbeitsbaum sauber.
 
 ### AP-1.2: Referenzmarkup aus dem Editor erheben (Grundwahrheit)
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.1
@@ -554,7 +554,7 @@ wird es einmal an der echten Installation gemessen und als Fixture abgelegt.
 
 ### AP-1.3: Testharness mit allen Testfällen anlegen (TDD, rot committen)
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.2
@@ -742,7 +742,7 @@ array(
 
 ### AP-1.4: HTML-Fragment in Kernblöcke umwandeln
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** opus (Markup-Treue, DOM-Verarbeitung mit mehreren Fallstricken)
 **Abhängigkeiten:** AP-1.3
@@ -846,7 +846,7 @@ Nach diesem AP sind die Testfälle T1–T11 und T23 aus
 
 ### AP-1.5: Abschnitte und Stil-Zuweisungen zu `post_content` zusammensetzen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-10)
 **Umfang:** M
 **Modell:** opus (Abbildungslogik mit mehreren Sonderfällen und Rückfällen)
 **Abhängigkeiten:** AP-1.4
@@ -1671,11 +1671,11 @@ bei vielen Dateien ausgeschlossen ist und ein Fehler nur eine Datei betrifft.
        )
    );
    ```
-5. Seite anlegen:
+5. Seite anlegen. **`wp_slash()` ist zwingend** — siehe Kasten unten:
    ```php
    $page_id = wp_insert_post(array(
        'post_title'   => $titel,
-       'post_content' => $post_content,
+       'post_content' => wp_slash($post_content),
        'post_type'    => 'page',
        'post_status'  => 'draft',
        'post_parent'  => 0,
@@ -1684,6 +1684,18 @@ bei vielen Dateien ausgeschlossen ist und ein Fehler nur eine Datei betrifft.
    ```
    Zweiter Parameter `true`, damit ein `WP_Error` zurückkommt statt einer 0.
    Bei `is_wp_error($page_id)` mit der Fehlermeldung antworten.
+
+   > **`wp_slash()` niemals weglassen.** `wp_insert_post()` erwartet
+   > maskierte Daten und ruft intern `wp_unslash()` auf. Wird der Inhalt
+   > unmaskiert übergeben, verschwindet **jeder Backslash** — gemessen am
+   > 2026-08-10 auf der Testinstallation:
+   > `\cdot` wird zu `cdot`, `\sum` wird zu `sum`, und ein doppelter
+   > Backslash wird zu einem einfachen.
+   > Damit wäre in jeder importierten Seite **jede LaTeX-Formel zerstört**,
+   > ohne Fehlermeldung. Mit `wp_slash()` ist der Rundlauf zeichengleich.
+   > Dieselbe Fehlerfamilie wie beim Icon-Wert (siehe `CLAUDE.md`,
+   > „Icon-Wert: kanonisches Parsen") — dort fehlte `wp_unslash()` beim
+   > Lesen, hier fehlte `wp_slash()` beim Schreiben.
 6. Antwort:
    ```php
    wp_send_json_success(array(
@@ -1736,6 +1748,12 @@ bei vielen Dateien ausgeschlossen ist und ein Fehler nur eine Datei betrifft.
       abgewiesen (Antwort `-1` bzw. Fehler), ohne dass eine Seite entsteht.
 - [ ] Im Quelltext von `ajax_seiten_importieren()` steht `wp_unslash()` vor
       **jedem** `json_decode()`.
+- [ ] Der Aufruf von `wp_insert_post()` übergibt `wp_slash($post_content)`.
+- [ ] **Backslash-Nachweis:** Eine Testdatei mit `$a_1 \cdot b$` und
+      `$$\sum x_i$$` importieren; im gespeicherten `post_content` stehen
+      beide Formeln zeichengenau (in phpMyAdmin oder über
+      `get_post_field('post_content', $id)` prüfen). Ohne `wp_slash()`
+      stünde dort `cdot` und `sum`.
 - [ ] `php tools/check-php74.php` ohne Befunde.
 - [ ] Datei-Map-Zeilen in der Übergabenotiz aktualisiert.
 
