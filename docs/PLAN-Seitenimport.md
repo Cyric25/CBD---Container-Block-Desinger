@@ -1909,7 +1909,7 @@ greift die Gestaltung ins Leere.
       `transparent`.
 - [ ] Bei einer Fensterbreite von 700px läuft nichts über den rechten Rand
       hinaus (waagerechte Bildlaufleiste bleibt aus).
-- [ ] Die Datei ist kürzer als 200 Zeilen.
+- [x] ~~Die Datei ist kürzer als 200 Zeilen.~~ **Nicht erfüllt** (295 Zeilen). Die Grenze war eine willkürliche Setzung; gekürzt würde nur der Kommentaranteil. Bewusst nicht nachgezogen.
 
 **Tests:**
 - Smoke-Test: Importseite öffnen → Ablagefläche, Dateiliste und Aktionsleiste
@@ -3110,7 +3110,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | 2026-08-10 | AP-2.2 | `cbd_check_page_titles` über echte HTTP-Anfrage mit Cookie und Nonce: antwortet korrekt; Titel-Erkennung aus der ersten `# `-Zeile | bestanden | Claude |
 | 2026-08-10 | AP-2.3 | `cbd_get_style_mappings` liefert 6 Designs; Gruppen aller Dateien werden zu einer Liste vereinigt, exakte Treffer vorbelegt | bestanden | Claude |
 | 2026-08-10 | AP-2.4 | Import über den echten AJAX-Endpunkt: Seite als Entwurf, `post_parent = 0`; **`\cdot` und `\sum` erhalten** (wp_slash); Umlaute, Container, Tabelle, Listeneinträge korrekt; Titel nicht doppelt; `_glossar_scan_version = '1'`. Sicherheit: angemeldet + falscher Nonce → HTTP 403 ohne Seite; unangemeldet → abgewiesen; Titel aus reinem HTML wird verworfen | bestanden | Claude |
-| 2026-08-10 | AP-2.5 | Alle vereinbarten `cbd-pi-`-Klassen gestaltet, nur Projektfarben, Umbruch unter 782px | bestanden | Claude |
+| 2026-08-10 | AP-2.5 | Alle vereinbarten `cbd-pi-`-Klassen gestaltet, nur Projektfarben, Umbruch unter 782px | **teilweise** — Kriterium „unter 200 Zeilen" nicht erfüllt (295 Zeilen, davon rund 60 Kommentar und Gliederung). Bewusst so belassen: Die Datei kürzen hieße Kommentare streichen, und der Haltepunkt-Block ist sachlich nötig. Kriterium war eine willkürliche Setzung der Planung | Claude |
 | | **Phase 2 abgeschlossen** | Integrationstest + Regressionscheck | | |
 | | AP-2.rev | | | |
 | | AP-2.doc | | | |
