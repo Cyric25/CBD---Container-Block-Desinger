@@ -122,3 +122,82 @@ bleiben in der Datenbank erhalten.
 - CDB-Designer bleibt auf PHP 7.4 (Prüftool bleibt Pflicht vor jedem ZIP)
 
 Details pro Arbeitspaket: VERBESSERUNGSPLAN.md, -2.md, -3.md, -4.md (je mit Status).
+
+---
+
+# Rollout: Seitenimport und Sammelaktionen (2026-08)
+
+Zwei Pakete, **Reihenfolge zählt**:
+
+| Schritt | Paket | Wohin |
+|---|---|---|
+| 1 | `Theme/dist/fos-online-schulbuch.zip` (**v1.5.76**) | Design → Themes → Theme hochladen |
+| 2 | `Plugins/CDB-Designer/dist/container-block-designer-3.1.86.zip` | Plugins → Installieren → Hochladen |
+
+**Warum das Theme zuerst?** Der Seitenimporter des Plugins hängt seinen
+Menüeintrag unter das Seitenmanager-Menü des Themes. Kommt das Plugin zuerst,
+ist der Eintrag zwar erreichbar, erscheint in der Zwischenzeit aber unter
+„Container Designer" statt unter dem Seitenmanager — kein Schaden, nur
+verwirrend. Umgekehrt passiert gar nichts Sichtbares, bis das Plugin nachzieht.
+
+**Accordion-Import:** Wer die Direktive `<!-- accordion: … -->` nutzen will,
+braucht den Block „Accordion – Aufklappbare Zeilen" aus dem Plugin „Eigene WP
+Blocks". Dessen Block-ZIP gehört **vor** das CDB-Paket, damit der Blocktyp
+existiert. Fehlt er, verzichtet der Import automatisch darauf und fügt die
+Abschnitte einzeln ein — es geht nichts verloren.
+
+## Erste Nutzung in fünf Schritten
+
+1. **Seitenmanager → Seiten importieren** öffnen.
+2. Markdown-Dateien auswählen oder auf die Fläche ziehen. Je Datei entsteht
+   eine Seite; der Titel ist die erste `# `-Zeile.
+3. Im Dialog die Container-Designs zuweisen. Gruppen, deren Überschrift genau
+   einem Design entspricht, sind schon vorbelegt; für den Rest gibt es
+   „Allen offenen Gruppen zuweisen". Wer nichts zuweist, bekommt den Inhalt
+   ohne Container — das lässt sich später nachholen.
+4. **Seiten anlegen.** Alles entsteht als **Entwurf** auf der obersten Ebene,
+   nichts wird überschrieben. Titel, die es schon gibt, werden vorher gewarnt
+   und sind abwählbar.
+5. Zurück im Seitenmanager: die neuen Entwürfe anhaken und per Sammelaktion
+   unter eine Elternseite hängen und veröffentlichen.
+
+## Nach einem WordPress- oder Plugin-Update
+
+Der Seitenimport erzeugt Blockmarkup, das exakt zur `save()`-Ausgabe der
+laufenden Version passen muss. Die Vorlage liegt in
+`tools/fixtures/referenz-markup.html` und stammt aus einer echten
+Editor-Speicherung.
+
+**Ändert sich WordPress oder das CDB-Plugin:** eine Seite mit Container-Blöcken
+im Editor öffnen, `docs/pruefung-blockmarkup.js` in die Browser-Konsole
+einfügen, das Ergebnis als neue Fixture ablegen und
+`php tools/test-block-serializer.php` wieder grün machen. Sonst zeigen neu
+importierte Seiten im Editor „Dieser Block enthält unerwarteten oder ungültigen
+Inhalt".
+
+## Rückweg
+
+Soll der Seitenimport wieder verschwinden, genügt es, in
+`container-block-designer.php` die zwei Zeilen
+
+```php
+require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-serializer.php';
+require_once CBD_PLUGIN_DIR . 'includes/class-cbd-page-importer.php';
+```
+
+zu entfernen. Serializer und Importseite sind nirgends sonst verdrahtet; der
+Rest des Plugins läuft unverändert weiter (am 2026-08-10 auf der
+Testinstallation nachgeprüft: Backend und Frontend liefen, nur der Menüpunkt
+fehlte). Die Sammelaktionen im Seitenmanager sind davon unabhängig — sie
+stecken im Theme.
+
+## Was auf der Testinstallation geprüft wurde
+
+Plugin gelöscht und **ausschließlich aus dem ZIP** neu installiert, danach:
+Container-Block registriert, beide neuen Klassen geladen, Menüeintrag unter dem
+Seitenmanager, Bulk-Leiste da, Import läuft mit erhaltenen LaTeX-Formeln.
+`tools/` ist nicht im Paket, der Autoloader referenziert kein phpunit.
+
+**Nicht geprüft** — dafür braucht es einen Menschen am Browser: das Ziehen und
+Ablegen von Dateien, das Aussehen der Dialoge und ob eine importierte Seite im
+Editor ohne Gültigkeitswarnung aufgeht.
