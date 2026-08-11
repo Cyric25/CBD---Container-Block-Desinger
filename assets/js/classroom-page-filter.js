@@ -101,7 +101,14 @@
                 }
             });
 
-            if (missingContainers.length > 0) {
+            // Auf einer serverseitig reduzierten Seite ergibt diese Warnung
+            // keinen Sinn: Dort steht ohnehin nur, was freigegeben ist, und
+            // freigegebene Container anderer Seiten fehlen naturgemäß. Der
+            // Wert kommt aus CBD_Classroom::enqueue_frontend_assets().
+            var istReduziert = (typeof cbdClassroomPageData !== 'undefined')
+                && !!cbdClassroomPageData.reduziert;
+
+            if (missingContainers.length > 0 && !istReduziert) {
                 console.warn('CBD Classroom Page Filter: WARNING - ' + missingContainers.length + ' treated containers from DB not found in DOM (page was likely edited):', missingContainers);
 
                 // Show warning but DON'T auto-cleanup - teacher might want to re-mark the blocks
@@ -110,6 +117,9 @@
                     'Die Markierungen bleiben in der Datenbank gespeichert, werden aber auf dieser Seite nicht angezeigt.');
 
                 // DON'T call cleanupInvalidContainers() - markings should persist
+            } else if (missingContainers.length > 0) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: ' + missingContainers.length +
+                    ' markierte Container fehlen im DOM - auf einer reduzierten Seite erwartet, keine Warnung.');
             }
 
             // Filter to only show containers that exist in BOTH DOM and DB

@@ -1136,12 +1136,24 @@ class CBD_Classroom {
             );
 
             // Localize with page data
+            // `reduziert` sagt dem Browser, dass der Server den Inhalt bereits
+            // gefiltert hat (gesperrte Seite, nicht angemeldet — siehe
+            // CBD_Classroom_Gate::inhalt_reduzieren()). Der Filter unterdrückt
+            // dann seine Warnung über "markierte Blöcke nicht gefunden": Auf
+            // einer reduzierten Seite ist alles Vorhandene freigegeben, und
+            // freigegebene Container ANDERER Seiten fehlen naturgemäß.
+            $reduziert = function_exists('simple_clean_seite_nur_lehrpersonen')
+                && function_exists('simple_clean_ist_lehrperson')
+                && !simple_clean_ist_lehrperson()
+                && simple_clean_seite_nur_lehrpersonen(get_the_ID());
+
             wp_localize_script(
                 'cbd-classroom-page-filter',
                 'cbdClassroomPageData',
                 array(
                     'ajaxUrl' => admin_url('admin-ajax.php'),
-                    'pageId' => get_the_ID()
+                    'pageId' => get_the_ID(),
+                    'reduziert' => (bool) $reduziert
                 )
             );
 
