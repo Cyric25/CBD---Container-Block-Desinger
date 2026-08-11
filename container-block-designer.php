@@ -130,6 +130,9 @@ class ContainerBlockDesigner {
 
         // Classroom System (Klassen-System) - optionales Feature
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-classroom.php';
+        // Muss NACH class-cbd-classroom.php kommen: Der Durchlass ruft
+        // CBD_Classroom::is_enabled() und ::behandelte_container().
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-classroom-gate.php';
 
         // Migration Tool - Stable ID Migration
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-migration.php';

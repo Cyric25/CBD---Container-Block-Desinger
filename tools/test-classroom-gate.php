@@ -220,6 +220,77 @@ check(
     $treffer
 );
 
+// =========================================================================
+// AP-2.2: Klassensitzung und Theme-Filter
+// =========================================================================
+
+require_once $plugin_dir . 'includes/class-cbd-classroom-gate.php';
+
+/** Setzt URL-Parameter, Transients und verwirft die gemerkte Sitzung. */
+function sitzung_setzen($classroom, $token, $transient = null) {
+    $_GET = array();
+    if (null !== $classroom) { $_GET['classroom'] = $classroom; }
+    if (null !== $token)     { $_GET['token']     = $token; }
+
+    $GLOBALS['test_transients'] = array();
+    if (null !== $transient) {
+        $GLOBALS['test_transients']['cbd_classroom_' . $token] = $transient;
+    }
+    if (method_exists('CBD_Classroom_Gate', 'sitzung_vergessen')) {
+        CBD_Classroom_Gate::sitzung_vergessen();
+    }
+}
+
+$gueltig = array('class_id' => 4, 'class_name' => 'Testklasse', 'created' => time());
+
+echo "\n== Klassensitzung erkennen ==\n";
+$GLOBALS['test_options']['cbd_classroom_enabled'] = 1;
+
+sitzung_setzen(null, null);
+check('1 · ohne Parameter -> keine Sitzung', null === ruf_statisch('CBD_Classroom_Gate', 'sitzung'), ruf_statisch('CBD_Classroom_Gate', 'sitzung'));
+
+sitzung_setzen(4, 'abc');   // kein Transient
+check('2 · Token abgelaufen -> keine Sitzung', null === ruf_statisch('CBD_Classroom_Gate', 'sitzung'));
+
+sitzung_setzen(9, 'abc', $gueltig);   // Transient zeigt auf Klasse 4
+check('3 · classroom passt nicht zum Token -> keine Sitzung', null === ruf_statisch('CBD_Classroom_Gate', 'sitzung'));
+
+sitzung_setzen(4, 'abc', $gueltig);
+$s = ruf_statisch('CBD_Classroom_Gate', 'sitzung');
+check('4 · gueltige Sitzung', is_array($s) && 4 === ($s['class_id'] ?? null), $s);
+
+$GLOBALS['test_options']['cbd_classroom_enabled'] = 0;
+sitzung_setzen(4, 'abc', $gueltig);
+check('5 · Klassensystem abgeschaltet -> keine Sitzung', null === ruf_statisch('CBD_Classroom_Gate', 'sitzung'));
+$GLOBALS['test_options']['cbd_classroom_enabled'] = 1;
+
+echo "\n== Der Theme-Filter simple_clean_lehrerseite_freigeben ==\n";
+$gate = CBD_Classroom_Gate::get_instance();
+$wpdb->zeilen = array(
+    array('class_id' => 4, 'page_id' => 31, 'container_id' => 'cbd-aaa', 'is_behandelt' => 1),
+    array('class_id' => 4, 'page_id' => 40, 'container_id' => 'cbd-zzz', 'is_behandelt' => 0),
+);
+
+sitzung_setzen(null, null);
+check('6 · ohne Sitzung bleibt gesperrt', false === $gate->seite_freigeben(false, 31));
+
+sitzung_setzen(4, 'abc', $gueltig);
+check('7 · Seite MIT behandelten Containern wird freigegeben', true === $gate->seite_freigeben(false, 31));
+
+sitzung_setzen(4, 'abc', $gueltig);
+check('8 · Seite OHNE behandelte Container bleibt gesperrt', false === $gate->seite_freigeben(false, 40));
+
+sitzung_setzen(4, 'abc', $gueltig);
+check('9 · Seite ganz ohne Eintraege bleibt gesperrt', false === $gate->seite_freigeben(false, 99));
+
+sitzung_setzen(null, null);
+check('10 · ein bereits freigegebener Wert bleibt true', true === $gate->seite_freigeben(true, 31));
+
+$GLOBALS['test_options']['cbd_classroom_enabled'] = 0;
+sitzung_setzen(4, 'abc', $gueltig);
+check('11 · Klassensystem abgeschaltet -> keine Freigabe', false === $gate->seite_freigeben(false, 31));
+$GLOBALS['test_options']['cbd_classroom_enabled'] = 1;
+
 $fails = $GLOBALS['fails'];
 echo "\n" . (0 === $fails ? "ALLE TESTS BESTANDEN\n" : "$fails FEHLER\n");
 exit(0 === $fails ? 0 : 1);
