@@ -43,6 +43,7 @@ Datei-Map des Projekts; Theme und „Eigene WP Blocks" hatten längst eine.
 | `class-latex-bulk-cleanup.php` | Reparatur beschädigter Formeln über alle Beiträge | – | `class-latex-parser.php` |
 | `class-cbd-pdf-generator.php` | PDF serverseitig erzeugen | mPDF mit TCPDF-Rückfall | `vendor/` |
 | `class-cbd-classroom.php` | Klassenverwaltung, Zeichnungen, Schülerzugang | eigene Tabelle `cbd_classes`. **Geteilte Helfer (AP-2.1):** `zerlege_container_id()` — die **einzige** Stelle, die das Format `<stableId>:pN` deutet — `basis_container_id()` und `behandelte_container($class_id, $page_id)` | `admin/classroom.php` |
+| `class-cbd-classroom-gate.php` | **Klassen-Durchlass für gesperrte Seiten** (seit 3.1.87) | `sitzung()` (Transient entscheidet, nicht der URL-Parameter), `seite_freigeben()` bedient den Theme-Filter `simple_clean_lehrerseite_freigeben` (Standard `false`), `inhalt_reduzieren()` auf `the_content` **Priorität 8**, `block_erlaubt()` mit Rückfall auf `data-stable-id`. Alle Theme-Zugriffe über `function_exists()` | `class-cbd-classroom.php`, Theme-Funktionen |
 | `class-cbd-block-organizer.php` | Container-Blöcke zwischen Seiten kopieren/verschieben | – | `admin/block-organizer.php` |
 | `class-cbd-block-reference.php` | Block „Block-Referenz" registrieren | – | `blocks/block-reference/` |
 | `class-cbd-blocks-rest-api.php` | REST-Schnittstelle für die Block-Designs | – | – |

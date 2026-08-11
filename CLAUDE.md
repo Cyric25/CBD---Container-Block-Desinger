@@ -854,6 +854,106 @@ ungültiger Dateien, Slug-Normalisierung inkl. Traversal, doppelte Slugs,
 Markup-Entschärfung, Verwerfen unbekannter Felder, Rundläufe Export→Import
 und JSON→Markdown, heikle Werte, Zahlentypen).
 
+## Klassen-Durchlass für gesperrte Seiten (seit 3.1.87)
+
+Das Theme kann Seiten sperren („nur für Lehrpersonen", Meta
+`_simple_clean_nur_lehrpersonen`; siehe `Theme/CLAUDE.md`). Für nicht
+angemeldete Besucher verschwinden sie überall und liefern beim Aufruf eine
+Hinweisseite mit HTTP 403.
+
+`includes/class-cbd-classroom-gate.php` öffnet diese Sperre in **einem** Fall:
+gültige Klassensitzung **und** die Seite enthält Container, die für diese
+Klasse als „behandelt" markiert sind. Gedacht für Lösungsseiten, deren Blöcke
+die Lehrperson im Unterricht nach und nach freigibt.
+
+### Die Naht zum Theme
+
+```php
+apply_filters('simple_clean_lehrerseite_freigeben', false, $post_id)
+```
+
+**Standardwert `false`.** `CBD_Classroom_Gate::seite_freigeben()` ist die
+einzige Stelle, die ihn öffnet. Fehlt das Plugin, ist es abgeschaltet oder
+greift der Filter nicht, bleibt die Seite gesperrt — ein Fehler in der Naht
+zeigt zu wenig, nie zu viel.
+
+Umgekehrt: Fehlt das Theme, gibt es keine Sperre. Alle Zugriffe auf
+Theme-Funktionen laufen deshalb über `function_exists()`.
+
+Das ist nach dem Menü-Slug `page-manager` die **zweite** Stelle, an der Theme
+und Plugin zusammenwirken — anders als dort hängt hier Vertraulichkeit daran.
+
+### Die Sitzung: der Transient entscheidet, nicht die URL
+
+`CBD_Classroom_Gate::sitzung()` liest `?classroom=` und `?token=` und lädt den
+Transient `cbd_classroom_<token>`. **Stimmt die `class_id` im Transient nicht
+mit `?classroom=` überein, gilt die Sitzung als ungültig.** Sonst ließe sich
+mit einem gültigen Token einer beliebigen Klasse die Freigabe einer anderen
+erschleichen.
+
+### Serverseitige Reduktion — der enge Geltungsbereich
+
+`inhalt_reduzieren()` hängt an `the_content` mit **Priorität 8** (`do_blocks`
+liegt auf 9, der Inhalt ist dort noch Blockmarkup). Erlaubte Blöcke gehen
+einzeln durch `render_block()`; **bewusst kein `serialize_blocks()`**, damit
+der Whitespace-Unterschied zwischen JavaScript- und PHP-Serializer (Abschnitt
+„Block-Serializer") keine Rolle spielt.
+
+**Alle vier Bedingungen müssen erfüllt sein:**
+
+1. Ausgabe des Hauptinhalts einer einzelnen Seite (`is_singular('page')`,
+   `in_the_loop()`, `is_main_query()`)
+2. Besucher ist **nicht** angemeldet
+3. die Seite ist gesperrt
+4. es liegt eine gültige Klassensitzung vor
+
+Fehlt eine davon, geht der Inhalt **unverändert** durch. **Eine Aufweichung
+hier wäre der schwerste denkbare Fehler dieser Erweiterung** — sie ließe
+Inhalte auf ganz normalen Seiten im laufenden Betrieb verschwinden. Auf nicht
+gesperrten Seiten bleibt der Klassenmodus deshalb wie bisher rein
+clientseitig; die Lehrperson behält dort ihre Vorschau.
+
+### `block_erlaubt()`: Standard ist Ablehnung
+
+Was kein Container-Block mit freigegebener `stableId` ist, entfällt — auch
+freistehende Absätze und Überschriften. Auf einer Lösungsseite ist alles
+Lösung, solange nichts anderes gesagt wurde.
+
+**Der Rückfall auf `data-stable-id` im gespeicherten HTML ist Pflicht.**
+Ältere Container tragen die Kennung nur dort, nicht in den Attributen —
+dasselbe löst `CBD_Block_Registration::render_block()` (ab Zeile ~899). Ohne
+den Rückfall verschwänden korrekt markierte Altbestände stillschweigend.
+
+### Geteilte Helfer — nicht duplizieren
+
+In `CBD_Classroom`:
+
+| Methode | Zweck |
+|---|---|
+| `zerlege_container_id()` | **einzige** Deutung des Formats `<stableId>:pN` (mehrseitige Tafelbilder) |
+| `basis_container_id()` | nur der Teil vor dem Suffix |
+| `behandelte_container($class_id, $page_id)` | Basis-Bezeichner aller behandelten Container, jeder genau einmal |
+
+`tools/test-classroom-gate.php` enthält eine Prüfung, die anschlägt, sobald die
+Suffix-Regel ein zweites Mal im Code auftaucht. Beim Bauen hat sie genau das
+gemeldet — der erste Anlauf ließ für den Seitenindex einen zweiten regulären
+Ausdruck stehen.
+
+### Der Browser-Filter kennt den Zustand
+
+`cbdClassroomPageData.reduziert` (aus `CBD_Classroom::enqueue_frontend_assets()`)
+sagt `classroom-page-filter.js`, dass der Server bereits gefiltert hat. Der
+Filter unterdrückt dann seine Warnung „markierte Blöcke nicht gefunden" — auf
+einer reduzierten Seite ist alles Vorhandene freigegeben, und freigegebene
+Container **anderer** Seiten fehlen naturgemäß.
+
+### Prüfharnisch
+
+`php tools/test-classroom-gate.php` — 37 Prüfungen ohne WordPress.
+
+**Beim Prüfen mit `curl` daran denken:** Die REST-Schnittstelle verlangt zur
+Cookie-Anmeldung zusätzlich `X-WP-Nonce`; ohne den gilt die Anfrage als anonym.
+
 ## Debugging-Konventionen
 
 - **PHP:** Informations-Logs laufen über klasseneigene `debug_log()`-Helper
