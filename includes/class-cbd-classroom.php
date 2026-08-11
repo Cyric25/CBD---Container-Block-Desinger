@@ -105,6 +105,87 @@ class CBD_Classroom {
         return (bool) get_option(self::OPTION_ENABLED, false);
     }
 
+    // =========================================================================
+    // GETEILTE HELFER (seit AP-2.1)
+    // =========================================================================
+
+    /**
+     * Eine container_id in Basis-Bezeichner und Tafelseite zerlegen.
+     *
+     * Mehrseitige Tafelbilder werden als `<stableId>:p<N>` gespeichert — eine
+     * Zeile je Tafelseite. Ohne Suffix ist die Tafelseite 0.
+     *
+     * DIES IST DIE EINZIGE STELLE IM PLUGIN, DIE DIESES FORMAT DEUTET.
+     * Benutzt von `basis_container_id()`, `behandelte_container()`,
+     * `ajax_get_page_classroom_data()` und dem Klassen-Durchlass
+     * (`CBD_Classroom_Gate`). Eine zweite Fassung liefe früher oder später
+     * auseinander — der Prüfharnisch `tools/test-classroom-gate.php` wacht
+     * darüber, dass es beim einen regulären Ausdruck bleibt.
+     *
+     * @param string $container_id
+     * @return array array('basis' => string, 'seite' => int)
+     */
+    public static function zerlege_container_id($container_id) {
+        $container_id = (string) $container_id;
+
+        if (preg_match('/^(.+):p(\d+)$/', $container_id, $treffer)) {
+            return array('basis' => $treffer[1], 'seite' => (int) $treffer[2]);
+        }
+
+        return array('basis' => $container_id, 'seite' => 0);
+    }
+
+    /**
+     * Nur der Basis-Bezeichner einer container_id.
+     *
+     * @param string $container_id
+     * @return string
+     */
+    public static function basis_container_id($container_id) {
+        $teile = self::zerlege_container_id($container_id);
+        return $teile['basis'];
+    }
+
+    /**
+     * Basis-Bezeichner aller Container, die für eine Klasse auf einer Seite
+     * als „behandelt" markiert sind.
+     *
+     * Jeder Bezeichner erscheint genau einmal, auch wenn mehrere Tafelseiten
+     * dazu gespeichert sind.
+     *
+     * @param int $class_id
+     * @param int $page_id
+     * @return string[] Liste der Basis-Bezeichner (kann leer sein)
+     */
+    public static function behandelte_container($class_id, $page_id) {
+        $class_id = (int) $class_id;
+        $page_id  = (int) $page_id;
+
+        // Ohne gültige Kennungen gar nicht erst abfragen.
+        if ($class_id <= 0 || $page_id <= 0) {
+            return array();
+        }
+
+        global $wpdb;
+
+        $roh = $wpdb->get_col($wpdb->prepare(
+            "SELECT container_id FROM " . CBD_TABLE_DRAWINGS . "
+             WHERE class_id = %d AND page_id = %d AND is_behandelt = 1",
+            $class_id,
+            $page_id
+        ));
+
+        $basis = array();
+        foreach ((array) $roh as $container_id) {
+            $id = self::basis_container_id($container_id);
+            if ('' !== $id && !isset($basis[$id])) {
+                $basis[$id] = true;
+            }
+        }
+
+        return array_keys($basis);
+    }
+
     /**
      * Register settings for the classroom toggle
      */
@@ -1347,14 +1428,12 @@ class CBD_Classroom {
         $treated_containers = array();
 
         foreach ($drawings as $drawing) {
-            // Detect multi-page suffix: "containerid:pN"
-            if (preg_match('/^(.+):p(\d+)$/', $drawing->container_id, $m)) {
-                $base_id   = $m[1];
-                $page_index = intval($m[2]);
-            } else {
-                $base_id    = $drawing->container_id;
-                $page_index = 0;
-            }
+            // Mehrseitige Tafelbilder: "<stableId>:pN". Die Zerlegung steht
+            // seit AP-2.1 in zerlege_container_id() — hier NICHT erneut
+            // ausprogrammieren, sonst laufen zwei Fassungen auseinander.
+            $teile      = self::zerlege_container_id($drawing->container_id);
+            $base_id    = $teile['basis'];
+            $page_index = $teile['seite'];
 
             if (!isset($drawings_map[$base_id])) {
                 $drawings_map[$base_id] = array(
