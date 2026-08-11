@@ -291,6 +291,60 @@ sitzung_setzen(4, 'abc', $gueltig);
 check('11 · Klassensystem abgeschaltet -> keine Freigabe', false === $gate->seite_freigeben(false, 31));
 $GLOBALS['test_options']['cbd_classroom_enabled'] = 1;
 
+// =========================================================================
+// AP-2.3: Auswahl der Blöcke für die serverseitige Reduktion
+// =========================================================================
+
+echo "\n== Welche Bloecke bleiben stehen ==\n";
+
+/** Baut einen Blockeintrag, wie parse_blocks() ihn liefert. */
+function block($name, $attrs = array(), $innerHTML = '') {
+    return array(
+        'blockName'    => $name,
+        'attrs'        => $attrs,
+        'innerBlocks'  => array(),
+        'innerHTML'    => $innerHTML,
+        'innerContent' => array($innerHTML),
+    );
+}
+
+$frei = array('cbd-aaa', 'cbd-html');
+
+$container_frei = block('container-block-designer/container', array('stableId' => 'cbd-aaa'), '<div>frei</div>');
+$container_zu   = block('container-block-designer/container', array('stableId' => 'cbd-bbb'), '<div>gesperrt</div>');
+$container_ohne = block('container-block-designer/container', array(), '<div>ohne Kennung</div>');
+$container_alt  = block('container-block-designer/container', array(), '<div data-stable-id="cbd-html">Altbestand</div>');
+$absatz         = block('core/paragraph', array(), '<p>frei stehend</p>');
+$ueberschrift   = block('core/heading', array(), '<h2>frei stehend</h2>');
+$rohes_html     = block(null, array(), "\n\n");
+
+check('1a · freigegebener Container bleibt', true === ruf_statisch('CBD_Classroom_Gate', 'block_erlaubt', array($container_frei, $frei)));
+check('1b · nicht freigegebener Container faellt', false === ruf_statisch('CBD_Classroom_Gate', 'block_erlaubt', array($container_zu, $frei)));
+check('2 · stableId NUR im HTML wird erkannt (Altbestand)', true === ruf_statisch('CBD_Classroom_Gate', 'block_erlaubt', array($container_alt, $frei)));
+check('3a · freistehender Absatz faellt', false === ruf_statisch('CBD_Classroom_Gate', 'block_erlaubt', array($absatz, $frei)));
+check('3b · freistehende Ueberschrift faellt', false === ruf_statisch('CBD_Classroom_Gate', 'block_erlaubt', array($ueberschrift, $frei)));
+check('4 · Container ohne stableId faellt', false === ruf_statisch('CBD_Classroom_Gate', 'block_erlaubt', array($container_ohne, $frei)));
+check('6 · bei leerer Freigabeliste faellt auch der Container', false === ruf_statisch('CBD_Classroom_Gate', 'block_erlaubt', array($container_frei, array())));
+check('7 · Eintrag ohne blockName faellt', false === ruf_statisch('CBD_Classroom_Gate', 'block_erlaubt', array($rohes_html, $frei)));
+
+// 5 · verschachtelte Bloecke: der Container bleibt als GANZES stehen
+$container_verschachtelt = array(
+    'blockName'   => 'container-block-designer/container',
+    'attrs'       => array('stableId' => 'cbd-aaa'),
+    'innerBlocks' => array(block('core/paragraph', array(), '<p>innen</p>')),
+    'innerHTML'   => '<div></div>',
+    'innerContent'=> array('<div>', null, '</div>'),
+);
+check('5 · Container mit verschachtelten Bloecken bleibt', true === ruf_statisch('CBD_Classroom_Gate', 'block_erlaubt', array($container_verschachtelt, $frei)));
+
+// Ein Container eines anderen Designs (eigener Blocktyp) zaehlt ebenfalls
+$container_variante = block('container-block-designer/infotext-k1', array('stableId' => 'cbd-aaa'), '<div>x</div>');
+check('8 · auch andere container-block-designer/* zaehlen', true === ruf_statisch('CBD_Classroom_Gate', 'block_erlaubt', array($container_variante, $frei)));
+
+// Ein fremder Blocktyp mit passender stableId zaehlt NICHT
+$fremd = block('modular-blocks/accordion', array('stableId' => 'cbd-aaa'), '<div>x</div>');
+check('9 · fremder Blocktyp mit passender Kennung faellt', false === ruf_statisch('CBD_Classroom_Gate', 'block_erlaubt', array($fremd, $frei)));
+
 $fails = $GLOBALS['fails'];
 echo "\n" . (0 === $fails ? "ALLE TESTS BESTANDEN\n" : "$fails FEHLER\n");
 exit(0 === $fails ? 0 : 1);
