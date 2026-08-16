@@ -16,6 +16,28 @@ if (!defined('ABSPATH')) {
 class CBD_LaTeX_Parser {
 
     /**
+     * Blocktypen, deren Inhalt niemals als LaTeX gelesen wird (AP-1.fix2).
+     *
+     * In diesen Blöcken sind `\(` und `\[` gewöhnliche Zeichen – in
+     * JavaScript-Regexen (`/\(([^)]+)\)/g`) sind sie alltäglich. Seit AP-1.1
+     * die Delimiter `\(…\)` und `\[…\]` erkennt, hätte der Parser dort jedes
+     * Skript und jedes Codebeispiel still zerschossen.
+     *
+     * Formeln gehen dadurch nicht verloren: Der gerenderte Inhalt läuft
+     * anschließend ohnehin durch `the_content` (Priorität 11).
+     *
+     * WICHTIG: Ein Blockname `null` (Inhalt ohne Blockmarkup, klassischer
+     * Editor) steht bewusst NICHT in dieser Liste und wird durch den
+     * strikten Vergleich in `parse_latex_in_blocks()` auch nicht getroffen.
+     */
+    private const KEIN_LATEX_BLOCK = array(
+        'core/html',
+        'core/code',
+        'core/preformatted',
+        'core/freeform',
+    );
+
+    /**
      * Singleton instance
      */
     private static $instance = null;
@@ -213,6 +235,15 @@ class CBD_LaTeX_Parser {
             return $block_content;
         }
 
+        // Blocktypen ohne LaTeX-Deutung überspringen (AP-1.fix2, M1).
+        // Strikter Vergleich: `null` (Freiform ohne Blockmarkup) trifft
+        // keinen Eintrag und läuft weiter durch den Parser.
+        if (is_array($block)
+            && isset($block['blockName'])
+            && in_array($block['blockName'], self::KEIN_LATEX_BLOCK, true)) {
+            return $block_content;
+        }
+
         // Performance: Skip if no LaTeX marker present at all
         if (!self::content_has_latex_markers($block_content)) {
             return $block_content;
@@ -280,8 +311,24 @@ class CBD_LaTeX_Parser {
         @ini_set('pcre.backtrack_limit', '1000000');
         @ini_set('pcre.recursion_limit', '100000');
 
+        // EIN Platzhalter-Speicher für alles, was vor den Delimiter-Mustern
+        // aus dem Text genommen wird: die geschützten Bereiche
+        // (script/pre/code) und die bereits gerenderten Formeln. Ein einziger
+        // Rücktausch am Ende – siehe restore_placeholders().
+        $display_formulas = array();
+        $display_counter = 0;
+        $protected_counter = 0;
+
         // Error handling: Catch preg_replace_callback failures
         try {
+            // AP-1.fix2 (M1, Ebene 2): Skripte und Codebeispiele ZUERST aus
+            // dem Weg räumen. Ein Skript kann auch in einem gewöhnlichen
+            // Absatz oder innerhalb eines Container-Blocks stehen – dort
+            // greift der Blocknamen-Filter aus parse_latex_in_blocks() nicht.
+            // Muss vor allen weiteren Ersetzungen laufen, auch vor der
+            // <em>-Reparatur unten.
+            $content = $this->mask_protected_regions($content, $display_formulas, $protected_counter);
+
             // CONSERVATIVE: Only decode specific HTML entities, NOT all
             // Be careful with backslashes - WordPress might strip them
             $content = str_replace('&bsol;', '\\', $content);
@@ -308,8 +355,8 @@ class CBD_LaTeX_Parser {
         // WICHTIG: Parse $$formula$$ ZUERST (display math)
         // Dies muss vor $formula$ geparst werden, damit $$ nicht als zwei $ interpretiert wird
         // Temporär ersetzen mit Platzhalter um Konflikte zu vermeiden
-        $display_formulas = array();
-        $display_counter = 0;
+        // ($display_formulas/$display_counter sind oben angelegt, damit der
+        //  catch-Zweig die Maskierung ebenfalls zurücknehmen kann.)
 
         // OPTIMIZED: Use [^\$] instead of . to prevent catastrophic backtracking
         // Match anything except $ sign, up to 10000 chars per formula
@@ -404,10 +451,9 @@ class CBD_LaTeX_Parser {
             PREG_UNMATCHED_AS_NULL
         );
 
-            // Platzhalter zurück durch gerenderte Formeln ersetzen
-            foreach ($display_formulas as $placeholder => $formula_html) {
-                $content = str_replace($placeholder, $formula_html, $content);
-            }
+            // Platzhalter zurück durch gerenderte Formeln bzw. die
+            // geschützten Bereiche ersetzen
+            $content = $this->restore_placeholders($content, $display_formulas);
 
         } catch (\Throwable $e) {
             // Throwable statt Exception: fängt auch PHP-Errors (TypeError etc.)
@@ -415,8 +461,10 @@ class CBD_LaTeX_Parser {
             if (defined('WP_DEBUG') && WP_DEBUG) {
                 error_log('[CBD LaTeX Parser] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             }
-            // Return original content if parsing fails
-            return $content;
+            // Return original content if parsing fails. Angefangene
+            // Maskierungen zwingend zurücknehmen – sonst stünden nackte
+            // ___CBD_…___-Marken im ausgelieferten Text.
+            return $this->restore_placeholders($content, $display_formulas);
         }
 
         // Check for PREG errors
@@ -435,6 +483,65 @@ class CBD_LaTeX_Parser {
             }
         }
 
+        return $content;
+    }
+
+    /**
+     * Nimmt Bereiche aus dem Text, in denen nichts geparst werden darf.
+     *
+     * Betroffen sind `<script>`, `<pre>` und `<code>` samt Inhalt. Dort sind
+     * `\(`, `\[` und `$` gewöhnliche Zeichen; eine JavaScript-Regex wie
+     * `/\(([^)]+)\)/g` wäre nach dem Parsen unbrauchbar.
+     *
+     * Nutzt dieselbe Platzhalter-Mechanik wie die Formeln selbst: Marke in
+     * den Text, Original in den gemeinsamen Speicher, Rücktausch am Ende
+     * über restore_placeholders(). Verschachtelung (`<pre><code>…`) ist
+     * abgedeckt, weil der äußere Treffer den inneren mitnimmt.
+     *
+     * @param string $content   Zu maskierender Text
+     * @param array  $store     Gemeinsamer Platzhalter-Speicher (Referenz)
+     * @param int    $counter   Laufende Nummer der Marken (Referenz)
+     * @return string
+     */
+    private function mask_protected_regions($content, &$store, &$counter) {
+        // Billige Vorprüfung: ohne eines dieser Tags gibt es nichts zu tun.
+        if (stripos($content, '<script') === false
+            && stripos($content, '<pre') === false
+            && stripos($content, '<code') === false) {
+            return $content;
+        }
+
+        $masked = preg_replace_callback(
+            '#<(script|pre|code)\b[^>]*>.*?</\1\s*>#is',
+            function ($matches) use (&$store, &$counter) {
+                $placeholder = '___CBD_PROTECTED_' . $counter . '___';
+                $store[$placeholder] = $matches[0];
+                $counter++;
+                return $placeholder;
+            },
+            $content
+        );
+
+        // preg_replace_callback() liefert bei einem PCRE-Fehler null. Dann
+        // lieber ungeschützt weiterarbeiten als den Inhalt zu verlieren –
+        // der Fehler wird unten über preg_last_error() protokolliert.
+        return (null === $masked) ? $content : $masked;
+    }
+
+    /**
+     * Tauscht alle Platzhalter wieder gegen ihren Inhalt.
+     *
+     * Eine Stelle für beide Sorten (geschützte Bereiche und gerenderte
+     * Formeln) – der Speicher ist derselbe.
+     *
+     * @param string $content
+     * @param array  $store Platzhalter => Ersatztext
+     * @return string
+     */
+    private function restore_placeholders($content, $store) {
+        foreach ($store as $placeholder => $ersatz) {
+            $content = str_replace($placeholder, $ersatz, $content);
+        }
         return $content;
     }
 
@@ -495,13 +602,22 @@ class CBD_LaTeX_Parser {
 
         // wpautop(): weiche Zeilenumbrüche. Das zugehörige \n bleibt stehen,
         // der ursprüngliche Text ist damit wiederhergestellt.
+        //
+        // MUSS vor dem Dekodieren laufen (AP-1.fix2): Aus einem maskierten
+        // `&lt;br /&gt;` würde sonst ein echtes Tag, das dann stehen bliebe.
         $stripped = preg_replace('#<br\s*/?>#i', '', $formula);
         if (null !== $stripped) {
             $formula = $stripped;
         }
 
         // wptexturize(): typografische Ersetzungen zurücknehmen.
-        return strtr($formula, array(
+        //
+        // Diese Tabelle ist gegen die ENTITY-Schreibweise geschrieben, die
+        // wptexturize() erzeugt – sie muss deshalb VOR dem Dekodieren
+        // greifen. Andernfalls stünde dort bereits das typografische Zeichen
+        // (’ statt &#8217;), die Tabelle liefe ins Leere und KaTeX bekäme in
+        // der Ableitung f'(x) ein U+2019 statt des Apostrophs.
+        $formula = strtr($formula, array(
             '&#8216;' => "'",
             '&#8217;' => "'",
             '&#8220;' => '"',
@@ -511,6 +627,14 @@ class CBD_LaTeX_Parser {
             '&#8230;' => '...',
             '&#215;'  => 'x',
         ));
+
+        // AP-1.fix2 (M2): Der Editor speichert `<`, `>` und `&` in Absätzen
+        // immer als Entity. Unaufgelöst sind `\begin{aligned}…&=…`, `array`,
+        // `matrix` und jeder Vergleich `a < b` in Formeln unbenutzbar –
+        // KaTeX bekäme `&amp;lt;` als Rohtext.
+        // ENT_HTML5 deckt auch benannte Entities wie `&eacute;` ab; die
+        // Funktion gibt es mit dieser Konstante seit PHP 5.4.
+        return html_entity_decode($formula, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     /**

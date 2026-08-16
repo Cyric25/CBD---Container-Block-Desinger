@@ -10,6 +10,9 @@
  *  - die Folgen der Prioritätsänderung 5 -> 11: klassische Inhalte laufen
  *    jetzt NACH wpautop() und wptexturize() durch den Parser
  *  - das Lade-Gate should_load_katex()
+ *  - AP-1.fix2: Code-Blöcke bleiben unangetastet (Blocknamen-Filter und
+ *    Maskierung von script/pre/code) und HTML-Entities erreichen KaTeX
+ *    aufgelöst
  *
  * Aufruf:  php tools/test-latex-parser.php
  *
@@ -343,6 +346,123 @@ $seite = run_the_content($nach_render_block);
 check('Gesamtkette: weiterhin genau zwei Formeln (keine Doppelrendrung)',
     2 === formula_count($seite), formula_count($seite));
 check('Gesamtkette: data-latex unveraendert', 'E=mc^2' === latex_of($seite, 0), latex_of($seite, 0));
+
+// =========================================================================
+echo "\n== Code-Bloecke und Entities (AP-1.fix2) ==\n";
+
+// --- M1, Ebene 1: Blocktypen, in denen \( und \[ keine Formeln sind -------
+// Regression aus AP-1.1: Seit die Delimiter \(…\) und \[…\] erkannt werden,
+// zerschoss der Parser jede JavaScript-Regex in Custom-HTML-, Code- und
+// Preformatted-Bloecken.
+
+$js_inline  = 'var muster = /\(([^)]+)\)/g;';
+$js_display = 'var m = /\[[a-z]+\]/i;';
+
+foreach (array('core/html', 'core/code', 'core/preformatted', 'core/freeform') as $blockname) {
+    $b = array('blockName' => $blockname, 'attrs' => array());
+
+    $out = $parser->parse_latex_in_blocks($js_inline, $b);
+    check($blockname . ': Regex mit \\(…\\) bleibt zeichengleich', $js_inline === $out, $out);
+    check($blockname . ': keine Formelklasse eingefuegt',
+        strpos($out, 'cbd-latex-formula') === false, $out);
+
+    $out = $parser->parse_latex_in_blocks($js_display, $b);
+    check($blockname . ': Regex mit \\[…\\] bleibt zeichengleich', $js_display === $out, $out);
+}
+
+$html_block  = array('blockName' => 'core/html', 'attrs' => array());
+$script_html = '<script>var m = /\(([^)]+)\)/g; console.log(m);</script>';
+$out = $parser->parse_latex_in_blocks($script_html, $html_block);
+check('core/html mit vollstaendigem Skript bleibt zeichengleich', $script_html === $out, $out);
+
+// Blockname null = Inhalt ohne Blockmarkup (Freiform im klassischen Editor).
+// Der darf NICHT uebersprungen werden, sonst verlieren klassische Inhalte
+// ihre Formeln.
+$out = $parser->parse_latex_in_blocks('<p>Formel $E=mc^2$ hier.</p>',
+    array('blockName' => null, 'attrs' => array()));
+check('blockName null wird NICHT uebersprungen', 1 === formula_count($out), $out);
+
+$out = $parser->parse_latex_in_blocks('<p>Formel \(x^2\) hier.</p>',
+    array('blockName' => 'core/paragraph', 'attrs' => array()));
+check('core/paragraph parst \\(…\\) weiterhin', 1 === formula_count($out), $out);
+
+// Klassischer Inhalt kommt nicht ueber render_block, sondern ueber
+// the_content(11) — dort greift der Blocknamen-Filter bewusst nicht.
+$seite = run_the_content("Klassisch mit \$a^2\$ im Text.");
+check('klassischer Inhalt ueber the_content(11) parst weiterhin',
+    1 === formula_count($seite), $seite);
+
+// --- M1, Ebene 2: script/pre/code auch im gewoehnlichen Absatz ------------
+// Ein Skript kann auch in einem Absatz oder in einem Container-Block stehen;
+// dort greift der Blocknamen-Filter nicht.
+
+$mit_formel = '<p>Text mit ' . $script_html . ' und Formel \(x^2\) dazu.</p>';
+$out = $parser->parse_latex($mit_formel);
+check('Skript im Absatz bleibt zeichengleich', strpos($out, $script_html) !== false, $out);
+check('Formel neben dem Skript wird gesetzt', 1 === formula_count($out), $out);
+check('Formel neben dem Skript ist "x^2"', 'x^2' === latex_of($out), latex_of($out));
+check('kein Platzhalter uebrig (Skript)', strpos($out, '___CBD_') === false, $out);
+
+$code_tag = '<code>\(x\)</code>';
+$out = $parser->parse_latex($code_tag);
+check('<code> bleibt zeichengleich', $code_tag === $out, $out);
+
+$pre_tag = '<pre>\[y\]</pre>';
+$out = $parser->parse_latex($pre_tag);
+check('<pre> bleibt zeichengleich', $pre_tag === $out, $out);
+
+$pre_code = '<pre><code>\(x\)</code></pre>';
+$out = $parser->parse_latex($pre_code);
+check('<pre><code> verschachtelt bleibt zeichengleich', $pre_code === $out, $out);
+
+$gemischt = '<p>Siehe ' . $code_tag . ' und $y$ hier.</p>';
+$out = $parser->parse_latex($gemischt);
+check('<code> daneben bleibt zeichengleich', strpos($out, $code_tag) !== false, $out);
+check('Formel neben <code> wird gesetzt',
+    1 === formula_count($out) && 'y' === latex_of($out), $out);
+
+$script_attr = '<SCRIPT type="text/javascript">var r = /\[a\]/;</SCRIPT>';
+$out = $parser->parse_latex($script_attr);
+check('Skript mit Attributen und Grossschreibung bleibt zeichengleich',
+    $script_attr === $out, $out);
+
+$code_attr = '<code class="language-js">if (a &lt; b) { m = /\(x\)/; }</code>';
+$out = $parser->parse_latex($code_attr);
+check('<code> mit Attributen bleibt zeichengleich', $code_attr === $out, $out);
+
+// --- M2: HTML-Entities erreichen KaTeX aufgeloest -------------------------
+// Der Editor speichert `<`, `>` und `&` in Absaetzen immer als Entity.
+// Unaufgeloest sind \begin{aligned}…&=…, array, matrix und jeder Vergleich
+// a < b in Formeln unbenutzbar.
+
+$out = $parser->parse_latex('Bedingung $a &lt; b$ gilt.');
+check('$a &lt; b$ -> data-latex "a < b"', 'a < b' === latex_of($out), latex_of($out));
+check('$a &lt; b$ -> kein & im Formeltext',
+    strpos((string) latex_of($out), '&') === false, latex_of($out));
+
+$out = $parser->parse_latex('Produkt $x &amp; y$ hier.');
+check('$x &amp; y$ -> data-latex "x & y"', 'x & y' === latex_of($out), latex_of($out));
+
+$out = $parser->parse_latex('Wort $\text{caf&eacute;}$ hier.');
+check('&eacute; wird aufgeloest', '\text{café}' === latex_of($out), latex_of($out));
+
+$out = $parser->parse_latex('$$\begin{aligned} a &amp;= b \end{aligned}$$');
+check('&amp; in \\begin{aligned} wird zum Zeichen',
+    '\begin{aligned} a &= b \end{aligned}' === latex_of($out), latex_of($out));
+
+// Reihenfolge festgenagelt: die wptexturize-Tabelle arbeitet auf der
+// Entity-Schreibweise und muss VOR dem Dekodieren greifen — sonst stuende
+// dort das typografische Zeichen und die Ableitung f'(x) bekaeme ein U+2019.
+$seite = run_the_content("Ableitung \$f'(x) &lt; 2\$ hier.");
+check('Texturierung und Entity zusammen -> "f\'(x) < 2"',
+    "f'(x) < 2" === latex_of($seite), latex_of($seite));
+
+// Gegenprobe: eine echte Formel ohne Entities bleibt unveraendert.
+$out = $parser->parse_latex('Bruch $\frac{1}{2}$ hier.');
+check('Formel ohne Entities unveraendert', '\frac{1}{2}' === latex_of($out), latex_of($out));
+
+$out = $parser->parse_latex('Menge $a \cap b$ hier.');
+check('Backslash-Makro unveraendert', 'a \cap b' === latex_of($out), latex_of($out));
 
 // =========================================================================
 echo "\n== content_has_latex_markers() ==\n";
