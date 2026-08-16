@@ -1235,7 +1235,47 @@ class CBD_Block_Registration {
                 $icon_value = $features['icon']['value'] ?? 'dashicons-admin-generic';
                 $icon_color = !empty($features['icon']['color']) ? $features['icon']['color'] : 'inherit';
 
-                $html .= '<span class="cbd-header-icon' . $this->custom_icon_class($icon_value) . '">';
+                // Icon-Position und Feinversatz (AP-2.2).
+                //
+                // Die Werte stehen im features-JSON der Datenbank und werden
+                // deshalb NIE roh übernommen, sondern immer durch die
+                // Sanitizer aus AP-2.1 geführt (includes/functions.php).
+                // Unbekannte Werte und die vier Altwerte 'top-left' …
+                // 'bottom-right' fallen dort auf 'header' zurück.
+                //
+                // Bei 'header' / offsetX 0 / offsetY 0 — dem Zustand JEDES
+                // bestehenden Designs — liefern beide Helfer einen leeren
+                // String. Es entsteht dann weder eine zusätzliche Klasse noch
+                // ein style-Attribut: Das Markup ist zeichengleich mit dem
+                // vor dieser Erweiterung. Das ist die eigentliche Zusicherung
+                // dieses Codeabschnitts, nicht bloß ein netter Nebeneffekt.
+                //
+                // Der function_exists()-Schutz folgt dem Icon-Größen-Zweig
+                // weiter oben (~:557): Fehlt functions.php aus irgendeinem
+                // Grund, bleibt es beim bisherigen Kopfzeilen-Icon statt eines
+                // Fatal Errors.
+                $icon_position_class = '';
+                $icon_position_style = '';
+
+                if (function_exists('cbd_get_icon_position_class')) {
+                    $icon_position_class = cbd_get_icon_position_class(
+                        cbd_sanitize_icon_position($features['icon']['position'] ?? '')
+                    );
+                    $icon_position_style = cbd_get_icon_position_style(
+                        cbd_sanitize_icon_offset($features['icon']['offsetX'] ?? 0),
+                        cbd_sanitize_icon_offset($features['icon']['offsetY'] ?? 0)
+                    );
+                }
+
+                $html .= '<span class="cbd-header-icon' . $this->custom_icon_class($icon_value);
+                if ('' !== $icon_position_class) {
+                    $html .= ' ' . $icon_position_class;
+                }
+                $html .= '"';
+                if ('' !== $icon_position_style) {
+                    $html .= ' style="' . esc_attr($icon_position_style) . '"';
+                }
+                $html .= '>';
                 $html .= $this->render_icon($icon_value, $icon_color);
                 $html .= '</span>';
             }
