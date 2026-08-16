@@ -140,10 +140,18 @@ class CBD_Blocks_REST_API {
             $block_title = end($block_name_parts);
         }
 
-        // Get or generate block ID
-        $block_id = $attrs['id'] ?? $attrs['blockId'] ?? '';
+        // Der massgebliche Bezeichner ist die stableId — sie existiert an
+        // jedem Container, waehrend ein HTML-Anker optional bleibt.
+        $stable_id = self::extract_stable_id($block);
 
-        // If no ID, try to extract from innerHTML
+        // Ohne stableId ist der Block nicht adressierbar; er entfaellt.
+        if ('' === $stable_id) {
+            return null;
+        }
+
+        // Legacy-Schluessel `blockId` — bleibt nur aus Rueckwaertskompatibilitaet
+        // erhalten. Neue Aufrufer verwenden `stableId`.
+        $block_id = $attrs['id'] ?? $attrs['blockId'] ?? '';
         if (empty($block_id) && !empty($block['innerHTML'])) {
             preg_match('/id="([^"]+)"/', $block['innerHTML'], $matches);
             if (!empty($matches[1])) {
@@ -151,12 +159,13 @@ class CBD_Blocks_REST_API {
             }
         }
 
-        // Skip if no ID could be found
-        if (empty($block_id)) {
-            return null;
-        }
+        // HTML-Anker (optional, vom Redakteur gesetzt). render.php baut
+        // daraus das Sprungfragment.
+        $anchor = isset($attrs['anchor']) ? (string) $attrs['anchor'] : '';
 
         return [
+            'stableId' => $stable_id,
+            'anchor' => $anchor,
             'blockId' => $block_id,
             'blockTitle' => $block_title,
             'postId' => $post->ID,
@@ -164,5 +173,48 @@ class CBD_Blocks_REST_API {
             'postUrl' => get_permalink($post->ID),
             'blockType' => $block['blockName'],
         ];
+    }
+
+    /**
+     * Stabilen Bezeichner eines Container-Blocks ermitteln
+     *
+     * Reihenfolge wie in CBD_Classroom_Gate::block_erlaubt(): zuerst das
+     * Blockattribut `stableId`, danach als RUECKFALL FUER ALTBESTAENDE das
+     * gespeicherte HTML — aeltere Container tragen die Kennung nur dort.
+     *
+     * Das HTML wird bewusst ueber WP_HTML_Tag_Processor gelesen statt ueber
+     * einen weiteren regulaeren Ausdruck: das Muster
+     * `data-stable-id="([^"]+)"` steht bereits an zwei Stellen im Plugin
+     * (class-cbd-classroom-gate.php, class-cbd-block-registration.php). Eine
+     * dritte Kopie haette dieselbe Regel an drei Orten gepflegt. Fehlt die
+     * Klasse (WordPress vor 6.2), entfaellt lediglich der Rueckfall; Bloecke
+     * mit Attribut werden weiterhin gefunden.
+     *
+     * @param array $block Eintrag aus parse_blocks()
+     * @return string Stabiler Bezeichner oder '' wenn keiner ermittelbar ist
+     */
+    private static function extract_stable_id($block) {
+        if (!empty($block['attrs']['stableId'])) {
+            return (string) $block['attrs']['stableId'];
+        }
+
+        $html = isset($block['innerHTML']) ? (string) $block['innerHTML'] : '';
+        if ('' === $html && !empty($block['innerContent'])) {
+            $html = implode('', array_filter((array) $block['innerContent'], 'is_string'));
+        }
+
+        if ('' === $html || !class_exists('WP_HTML_Tag_Processor')) {
+            return '';
+        }
+
+        $tags = new WP_HTML_Tag_Processor($html);
+        while ($tags->next_tag()) {
+            $wert = $tags->get_attribute('data-stable-id');
+            if (is_string($wert) && '' !== $wert) {
+                return $wert;
+            }
+        }
+
+        return '';
     }
 }

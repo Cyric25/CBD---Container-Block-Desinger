@@ -4,6 +4,18 @@
  * Styles for LaTeX formulas rendered with KaTeX
  * Ensures formulas are centered, readable, and print-friendly
  *
+ * WICHTIG (AP-1.1): Display-Formeln sind seit v3.1.87 ein <span>, kein <div>.
+ * Ein <div> innerhalb eines <p> zwingt den HTML-Parser des Browsers, den
+ * Absatz aufzuspalten; dabei entstehen nackte Textknoten, die z. B. der
+ * Accordion-Block nicht mehr in seine Klappzeile verschieben kann.
+ *
+ * Daraus folgen zwei Regeln für diese Datei:
+ *   1. Die Blockdarstellung leistet ausschliesslich `display: block` unten —
+ *      wird sie entfernt, laufen alle Display-Formeln inline zusammen.
+ *   2. NIEMALS Elementselektoren verwenden (kein `div.cbd-latex-display`,
+ *      kein `div .cbd-latex-…`). Alle Regeln hier sind klassenbasiert und
+ *      greifen deshalb für <span> wie für <div> (Altbestand im Cache).
+ *
  * @package ContainerBlockDesigner
  * @since 2.7.0
  */
@@ -17,11 +29,13 @@
 
 /* Display formulas - block level, centered */
 .cbd-latex-formula.cbd-latex-display {
-    display: block !important;
+    display: block !important; /* traegt die gesamte Blockdarstellung (s. o.) */
+    box-sizing: border-box; /* das <span> liegt jetzt IM <p> — nicht ueberlaufen */
     width: 100%;
     margin: 20px auto;
     padding: 15px 0;
     text-align: center;
+    text-indent: 0; /* Einzug des umgebenden Absatzes nicht erben */
     clear: both;
     overflow-x: auto; /* Allow horizontal scrolling for long formulas */
 }

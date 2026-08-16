@@ -4,7 +4,7 @@
 	"name": "cbd/block-reference",
 	"version": "1.0.0",
 	"title": "Block-Referenz",
-	"category": "container",
+	"category": "container-blocks",
 	"icon": "admin-links",
 	"description": "Erstelle einen Link zu einem anderen Container-Block auf dieser oder einer anderen Seite.",
 	"keywords": ["referenz", "link", "container", "cbd", "verweis"],
@@ -14,6 +14,14 @@
 		"align": ["wide", "full"]
 	},
 	"attributes": {
+		"targetStableId": {
+			"type": "string",
+			"default": ""
+		},
+		"targetAnchor": {
+			"type": "string",
+			"default": ""
+		},
 		"targetBlockId": {
 			"type": "string",
 			"default": ""
@@ -40,7 +48,7 @@
 		}
 	},
 	"textdomain": "container-block-designer",
-	"editorScript": "file:./index.js",
+	"editorScript": "cbd-block-reference-editor",
 	"editorStyle": "file:./editor.css",
 	"style": "file:./style.css",
 	"viewScript": "file:./view.js"
