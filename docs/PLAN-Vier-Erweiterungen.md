@@ -2557,6 +2557,26 @@ erweitern, keine Parallelstruktur aufbauen.
      In diesem Plan nicht umgesetzt, weil jede der drei Stellen einem
      anderen AP gehört und die betroffenen Dateien außerhalb der jeweiligen
      Dateilisten lagen.
+   - **Aus AP-1.5 — betrifft das Ausrollen, bitte vor der Produktivinstallation
+     klären:** Der Block-Uploader in „Eigene WP Blocks"
+     (`includes/class-admin-manager.php`) kennt das Verzeichnis `build/`
+     **nicht** — kein einziger Treffer für „build".
+     `includes/class-block-manager.php` bevorzugt aber `build/blocks/<name>/`,
+     sobald es existiert. **Wer `accordion.zip` über die Oberfläche hochlädt,
+     während dort ein veraltetes `build/blocks/accordion/` liegt, testet und
+     betreibt weiter den alten Stand — das ZIP allein wirkt nicht.** Auf dem
+     Testserver bestand genau diese Konstellation; AP-1.5 hat deshalb beide
+     Verzeichnisse kopiert. Für die Produktivinstallation gehört geprüft, ob
+     dort ein `build/`-Verzeichnis liegt. Andernfalls läuft die Korrektur aus
+     AP-1.2 ins Leere.
+   - **Aus AP-1.5 — Betriebshinweis Testserver:** Der WordPress-Auto-Updater
+     startet per wp-cron ein Core-Update, stirbt am 30-Sekunden-Zeitlimit in
+     `wp-admin/includes/update-core.php` und hinterlässt eine
+     `.maintenance`-Datei; die ganze Installation liefert dann HTTP 503.
+     Sofortmaßnahme: `.maintenance` und `wp-content/upgrade/wordpress-*`
+     löschen. Dauerhafte Abhilfe wäre
+     `define('AUTOMATIC_UPDATER_DISABLED', true);` in der `wp-config.php` des
+     Testservers — Entscheidung des Nutzers, in diesem Plan nicht getroffen.
    - **Aus AP-1.0:** Den im Plan `PLAN-accordion-block.md` (AP-2.3n)
      erwähnten jsdom-Prüfharnisch mit „104 Zusicherungen" gibt es im
      Repository nicht — er wurde nie committet und ist auch in der
@@ -2599,7 +2619,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.2 | Accordion verliert keine Textknoten mehr | opus | ☑ | AP-1.0 | Commit `4a38c72` auf `phase-1-latex-accordion`. **Regression bewiesen:** derselbe jsdom-Harnisch meldet gegen den alten Stand 9 Fehlschläge, gegen den neuen 0. `build/` und `plugin-zips/accordion.zip` neu erzeugt (gitignored, separat hochzuladen) |
 | AP-1.3 | Block-Referenz editorfähig, auf `stableId` | opus | ☑ | – | Commit `760543f` (3. Anlauf; die ersten beiden am Sitzungslimit abgebrochen). **Widerspruch im Plantext gefunden — siehe AP-1.3, Schritt 1:** Der Schritt verlangt, den `data-stable-id`-Regex „wortgleich zu übernehmen", das Akzeptanzkriterium verbietet zugleich eine dritte Kopie. Gelöst über `WP_HTML_Tag_Processor` statt eines Regex. **Preis: Auf WordPress < 6.2 entfällt der Altbestands-Rückfall.** Nebenbefunde: `block.json` nannte die Kategorie `container` statt `container-blocks`; `apiVersion` fehlte in der clientseitigen Registrierung |
 | AP-1.4 | Screenshot liefert wieder eine Datei | sonnet | ☑ | – | Commit `aa98770`. `yield*` gesetzt, `interactivity-fallback.js` nachgezogen (dort fehlten Canvas-Deckel und `backgroundColor` ganz). Browserprüfungen an AP-1.5 verwiesen |
-| AP-1.5 | Abnahme Phase 1 auf dem Testserver | sonnet | ☐ | AP-1.0–AP-1.4 | einzige Stelle mit Versionsbump |
+| AP-1.5 | Abnahme Phase 1 auf dem Testserver | ~~sonnet~~ **opus** | ☑ (maschinell) | AP-1.0–AP-1.4 | Version 3.1.87 → **3.1.88**, ZIP gebaut, Autoloader `--no-dev` verifiziert. **Modellwahl vom Orchestrator auf opus geändert** — die Abnahme muss Testinhalte selbst anlegen und gerendertes HTML beurteilen, das ist Urteils- statt Musterarbeit. **Der maschinelle Teil ist vollständig grün; die Browserhälfte steht als Klickliste U1–U11 beim Nutzer aus.** Drei Befunde, siehe unten |
 | AP-1.rev | Unabhängiges Review Phase 1 | opus | ☐ | AP-1.0–AP-1.5 | nur lesend |
 | AP-1.doc | Dokumentation Phase 1 | sonnet | ☐ | AP-1.rev | Merge in `main` |
 | AP-2.1 | Datenmodell und Sanitizer Icon-Position | sonnet | ☐ | – | TDD; parallel zu 2.4, 2.6 |
@@ -2624,8 +2644,8 @@ pro Phasenabschluss.
 | 2026-08-16 | AP-1.2 | `node --check blocks/accordion/view.js`; `npm run build` (webpack 5.102.0, Exit 0); `npm run block-zips` (14 ZIPs); jsdom-Harnisch mit 35 Zusicherungen, **zusätzlich gegen den Stand vor der Änderung gefahren** | nachher 35/0 bestanden, vorher 26/9 — die neun Fehlschläge sind genau die Textknoten- und Re-Render-Fälle. `node --check` und die Build-Artefakte vom Orchestrator nachgeprüft. Browserprüfungen (Höhe beim Öffnen, Zeilenkopf mit Formel, Fall „erste Zeile offen") **offen → AP-1.5** | AP-1.2-Agent, Syntax und Artefakte vom Orchestrator nachgefahren |
 | 2026-08-16 | AP-1.3 | `php -l` (3 Dateien); `php tools/check-php74.php` (562 Dateien); `node --check` (index.js, view.js); `block.json` per `require` geprüft; drei eigene Harnische im Scratchpad: REST-Extraktion gegen die echte `WP_HTML_Tag_Processor` (34), Editor-Registrierung mit nachgebauten `wp.*`-Globalen (36), `view.js` unter jsdom (23) | 93 Prüfungen bestanden, Exit 0; `php -l`, `check-php74` und `node --check` vom Orchestrator nachgefahren. Browserprüfungen (Editor, Auswahlliste, REST im Browser, Frontend beide Fälle, `debug.log`, Regression „unerwarteter Inhalt") **offen → AP-1.5** | AP-1.3-Agent, Kernprüfungen vom Orchestrator nachgefahren |
 | 2026-08-16 | AP-1.4 | `node --input-type=module --check` (store), `node --check` (fallback); Grep-Belege für `yield*` und den entfernten Icon-Selektor | bestanden, Exit 0. Browserprüfungen (Zwischenablage-Fehlschlag erzwingen, Warn-Icon, langer Block) **offen → AP-1.5** | AP-1.4-Agent, Syntaxprüfung und Grep vom Orchestrator nachgefahren |
-| | AP-1.5 | | | |
-| | **Phase 1 abgeschlossen** | | | |
+| 2026-08-16 | AP-1.5 | 9 Prüfharnische (alle Exit 0, u. a. `test-block-serializer.php` 71/0, `test-design-transfer.php` 98, `test-classroom-gate.php` 38, `test-latex-parser.php` 78); `check-php74.php` 562 Dateien; `create-plugin-zip.js` → 3.1.88, 998 Dateien, Autoloader `--no-dev` mit 0 phpunit-Treffern; Installation auf dem Testserver in der Reihenfolge Accordion → CDB; 7 Testseiten per `wp_insert_post()` mit `wp_slash()`; 9 Seitenabrufe per `curl` mit HTML-Analyse; Vorher/Nachher-Vergleich gegen den Stand 3.1.87 | **maschinell vollständig bestanden.** Kernbeleg Regression: Auf der Seite ohne Blockmarkup sinkt die `<p>`-Zahl 3 → 2 — genau die geheilte Absatzaufspaltung; Display-Formeln `<div>` 1 → 0, `<span>` 0 → 2. Projektweit 0 Treffer für `<div class="cbd-latex`. Backslash-Bilanz auf allen 7 Seiten soll = ist. `debug.log`: 288 Zeilen = 9 × derselbe Init-Block, **0** Notices/Warnings/Deprecations/Fatal. **Browserhälfte offen: Klickliste U1–U11 beim Nutzer.** Regression 4 (Klassenansicht) **nicht prüfbar** — keine Klasse eingerichtet | AP-1.5-Agent |
+| | **Phase 1 abgeschlossen** | | | offen bis U1–U11 abgehakt sind |
 | | AP-1.rev | | | |
 | | AP-1.doc | | | |
 | | AP-2.1 | | | |
