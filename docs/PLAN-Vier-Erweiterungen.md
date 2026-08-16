@@ -2546,6 +2546,22 @@ erweitern, keine Parallelstruktur aufbauen.
      `accordion.zip`, dann das CDB-Plugin-ZIP.
    - Die bewusst liegen gelassenen offenen Punkte aus Abschnitt 2
      (tote Dateien, doppelte Admin-Formulare, Editor zeigt kein Icon).
+   - **Aus AP-1.3:** Die Extraktion der `stableId` aus einem
+     `parse_blocks()`-Eintrag existiert an drei Stellen in drei Fassungen —
+     `CBD_Classroom_Gate::block_erlaubt()` und
+     `CBD_Block_Registration::render_block()` je mit einem Regex,
+     `CBD_Blocks_REST_API::extract_stable_id()` mit
+     `WP_HTML_Tag_Processor`. Vorschlag für ein Folge-Vorhaben: einmal
+     zentral als `public static` in `CBD_Classroom` neben
+     `basis_container_id()` ablegen und von allen drei Stellen nutzen.
+     In diesem Plan nicht umgesetzt, weil jede der drei Stellen einem
+     anderen AP gehört und die betroffenen Dateien außerhalb der jeweiligen
+     Dateilisten lagen.
+   - **Aus AP-1.0:** Den im Plan `PLAN-accordion-block.md` (AP-2.3n)
+     erwähnten jsdom-Prüfharnisch mit „104 Zusicherungen" gibt es im
+     Repository nicht — er wurde nie committet und ist auch in der
+     Historie nicht auffindbar. Die dort behauptete Testabdeckung ist
+     nicht reproduzierbar.
 7. „Stand"-Datum in den Datei-Maps aktualisieren.
 
 **Akzeptanzkriterien:**
@@ -2581,7 +2597,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.0 | Accordion-Branch nach `main` mergen | sonnet | ☑ | – | Merge-Commit `626c6f8` auf `main`, Tag `pre-latex-merge` (= alter Stand `f6826a5`) lokal+remote, Branch `phase-1-latex-accordion` angelegt. **AK1 war fehlerhaft formuliert und wurde korrigiert** (siehe AP-1.0). **Befund: Den jsdom-Prüfharnisch mit „104 Zusicherungen" aus `PLAN-accordion-block.md` AP-2.3n gibt es nicht** — nie committet, in der ganzen Historie nicht auffindbar |
 | AP-1.1 | LaTeX-Renderer öffnen und Parser härten | opus | ☑ | – | Commit `70c77bc`. `tools/test-latex-parser.php` neu, 78 Prüfungen grün. **Zusatzbefund:** Auf Priorität 11 laufen `wpautop`/`wptexturize` vorher und tragen `<br />` und Entities in die Formeln — deshalb neu `normalize_formula_text()`. Zwei Bestandsfehler in `latex-formulas.css` gefunden, bewusst nicht behoben (siehe Übergabenotiz) |
 | AP-1.2 | Accordion verliert keine Textknoten mehr | opus | ☐ | AP-1.0 | entsperrt; Branch `phase-1-latex-accordion` |
-| AP-1.3 | Block-Referenz editorfähig, auf `stableId` | opus | ◐ | – | 1. und 2. Anlauf 2026-08-16 je durch Sitzungslimit abgebrochen. **Teilstand im Arbeitsverzeichnis, nicht committet:** alle sieben Zieldateien geändert (~830 Zeilen), Abbruch beim Eingrenzen der `[id]`-Regel in `style.css`. **Ungeprüft** — weder `php -l` noch `check-php74.php` noch Akzeptanzkriterien gelaufen |
+| AP-1.3 | Block-Referenz editorfähig, auf `stableId` | opus | ☑ | – | Commit `760543f` (3. Anlauf; die ersten beiden am Sitzungslimit abgebrochen). **Widerspruch im Plantext gefunden — siehe AP-1.3, Schritt 1:** Der Schritt verlangt, den `data-stable-id`-Regex „wortgleich zu übernehmen", das Akzeptanzkriterium verbietet zugleich eine dritte Kopie. Gelöst über `WP_HTML_Tag_Processor` statt eines Regex. **Preis: Auf WordPress < 6.2 entfällt der Altbestands-Rückfall.** Nebenbefunde: `block.json` nannte die Kategorie `container` statt `container-blocks`; `apiVersion` fehlte in der clientseitigen Registrierung |
 | AP-1.4 | Screenshot liefert wieder eine Datei | sonnet | ☑ | – | Commit `aa98770`. `yield*` gesetzt, `interactivity-fallback.js` nachgezogen (dort fehlten Canvas-Deckel und `backgroundColor` ganz). Browserprüfungen an AP-1.5 verwiesen |
 | AP-1.5 | Abnahme Phase 1 auf dem Testserver | sonnet | ☐ | AP-1.0–AP-1.4 | einzige Stelle mit Versionsbump |
 | AP-1.rev | Unabhängiges Review Phase 1 | opus | ☐ | AP-1.0–AP-1.5 | nur lesend |
@@ -2606,7 +2622,7 @@ pro Phasenabschluss.
 | 2026-08-16 | AP-1.0 | `npm run build` (webpack 5.102.0); Merge konfliktfrei, 8 Dateien; Baumvergleich `git diff --stat main phase-1-accordion-grundlage`; Tag und Branch lokal+remote | bestanden. **Prüfharnisch nicht ausführbar** — die jsdom-Testumgebung aus AP-2.3n des Accordion-Plans existiert im Repo nicht und findet sich auch in der Historie nicht. Merge trotzdem ausgeführt (ausdrückliche Nutzerentscheidung) | AP-1.0-Agent, nachgeprüft durch Orchestrator |
 | 2026-08-16 | AP-1.1 | `php tools/test-latex-parser.php` (78 Prüfungen); `php -l`; `php tools/check-php74.php` (562 Dateien); `node --check assets/js/latex-renderer.js`; zusätzlich 28 jsdom-Zusicherungen zum API-Vertrag | alle bestanden, Exit 0. Browserprüfungen (Absatz nicht zerrissen, Konsolen-Rundlauf, `debug.log`) **offen → AP-1.5** | AP-1.1-Agent, Harnisch und `php -l` vom Orchestrator nachgefahren |
 | | AP-1.2 | | | |
-| | AP-1.3 | | | |
+| 2026-08-16 | AP-1.3 | `php -l` (3 Dateien); `php tools/check-php74.php` (562 Dateien); `node --check` (index.js, view.js); `block.json` per `require` geprüft; drei eigene Harnische im Scratchpad: REST-Extraktion gegen die echte `WP_HTML_Tag_Processor` (34), Editor-Registrierung mit nachgebauten `wp.*`-Globalen (36), `view.js` unter jsdom (23) | 93 Prüfungen bestanden, Exit 0; `php -l`, `check-php74` und `node --check` vom Orchestrator nachgefahren. Browserprüfungen (Editor, Auswahlliste, REST im Browser, Frontend beide Fälle, `debug.log`, Regression „unerwarteter Inhalt") **offen → AP-1.5** | AP-1.3-Agent, Kernprüfungen vom Orchestrator nachgefahren |
 | 2026-08-16 | AP-1.4 | `node --input-type=module --check` (store), `node --check` (fallback); Grep-Belege für `yield*` und den entfernten Icon-Selektor | bestanden, Exit 0. Browserprüfungen (Zwischenablage-Fehlschlag erzwingen, Warn-Icon, langer Block) **offen → AP-1.5** | AP-1.4-Agent, Syntaxprüfung und Grep vom Orchestrator nachgefahren |
 | | AP-1.5 | | | |
 | | **Phase 1 abgeschlossen** | | | |
