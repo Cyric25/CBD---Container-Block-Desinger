@@ -1,0 +1,464 @@
+<?php
+/**
+ * Standalone-Harness für den LaTeX-Parser — ohne WordPress.
+ *
+ * Geprüft wird:
+ *  - Filter-Registrierung (`the_content` auf 11, `render_block` auf 5)
+ *  - alle vier Delimiter: $$…$$, [latex]…[/latex], \[…\], $…$, \(…\)
+ *  - Display-Formeln sind ein <span>, kein <div> (AP-1.1)
+ *  - der Doppelparse-Schutz
+ *  - die Folgen der Prioritätsänderung 5 -> 11: klassische Inhalte laufen
+ *    jetzt NACH wpautop() und wptexturize() durch den Parser
+ *  - das Lade-Gate should_load_katex()
+ *
+ * Aufruf:  php tools/test-latex-parser.php
+ *
+ * @package ContainerBlockDesigner
+ */
+
+if (PHP_SAPI !== 'cli') {
+    exit("Nur über die Kommandozeile aufrufen.\n");
+}
+
+define('ABSPATH', '/');
+
+// --- WordPress-Stubs ------------------------------------------------------
+
+class WP_Post {
+    public $ID = 0;
+    public $post_content = '';
+    public function __construct($id = 0, $content = '') {
+        $this->ID = $id;
+        $this->post_content = $content;
+    }
+}
+
+$GLOBALS['hooks'] = array();          // hook => array(array(priority, callback))
+$GLOBALS['is_admin'] = false;
+$GLOBALS['is_singular'] = false;
+$GLOBALS['is_home'] = false;
+$GLOBALS['is_archive'] = false;
+$GLOBALS['queried_object'] = null;
+$GLOBALS['queried_object_id'] = 0;
+$GLOBALS['posts_by_id'] = array();
+$GLOBALS['global_post'] = null;
+
+function add_action($hook, $cb, $priority = 10, $args = 1) {
+    add_filter($hook, $cb, $priority, $args);
+}
+function add_filter($hook, $cb, $priority = 10, $args = 1) {
+    if (!isset($GLOBALS['hooks'][$hook])) {
+        $GLOBALS['hooks'][$hook] = array();
+    }
+    $GLOBALS['hooks'][$hook][] = array('priority' => $priority, 'cb' => $cb);
+    return true;
+}
+function __($s, $d = null) { return $s; }
+function esc_html($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
+function esc_attr($s)  { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
+function esc_url($s)   { return (string) $s; }
+function is_admin()    { return (bool) $GLOBALS['is_admin']; }
+function is_singular($t = '') { return (bool) $GLOBALS['is_singular']; }
+function is_home()     { return (bool) $GLOBALS['is_home']; }
+function is_archive()  { return (bool) $GLOBALS['is_archive']; }
+function get_queried_object()    { return $GLOBALS['queried_object']; }
+function get_queried_object_id() { return (int) $GLOBALS['queried_object_id']; }
+function get_post($id = null) {
+    if (null === $id) {
+        return $GLOBALS['global_post'];
+    }
+    $id = (int) $id;
+    return isset($GLOBALS['posts_by_id'][$id]) ? $GLOBALS['posts_by_id'][$id] : null;
+}
+
+// --- Kern-Filter auf `the_content` (Reihenfolge wie in WordPress) ---------
+// In WordPress registriert default-filters.php diese VOR jedem Plugin.
+add_filter('the_content', 'stub_do_blocks', 9);
+add_filter('the_content', 'stub_wptexturize', 10);
+add_filter('the_content', 'stub_wpautop', 10);
+add_filter('the_content', 'stub_do_shortcode', 11);
+
+/**
+ * do_blocks() – hier bewusst als Durchreiche. Der ungünstigste Fall für
+ * diesen Test: Blockinhalt wird separat über parse_latex_in_blocks() geführt,
+ * klassischer Inhalt kommt unverändert bei Priorität 11 an.
+ */
+function stub_do_blocks($c) { return $c; }
+function stub_do_shortcode($c) { return $c; }
+
+/**
+ * Naive, aber tag-bewusste Nachbildung von wptexturize(): Text zwischen den
+ * Tags wird typografisch ersetzt, Attributwerte bleiben unberührt — genau
+ * wie im Original.
+ */
+function stub_wptexturize($content) {
+    $parts = preg_split('/(<[^>]*>)/', $content, -1, PREG_SPLIT_DELIM_CAPTURE);
+    $out = '';
+    foreach ($parts as $part) {
+        if ($part !== '' && $part[0] === '<') {
+            $out .= $part;
+            continue;
+        }
+        $part = str_replace('---', '&#8212;', $part);
+        $part = str_replace('--', '&#8211;', $part);
+        $part = str_replace('...', '&#8230;', $part);
+        $part = str_replace("'", '&#8217;', $part);
+        $part = str_replace('"', '&#8221;', $part);
+        $part = preg_replace('/(?<=\d)x(?=\d)/', '&#215;', $part);
+        $out .= $part;
+    }
+    return $out;
+}
+
+/** Nachbildung von wpautop() für unformatierten Text. */
+function stub_wpautop($content) {
+    if (strpos($content, '<p>') !== false) {
+        return $content; // bereits abgesetzt
+    }
+    $parts = preg_split('/\n\s*\n/', trim($content));
+    $out = '';
+    foreach ($parts as $p) {
+        $out .= '<p>' . str_replace("\n", "<br />\n", $p) . "</p>\n";
+    }
+    return $out;
+}
+
+/** Minimaler Ersatz für apply_filters('the_content', …). */
+function run_the_content($content) {
+    $entries = $GLOBALS['hooks']['the_content'];
+    // stabil nach Priorität sortieren (Registrierungsreihenfolge erhalten)
+    $indexed = array();
+    foreach ($entries as $i => $e) {
+        $indexed[] = array($e['priority'], $i, $e['cb']);
+    }
+    usort($indexed, function($a, $b) {
+        if ($a[0] === $b[0]) {
+            return $a[1] - $b[1];
+        }
+        return $a[0] < $b[0] ? -1 : 1;
+    });
+    foreach ($indexed as $e) {
+        $content = call_user_func($e[2], $content);
+    }
+    return $content;
+}
+
+require_once str_replace('\\', '/', dirname(__DIR__)) . '/includes/class-latex-parser.php';
+
+// --- Prüfgerüst -----------------------------------------------------------
+
+$GLOBALS['fails'] = 0;
+
+function check($label, $condition, $actual = null) {
+    if ($condition) {
+        echo "  OK   $label\n";
+        return;
+    }
+    $GLOBALS['fails']++;
+    echo "  FAIL $label" . (null !== $actual ? ' -> ' . var_export($actual, true) : '') . "\n";
+}
+
+/** Liest das data-latex-Attribut der n-ten Formel (entschlüsselt). */
+function latex_of($html, $n = 0) {
+    if (!preg_match_all('/data-latex="([^"]*)"/', $html, $m)) {
+        return null;
+    }
+    return isset($m[1][$n]) ? html_entity_decode($m[1][$n], ENT_QUOTES, 'UTF-8') : null;
+}
+
+function formula_count($html) {
+    return substr_count($html, 'data-formula-id="');
+}
+
+$parser = CBD_LaTeX_Parser::get_instance();
+
+// =========================================================================
+echo "== Filter-Registrierung ==\n";
+
+$prio = array();
+foreach ($GLOBALS['hooks'] as $hook => $entries) {
+    foreach ($entries as $e) {
+        if (is_array($e['cb']) && $e['cb'][0] === $parser) {
+            $prio[$hook . '::' . $e['cb'][1]] = $e['priority'];
+        }
+    }
+}
+
+check('the_content -> parse_latex auf Prioritaet 11',
+    isset($prio['the_content::parse_latex']) && 11 === $prio['the_content::parse_latex'],
+    isset($prio['the_content::parse_latex']) ? $prio['the_content::parse_latex'] : null);
+check('render_block -> parse_latex_in_blocks auf Prioritaet 5',
+    isset($prio['render_block::parse_latex_in_blocks']) && 5 === $prio['render_block::parse_latex_in_blocks'],
+    isset($prio['render_block::parse_latex_in_blocks']) ? $prio['render_block::parse_latex_in_blocks'] : null);
+check('Prioritaet 11 liegt NACH do_blocks (9), wpautop und wptexturize (10)',
+    isset($prio['the_content::parse_latex']) && $prio['the_content::parse_latex'] > 10);
+
+// =========================================================================
+echo "\n== Display-Formeln: <span>, kein <div> ==\n";
+
+$cases_display = array(
+    'Dollar   $$a+b$$'       => '$$a+b$$',
+    'Shortcode [latex]'      => '[latex]a+b[/latex]',
+    'Backslash \\[ … \\]'    => '\[a+b\]',
+);
+foreach ($cases_display as $label => $input) {
+    $out = $parser->parse_latex($input);
+    check($label . ': enthaelt cbd-latex-display', strpos($out, 'cbd-latex-display') !== false, $out);
+    check($label . ': enthaelt KEIN <div', strpos($out, '<div') === false, $out);
+    check($label . ': data-latex ist "a+b"', 'a+b' === latex_of($out), latex_of($out));
+    check($label . ': genau eine Formel', 1 === formula_count($out), formula_count($out));
+}
+
+$out = $parser->parse_latex('$$a+b$$');
+check('Markup-Form der Display-Formel',
+    (bool) preg_match('/^<span class="cbd-latex-formula cbd-latex-display" id="[^"]+" data-latex="a\+b" data-formula-id="[^"]+"><span class="cbd-latex-content"><\/span><\/span>$/', $out),
+    $out);
+
+// =========================================================================
+echo "\n== Inline-Formeln ==\n";
+
+$out = $parser->parse_latex('Es gilt $x$ hier.');
+check('$x$ -> cbd-latex-inline', strpos($out, 'cbd-latex-inline') !== false, $out);
+check('$x$ -> kein <div', strpos($out, '<div') === false, $out);
+check('$x$ -> data-latex "x"', 'x' === latex_of($out), latex_of($out));
+
+$out = $parser->parse_latex('Es gilt \(x\) hier.');
+check('\\(x\\) -> cbd-latex-inline', strpos($out, 'cbd-latex-inline') !== false, $out);
+check('\\(x\\) -> data-latex "x"', 'x' === latex_of($out), latex_of($out));
+
+$out = $parser->parse_latex('Index \(y_1\) im Text.');
+check('\\(y_1\\) -> data-latex "y_1"', 'y_1' === latex_of($out), latex_of($out));
+
+$out = $parser->parse_latex('Display \[x^2\] im Text.');
+check('\\[x^2\\] -> data-latex "x^2"', 'x^2' === latex_of($out), latex_of($out));
+check('\\[x^2\\] -> Display-Klasse', strpos($out, 'cbd-latex-display') !== false, $out);
+
+$out = $parser->parse_latex('Klammer \( x \) mit Leerzeichen.');
+check('\\( x \\) wird trotz Leerzeichen erkannt (eindeutiger Delimiter)',
+    strpos($out, 'cbd-latex-inline') !== false, $out);
+check('\\( x \\) -> data-latex getrimmt "x"', 'x' === latex_of($out), latex_of($out));
+
+$in = 'Kosten: $5 bis $10 pro Stueck.';
+check('Whitespace-Regel bei $…$ bleibt: "$5 bis $10" unveraendert',
+    $in === $parser->parse_latex($in), $parser->parse_latex($in));
+
+$in = 'Leere Klammer \(\) und \( \) bleiben stehen.';
+check('leere \\(\\)/\\( \\) erzeugen keine Formel',
+    formula_count($parser->parse_latex($in)) === 0, $parser->parse_latex($in));
+
+$in = 'Leer \(\) danach echt \(x\) Ende.';
+$out = $parser->parse_latex($in);
+check('leere Klammer verschluckt die folgende Formel nicht',
+    1 === formula_count($out) && 'x' === latex_of($out), $out);
+
+$in = 'Leer \[\] danach echt \[y\] Ende.';
+$out = $parser->parse_latex($in);
+check('leere \\[\\] verschluckt die folgende Display-Formel nicht',
+    1 === formula_count($out) && 'y' === latex_of($out), $out);
+
+// =========================================================================
+echo "\n== Gemischt, Reihenfolge Display vor Inline ==\n";
+
+$out = $parser->parse_latex('Zuerst \[a^2\] dann \(b\) und $c$ sowie $$d$$.');
+check('vier Formeln erkannt', 4 === formula_count($out), formula_count($out));
+check('kein <div im Gesamtergebnis', strpos($out, '<div') === false, $out);
+check('Display a^2 vorhanden', strpos($out, 'data-latex="a^2"') !== false, $out);
+check('Display d vorhanden', strpos($out, 'data-latex="d"') !== false, $out);
+check('kein Platzhalter uebrig', strpos($out, '___CBD_') === false, $out);
+
+// =========================================================================
+echo "\n== Inhalte ohne Formeln und Doppelparse-Schutz ==\n";
+
+$plain = "<p>Ein Absatz ganz ohne Formeln.</p>\n<p>Noch einer.</p>";
+check('Text ohne Formeln bleibt unveraendert', $plain === $parser->parse_latex($plain), $parser->parse_latex($plain));
+
+$rendered = $parser->parse_latex('Formel $x^2$ im Text.');
+check('Doppelparse-Schutz: zweiter Durchlauf aendert nichts',
+    $rendered === $parser->parse_latex($rendered));
+check('Doppelparse-Schutz: weiterhin genau eine Formel',
+    1 === formula_count($parser->parse_latex($rendered)));
+
+check('parse_latex(null) bleibt null', null === $parser->parse_latex(null));
+check('parse_latex("") bleibt ""', '' === $parser->parse_latex(''));
+
+// =========================================================================
+echo "\n== Blockweg (render_block, Prioritaet 5) ==\n";
+
+$block = array('blockName' => 'core/paragraph', 'attrs' => array());
+
+$out = $parser->parse_latex_in_blocks('<p>Formel $E=mc^2$ hier.</p>', $block);
+check('Block mit $…$ wird geparst', 1 === formula_count($out), $out);
+
+$out = $parser->parse_latex_in_blocks('<p>Formel \[E=mc^2\] hier.</p>', $block);
+check('Block mit \\[…\\] wird NICHT mehr vorzeitig uebersprungen',
+    1 === formula_count($out), $out);
+
+$out = $parser->parse_latex_in_blocks('<p>Formel \(E=mc^2\) hier.</p>', $block);
+check('Block mit \\(…\\) wird NICHT mehr vorzeitig uebersprungen',
+    1 === formula_count($out), $out);
+
+$nomarker = '<p>Ganz normaler Absatz.</p>';
+check('Block ohne Marker bleibt zeichengleich', $nomarker === $parser->parse_latex_in_blocks($nomarker, $block));
+
+// =========================================================================
+echo "\n== Prioritaetswechsel 5 -> 11: klassischer Inhalt (kein Blockmarkup) ==\n";
+
+$klassisch = "Klassischer Absatz mit \$E=mc^2\$ im Text.\n\nZweiter Absatz mit \\[a^2+b^2=c^2\\] als Blockformel.";
+$seite = run_the_content($klassisch);
+
+check('klassisch: zwei Formeln erzeugt', 2 === formula_count($seite), $seite);
+check('klassisch: Inline-Formel korrekt', 'E=mc^2' === latex_of($seite, 0), latex_of($seite, 0));
+check('klassisch: Display-Formel korrekt', 'a^2+b^2=c^2' === latex_of($seite, 1), latex_of($seite, 1));
+check('klassisch: kein <div im Ergebnis', strpos($seite, '<div') === false, $seite);
+check('klassisch: Display-Formel liegt IM Absatz (kein zerrissener <p>)',
+    (bool) preg_match('/<p>[^<]*<span class="cbd-latex-formula cbd-latex-display"/', $seite), $seite);
+check('klassisch: kein Platzhalter uebrig', strpos($seite, '___CBD_') === false, $seite);
+
+// Formel ueber mehrere Zeilen: wpautop setzt <br /> hinein
+$mehrzeilig = "Vorher.\n\n\$\$\na + b\n\$\$\n\nNachher.";
+$seite = run_the_content($mehrzeilig);
+check('mehrzeilige $$…$$: <br /> aus wpautop wird entfernt',
+    'a + b' === latex_of($seite), latex_of($seite));
+
+// wptexturize haette die Formel zerstoert
+$texturiert = "Ableitung \$f'(x) = 2x\$ und Produkt \$3x3\$ und Bereich \$a--b\$.";
+$seite = run_the_content($texturiert);
+check('wptexturize: Apostroph wiederhergestellt', "f'(x) = 2x" === latex_of($seite, 0), latex_of($seite, 0));
+check('wptexturize: 3x3 wiederhergestellt', '3x3' === latex_of($seite, 1), latex_of($seite, 1));
+check('wptexturize: Doppel-Minus wiederhergestellt', 'a--b' === latex_of($seite, 2), latex_of($seite, 2));
+
+// =========================================================================
+echo "\n== Prioritaetswechsel 5 -> 11: Blockinhalt laeuft nicht doppelt ==\n";
+
+$block_html = '<p>Formel $E=mc^2$ und \[a^2\] im Block.</p>';
+$nach_render_block = $parser->parse_latex_in_blocks($block_html, $block);
+check('render_block hat beide Formeln erzeugt', 2 === formula_count($nach_render_block), $nach_render_block);
+
+$vorher = $nach_render_block;
+$nachher = $parser->parse_latex($nach_render_block);
+check('the_content(11) laesst bereits gerenderten Blockinhalt zeichengleich',
+    $vorher === $nachher);
+
+$seite = run_the_content($nach_render_block);
+check('Gesamtkette: weiterhin genau zwei Formeln (keine Doppelrendrung)',
+    2 === formula_count($seite), formula_count($seite));
+check('Gesamtkette: data-latex unveraendert', 'E=mc^2' === latex_of($seite, 0), latex_of($seite, 0));
+
+// =========================================================================
+echo "\n== content_has_latex_markers() ==\n";
+
+$marker_cases = array(
+    'Text mit $x$'                => true,
+    'Text mit [latex]x[/latex]'   => true,
+    'Text mit \(x\)'              => true,
+    'Text mit \[x\]'              => true,
+    // "blockquote" darf die Heuristik fuer wiederverwendbare Bloecke nicht
+    // ausloesen: gesucht wird "<!-- wp:block " MIT Leerzeichen.
+    '<!-- wp:blockquote -->Zitat'  => false,
+    '<!-- wp:block {"ref":7} -->' => true,
+    'Ganz normaler Text.'         => false,
+    ''                            => false,
+);
+foreach ($marker_cases as $in => $expected) {
+    $actual = CBD_LaTeX_Parser::content_has_latex_markers($in);
+    check(var_export($in, true) . ' -> ' . var_export($expected, true), $expected === $actual, $actual);
+}
+check('nicht-String -> false', false === CBD_LaTeX_Parser::content_has_latex_markers(null));
+
+// =========================================================================
+echo "\n== should_load_katex() ==\n";
+
+$gate = new ReflectionMethod('CBD_LaTeX_Parser', 'should_load_katex');
+$gate->setAccessible(true);
+function gate_says($parser, $gate) { return (bool) $gate->invoke($parser); }
+
+function reset_query_state() {
+    $GLOBALS['is_admin'] = false;
+    $GLOBALS['is_singular'] = false;
+    $GLOBALS['is_home'] = false;
+    $GLOBALS['is_archive'] = false;
+    $GLOBALS['queried_object'] = null;
+    $GLOBALS['queried_object_id'] = 0;
+    $GLOBALS['posts_by_id'] = array();
+    $GLOBALS['global_post'] = null;
+}
+
+// 1) Einzelseite mit \[ im Inhalt -> laden (frueher: nur $ / [latex])
+reset_query_state();
+$post = new WP_Post(42, 'Inhalt mit \[a^2\] Formel.');
+$GLOBALS['is_singular'] = true;
+$GLOBALS['queried_object'] = $post;
+$GLOBALS['queried_object_id'] = 42;
+$GLOBALS['posts_by_id'][42] = $post;
+check('Einzelseite mit \\[ -> laden', gate_says($parser, $gate));
+
+// 2) Einzelseite ohne Marker -> nicht laden
+reset_query_state();
+$post = new WP_Post(43, 'Ein Text ganz ohne Formeln.');
+$GLOBALS['is_singular'] = true;
+$GLOBALS['queried_object'] = $post;
+$GLOBALS['queried_object_id'] = 43;
+$GLOBALS['posts_by_id'][43] = $post;
+check('Einzelseite ohne Marker -> nicht laden', !gate_says($parser, $gate));
+
+// 3) get_queried_object_id() wird genutzt, auch wenn das globale $post
+//    (noch) auf einen anderen Beitrag zeigt — das ist der Kern der Haertung.
+reset_query_state();
+$richtig = new WP_Post(44, 'Inhalt mit $x$ Formel.');
+$falsch  = new WP_Post(99, 'Ganz ohne Formeln.');
+$GLOBALS['is_singular'] = true;
+$GLOBALS['queried_object'] = $richtig;
+$GLOBALS['queried_object_id'] = 44;
+$GLOBALS['posts_by_id'][44] = $richtig;
+$GLOBALS['global_post'] = $falsch;
+check('abgefragter Beitrag schlaegt globales $post', gate_says($parser, $gate));
+
+// 4) Rueckfall auf get_post(), wenn get_queried_object_id() nichts liefert
+reset_query_state();
+$GLOBALS['is_singular'] = true;
+$GLOBALS['global_post'] = new WP_Post(45, 'Inhalt mit $y$ Formel.');
+check('Rueckfall auf globales $post', gate_says($parser, $gate));
+
+// 5) Startseite / Archiv -> laden (frueher: nie, wegen is_singular()-Gate)
+reset_query_state();
+$GLOBALS['is_home'] = true;
+check('Startseite -> laden', gate_says($parser, $gate));
+
+reset_query_state();
+$GLOBALS['is_archive'] = true;
+check('Archiv -> laden', gate_says($parser, $gate));
+
+// 6) Term-Archiv: get_queried_object() ist kein WP_Post -> Term-ID darf nicht
+//    als Beitrags-ID missverstanden werden.
+reset_query_state();
+$GLOBALS['is_archive'] = false;
+$GLOBALS['queried_object'] = (object) array('term_id' => 7);
+$GLOBALS['queried_object_id'] = 7;
+$GLOBALS['posts_by_id'][7] = new WP_Post(7, 'Fremder Beitrag mit $z$.');
+check('Term-ID wird nicht als Beitrags-ID gelesen', !gate_says($parser, $gate));
+
+// 7) Nichts ermittelbar, keine Einzelseite -> nicht laden
+reset_query_state();
+check('kein Kontext -> nicht laden', !gate_says($parser, $gate));
+
+// =========================================================================
+echo "\n== Robustheit ==\n";
+
+$lang = 'Text ' . str_repeat('a', 200) . ' $x$ Ende.';
+check('langer Text mit Formel wird verarbeitet', 1 === formula_count($parser->parse_latex($lang)));
+
+$unbalanced = '<p>Preis $5 und $ noch $ ein Zeichen</p>'; // drei $ = ungerade
+$out = $parser->parse_latex_in_blocks($unbalanced, $block);
+check('ungerade Anzahl $ -> Warnhinweis statt Parsen',
+    strpos($out, 'cbd-latex-warning') !== false, $out);
+
+check('preg_last_error() ist sauber', PREG_NO_ERROR === preg_last_error(), preg_last_error());
+
+// =========================================================================
+echo "\n";
+if ($GLOBALS['fails'] > 0) {
+    echo "FEHLGESCHLAGEN: {$GLOBALS['fails']} Pruefung(en).\n";
+    exit(1);
+}
+echo "Alle Pruefungen bestanden.\n";
+exit(0);

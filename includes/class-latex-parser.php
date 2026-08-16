@@ -52,9 +52,21 @@ class CBD_LaTeX_Parser {
         // Priority 5: Run BEFORE wpautop and other text formatting filters
         add_filter('render_block', array($this, 'parse_latex_in_blocks'), 5, 2);
 
-        // Legacy filter for classic editor content and non-block content
-        // Priority 5: Run BEFORE wpautop (priority 10)
-        add_filter('the_content', array($this, 'parse_latex'), 5);
+        // Rückfall für klassische Inhalte (kein Blockmarkup).
+        //
+        // Priorität 11 – also NACH do_blocks() (Kernpriorität 9). Auf der
+        // früheren Priorität 5 sah dieser Filter rohes Blockmarkup samt
+        // `<!-- wp:… -->`-Kommentaren und veränderte es, obwohl der Filter
+        // `render_block` dieselbe Arbeit bereits je Block leistet. Der
+        // Doppelparse-Schutz in parse_latex() (Prüfung auf
+        // `cbd-latex-formula`) sorgt dafür, dass bereits gerenderte Inhalte
+        // hier unangetastet durchlaufen.
+        //
+        // Folge des späteren Zeitpunkts: wptexturize() und wpautop()
+        // (beide Priorität 10) haben den Text dann schon angefasst. Deshalb
+        // dreht normalize_formula_text() deren Spuren innerhalb einer Formel
+        // wieder zurück.
+        add_filter('the_content', array($this, 'parse_latex'), 11);
     }
 
     /**
@@ -73,19 +85,62 @@ class CBD_LaTeX_Parser {
             return $screen && method_exists($screen, 'is_block_editor') && $screen->is_block_editor();
         }
 
-        // Frontend: nur auf Einzelseiten mit LaTeX-Markern im Inhalt
-        if (is_singular()) {
-            $post = get_post();
-            if ($post instanceof WP_Post) {
-                return strpos($post->post_content, '$') !== false
-                    || strpos($post->post_content, '[latex]') !== false
-                    // Wiederverwendbare Blöcke können Formeln enthalten, deren
-                    // Inhalt hier nicht sichtbar ist – konservativ laden.
-                    || strpos($post->post_content, '<!-- wp:block ') !== false;
-            }
+        // Listen-Ansichten (Startseite, Archive) zeigen viele Beiträge; deren
+        // Inhalte lassen sich hier nicht einzeln prüfen -> konservativ laden.
+        if (is_home() || is_archive()) {
+            return true;
         }
 
-        return false;
+        // Beitrags-ID robust ermitteln: get_queried_object_id() ist zur
+        // wp_enqueue_scripts-Zeit zuverlässiger als das globale $post, das je
+        // nach Theme noch nicht gesetzt ist. Gleiche Begründung wie in
+        // CBD_Block_Registration::frontend_has_container_block().
+        $post = null;
+        $post_id = get_queried_object_id();
+        if ($post_id > 0 && get_queried_object() instanceof WP_Post) {
+            // Nur wenn das abgefragte Objekt wirklich ein Beitrag ist – auf
+            // Term-Archiven liefert get_queried_object_id() eine Term-ID, die
+            // als Beitrags-ID einen fremden Beitrag treffen könnte.
+            $candidate = get_post($post_id);
+            if ($candidate instanceof WP_Post) {
+                $post = $candidate;
+            }
+        }
+        if (!($post instanceof WP_Post)) {
+            $post = get_post(); // Rückfall: globales $post
+        }
+
+        if ($post instanceof WP_Post) {
+            return self::content_has_latex_markers($post->post_content);
+        }
+
+        // Keine Beitrags-ID ermittelbar (z. B. Template-Teil ohne Loop):
+        // im Zweifel auf Einzelseiten laden.
+        return is_singular();
+    }
+
+    /**
+     * Enthält der Text überhaupt einen LaTeX-Marker?
+     *
+     * Einzige Stelle, an der die erkannten Delimiter für das Lade-Gate
+     * aufgezählt werden – sie muss mit den Mustern in parse_latex()
+     * übereinstimmen.
+     *
+     * @param string $content
+     * @return bool
+     */
+    public static function content_has_latex_markers($content) {
+        if (!is_string($content) || '' === $content) {
+            return false;
+        }
+
+        return strpos($content, '$') !== false
+            || strpos($content, '[latex]') !== false
+            || strpos($content, '\\(') !== false
+            || strpos($content, '\\[') !== false
+            // Wiederverwendbare Blöcke können Formeln enthalten, deren
+            // Inhalt hier nicht sichtbar ist – konservativ laden.
+            || strpos($content, '<!-- wp:block ') !== false;
     }
 
     /**
@@ -158,8 +213,8 @@ class CBD_LaTeX_Parser {
             return $block_content;
         }
 
-        // Performance: Skip if no $ or [latex] markers present
-        if (strpos($block_content, '$') === false && strpos($block_content, '[latex]') === false) {
+        // Performance: Skip if no LaTeX marker present at all
+        if (!self::content_has_latex_markers($block_content)) {
             return $block_content;
         }
 
@@ -288,6 +343,54 @@ class CBD_LaTeX_Parser {
             PREG_UNMATCHED_AS_NULL
         );
 
+        // Parse \[formula\] syntax (display math, KaTeX-/MathJax-Konvention).
+        // Muss wie $$…$$ VOR den Inline-Mustern laufen und wird ebenfalls
+        // über Platzhalter geschützt.
+        $content = preg_replace_callback(
+            // {0,…} statt {1,…}: Sonst könnte der lazy Quantor den Backslash
+            // eines unmittelbar folgenden \] verschlucken und über die
+            // nächste Formel hinweggreifen. Der leere Treffer wird unten
+            // verworfen.
+            '/\\\\\[(.{0,10000}?)\\\\\]/s',
+            function($matches) use (&$display_formulas, &$display_counter) {
+                if (trim($matches[1]) === '') {
+                    return $matches[0]; // leere Klammer ist keine Formel
+                }
+                $placeholder = '___CBD_DISPLAY_FORMULA_' . $display_counter . '___';
+                $display_formulas[$placeholder] = $this->render_display_formula($matches);
+                $display_counter++;
+                return $placeholder;
+            },
+            $content,
+            -1,
+            $count,
+            PREG_UNMATCHED_AS_NULL
+        );
+
+        // Parse \(formula\) syntax (inline math, KaTeX-/MathJax-Konvention).
+        // Läuft VOR dem $…$-Muster und legt das Ergebnis in einem Platzhalter
+        // ab: Enthielte eine so ausgezeichnete Formel ein $, würde der
+        // nachfolgende $…$-Durchlauf sonst in das erzeugte Markup schneiden.
+        // Die Whitespace-Regel von $…$ gilt hier bewusst NICHT – \( … \) ist
+        // eindeutig, "\( x \)" ist gültiges LaTeX.
+        $content = preg_replace_callback(
+            // {0,…} aus demselben Grund wie bei \[…\] oben.
+            '/\\\\\((.{0,500}?)\\\\\)/s',
+            function($matches) use (&$display_formulas, &$display_counter) {
+                if (trim($matches[1]) === '') {
+                    return $matches[0]; // leere Klammer ist keine Formel
+                }
+                $placeholder = '___CBD_INLINE_FORMULA_' . $display_counter . '___';
+                $display_formulas[$placeholder] = $this->build_inline_formula($matches[1]);
+                $display_counter++;
+                return $placeholder;
+            },
+            $content,
+            -1,
+            $count,
+            PREG_UNMATCHED_AS_NULL
+        );
+
         // Parse $formula$ syntax (inline math) - nun ohne $$ Konflikte
         // OPTIMIZED: Limit to reasonable formula length (500 chars for inline) and prevent backtracking
         // ROBUST: Inline formulas should be SHORT - most are < 100 chars. 500 is very generous.
@@ -301,7 +404,7 @@ class CBD_LaTeX_Parser {
             PREG_UNMATCHED_AS_NULL
         );
 
-            // Platzhalter zurück durch gerenderte Display-Formeln ersetzen
+            // Platzhalter zurück durch gerenderte Formeln ersetzen
             foreach ($display_formulas as $placeholder => $formula_html) {
                 $content = str_replace($placeholder, $formula_html, $content);
             }
@@ -342,7 +445,7 @@ class CBD_LaTeX_Parser {
      * @return string Rendered HTML
      */
     private function render_display_formula($matches) {
-        $formula = trim($matches[1]);
+        $formula = trim($this->normalize_formula_text($matches[1]));
         $this->formula_counter++;
 
         $formula_id = 'cbd-latex-' . uniqid() . '-' . $this->formula_counter;
@@ -351,17 +454,63 @@ class CBD_LaTeX_Parser {
         $this->formulas[$formula_id] = $formula;
 
         // Return HTML structure for KaTeX rendering
-        // The span is empty - KaTeX will fill it with rendered content
+        // The inner span is empty - KaTeX will fill it with rendered content.
+        //
+        // ÄUSSERES ELEMENT IST EIN <span>, KEIN <div> (AP-1.1):
+        // Ein <div> innerhalb eines <p> zwingt den HTML-Parser des Browsers,
+        // den Absatz aufzuspalten. Dabei entstehen nackte Textknoten neben
+        // dem Absatz, die z. B. der Accordion-Block nicht mehr in seine
+        // Klappzeile verschieben kann – sie bleiben sichtbar daneben stehen.
+        // Die Blockdarstellung leistet `display:block` in latex-formulas.css
+        // (.cbd-latex-formula.cbd-latex-display) genauso.
         $html = sprintf(
-            '<div class="cbd-latex-formula cbd-latex-display" id="%s" data-latex="%s" data-formula-id="%s">
-                <span class="cbd-latex-content"></span>
-            </div>',
+            '<span class="cbd-latex-formula cbd-latex-display" id="%s" data-latex="%s" data-formula-id="%s"><span class="cbd-latex-content"></span></span>',
             esc_attr($formula_id),
             esc_attr($formula),
             esc_attr($formula_id)
         );
 
         return $html;
+    }
+
+    /**
+     * Entfernt Spuren, die WordPress-Textfilter im Formeltext hinterlassen.
+     *
+     * Nötig, seit der `the_content`-Filter auf Priorität 11 läuft (AP-1.1):
+     * wpautop() und wptexturize() (beide Priorität 10) haben den klassischen
+     * Inhalt dann bereits angefasst. In Blockinhalten steht aus demselben
+     * Grund `<br>` in Absätzen mit weichen Zeilenumbrüchen.
+     *
+     * Innerhalb einer Formel hat keines dieser Zeichen eine legitime
+     * Bedeutung – KaTeX bekäme sie sonst als Rohtext und würde die Formel
+     * rot als Fehler anzeigen.
+     *
+     * @param string $formula Roher Formeltext aus dem Regex-Treffer
+     * @return string
+     */
+    private function normalize_formula_text($formula) {
+        if (!is_string($formula) || '' === $formula) {
+            return $formula;
+        }
+
+        // wpautop(): weiche Zeilenumbrüche. Das zugehörige \n bleibt stehen,
+        // der ursprüngliche Text ist damit wiederhergestellt.
+        $stripped = preg_replace('#<br\s*/?>#i', '', $formula);
+        if (null !== $stripped) {
+            $formula = $stripped;
+        }
+
+        // wptexturize(): typografische Ersetzungen zurücknehmen.
+        return strtr($formula, array(
+            '&#8216;' => "'",
+            '&#8217;' => "'",
+            '&#8220;' => '"',
+            '&#8221;' => '"',
+            '&#8211;' => '--',
+            '&#8212;' => '---',
+            '&#8230;' => '...',
+            '&#215;'  => 'x',
+        ));
     }
 
     /**
@@ -379,7 +528,20 @@ class CBD_LaTeX_Parser {
             return $matches[0]; // unverändert lassen
         }
 
-        $formula = trim($matches[1]);
+        return $this->build_inline_formula($matches[1]);
+    }
+
+    /**
+     * Baut das Markup einer Inline-Formel.
+     *
+     * Gemeinsamer Kern von `$…$` (render_inline_formula(), mit
+     * Whitespace-Regel) und `\(…\)` (ohne, weil der Delimiter eindeutig ist).
+     *
+     * @param string $raw_formula Formeltext ohne Delimiter
+     * @return string Markup
+     */
+    private function build_inline_formula($raw_formula) {
+        $formula = trim($this->normalize_formula_text($raw_formula));
         $this->formula_counter++;
 
         $formula_id = 'cbd-latex-inline-' . uniqid() . '-' . $this->formula_counter;
