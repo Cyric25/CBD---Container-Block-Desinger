@@ -1164,6 +1164,124 @@ installiert – so, wie es später auf der Produktivinstallation abläuft.
 
 ---
 
+### AP-1.fix1: Weiße Schrift im Dunkelmodus abstellen
+
+**Status:** ☐ offen
+**Umfang:** S
+**Modell:** opus
+**Abhängigkeiten:** AP-1.5 (der Befund stammt aus der Abnahme)
+
+**Ziel & Kontext:**
+Bei der Abnahme (AP-1.5, Klickliste U1–U11) zeigte sich: LaTeX-Formeln
+innerhalb von Accordions sind **unsichtbar — weiße Schrift auf weißem
+Grund.** Gewöhnlicher Fließtext daneben ist lesbar.
+
+**Der Befund ist gemessen, nicht vermutet.** Das Prüfskript
+`Plugins/CDB-Designer/docs/pruefung-formelfarbe.js` hat die Farbkette im
+Browser ausgelesen. Ergebnis: `.cbd-latex-content` steht auf
+`rgb(255,255,255)`, obwohl der umgebende Absatz korrekt auf `rgb(51,51,51)`
+steht. Ausgeschlossen wurden dabei: fehlende KaTeX-Assets, die Ladeanzeige
+(`opacity: 0.3`), gescheiterte Formeln und Inline-Stile.
+
+**Ursache — zwei Dinge in `Plugins/Eigene WP Blocks/assets/css/blocks.css`,
+die zusammenwirken:**
+
+1. **Zeile ~172-176:** Ein `@media (prefers-color-scheme: dark)`-Block setzt
+   `--modular-blocks-text` von `#1e1e1e` auf **`#ffffff`**. Steht das
+   Betriebssystem des Besuchers auf dunkles Design, wird die Textfarbe des
+   Plugins weiß — **aber das Theme „FOS Online Schulbuch" hat keinen
+   Dunkelmodus** und behält seinen weißen Hintergrund. `#ffffff` kommt in der
+   ganzen Datei ausschließlich in diesem Block vor.
+2. **Zeile ~92-96:** Die Regel
+   `.modular-block-content, [class*="wp-block-modular-blocks"] [class*="content"] { color: var(--modular-blocks-text); }`
+   greift auf **jedes** Element, dessen Klassenname die Zeichenfolge
+   „content" enthält — also auch auf `.cbd-latex-content`, ein Element des
+   **fremden** Plugins CDB-Designer.
+
+Die Accordion-eigene Regel
+`.mb-accordion__content p, …li, …h1-h6 { color: #333 }` holt Absätze,
+Listen und Überschriften zurück. Eine Formel ist keines davon und bleibt
+weiß. Genau deshalb ist nur sie betroffen.
+
+**Tragweite:** Das ist ein Altbestandsfehler, **nicht** von den
+Arbeitspaketen dieses Plans verursacht. Er trifft die Produktivseite: Jeder
+Besucher mit dunklem Systemdesign sieht Formeln in Accordions unsichtbar.
+Der Dunkelmodus-Block schaltet zudem Flächen- und Rahmenfarben um, während
+das Theme hell bleibt — dort sind weitere unleserliche Kombinationen zu
+erwarten.
+
+**Betroffene Dateien:**
+- `Plugins/Eigene WP Blocks/assets/css/blocks.css` (ändern)
+- `Plugins/Eigene WP Blocks/reference_file_map.md` (ändern)
+
+**Vorgehen:**
+
+1. **Den Dunkelmodus-Block stilllegen.** Den gesamten
+   `@media (prefers-color-scheme: dark)`-Abschnitt entfernen. **An seiner
+   Stelle einen Kommentar hinterlassen**, der festhält, warum er nicht
+   zurückkommen darf: Das Theme folgt dem Systemdesign nicht; ein Plugin, das
+   seine Farben gegen das Theme umschaltet, kann nur unleserliche
+   Kombinationen erzeugen. Ein echter Dunkelmodus müsste vom Theme ausgehen,
+   nicht vom Block-Plugin.
+2. **Den Selektor eingrenzen.** `[class*="wp-block-modular-blocks"] [class*="content"]`
+   darf nicht in fremde Plugins hineingreifen.
+   **Vorgehen dabei:** Ermittle zuerst, welche Elemente die Regel heute
+   tatsächlich trifft — durchsuche `blocks/*/render.php` und `blocks/*/view.js`
+   nach Klassennamen, die „content" enthalten. Grenze den Selektor dann auf
+   diese ein bzw. nimm fremde Elemente aus. Ziel ist, dass kein Block seine
+   beabsichtigte Gestaltung verliert.
+   Prüfe im selben Zug die benachbarten Regeln mit derselben Schwäche:
+   `[class*="button"]` (Zeile ~205-209) und `[class*="card"]` — beschreibe in
+   der Übergabenotiz, ob sie dasselbe Problem haben; **ändere sie nur, wenn
+   du sicher bist, dass nichts kaputtgeht**, sonst nur vermerken.
+3. `blocks.css` liegt unter `assets/css/` und wird direkt eingebunden — **es
+   gibt dafür keinen Webpack-Build.** `npm run build` ist für dieses AP
+   nicht nötig; führe es trotzdem aus, um sicherzugehen, dass nichts
+   Bestehendes bricht.
+
+**Akzeptanzkriterien:**
+- [ ] In `blocks.css` kommt `prefers-color-scheme` nicht mehr vor.
+- [ ] `#ffffff` als Wert für `--modular-blocks-text` kommt nicht mehr vor.
+- [ ] An der Stelle des entfernten Blocks steht ein Kommentar mit der
+      Begründung.
+- [ ] Der Selektor trifft `.cbd-latex-content` nicht mehr. Nachweis: In der
+      Browser-Konsole auf der Prüfseite liefert
+      `document.querySelector('.cbd-latex-content').matches('[class*="wp-block-modular-blocks"] [class*="content"]')`
+      zwar weiterhin `true` (die Klasse enthält nun einmal „content"), aber
+      die **neue** Regel darf nicht mehr greifen — maßgeblich ist der
+      gemessene Farbwert aus dem nächsten Punkt.
+- [ ] Auf `http://fos.localhost:8080/index.php/phase-1-pruefseite/` liefert
+      das Prüfskript `Plugins/CDB-Designer/docs/pruefung-formelfarbe.js` für
+      **alle** Formeln eine dunkle Farbe (nicht `rgb(255,255,255)`), und zwar
+      **bei eingeschaltetem dunklem Systemdesign**.
+- [ ] Kein anderer Block verliert seine Gestaltung (Sichtprüfung der
+      Prüfseite und einer Seite mit einem weiteren Modular-Block).
+- [ ] `reference_file_map.md` vermerkt bei `assets/css/blocks.css`, dass es
+      dort bewusst keinen Dunkelmodus gibt.
+
+**Tests:**
+- **Der entscheidende Test läuft mit eingeschaltetem dunklem Systemdesign.**
+  In Chrome ohne Systemwechsel: F12 → Drei-Punkte-Menü → *Weitere Werkzeuge*
+  → *Rendering* → `Emulate CSS media feature prefers-color-scheme` auf `dark`
+  stellen. Prüfseite neu laden.
+- Prüfschritt A: Prüfskript `pruefung-formelfarbe.js` ausführen. Erwartung:
+  Spalte `color` zeigt für alle elf Formeln einen dunklen Wert; die
+  Meldung „HIER SPRINGT DIE FARBE UM" darf für `.cbd-latex-content` nicht
+  mehr erscheinen.
+- Prüfschritt B: Sichtprüfung der Abschnitte T3, T4 und T6 der Prüfseite —
+  Formeln lesbar, Fließtext unverändert.
+- Prüfschritt C: Emulation zurück auf `light`, Seite neu laden. Erwartung:
+  unverändert lesbar, nichts hat sich verschlechtert.
+- Prüfschritt D (Regression): Eine Seite mit einem anderen Modular-Block
+  aufrufen (z. B. `multiple-choice` oder `drag-the-words`, sofern vorhanden)
+  und prüfen, dass Schrift- und Flächenfarben unverändert sind.
+- Log-Check: `C:\allinkl-testserver\www\htdocs\w0000001\fos\wp-content\debug.log`
+  ohne neue Einträge.
+
+**Übergabenotiz:**
+
+---
+
 ### AP-1.rev: Unabhängiges Review Phase 1
 
 **Status:** ☐ offen
@@ -2620,7 +2738,8 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.3 | Block-Referenz editorfähig, auf `stableId` | opus | ☑ | – | Commit `760543f` (3. Anlauf; die ersten beiden am Sitzungslimit abgebrochen). **Widerspruch im Plantext gefunden — siehe AP-1.3, Schritt 1:** Der Schritt verlangt, den `data-stable-id`-Regex „wortgleich zu übernehmen", das Akzeptanzkriterium verbietet zugleich eine dritte Kopie. Gelöst über `WP_HTML_Tag_Processor` statt eines Regex. **Preis: Auf WordPress < 6.2 entfällt der Altbestands-Rückfall.** Nebenbefunde: `block.json` nannte die Kategorie `container` statt `container-blocks`; `apiVersion` fehlte in der clientseitigen Registrierung |
 | AP-1.4 | Screenshot liefert wieder eine Datei | sonnet | ☑ | – | Commit `aa98770`. `yield*` gesetzt, `interactivity-fallback.js` nachgezogen (dort fehlten Canvas-Deckel und `backgroundColor` ganz). Browserprüfungen an AP-1.5 verwiesen |
 | AP-1.5 | Abnahme Phase 1 auf dem Testserver | ~~sonnet~~ **opus** | ☑ (maschinell) | AP-1.0–AP-1.4 | Version 3.1.87 → **3.1.88**, ZIP gebaut, Autoloader `--no-dev` verifiziert. **Modellwahl vom Orchestrator auf opus geändert** — die Abnahme muss Testinhalte selbst anlegen und gerendertes HTML beurteilen, das ist Urteils- statt Musterarbeit. **Der maschinelle Teil ist vollständig grün; die Browserhälfte steht als Klickliste U1–U11 beim Nutzer aus.** Drei Befunde, siehe unten |
-| AP-1.rev | Unabhängiges Review Phase 1 | opus | ☐ | AP-1.0–AP-1.5 | nur lesend |
+| AP-1.fix1 | Weiße Schrift im Dunkelmodus abstellen | opus | ☑ (Browserprüfung offen) | AP-1.5 | Commit `b854060` im Repo „Eigene WP Blocks", gepusht. **Altbestandsfehler, nicht von diesem Plan verursacht** — aus der Abnahme aufgedeckt. **Vom Orchestrator selbst umgesetzt**, weil zwei Agentenanläufe am Sitzungslimit scheiterten und die Diagnose bereits vollständig vorlag |
+| AP-1.rev | Unabhängiges Review Phase 1 | opus | ☐ | AP-1.0–AP-1.5, AP-1.fix1 | nur lesend |
 | AP-1.doc | Dokumentation Phase 1 | sonnet | ☐ | AP-1.rev | Merge in `main` |
 | AP-2.1 | Datenmodell und Sanitizer Icon-Position | sonnet | ☐ | – | TDD; parallel zu 2.4, 2.6 |
 | AP-2.2 | Icon-Position im Frontend rendern | opus | ☐ | AP-2.1 | parallel zu 2.3, 2.5 |
@@ -2645,7 +2764,8 @@ pro Phasenabschluss.
 | 2026-08-16 | AP-1.3 | `php -l` (3 Dateien); `php tools/check-php74.php` (562 Dateien); `node --check` (index.js, view.js); `block.json` per `require` geprüft; drei eigene Harnische im Scratchpad: REST-Extraktion gegen die echte `WP_HTML_Tag_Processor` (34), Editor-Registrierung mit nachgebauten `wp.*`-Globalen (36), `view.js` unter jsdom (23) | 93 Prüfungen bestanden, Exit 0; `php -l`, `check-php74` und `node --check` vom Orchestrator nachgefahren. Browserprüfungen (Editor, Auswahlliste, REST im Browser, Frontend beide Fälle, `debug.log`, Regression „unerwarteter Inhalt") **offen → AP-1.5** | AP-1.3-Agent, Kernprüfungen vom Orchestrator nachgefahren |
 | 2026-08-16 | AP-1.4 | `node --input-type=module --check` (store), `node --check` (fallback); Grep-Belege für `yield*` und den entfernten Icon-Selektor | bestanden, Exit 0. Browserprüfungen (Zwischenablage-Fehlschlag erzwingen, Warn-Icon, langer Block) **offen → AP-1.5** | AP-1.4-Agent, Syntaxprüfung und Grep vom Orchestrator nachgefahren |
 | 2026-08-16 | AP-1.5 | 9 Prüfharnische (alle Exit 0, u. a. `test-block-serializer.php` 71/0, `test-design-transfer.php` 98, `test-classroom-gate.php` 38, `test-latex-parser.php` 78); `check-php74.php` 562 Dateien; `create-plugin-zip.js` → 3.1.88, 998 Dateien, Autoloader `--no-dev` mit 0 phpunit-Treffern; Installation auf dem Testserver in der Reihenfolge Accordion → CDB; 7 Testseiten per `wp_insert_post()` mit `wp_slash()`; 9 Seitenabrufe per `curl` mit HTML-Analyse; Vorher/Nachher-Vergleich gegen den Stand 3.1.87 | **maschinell vollständig bestanden.** Kernbeleg Regression: Auf der Seite ohne Blockmarkup sinkt die `<p>`-Zahl 3 → 2 — genau die geheilte Absatzaufspaltung; Display-Formeln `<div>` 1 → 0, `<span>` 0 → 2. Projektweit 0 Treffer für `<div class="cbd-latex`. Backslash-Bilanz auf allen 7 Seiten soll = ist. `debug.log`: 288 Zeilen = 9 × derselbe Init-Block, **0** Notices/Warnings/Deprecations/Fatal. **Browserhälfte offen: Klickliste U1–U11 beim Nutzer.** Regression 4 (Klassenansicht) **nicht prüfbar** — keine Klasse eingerichtet | AP-1.5-Agent |
-| | **Phase 1 abgeschlossen** | | | offen bis U1–U11 abgehakt sind |
+| 2026-08-16 | AP-1.fix1 | jsdom-Nachweis gegen die echte Klassenkette der Formel (8 Prüfungen, Exit 0); `postcss.parse()` über `blocks.css`; Datei auf den Testserver kopiert und die **ausgelieferte** Fassung per `curl` gegengeprüft | bestanden. `prefers-color-scheme` im wirksamen Teil: **0** (steht nur noch im Begründungskommentar). `.cbd-latex-content` wird **nicht** mehr getroffen, `.mb-accordion__content` und `.text-content` weiterhin. **Gegenprobe:** der alte Selektor traf die Formel — damit ist die Ursache belegt, nicht nur behauptet. **Der entscheidende Test (Dunkelmodus-Emulation + Prüfskript) ist nur im Browser möglich und steht beim Nutzer aus** | Orchestrator |
+| | **Phase 1 abgeschlossen** | | | offen bis U1–U11 und die Dunkelmodus-Gegenprobe abgehakt sind |
 | | AP-1.rev | | | |
 | | AP-1.doc | | | |
 | | AP-2.1 | | | |
