@@ -61,3 +61,34 @@
 	width: 18px;
 	height: 18px;
 }
+
+/* Hinweis auf das Verhalten beim Klick (Attribut displayMode).
+   Der Modal-Modus ist im Editor nicht sichtbar — die Vorschaukarte sagt
+   deshalb ausdrücklich, was ein Klick im Frontend auslöst. */
+.cbd-block-reference-preview-modus {
+	display: flex;
+	align-items: center;
+	gap: 0.4em;
+	margin: 0.75em 0 0;
+	padding: 0.4em 0.7em;
+	border-radius: 4px;
+	font-size: 13px;
+	line-height: 1.4;
+}
+
+.cbd-block-reference-preview-modus .dashicons {
+	font-size: 16px;
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+}
+
+.cbd-block-reference-preview-modus.is-modal {
+	background: #e7f5ea;
+	color: #1e6b33;
+}
+
+.cbd-block-reference-preview-modus.is-link {
+	background: #f0f0f0;
+	color: #555;
+}
