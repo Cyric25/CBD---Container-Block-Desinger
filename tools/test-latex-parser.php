@@ -13,6 +13,9 @@
  *  - AP-1.fix2: Code-Blöcke bleiben unangetastet (Blocknamen-Filter und
  *    Maskierung von script/pre/code) und HTML-Entities erreichen KaTeX
  *    aufgelöst
+ *  - AP-1.fix5: die vier Befunde aus dem Review AP-1.rev2 — $-Zählung auf dem
+ *    maskierten Text (N1), Rücktausch in umgekehrter Reihenfolge (N2),
+ *    kollisionsfreie Marken (N3), unmittelbare PCRE-Fehlerauswertung (N4)
  *
  * Aufruf:  php tools/test-latex-parser.php
  *
@@ -24,6 +27,22 @@ if (PHP_SAPI !== 'cli') {
 }
 
 define('ABSPATH', '/');
+
+// WP_DEBUG an, damit die Protokollzweige des Parsers überhaupt laufen; die
+// Ausgabe von error_log() geht in eine Datei, damit der Harness sie lesen
+// kann (gebraucht für N4). Ohne die Umleitung schriebe PHP-CLI nach stderr.
+define('WP_DEBUG', true);
+$GLOBALS['log_file'] = sys_get_temp_dir() . '/cbd-latex-parser-test.log';
+@unlink($GLOBALS['log_file']);
+ini_set('error_log', $GLOBALS['log_file']);
+// Fatale Fehler dürfen nicht in dieser Datei verschwinden – sonst bricht der
+// Harness stillschweigend mitten im Lauf ab.
+ini_set('display_errors', 'stderr');
+
+function log_reset() { @unlink($GLOBALS['log_file']); }
+function log_read()  {
+    return is_file($GLOBALS['log_file']) ? (string) file_get_contents($GLOBALS['log_file']) : '';
+}
 
 // --- WordPress-Stubs ------------------------------------------------------
 
@@ -463,6 +482,130 @@ check('Formel ohne Entities unveraendert', '\frac{1}{2}' === latex_of($out), lat
 
 $out = $parser->parse_latex('Menge $a \cap b$ hier.');
 check('Backslash-Makro unveraendert', 'a \cap b' === latex_of($out), latex_of($out));
+
+// =========================================================================
+echo "\n== Haertung AP-1.fix5 ==\n";
+
+// --- N1: die $-Zaehlung laeuft auf dem maskierten Text --------------------
+// jQuery mit $ ist im Projekt gelebtes Muster (dafuer existiert eigens
+// CBD_Block_Registration::isolate_inline_scripts()), und Container-Bloecke
+// stehen nicht in KEIN_LATEX_BLOCK. Vorher zaehlte parse_latex_in_blocks()
+// die $ im ROHTEXT: drei $ im Skript = ungerade -> rote Warnbox plus rot
+// hinterlegte <span> mitten ins Skript, das Skript war zerstoert.
+
+$container_block = array('blockName' => 'container-block-designer/container', 'attrs' => array());
+$jquery = '<script>jQuery(function($){ var a = $(".x"); var b = $(".y"); });</script>';
+
+$in  = '<p>Hinweis dazu.</p>' . $jquery;
+$out = $parser->parse_latex_in_blocks($in, $container_block);
+check('N1: jQuery-Skript mit ungerader $-Zahl bleibt zeichengleich', $in === $out, $out);
+check('N1: keine Warnbox wegen der $ im Skript',
+    strpos($out, 'cbd-latex-warning') === false, $out);
+check('N1: keine rot hinterlegten <span> im Skript',
+    strpos($out, 'background: #dc3545') === false, $out);
+
+$in  = '<p>Formel $x^2$ dazu.</p>' . $jquery;
+$out = $parser->parse_latex_in_blocks($in, $container_block);
+check('N1: Formel neben dem Skript wird gesetzt', 1 === formula_count($out), $out);
+check('N1: data-latex ist "x^2"', 'x^2' === latex_of($out), latex_of($out));
+check('N1: Skript daneben bleibt unversehrt', strpos($out, $jquery) !== false, $out);
+check('N1: keine Warnbox trotz fuenf $ im Rohtext',
+    strpos($out, 'cbd-latex-warning') === false, $out);
+
+// Die Warnfunktion darf NICHT verloren gehen.
+$in  = '<p>Preis $5 und $ noch $ ein Zeichen.</p>';
+$out = $parser->parse_latex_in_blocks($in, $container_block);
+check('N1: ungerade $ ausserhalb von Skripten -> Warnbox erscheint weiterhin',
+    strpos($out, 'cbd-latex-warning') !== false, $out);
+
+// Gemischt: das Skript verschiebt die Bilanz nicht mehr — und wird bei einer
+// echten Warnung auch nicht mit roten <span> zugekleistert.
+$dollar_skript = '<script>var s = "$";</script>';
+$in  = '<p>Preis $5 und $ noch $ ein.</p>' . $dollar_skript;
+$out = $parser->parse_latex_in_blocks($in, $container_block);
+check('N1: Bilanz wird ohne die $ im Skript gebildet (3 statt 4 -> Warnung)',
+    strpos($out, 'cbd-latex-warning') !== false, $out);
+check('N1: Skript bleibt auch im Warnfall zeichengleich',
+    strpos($out, $dollar_skript) !== false, $out);
+
+// --- N2: zurueckgetauscht wird in umgekehrter Reihenfolge -----------------
+// Die geschuetzten Bereiche liegen im Speicher VOR den Formeln. Wurden sie
+// zuerst zurueckgetauscht, lief ihr wiederhergestellter Inhalt anschliessend
+// noch durch die Formel-Ersetzungen.
+
+$restore = new ReflectionMethod('CBD_LaTeX_Parser', 'restore_placeholders');
+$restore->setAccessible(true);
+$store = array(
+    // Reihenfolge wie im echten Ablauf: erst geschuetzter Bereich, dann Formel
+    '___CBD_PROTECTED_probe_0___'       => '<code>___CBD_DISPLAY_FORMULA_probe_0___</code>',
+    '___CBD_DISPLAY_FORMULA_probe_0___' => '<span class="probe-formel"></span>',
+);
+$out = $restore->invoke(
+    $parser,
+    'A ___CBD_PROTECTED_probe_0___ B ___CBD_DISPLAY_FORMULA_probe_0___ C',
+    $store
+);
+check('N2: Formeln werden vor den geschuetzten Bereichen zurueckgetauscht',
+    'A <code>___CBD_DISPLAY_FORMULA_probe_0___</code> B <span class="probe-formel"></span> C' === $out,
+    $out);
+
+// Der im Review gemessene Fall, Ende zu Ende.
+$in  = '<p>Beispiel <code>___CBD_DISPLAY_FORMULA_0___</code> und $$q$$ dazu.</p>';
+$out = $parser->parse_latex($in);
+check('N2: Code-Inhalt wird nicht durch die Formel ersetzt',
+    strpos($out, '<code>___CBD_DISPLAY_FORMULA_0___</code>') !== false, $out);
+check('N2: dabei entsteht genau eine Formel', 1 === formula_count($out), $out);
+
+// --- N3: die Marken sind je Aufruf zufaellig ------------------------------
+// Ein Nutzertext, der eine Marke enthaelt, wurde vorher durch den
+// Skriptinhalt bzw. die Formel ersetzt — das Skript stand danach doppelt.
+
+$skript = '<script>var a = 1;</script>';
+$in  = '<p>Text mit ___CBD_PROTECTED_0___ als Beispiel.</p>' . $skript;
+$out = $parser->parse_latex($in);
+check('N3: Nutzertext mit ___CBD_PROTECTED_0___ bleibt zeichengleich', $in === $out, $out);
+check('N3: das Skript steht genau einmal', 1 === substr_count($out, $skript), $out);
+
+$in  = '<p>Marke ___CBD_INLINE_FORMULA_0___ und \(z\) dazu.</p>';
+$out = $parser->parse_latex($in);
+check('N3: Inline-Marke im Nutzertext ueberlebt',
+    strpos($out, '___CBD_INLINE_FORMULA_0___') !== false, $out);
+check('N3: dabei entsteht genau eine Inline-Formel', 1 === formula_count($out), $out);
+
+// Der Doppelparse-Schutz prueft die AUSGABE (cbd-latex-formula), nicht die
+// Marken — er darf von der Zufallsmarke nicht betroffen sein.
+$rendered_n3 = $parser->parse_latex('Formel $p^2$ im Text.');
+check('N3: Doppelparse-Schutz greift weiterhin',
+    $rendered_n3 === $parser->parse_latex($rendered_n3), $parser->parse_latex($rendered_n3));
+
+// --- N4: PCRE-Fehler wird unmittelbar ausgewertet -------------------------
+// preg_last_error() wird von jedem nachfolgenden erfolgreichen preg_*-Aufruf
+// auf PREG_NO_ERROR zurueckgesetzt. Eine Auswertung "unten" erreicht den
+// Fehler aus mask_protected_regions() deshalb nie.
+
+$maskiere = Closure::bind(function ($text) {
+    $speicher = array();
+    $zaehler  = 0;
+    return $this->mask_protected_regions($text, $speicher, $zaehler, 'probe');
+}, $parser, 'CBD_LaTeX_Parser');
+
+$alt_limit = ini_get('pcre.backtrack_limit');
+ini_set('pcre.backtrack_limit', '1000');
+$boese = '<script>' . str_repeat('a', 100000); // ohne schliessendes Tag
+log_reset();
+$ergebnis = $maskiere($boese);
+$protokoll = log_read();
+ini_set('pcre.backtrack_limit', $alt_limit);
+
+check('N4: bei PCRE-Fehler bleibt der Inhalt unveraendert', $boese === $ergebnis);
+check('N4: der PCRE-Fehler wird protokolliert',
+    strpos($protokoll, 'PREG') !== false, $protokoll);
+check('N4: die Meldung nennt die Fundstelle mask_protected_regions',
+    strpos($protokoll, 'mask_protected_regions') !== false, $protokoll);
+
+// Fehlercode wieder sauber machen, damit die Robustheitspruefung am Ende
+// nicht auf diesem provozierten Fehler sitzenbleibt.
+preg_match('/a/', 'a');
 
 // =========================================================================
 echo "\n== content_has_latex_markers() ==\n";
