@@ -376,8 +376,15 @@ als erledigt erklärt, sondern ehrlich vermerkt.
    und mit `git push -u origin phase-1-latex-accordion` veröffentlichen.
 
 **Akzeptanzkriterien:**
-- [ ] `git rev-list --left-right --count main...phase-1-accordion-grundlage`
-      gibt `0	0` aus (beide Branches auf demselben Stand).
+- [ ] `git diff --stat main phase-1-accordion-grundlage` gibt **nichts** aus
+      (beide Branches haben denselben Dateibaum).
+      **Korrigiert am 2026-08-16 (AP-1.0, 2. Anlauf).** Ursprünglich stand
+      hier `git rev-list --left-right --count main...phase-1-accordion-grundlage`
+      → `0	0`. Das ist mit dem in Schritt 5 vorgeschriebenen `--no-ff`-Merge
+      **mathematisch nie erreichbar**: Der Merge-Commit selbst existiert nur
+      auf `main` und wird immer als `1	0` gezählt. Ein Baumvergleich prüft
+      das Gemeinte. Wer dieses Muster in einem anderen AP wiederverwendet,
+      nimmt den Baumvergleich, nicht `rev-list`.
 - [ ] Der Tag `pre-latex-merge` existiert lokal und auf dem Remote
       (`git ls-remote --tags origin` enthält ihn).
 - [ ] `Plugins/Eigene WP Blocks/blocks/accordion/view.js` existiert auf
@@ -2571,11 +2578,11 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 
 | AP | Titel | Modell | Status | Abhängig von | Notiz |
 |---|---|---|---|---|---|
-| AP-1.0 | Accordion-Branch nach `main` mergen | sonnet | ☐ | – | Repo „Eigene WP Blocks" |
-| AP-1.1 | LaTeX-Renderer öffnen und Parser härten | opus | ☐ | – | parallel zu 1.2, 1.3, 1.4 |
-| AP-1.2 | Accordion verliert keine Textknoten mehr | opus | ☐ | AP-1.0 | parallel zu 1.1, 1.3, 1.4 |
-| AP-1.3 | Block-Referenz editorfähig, auf `stableId` | opus | ☐ | – | parallel zu 1.1, 1.2, 1.4 |
-| AP-1.4 | Screenshot liefert wieder eine Datei | sonnet | ☐ | – | parallel zu 1.1, 1.2, 1.3 |
+| AP-1.0 | Accordion-Branch nach `main` mergen | sonnet | ☑ | – | Merge-Commit `626c6f8` auf `main`, Tag `pre-latex-merge` (= alter Stand `f6826a5`) lokal+remote, Branch `phase-1-latex-accordion` angelegt. **AK1 war fehlerhaft formuliert und wurde korrigiert** (siehe AP-1.0). **Befund: Den jsdom-Prüfharnisch mit „104 Zusicherungen" aus `PLAN-accordion-block.md` AP-2.3n gibt es nicht** — nie committet, in der ganzen Historie nicht auffindbar |
+| AP-1.1 | LaTeX-Renderer öffnen und Parser härten | opus | ☑ | – | Commit `70c77bc`. `tools/test-latex-parser.php` neu, 78 Prüfungen grün. **Zusatzbefund:** Auf Priorität 11 laufen `wpautop`/`wptexturize` vorher und tragen `<br />` und Entities in die Formeln — deshalb neu `normalize_formula_text()`. Zwei Bestandsfehler in `latex-formulas.css` gefunden, bewusst nicht behoben (siehe Übergabenotiz) |
+| AP-1.2 | Accordion verliert keine Textknoten mehr | opus | ☐ | AP-1.0 | entsperrt; Branch `phase-1-latex-accordion` |
+| AP-1.3 | Block-Referenz editorfähig, auf `stableId` | opus | ◐ | – | 1. und 2. Anlauf 2026-08-16 je durch Sitzungslimit abgebrochen. **Teilstand im Arbeitsverzeichnis, nicht committet:** alle sieben Zieldateien geändert (~830 Zeilen), Abbruch beim Eingrenzen der `[id]`-Regel in `style.css`. **Ungeprüft** — weder `php -l` noch `check-php74.php` noch Akzeptanzkriterien gelaufen |
+| AP-1.4 | Screenshot liefert wieder eine Datei | sonnet | ☑ | – | Commit `aa98770`. `yield*` gesetzt, `interactivity-fallback.js` nachgezogen (dort fehlten Canvas-Deckel und `backgroundColor` ganz). Browserprüfungen an AP-1.5 verwiesen |
 | AP-1.5 | Abnahme Phase 1 auf dem Testserver | sonnet | ☐ | AP-1.0–AP-1.4 | einzige Stelle mit Versionsbump |
 | AP-1.rev | Unabhängiges Review Phase 1 | opus | ☐ | AP-1.0–AP-1.5 | nur lesend |
 | AP-1.doc | Dokumentation Phase 1 | sonnet | ☐ | AP-1.rev | Merge in `main` |
@@ -2596,11 +2603,11 @@ pro Phasenabschluss.
 
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
-| | AP-1.0 | | | |
-| | AP-1.1 | | | |
+| 2026-08-16 | AP-1.0 | `npm run build` (webpack 5.102.0); Merge konfliktfrei, 8 Dateien; Baumvergleich `git diff --stat main phase-1-accordion-grundlage`; Tag und Branch lokal+remote | bestanden. **Prüfharnisch nicht ausführbar** — die jsdom-Testumgebung aus AP-2.3n des Accordion-Plans existiert im Repo nicht und findet sich auch in der Historie nicht. Merge trotzdem ausgeführt (ausdrückliche Nutzerentscheidung) | AP-1.0-Agent, nachgeprüft durch Orchestrator |
+| 2026-08-16 | AP-1.1 | `php tools/test-latex-parser.php` (78 Prüfungen); `php -l`; `php tools/check-php74.php` (562 Dateien); `node --check assets/js/latex-renderer.js`; zusätzlich 28 jsdom-Zusicherungen zum API-Vertrag | alle bestanden, Exit 0. Browserprüfungen (Absatz nicht zerrissen, Konsolen-Rundlauf, `debug.log`) **offen → AP-1.5** | AP-1.1-Agent, Harnisch und `php -l` vom Orchestrator nachgefahren |
 | | AP-1.2 | | | |
 | | AP-1.3 | | | |
-| | AP-1.4 | | | |
+| 2026-08-16 | AP-1.4 | `node --input-type=module --check` (store), `node --check` (fallback); Grep-Belege für `yield*` und den entfernten Icon-Selektor | bestanden, Exit 0. Browserprüfungen (Zwischenablage-Fehlschlag erzwingen, Warn-Icon, langer Block) **offen → AP-1.5** | AP-1.4-Agent, Syntaxprüfung und Grep vom Orchestrator nachgefahren |
 | | AP-1.5 | | | |
 | | **Phase 1 abgeschlossen** | | | |
 | | AP-1.rev | | | |
