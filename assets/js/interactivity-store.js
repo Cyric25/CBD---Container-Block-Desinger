@@ -210,6 +210,10 @@ store('container-block-designer', {
 				return;
 			}
 
+			// Ursache eines gescheiterten Zwischenablage-Versuchs (Stufe 1) merken,
+			// damit der Haupt-catch sie bei vollständigem Fehlschlag ausgeben kann.
+			let clipboardErrorCause = null;
+
 			try {
 				// Setze Loading-State
 				context.screenshotLoading = true;
@@ -256,13 +260,32 @@ store('container-block-designer', {
 				// Kurze Verzögerung damit DOM aktualisiert wird
 				yield new Promise(resolve => setTimeout(resolve, 50));
 
+				// Canvas-Fläche deckeln: fest scale:2 kann bei sehr hohen Blöcken
+				// die Flächengrenze mancher Browser sprengen (toBlob liefert dann
+				// null). Gleiches Muster wie im PDF-Pfad (pdf-server-side.js:26-27,
+				// :787, :838-842): Gerät erkennen, Pixel-Obergrenze setzen, scale
+				// so weit reduzieren, dass breite * hoehe * scale² darunter bleibt.
+				const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+					(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+				const maxCanvasPixels = isIOSDevice ? 16000000 : 64000000;
+				let screenshotScale = 2;
+				const containerPixels = containerBlock.offsetWidth * containerBlock.offsetHeight;
+				if (containerPixels * screenshotScale * screenshotScale > maxCanvasPixels) {
+					screenshotScale = Math.max(1, Math.sqrt(maxCanvasPixels / containerPixels));
+				}
+				screenshotScale = Math.min(screenshotScale, 2);
+
+				if (window.cbdDebug) {
+					console.log('[CBD Screenshot] scale =', screenshotScale, 'für', containerBlock.offsetWidth, 'x', containerBlock.offsetHeight, 'px');
+				}
+
 				// Screenshot erstellen
 				const canvas = yield html2canvas(containerBlock, {
 					useCORS: true,
 					allowTaint: false,
-					scale: 2,
+					scale: screenshotScale,
 					logging: false,
-					backgroundColor: null
+					backgroundColor: '#ffffff'
 				});
 
 				// Buttons wieder einblenden
@@ -287,7 +310,9 @@ store('container-block-designer', {
 						clipboardSuccess = true;
 						// Success - skip other tiers
 					} catch (err) {
-						// Will fallback to Tier 2 below
+						// Ursache merken statt verschlucken - der Ablauf faellt
+						// weiterhin auf Stufe 2/3 (tryWebShare) zurueck
+						clipboardErrorCause = err;
 					}
 				} else {
 				}
@@ -299,7 +324,7 @@ store('container-block-designer', {
 					if (!blob) {
 						throw new Error('Failed to create blob from canvas');
 					}
-					yield tryWebShare(blob, canvas, context);
+					yield* tryWebShare(blob, canvas, context);
 				}
 
 				// Helper: Try Web Share API
@@ -364,16 +389,25 @@ store('container-block-designer', {
 				context.screenshotError = true;
 				context.screenshotLoading = false;
 
-				// Icon zurücksetzen
-				const icon = element.ref.querySelector('.cbd-screenshot .dashicons');
+				// Ursache sichtbar machen - console.error bleibt bewusst
+				// ungegated (siehe CLAUDE.md, Abschnitt Debugging-Konventionen)
+				console.error('[CBD Screenshot] Fehlgeschlagen:', error, clipboardErrorCause ? { clipboardError: clipboardErrorCause } : '');
+
+				// Icon auf Warnsymbol setzen, damit der Fehlschlag sichtbar ist -
+				// sonst bliebe der Spinner (dashicons-update-alt) haengen
+				const icon = element.ref.querySelector('.dashicons');
 				if (icon) {
 					icon.classList.remove('dashicons-update-alt', 'dashicons-yes-alt');
-					icon.classList.add('dashicons-camera');
+					icon.classList.add('dashicons-warning');
 				}
 
 				setTimeout(() => {
 					context.screenshotError = false;
-				}, 2000);
+					if (icon) {
+						icon.classList.remove('dashicons-warning');
+						icon.classList.add('dashicons-camera');
+					}
+				}, 3000);
 			}
 		},
 

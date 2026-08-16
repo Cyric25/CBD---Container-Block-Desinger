@@ -227,6 +227,11 @@
             const $containerBlock = $container.children('.cbd-container-block');
             const $icon = $button.find('.dashicons');
 
+            // Ursache eines gescheiterten Zwischenablage-Versuchs (Stufe 1) merken,
+            // damit der abschließende Fehlerpfad sie ausgeben kann (sinngemäß wie
+            // in interactivity-store.js).
+            let clipboardErrorCause = null;
+
             // WICHTIG: Nur das DIREKTE Content-Element - Fallback-Strategie
             let $content = $container.children('.cbd-container-content');
             if ($content.length === 0) {
@@ -274,12 +279,33 @@
 
                 // Kurze Verzögerung damit DOM aktualisiert wird
                 setTimeout(function() {
+                    // Canvas-Fläche deckeln: fest scale:2 kann bei sehr hohen Blöcken
+                    // die Flächengrenze mancher Browser sprengen (toBlob liefert dann
+                    // null). Gleiches Muster wie im PDF-Pfad (pdf-server-side.js:26-27,
+                    // :787, :838-842) und in interactivity-store.js: Gerät erkennen,
+                    // Pixel-Obergrenze setzen, scale so weit reduzieren, dass
+                    // breite * hoehe * scale² darunter bleibt.
+                    var isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                    var maxCanvasPixels = isIOSDevice ? 16000000 : 64000000;
+                    var screenshotScale = 2;
+                    var containerEl = $containerBlock[0];
+                    var containerPixels = containerEl.offsetWidth * containerEl.offsetHeight;
+                    if (containerPixels * screenshotScale * screenshotScale > maxCanvasPixels) {
+                        screenshotScale = Math.max(1, Math.sqrt(maxCanvasPixels / containerPixels));
+                    }
+                    screenshotScale = Math.min(screenshotScale, 2);
+
+                    if (window.cbdDebug) {
+                        console.log('[CBD Fallback Screenshot] scale =', screenshotScale, 'für', containerEl.offsetWidth, 'x', containerEl.offsetHeight, 'px');
+                    }
+
                     html2canvas($containerBlock[0], {
                         useCORS: true,
                         allowTaint: false,
-                        scale: 2,
+                        scale: screenshotScale,
                         logging: false,
-                        backgroundColor: null
+                        backgroundColor: '#ffffff'
                     }).then(function(canvas) {
                         // Buttons wieder einblenden
                         $actionButtons.css({
@@ -301,7 +327,10 @@
                                     showSuccess(context, wasCollapsed, $content, $button, $icon, $container);
                                 })
                                 .catch(function(err) {
-                                    // Clipboard failed, erstelle Blob für Fallback
+                                    // Clipboard failed, erstelle Blob für Fallback.
+                                    // Ursache merken statt verschlucken - der Ablauf
+                                    // faellt weiterhin auf Stufe 2/3 zurueck.
+                                    clipboardErrorCause = err;
                                     canvas.toBlob(function(blob) {
                                         if (!blob) {
                                             console.error('[CBD Fallback] Failed to create blob');
@@ -409,18 +438,25 @@
                             'opacity': ''
                         });
 
-                        // Error state
+                        // Ursache sichtbar machen - console.error bleibt bewusst
+                        // ungegated (siehe CLAUDE.md, Abschnitt Debugging-Konventionen)
+                        console.error('[CBD Fallback Screenshot] Fehlgeschlagen:', error, clipboardErrorCause ? { clipboardError: clipboardErrorCause } : '');
+
+                        // Error state - Icon auf Warnsymbol setzen, damit der
+                        // Fehlschlag sichtbar ist, sonst bliebe der Spinner
+                        // (dashicons-update-alt) haengen
                         context.screenshotLoading = false;
                         context.screenshotError = true;
                         $container.data('cbd-context', context);
                         $button.prop('disabled', false);
-                        $icon.removeClass('dashicons-update-alt').addClass('dashicons-camera');
+                        $icon.removeClass('dashicons-update-alt dashicons-yes-alt').addClass('dashicons-warning');
 
-                        // Reset error after 2 seconds
+                        // Reset error after 3 seconds
                         setTimeout(function() {
                             context.screenshotError = false;
                             $container.data('cbd-context', context);
-                        }, 2000);
+                            $icon.removeClass('dashicons-warning').addClass('dashicons-camera');
+                        }, 3000);
                     });
                 }, 50); // Verzögerung für Button-Ausblendung
             }, wasCollapsed ? 350 : 50);
