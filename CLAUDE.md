@@ -954,6 +954,166 @@ Container **anderer** Seiten fehlen naturgemäß.
 **Beim Prüfen mit `curl` daran denken:** Die REST-Schnittstelle verlangt zur
 Cookie-Anmeldung zusätzlich `X-WP-Nonce`; ohne den gilt die Anfrage als anonym.
 
+## LaTeX-Formeln: Renderpfad und Wiederholrendern (seit 3.1.88)
+
+Formeln laufen durch zwei Filter, aber registriert wird beides an **einer**
+Stelle: dem Konstruktor von `CBD_LaTeX_Parser`
+(`includes/class-latex-parser.php`).
+
+| Filter | Priorität | Sieht |
+|---|---|---|
+| `render_block` | 5 | jeden einzelnen Block samt Blockname — läuft **vor** `do_blocks()` (Kern-Priorität 9) |
+| `the_content` | 11 | den fertigen Beitragsinhalt — läuft **nach** `do_blocks()`, `wpautop()` und `wptexturize()` (Kern-Priorität 9/10) |
+
+### Priorität 11 ist ein Sicherheitsnetz, kein zweiter gleichwertiger Weg
+
+WordPress schickt auch Freiform-Inhalt (klassischer Editor, kein Blockmarkup —
+`blockName === null`) durch `render_block`. Der Filter auf Priorität 5 sieht
+also praktisch **jeden** Inhalt und erledigt die Arbeit in aller Regel
+vollständig, bevor `the_content` überhaupt läuft. Der Filter auf Priorität 11
+greift damit fast nie produktiv — er fängt nur den schmalen Rest ab, den
+Priorität 5 aus gutem Grund ausgelassen hat (siehe nächster Abschnitt).
+
+**Der Doppelparse-Schutz ist seitenweit, nicht je Formel.** `parse_latex()`
+prüft einmal, ob der übergebene Text bereits `cbd-latex-formula` enthält
+(`:306`), und gibt ihn dann unverändert zurück — für den **ganzen** Text, nicht
+nur für die eine Formel, die den Treffer ausgelöst hat. Auf `render_block`
+(Priorität 5) betrifft das jeweils nur den einen Block. Auf `the_content`
+(Priorität 11) ist der übergebene Text der **gesamte** Beitragsinhalt: Hat
+irgendein Block auf der Seite bereits eine Formel über `render_block`
+gerendert, enthält der Gesamttext `cbd-latex-formula`, und der komplette
+`the_content`-Durchlauf entfällt — auch für Formeln in Blöcken, die auf
+Priorität 5 übersprungen wurden. Das ist Absicht, siehe nächster Abschnitt.
+
+### LaTeX im „Individuellen HTML"-Block: bewusst nicht immer gesetzt
+
+Seit AP-1.fix2 überspringt `parse_latex_in_blocks()` die Blocktypen in
+`CBD_LaTeX_Parser::KEIN_LATEX_BLOCK` (`core/html`, `core/code`,
+`core/preformatted`, `core/freeform`) vollständig — dort sind `\(` und `\[`
+gewöhnliche Zeichen, die in JavaScript-Regexen wie `/\(([^)]+)\)/g`
+alltäglich vorkommen. Ohne diese Ausnahme hätte der Parser seit den in
+AP-1.1 ergänzten Delimitern `\(…\)`/`\[…\]` jedes Skript in einem
+„Individuelles HTML"-Block beim Rendern still zerstört.
+
+Der `the_content`-Filter (Priorität 11) holt Formeln in einem solchen Block
+**normalerweise** nach — er kennt keine Blocktypen, nur den fertigen Text.
+**Außer** wenn auf derselben Seite bereits eine andere Formel über
+`render_block` gerendert wurde: Dann greift der oben beschriebene
+seitenweite Doppelparse-Schutz, und der komplette `the_content`-Durchlauf
+entfällt, die Formel im HTML-Block bleibt Rohtext. Das ist ein bewusster
+Tausch: **heile Skripte wiegen schwerer** als eine in jedem Fall gerenderte
+Formel innerhalb eines HTML-Blocks. Eine zweite Schutzebene fängt den Fall
+ab, dass ein `<script>`, `<pre>` oder `<code>` **nicht** in einem eigenen
+HTML-Block steht, sondern mitten in einem gewöhnlichen Absatz oder in einem
+Container-Block: `mask_protected_regions()` nimmt diese Bereiche vor allen
+Delimiter-Mustern per Platzhalter aus dem Text, `restore_placeholders()`
+tauscht sie am Ende zurück — **dieselbe** Platzhalter-Mechanik, die auch für
+`$$…$$` und die übrigen Display-Formeln verwendet wird (kein zweiter,
+separater Mechanismus).
+
+### `normalize_formula_text()`: Die Reihenfolge ist zwingend
+
+Weil `the_content` erst nach `wpautop()`/`wptexturize()` läuft, hat WordPress
+den Formeltext zu diesem Zeitpunkt bereits angefasst — weiche Zeilenumbrüche
+wurden zu `<br />`, gerade Anführungszeichen zu typografischen Entities. Drei
+Schritte in **dieser** Reihenfolge machen das rückgängig:
+
+1. `<br />` entfernen (wpautop)
+2. die wptexturize-Ersetzungstabelle zurückdrehen (`&#8217;` → `'` usw.)
+3. `html_entity_decode()` (alle übrigen Entities, u. a. `&amp;` → `&`, `&eacute;` → `é`)
+
+**Vertauscht man Schritt 2 und 3, bricht die Ableitungsschreibweise:**
+`html_entity_decode()` zuerst würde aus `&#8217;` bereits ein echtes
+Anführungszeichen machen (`f’(x)`, U+2019) — die anschließende Tabelle sucht
+aber nach der Entity-Schreibweise `&#8217;` und findet sie nicht mehr. KaTeX
+bekäme also `f’(x)` mit dem typografischen Zeichen statt der Ableitung
+`f'(x)`. Schritt 1 muss ebenfalls vor Schritt 3 laufen: Ein maskiertes
+`&lt;br /&gt;` (jemand will das Tag als Text zeigen) würde durch ein vorab
+ausgeführtes `html_entity_decode()` zu einem echten `<br />`, das dann fälschlich
+von Schritt 1 entfernt würde.
+
+### `window.cbdRenderLatex(root)` — die Zusage an andere Skripte
+
+`assets/js/latex-renderer.js` stellt eine öffentliche Funktion bereit, gegen
+die auch andere Plugins programmieren dürfen:
+
+| Eigenschaft | Festlegung |
+|---|---|
+| Aufruf | `window.cbdRenderLatex(root)` |
+| Parameter `root` | `Element` oder `Document`. Optional, Vorgabe `document`. |
+| Wirkung | Rendert alle `.cbd-latex-formula` innerhalb von `root`, die **kein** Attribut `data-cbd-latex-rendered="1"` tragen (bereits fehlgeschlagene tragen `data-cbd-latex-failed="1"` und werden nicht erneut versucht). Nach erfolgreichem Rendern wird `data-cbd-latex-rendered="1"` gesetzt. |
+| Rückgabe | `Promise<number>` — Anzahl **neu** gerenderter Formeln. Löst erst auf, **nachdem** `document.fonts.ready` erfüllt ist, damit der Aufrufer danach zuverlässig Höhen messen kann. |
+| KaTeX fehlt | Liefert `Promise.resolve(0)`, wirft **nicht**. |
+| Verfügbarkeit | Existiert, sobald `latex-renderer.js` geladen ist (an KaTeX gekoppelt eingebunden). Aufrufer aus anderen Plugins müssen `typeof window.cbdRenderLatex === 'function'` prüfen — das CDB-Plugin kann abgeschaltet sein. |
+
+Intern ruft `renderAllFormulas()` (Fallback bei `DOMContentLoaded`), ein
+sofort beim Laden der Datei gestarteter `MutationObserver` (reagiert nur auf
+**hinzugefügte** Knoten) und ein entprellter `resize`-Listener (150 ms)
+dieselbe Funktion auf. Grund für den `resize`-Listener: Das Accordion in
+„Eigene WP Blocks" feuert beim Aufklappen ein `resize`-Ereignis als
+generisches „bitte neu vermessen"-Signal — damit greift der Fall auch dann,
+wenn ein Aufrufer die Funktion nicht direkt nutzt.
+
+### Warum Display-Formeln ein `<span>` sind, kein `<div>`
+
+`render_display_formula()` gibt `<span class="cbd-latex-formula
+cbd-latex-display">` aus, nie ein `<div>`. Grund: Ein `<div>` innerhalb eines
+`<p>` zwingt den HTML-Parser des Browsers, den Absatz aufzuspalten — dabei
+entstehen nackte Textknoten neben dem Absatz. Blöcke, die ihren Inhalt anhand
+von `children` umsortieren (nicht `childNodes`), verlieren diese Textknoten
+komplett; sie bleiben sichtbar außerhalb jeder Struktur stehen. Genau das
+passierte im Accordion-Block, bevor AP-1.2 `buildRows()` auf `childNodes`
+umgestellt hat. Die Blockdarstellung (zentriert, eigene Zeile) liefert
+`display: block` in `latex-formulas.css` (`.cbd-latex-formula.cbd-latex-display`)
+— das greift für ein `<span>` genauso wie für ein `<div>`, ohne dessen
+Nebenwirkung auf den Absatz.
+
+### Dritte Stelle, an der die beiden Plugins zusammenwirken
+
+Neben dem Accordion-Import (Abschnitt „Content-Importer") und der
+Klassen-Freigabe (Abschnitt „Klassen-Durchlass für gesperrte Seiten") ist
+`window.cbdRenderLatex` die **dritte** Stelle, an der CDB-Designer und
+„Eigene WP Blocks" über eine Schnittstelle zusammenwirken. Anders als bei der
+Klassen-Freigabe ist diese Naht **einseitig optional**: `blocks/accordion/view.js`
+prüft vor jedem Aufruf `typeof window.cbdRenderLatex === 'function'` und
+verhält sich ohne die Funktion wie zuvor — das CDB-Plugin kann fehlen oder
+abgeschaltet sein, ohne dass das Accordion bricht. Näheres zur
+Accordion-Seite dieser Naht steht in `Plugins/Eigene WP Blocks/CLAUDE.md`.
+
+### Offener Punkt: `stableId`-Extraktion existiert dreifach
+
+Die Extraktion der `stableId` aus einem Eintrag von `parse_blocks()` bzw. aus
+gespeichertem Markup steht an **drei** Stellen in **drei** unterschiedlichen
+Fassungen:
+
+| Datei | Methode | Technik |
+|---|---|---|
+| `includes/class-cbd-block-registration.php` | `render_block()` (Rückfall-Zweig, `:902`) | regulärer Ausdruck `/data-stable-id="([^"]+)"/` |
+| `includes/class-cbd-classroom-gate.php` | `block_erlaubt()` (`:281`) | derselbe reguläre Ausdruck, ein zweites Mal geschrieben |
+| `includes/class-cbd-blocks-rest-api.php` | `extract_stable_id()` (`:210-212`) | `WP_HTML_Tag_Processor` |
+
+**Es gibt dafür keinen Duplikatswächter.** Der Prüfharnisch
+`tools/test-classroom-gate.php` weist zwar nach, dass die Suffix-Regel `:pN`
+(für mehrseitige Tafelbilder, `<stableId>:pN`) nur **einmal** im Code steht —
+aber diese Zusicherung liest ausschließlich `class-cbd-classroom.php` und
+prüft nur die Suffix-Regel, nicht die `data-stable-id`-Extraktion selbst und
+nicht die beiden anderen Dateien. Driften die drei Fassungen auseinander
+(z. B. weil eine künftige Änderung nur an einer Stelle nachgezogen wird),
+bemerkt das kein Test. Vorschlag für ein künftiges AP: die Extraktion einmal
+zentral ablegen (etwa als statische Methode auf `CBD_Classroom_Gate` oder in
+einer eigenen Hilfsklasse) und die beiden anderen Stellen darauf umstellen.
+
+### Prüfharnisch
+
+`php tools/test-latex-parser.php` — 113 Prüfungen ohne WordPress (Stand nach
+AP-1.fix2; ursprünglich 78, TDD-Runde für die Code-Block-Ausnahme und die
+Entity-Auflösung kam mit 35 neuen Fällen dazu). Geprüft werden die
+Filterprioritäten, alle fünf Delimiter, `<span>` statt `<div>`, der
+Doppelparse-Schutz, das Lade-Gate `should_load_katex()`, die Folgen der
+`the_content`-Priorität 11 (Spuren von `wpautop`/`wptexturize` in der Formel)
+sowie — seit AP-1.fix2 — die Code-Block-Ausnahme und die
+Entity-Auflösung.
+
 ## Debugging-Konventionen
 
 - **PHP:** Informations-Logs laufen über klasseneigene `debug_log()`-Helper
@@ -1004,7 +1164,7 @@ Cookie-Anmeldung zusätzlich `X-WP-Nonce`; ohne den gilt die Anfrage als anonym.
 
 4. **PHP 8 Compatibility:** Compatibility layer in `includes/php8-wordpress-compatibility.php`
 
-5. **LaTeX Parser Integration:** LaTeX formulas parsed in `CBD_Block_Registration::render_block()` at line 850-853 via `CBD_LaTeX_Parser::parse_latex()`
+5. **LaTeX Parser Integration:** ~~LaTeX formulas parsed in `CBD_Block_Registration::render_block()` at line 850-853~~ — **überholt seit 3.1.88.** Das Parsen läuft nicht mehr im Block-Renderer, sondern global über zwei Filter, die `CBD_LaTeX_Parser` in seinem Konstruktor registriert: `render_block` (Priorität 5) für jeden Block und `the_content` (Priorität 11) als Sicherheitsnetz. `class-cbd-block-registration.php` sagt das an der alten Fundstelle inzwischen selbst („LaTeX parsing is now handled globally via render_block filter"). Vollständige Beschreibung im Abschnitt **„LaTeX-Formeln: Renderpfad und Wiederholrendern"**.
 
 ## Database Migrations
 

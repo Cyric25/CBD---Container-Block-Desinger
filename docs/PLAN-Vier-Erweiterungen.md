@@ -1336,6 +1336,261 @@ KEINE Datei verändern.
 
 ---
 
+### AP-1.fix2: Parser schont Code-Blöcke und löst Entities auf
+
+**Status:** ☐ offen
+**Umfang:** M
+**Modell:** opus
+**Abhängigkeiten:** AP-1.rev
+
+**Ziel & Kontext:**
+Das Review AP-1.rev hat zwei mittlere Befunde ergeben, beide in
+`Plugins/CDB-Designer/includes/class-latex-parser.php`. **Beide wurden vom
+Orchestrator unabhängig nachgemessen und bestätigt.**
+
+**M1 — die neuen Delimiter zerstören JavaScript. Das ist eine Regression aus
+diesem Plan** (AP-1.1, Schritt 8: „Delimiter `\(…\)` und `\[…\]` ergänzen").
+`parse_latex_in_blocks()` hängt am Filter `render_block` und hat **keinen**
+Blocknamen-Filter — es verarbeitet jeden Block, auch `core/html`,
+`core/code` und `core/preformatted`. Gemessene Wirkung:
+
+```
+Eingabe : var muster = /\(([^)]+)\)/g;
+Ausgabe : var muster = /<span class="cbd-latex-formula cbd-latex-inline"
+          data-latex="([^)]+)">…</span>/g;
+```
+
+Das Skript ist danach kaputt. `\(` und `\[` sind in JavaScript-Regexen
+alltäglich, und Skripte in Blockinhalten sind im Projekt ein gelebtes Muster
+— dafür existiert eigens `CBD_Block_Registration::isolate_inline_scripts()`.
+**Jede bestehende Seite mit einem solchen HTML-Block wird beim Rendern still
+beschädigt.**
+
+**M2 — HTML-Entities erreichen KaTeX unaufgelöst.** Der Editor speichert `&`
+in Absätzen immer als `&amp;`. Gemessen:
+
+```
+Eingabe : Bedingung $a &lt; b$ gilt.
+data-latex="a &amp;lt; b"     ← KaTeX bekommt die Entity, nicht das Zeichen
+```
+
+Damit sind `\begin{aligned}…&=…\end{aligned}`, `array`, `matrix` und jeder
+Vergleich `a < b` in Formeln unbenutzbar. Das ist **Altbestand**, nicht von
+diesem Plan verursacht — aber `normalize_formula_text()` (in AP-1.1 neu
+angelegt) ist jetzt genau die richtige Stelle dafür.
+
+**Betroffene Dateien:**
+- `Plugins/CDB-Designer/includes/class-latex-parser.php` (ändern)
+- `Plugins/CDB-Designer/tools/test-latex-parser.php` (ändern — Testfälle ergänzen)
+
+**Vorgehen:**
+
+Dieses AP wird **nach TDD** umgesetzt: erst die Testfälle, rot bestätigen,
+dann implementieren.
+
+1. **Testfälle zuerst** in `tools/test-latex-parser.php` ergänzen, in einer
+   neuen Gruppe „Code-Blöcke und Entities":
+   - `var muster = /\(([^)]+)\)/g;` → Ausgabe **unverändert**, kein
+     `cbd-latex-formula`
+   - `var m = /\[[a-z]+\]/i;` → Ausgabe **unverändert**
+   - Ein `<script>`-Abschnitt mit `\(`-Regex innerhalb von Fließtext, der
+     daneben eine **echte** Formel enthält → Formel wird gesetzt, Skript
+     bleibt unangetastet
+   - `<code>\(x\)</code>` und `<pre>\[y\]</pre>` → unverändert
+   - `$a &amp;lt; b$` → `data-latex` enthält `a < b`, **kein** `&`
+   - `$x &amp;amp; y$` → `data-latex` enthält `x & y`
+   - `$\text{caf&amp;eacute;}$` → Entity aufgelöst
+   - Gegenprobe: eine echte Formel ohne Entities bleibt unverändert
+   Tests laufen lassen, **Fehlschlag bestätigen**, roten Stand committen —
+   den Commit macht der Orchestrator, melde ihm den roten Stand.
+2. **M1 lösen.** Zwei Ebenen, beide nötig:
+   - In `parse_latex_in_blocks()` die Blocktypen `core/html`, `core/code`,
+     `core/preformatted` und `core/freeform` **überspringen**. Der Blockname
+     steht im zweiten Parameter des `render_block`-Filters
+     (`$block['blockName']`).
+   - In `parse_latex()` zusätzlich `<script>…</script>`, `<pre>…</pre>` und
+     `<code>…</code>` **vor** den Delimiter-Regexen per Platzhalter
+     maskieren und danach zurücktauschen. **Die Platzhalter-Mechanik
+     existiert bereits** — `parse_latex()` nutzt sie für `$$…$$` (siehe die
+     `___CBD_DISPLAY_FORMULA_n___`-Marken). Baue keine zweite Fassung, nutze
+     dasselbe Muster.
+   Die zweite Ebene ist nötig, weil ein Skript auch in einem gewöhnlichen
+   Absatz oder in einem Container-Block stehen kann.
+3. **M2 lösen.** In `normalize_formula_text()` nach dem Entfernen der
+   `<br />` ein `html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8')`
+   ergänzen. **Reihenfolge beachten:** erst `<br>` entfernen, dann
+   dekodieren — sonst könnte ein `&lt;br /&gt;` zu einem echten Tag werden,
+   der dann stehen bleibt.
+4. `php tools/check-php74.php` grün bekommen. **`html_entity_decode` mit
+   `ENT_HTML5` gibt es seit PHP 5.4** — unkritisch für 7.4.
+5. Alle Prüfharnische erneut laufen lassen, insbesondere
+   `php tools/test-latex-parser.php`.
+
+**Akzeptanzkriterien:**
+- [ ] `php tools/test-latex-parser.php` läuft grün, mit den neuen Testfällen.
+- [ ] Der Commit-Verlauf zeigt erst die roten Tests, dann die Implementierung.
+- [ ] Ein `core/html`-Block mit `/\(([^)]+)\)/g` bleibt **zeichengleich**.
+- [ ] Ein `<script>`-Abschnitt in einem gewöhnlichen Absatz bleibt
+      zeichengleich, während eine echte Formel daneben gesetzt wird.
+- [ ] `$a &amp;lt; b$` ergibt `data-latex` mit `a < b`.
+- [ ] Die Platzhalter-Mechanik wurde wiederverwendet, nicht dupliziert.
+- [ ] `php tools/check-php74.php` meldet keinen Fehler.
+- [ ] `reference_file_map.md` bei `class-latex-parser.php` nachgezogen.
+
+**Tests:**
+- Smoke: `php -l includes/class-latex-parser.php`.
+- Prüfschritt A: `php tools/test-latex-parser.php` — Ausgabe und Exitcode.
+- Prüfschritt B (Regression): `php tools/test-block-serializer.php` und
+  `php tools/test-classroom-gate.php` müssen weiterhin bestehen.
+- Prüfschritt C: Auf dem Testserver (`http://fos.localhost:8080/`) eine Seite
+  mit einem „Individuelles HTML"-Block anlegen, der
+  `<script>var m = /\(([^)]+)\)/g; console.log(m);</script>` enthält, und im
+  ausgelieferten HTML nachweisen, dass der Regex unverändert ankommt.
+  **Achtung:** Die Plugins liegen dort als Kopie — geänderte Datei vorher
+  dorthin kopieren.
+- Log-Check: `debug.log` ohne neue Einträge.
+
+**Übergabenotiz:**
+
+---
+
+### AP-1.fix3: Abbruch-Icon und Dev-Reste im Verteilungspaket
+
+**Status:** ☐ offen
+**Umfang:** S
+**Modell:** sonnet
+**Abhängigkeiten:** AP-1.rev
+
+**Ziel & Kontext:**
+Zwei geringe Befunde aus AP-1.rev, beide im CDB-Designer.
+
+**G3 — ein bewusster Abbruch sieht aus wie ein Fehler.** Bricht der Nutzer
+den Web-Share-Dialog ab, wirft der Browser einen `AbortError`. Der landet
+seit AP-1.4 im Haupt-`catch` von `actions.createScreenshot`, und der zeigt
+jetzt ein Warn-Icon plus `console.error`. **Vor AP-1.4 war das nicht
+erreichbar**, weil der Rumpf von `tryWebShare` wegen des Generator-Fehlers
+nie lief — der Befund ist also eine Folge der Reparatur.
+
+**G8 — Dev-Reste im Verteilungspaket.** Das ZIP enthält
+`vendor/bin/phpunit.bat` und `vendor/mpdf/mpdf/phpunit.xml`. Der Autoloader
+ist nachweislich sauber (0 phpunit-Treffer in `autoload_static.php`), die
+Dateien sind also unschädlich — sie gehören trotzdem nicht in ein
+Produktivpaket.
+
+**Betroffene Dateien:**
+- `Plugins/CDB-Designer/assets/js/interactivity-store.js` (ändern)
+- `Plugins/CDB-Designer/assets/js/interactivity-fallback.js` (ändern)
+- `Plugins/CDB-Designer/create-plugin-zip.js` (ändern)
+
+**Vorgehen:**
+1. **G3:** Im Haupt-`catch` von `actions.createScreenshot` den Fehlernamen
+   prüfen. Ist es ein `AbortError` (`error && error.name === 'AbortError'`),
+   das Icon **stillschweigend** auf das Ausgangs-Icon zurückstellen, kein
+   Warn-Icon, kein `console.error`. Alle übrigen Fehler unverändert
+   behandeln. Dieselbe Behandlung in `interactivity-fallback.js` — dort gibt
+   es bereits ein `resetButton()` für genau diesen Fall, prüfe, ob es
+   ausreicht, und halte beide Dateien inhaltlich gleich.
+2. **G8:** In `create-plugin-zip.js` das Verzeichnis `vendor/bin/` von der
+   Aufnahme ausschließen. **Die Autoloader-Behandlung nicht anfassen** —
+   `composer dump-autoload --no-dev --optimize` vor dem Packen und das
+   Wiederherstellen danach bleiben unverändert; ohne sie ergibt das ZIP
+   HTTP 500 auf der Zielinstallation.
+   `vendor/mpdf/mpdf/phpunit.xml` liegt innerhalb eines Paketverzeichnisses;
+   schließe es nur aus, wenn das ohne Nebenwirkung möglich ist — sonst in
+   der Übergabenotiz vermerken.
+3. **Keine Versionsnummer erhöhen** (Regel 23) und **kein ZIP bauen** — das
+   ZIP entsteht in AP-2.7 neu. Prüfe die Änderung an
+   `create-plugin-zip.js` durch Lesen, nicht durch einen Bau.
+
+**Akzeptanzkriterien:**
+- [ ] `AbortError` führt zu stillschweigender Rückstellung ohne Warn-Icon.
+- [ ] Jeder andere Fehler zeigt weiterhin das Warn-Icon mit 3-s-Rückstellung.
+- [ ] Beide JS-Dateien verhalten sich gleich.
+- [ ] `node --check` läuft für beide Dateien fehlerfrei
+      (`interactivity-store.js` ist ESM).
+- [ ] `create-plugin-zip.js` schließt `vendor/bin/` aus; die
+      Autoloader-Schritte sind unverändert.
+- [ ] Keine Versionsnummer geändert.
+
+**Tests:**
+- `node --check assets/js/interactivity-fallback.js` und
+  `node --input-type=module --check < assets/js/interactivity-store.js`.
+- `node --check create-plugin-zip.js`.
+- Beleg per Textsuche, dass `AbortError` in beiden JS-Dateien behandelt wird.
+- Beleg per Textsuche, dass die Zeile mit `composer dump-autoload` in
+  `create-plugin-zip.js` unverändert ist.
+
+**Übergabenotiz:**
+
+---
+
+### AP-1.fix4: Ausnahme auf die Nachbarregeln ziehen
+
+**Status:** ☐ offen
+**Umfang:** S
+**Modell:** sonnet
+**Abhängigkeiten:** AP-1.rev
+
+**Ziel & Kontext:**
+Befund G5 aus AP-1.rev. AP-1.fix1 hat in
+`Plugins/Eigene WP Blocks/assets/css/blocks.css` den Selektor
+`[class*="wp-block-modular-blocks"] [class*="content"]` um
+`:not([class*="cbd-"])` ergänzt, damit das Plugin nicht in fremde Plugins
+hineinfärbt.
+
+**Zwei Nachbarregeln haben dieselbe Schwäche und blieben ungeschützt:**
+
+- `[class*="wp-block-modular-blocks"] [class*="title"]` setzt ebenfalls
+  `color: var(--modular-blocks-text)` — **eine Farbe, also derselbe
+  Fehlertyp.** Ohne den entfernten Dunkelmodus heute unauffällig, aber die
+  Regel greift weiterhin in fremde Elemente.
+- `[class*="content"] p` und `[class*="content"] p:last-child` setzen nur
+  `margin`, sind also harmlos — der Einheitlichkeit halber trotzdem
+  mitziehen.
+
+Das Review hat außerdem geprüft und bestätigt: **Keine der eigenen
+`content`-Klassen enthält „cbd"** (`draggable-content`, `feedback-content`,
+`info-content`, `item-content`, `mb-accordion__content`, `popup-content`,
+`results-content`, `text-content`, `tip-content`, `zone-content` …). Die
+Ausnahme schließt also kein eigenes Element aus. Prüfe dasselbe für die
+`title`-Klassen, bevor du die Ausnahme dort ergänzt.
+
+**Betroffene Dateien:**
+- `Plugins/Eigene WP Blocks/assets/css/blocks.css` (ändern)
+
+**Vorgehen:**
+1. Alle Klassennamen mit „title" in `blocks/*/render.php` und
+   `blocks/*/view.js` ermitteln und prüfen, dass keiner „cbd" enthält.
+   Trifft das nicht zu, die Ausnahme dort **nicht** setzen und den Grund
+   vermerken.
+2. `:not([class*="cbd-"])` in derselben Form auf die drei Regeln ziehen:
+   `[class*="title"]`, `[class*="content"] p`, `[class*="content"] p:last-child`.
+3. Den vorhandenen Kommentar über der bereits reparierten Regel um einen
+   Satz ergänzen, dass die Nachbarregeln aus demselben Grund geschützt sind.
+4. **Kein Build nötig** — `assets/css/blocks.css` wird direkt eingebunden.
+5. Datei nach
+   `C:\allinkl-testserver\www\htdocs\w0000001\fos\wp-content\plugins\modular-blocks-plugin\assets\css\blocks.css`
+   kopieren, damit der Testserver den neuen Stand hat.
+
+**Akzeptanzkriterien:**
+- [ ] Die drei Regeln tragen `:not([class*="cbd-"])`.
+- [ ] Nachgewiesen, dass keine eigene `title`-Klasse „cbd" enthält.
+- [ ] `postcss.parse()` über die Datei läuft fehlerfrei (postcss liegt in
+      `node_modules` dieses Repositories).
+- [ ] Nachweis mit jsdom, dass `.mb-accordion__content` und die übrigen
+      eigenen Klassen weiterhin getroffen werden.
+- [ ] Datei auf den Testserver kopiert.
+- [ ] `reference_file_map.md` bei `assets/css/blocks.css` nachgezogen.
+
+**Tests:**
+- `node -e "require('postcss').parse(require('fs').readFileSync('assets/css/blocks.css','utf8'))"` läuft ohne Wurf.
+- jsdom-Prüfung: eigene Klassen werden getroffen, `cbd-`-Klassen nicht.
+- Die ausgelieferte Datei per `curl` gegenprüfen.
+
+**Übergabenotiz:**
+
+---
+
 ### AP-1.doc: Dokumentation Phase 1
 
 **Status:** ☐ offen
@@ -2739,7 +2994,12 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.4 | Screenshot liefert wieder eine Datei | sonnet | ☑ | – | Commit `aa98770`. `yield*` gesetzt, `interactivity-fallback.js` nachgezogen (dort fehlten Canvas-Deckel und `backgroundColor` ganz). Browserprüfungen an AP-1.5 verwiesen |
 | AP-1.5 | Abnahme Phase 1 auf dem Testserver | ~~sonnet~~ **opus** | ☑ (maschinell) | AP-1.0–AP-1.4 | Version 3.1.87 → **3.1.88**, ZIP gebaut, Autoloader `--no-dev` verifiziert. **Modellwahl vom Orchestrator auf opus geändert** — die Abnahme muss Testinhalte selbst anlegen und gerendertes HTML beurteilen, das ist Urteils- statt Musterarbeit. **Der maschinelle Teil ist vollständig grün; die Browserhälfte steht als Klickliste U1–U11 beim Nutzer aus.** Drei Befunde, siehe unten |
 | AP-1.fix1 | Weiße Schrift im Dunkelmodus abstellen | opus | ☑ (Browserprüfung offen) | AP-1.5 | Commit `b854060` im Repo „Eigene WP Blocks", gepusht. **Altbestandsfehler, nicht von diesem Plan verursacht** — aus der Abnahme aufgedeckt. **Vom Orchestrator selbst umgesetzt**, weil zwei Agentenanläufe am Sitzungslimit scheiterten und die Diagnose bereits vollständig vorlag |
-| AP-1.rev | Unabhängiges Review Phase 1 | opus | ☐ | AP-1.0–AP-1.5, AP-1.fix1 | nur lesend |
+| AP-1.rev | Unabhängiges Review Phase 1 | opus | ☑ | AP-1.0–AP-1.5, AP-1.fix1 | Alle sieben APs bestanden, Phasen-Endzustand erreicht, Scope sauber, keine Datei verändert. **Keine kritischen Befunde, aber zwei mittlere:** M1 (`\(…\)`/`\[…\]` zerstören JS-Regexe in HTML-Blöcken — **Regression aus der Planvorgabe von AP-1.1, Schritt 8**) und M2 (HTML-Entities in Formeln nicht aufgelöst, Altbestand). **Beide vom Orchestrator unabhängig nachgemessen und bestätigt.** Dazu acht geringe Befunde |
+| AP-1.fix2 | M1 + M2: Parser schont Code-Blöcke, löst Entities auf | opus | ☑ | AP-1.rev | Commit `70604a4`. **TDD-Nachweis: 29 von 113 Prüfungen vor der Implementierung rot**, danach 113/0. Zwei Ebenen (Blocknamen-Filter mit striktem Vergleich, damit `blockName === null` durchläuft; plus Maskierung von `script`/`pre`/`code`). Schloss nebenbei ein bestehendes Loch: Der Platzhalter-Rücktausch fehlte im `catch`-Zweig. Vom Orchestrator mit eigenem Skript gegengeprüft |
+| AP-1.fix3 | G3 + G8: Abbruch-Icon und Dev-Reste im ZIP | sonnet | ☑ | AP-1.rev | Commit `40994f5`. `interactivity-fallback.js` brauchte **keine** Änderung — dort fängt `resetButton()` den `AbortError` bereits ab; der Agent hat nachgesehen statt blind anzugleichen. `vendor/bin/` pfadgenau ausgeschlossen, nicht per Segmentname |
+| AP-1.fix4 | G5: Ausnahme auf die Nachbarregeln ziehen | sonnet | ☑ | AP-1.rev | Commit `a2737ff` („Eigene WP Blocks"), gepusht. 37 jsdom-Zusicherungen gegen die **per postcss aus der Datei extrahierten** Selektoren. Nebenbefund: jsdom löst `var()` in `getComputedStyle()` grundsätzlich nicht auf |
+| AP-1.rev2 | Kurz-Review der drei Korrekturen | opus | ☐ | AP-1.fix2–AP-1.fix4 | nur lesend; prüft, ob die Korrekturen selbst neue Befunde erzeugt haben. **1. Anlauf 2026-08-16 am Sitzungslimit abgebrochen**, keine Änderung hinterlassen (Review arbeitet ohnehin nur lesend). **Muss vor dem Merge nach `main` nachgeholt werden** |
+| AP-1.doc | Dokumentation Phase 1 | sonnet | ☑ | AP-1.rev | Der Agent schrieb den neuen Abschnitt „LaTeX-Formeln: Renderpfad und Wiederholrendern" in `CDB-Designer/CLAUDE.md` (160 Zeilen, neun Unterabschnitte, null Löschungen), bevor ihn das Sitzungslimit traf. **Den Rest hat der Orchestrator selbst fertiggestellt:** veraltete Aussage zu Zeile 850-853 korrigiert, beide Datei-Maps nachgezogen, Accordion-Abschnitt in `Eigene WP Blocks/CLAUDE.md` neu angelegt (er fehlte dort vollständig), Eintrag in `DOKUMENTATION.md` |
 | AP-1.doc | Dokumentation Phase 1 | sonnet | ☐ | AP-1.rev | Merge in `main` |
 | AP-2.1 | Datenmodell und Sanitizer Icon-Position | sonnet | ☐ | – | TDD; parallel zu 2.4, 2.6 |
 | AP-2.2 | Icon-Position im Frontend rendern | opus | ☐ | AP-2.1 | parallel zu 2.3, 2.5 |
