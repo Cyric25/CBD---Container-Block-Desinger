@@ -110,7 +110,11 @@
 	scroll-margin-top: 100px; /* Offset for fixed headers */
 }
 
-/* Ensure referenced blocks have smooth scroll margin */
-[id] {
+/* Ensure referenced blocks have smooth scroll margin.
+   BEWUSST auf die Container-Klassen eingegrenzt: Die frühere Regel `[id]`
+   galt für JEDES Element mit id auf der ganzen Seite — auch für fremde
+   Blöcke und Theme-Elemente. */
+.cbd-container,
+.cbd-container-block {
 	scroll-margin-top: 80px;
 }

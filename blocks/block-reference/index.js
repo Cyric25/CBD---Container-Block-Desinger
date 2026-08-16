@@ -1,159 +1,373 @@
-import { registerBlockType } from '@wordpress/blocks';
-import { useBlockProps, InspectorControls } from '@wordpress/block-editor';
-import { PanelBody, SelectControl, TextControl, ToggleControl, Placeholder, Spinner } from '@wordpress/components';
-import { useState, useEffect } from '@wordpress/element';
-import apiFetch from '@wordpress/api-fetch';
-import { __ } from '@wordpress/i18n';
+/**
+ * Container Block Designer - Block "Block-Referenz" (Editor)
+ *
+ * KEIN BUILD-SCHRITT: Diese Datei wird unveraendert an den Browser
+ * ausgeliefert. Deshalb kein JSX und keine ES-Module-Syntax - der Zugriff
+ * laeuft ausschliesslich ueber die wp.*-Globale, Elemente entstehen ueber
+ * wp.element.createElement (hier als `el`). Vorbild: assets/js/block-editor.js
+ *
+ * Die Abhaengigkeiten (wp-blocks, wp-element, wp-block-editor, wp-components,
+ * wp-i18n, wp-api-fetch) meldet CBD_Block_Reference::register_editor_script()
+ * an; block.json verweist nur noch auf das Handle.
+ */
+(function (wp) {
+	'use strict';
 
-registerBlockType('cbd/block-reference', {
-	edit: ({ attributes, setAttributes }) => {
-		const { targetBlockId, targetPostId, targetBlockTitle, targetPostTitle, linkText, showIcon } = attributes;
-		const [cbdBlocks, setCbdBlocks] = useState([]);
-		const [loading, setLoading] = useState(true);
+	if (!wp || !wp.blocks || !wp.element || !wp.blockEditor || !wp.components) {
+		return;
+	}
 
-		const blockProps = useBlockProps({
-			className: 'cbd-block-reference-editor'
-		});
+	var el = wp.element.createElement;
+	var Fragment = wp.element.Fragment;
+	var useState = wp.element.useState;
+	var useEffect = wp.element.useEffect;
 
-		// Fetch all CBD blocks
-		useEffect(() => {
-			setLoading(true);
-			apiFetch({ path: '/cbd/v1/blocks' })
-				.then((blocks) => {
-					setCbdBlocks(blocks);
-					setLoading(false);
-				})
-				.catch((error) => {
-					console.error('Error fetching CBD blocks:', error);
-					setLoading(false);
-				});
+	var InspectorControls = wp.blockEditor.InspectorControls;
+	var useBlockProps = wp.blockEditor.useBlockProps;
+
+	var PanelBody = wp.components.PanelBody;
+	var SelectControl = wp.components.SelectControl;
+	var TextControl = wp.components.TextControl;
+	var ToggleControl = wp.components.ToggleControl;
+	var Placeholder = wp.components.Placeholder;
+	var Spinner = wp.components.Spinner;
+
+	var TEXTDOMAIN = 'container-block-designer';
+	var __ = (wp.i18n && wp.i18n.__) ? wp.i18n.__ : function (text) { return text; };
+	var sprintf = (wp.i18n && wp.i18n.sprintf) ? wp.i18n.sprintf : function (muster, wert) {
+		return String(muster).replace('%s', wert);
+	};
+
+	/**
+	 * Schluessel eines Listeneintrags fuer die Auswahlliste.
+	 *
+	 * Seiten-ID UND stableId, weil CBD_Block_Organizer::should_regenerate_id()
+	 * die stableId beim Kopieren NICHT neu vergibt - dieselbe Kennung kann
+	 * also auf zwei Seiten liegen.
+	 */
+	function schluessel(eintrag) {
+		if (!eintrag || !eintrag.stableId) {
+			return '';
+		}
+		return String(parseInt(eintrag.postId, 10) || 0) + '|' + String(eintrag.stableId);
+	}
+
+	function text(wert) {
+		return (wert === null || wert === undefined) ? '' : String(wert);
+	}
+
+	/**
+	 * Automatisch vorbelegter Link-Text zu einem Blocktitel.
+	 */
+	function autoLinkText(titel) {
+		return titel ? sprintf(__('Gehe zu: %s', TEXTDOMAIN), titel) : '';
+	}
+
+	function passtZurSuche(eintrag, begriff) {
+		if (!begriff) {
+			return true;
+		}
+		var heuhaufen = (text(eintrag.postTitle) + ' ' + text(eintrag.blockTitle)).toLowerCase();
+		var teile = begriff.toLowerCase().split(/\s+/);
+		for (var i = 0; i < teile.length; i++) {
+			if (teile[i] && heuhaufen.indexOf(teile[i]) === -1) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	function BlockReferenceEdit(props) {
+		var attributes = props.attributes || {};
+		var setAttributes = props.setAttributes;
+
+		var targetStableId = text(attributes.targetStableId);
+		var targetBlockId = text(attributes.targetBlockId);
+		var targetPostId = parseInt(attributes.targetPostId, 10) || 0;
+		var targetBlockTitle = text(attributes.targetBlockTitle);
+		var targetPostTitle = text(attributes.targetPostTitle);
+		var linkText = text(attributes.linkText);
+		var showIcon = attributes.showIcon !== false;
+
+		var blockState = useState([]);
+		var bloecke = blockState[0];
+		var setBloecke = blockState[1];
+
+		var ladeState = useState(true);
+		var laedt = ladeState[0];
+		var setLaedt = ladeState[1];
+
+		var fehlerState = useState('');
+		var fehler = fehlerState[0];
+		var setFehler = fehlerState[1];
+
+		var sucheState = useState('');
+		var suche = sucheState[0];
+		var setSuche = sucheState[1];
+
+		var blockProps = useBlockProps({ className: 'cbd-block-reference-editor' });
+
+		useEffect(function () {
+			var abgebrochen = false;
+
+			if (!wp.apiFetch) {
+				setLaedt(false);
+				setFehler(__('Die Blockliste konnte nicht geladen werden.', TEXTDOMAIN));
+				return undefined;
+			}
+
+			setLaedt(true);
+			wp.apiFetch({ path: '/cbd/v1/blocks' }).then(function (antwort) {
+				if (abgebrochen) {
+					return;
+				}
+				setBloecke(Array.isArray(antwort) ? antwort : []);
+				setLaedt(false);
+			}).catch(function (error) {
+				if (abgebrochen) {
+					return;
+				}
+				console.error('CBD Block-Referenz: Blockliste konnte nicht geladen werden.', error);
+				setFehler(__('Die Blockliste konnte nicht geladen werden.', TEXTDOMAIN));
+				setLaedt(false);
+			});
+
+			return function () {
+				abgebrochen = true;
+			};
 		}, []);
 
-		// Create options for SelectControl
-		const blockOptions = [
-			{ label: __('-- Block auswählen --', 'container-block-designer'), value: '' },
-			...cbdBlocks.map((block) => ({
-				label: `${block.postTitle} → ${block.blockTitle}`,
-				value: JSON.stringify({
-					blockId: block.blockId,
-					postId: block.postId,
-					blockTitle: block.blockTitle,
-					postTitle: block.postTitle
-				})
-			}))
-		];
+		var aktuellerWert = targetStableId
+			? (String(targetPostId) + '|' + targetStableId)
+			: '';
 
-		const handleBlockSelection = (value) => {
-			if (!value) {
-				setAttributes({
+		var treffer = [];
+		var aktuellerTrefferDabei = false;
+		for (var i = 0; i < bloecke.length; i++) {
+			var eintrag = bloecke[i];
+			if (!eintrag || !eintrag.stableId) {
+				continue;
+			}
+			if (!passtZurSuche(eintrag, suche.trim())) {
+				continue;
+			}
+			treffer.push(eintrag);
+			if (aktuellerWert && schluessel(eintrag) === aktuellerWert) {
+				aktuellerTrefferDabei = true;
+			}
+		}
+
+		var optionen = [{
+			label: __('-- Block auswaehlen --', TEXTDOMAIN),
+			value: ''
+		}];
+
+		// Die getroffene Auswahl bleibt in der Liste, auch wenn der Suchtext
+		// sie gerade herausfiltert - sonst zeigte das Auswahlfeld einen Wert
+		// an, den es nicht kennt, und verwuerfe ihn beim naechsten Rendern.
+		if (aktuellerWert && !aktuellerTrefferDabei) {
+			optionen.push({
+				label: (targetPostTitle || __('(unbekannte Seite)', TEXTDOMAIN))
+					+ ' → '
+					+ (targetBlockTitle || targetStableId),
+				value: aktuellerWert
+			});
+		}
+
+		for (var j = 0; j < treffer.length; j++) {
+			optionen.push({
+				label: (text(treffer[j].postTitle) || __('(ohne Titel)', TEXTDOMAIN))
+					+ ' → '
+					+ (text(treffer[j].blockTitle) || text(treffer[j].stableId)),
+				value: schluessel(treffer[j])
+			});
+		}
+
+		// Ein selbst geschriebener Link-Text bleibt erhalten; nur der
+		// automatisch vorbelegte wird beim Zielwechsel nachgezogen.
+		var linkTextIstAutomatisch = ('' === linkText) || (linkText === autoLinkText(targetBlockTitle));
+
+		function waehleZiel(wert) {
+			if (!wert) {
+				var leer = {
+					targetStableId: '',
+					targetAnchor: '',
 					targetBlockId: '',
 					targetPostId: 0,
 					targetBlockTitle: '',
-					targetPostTitle: '',
-					linkText: ''
-				});
+					targetPostTitle: ''
+				};
+				if (linkTextIstAutomatisch) {
+					leer.linkText = '';
+				}
+				setAttributes(leer);
 				return;
 			}
 
-			const data = JSON.parse(value);
-			setAttributes({
-				targetBlockId: data.blockId,
-				targetPostId: data.postId,
-				targetBlockTitle: data.blockTitle,
-				targetPostTitle: data.postTitle,
-				linkText: linkText || `Gehe zu: ${data.blockTitle}`
-			});
-		};
+			var gewaehlt = null;
+			for (var k = 0; k < bloecke.length; k++) {
+				if (schluessel(bloecke[k]) === wert) {
+					gewaehlt = bloecke[k];
+					break;
+				}
+			}
 
-		// Get current selected value
-		const selectedValue = targetBlockId ? JSON.stringify({
-			blockId: targetBlockId,
-			postId: targetPostId,
-			blockTitle: targetBlockTitle,
-			postTitle: targetPostTitle
-		}) : '';
+			if (!gewaehlt) {
+				return;
+			}
 
-		return (
-			<>
-				<InspectorControls>
-					<PanelBody title={__('Block-Referenz Einstellungen', 'container-block-designer')}>
-						<SelectControl
-							label={__('Ziel-Block', 'container-block-designer')}
-							value={selectedValue}
-							options={blockOptions}
-							onChange={handleBlockSelection}
-							help={__('Wähle einen Container-Block als Ziel aus', 'container-block-designer')}
-						/>
+			var neu = {
+				targetStableId: text(gewaehlt.stableId),
+				targetAnchor: text(gewaehlt.anchor),
+				targetBlockId: text(gewaehlt.blockId),
+				targetPostId: parseInt(gewaehlt.postId, 10) || 0,
+				targetBlockTitle: text(gewaehlt.blockTitle),
+				targetPostTitle: text(gewaehlt.postTitle)
+			};
 
-						{targetBlockId && (
-							<>
-								<TextControl
-									label={__('Link-Text', 'container-block-designer')}
-									value={linkText}
-									onChange={(value) => setAttributes({ linkText: value })}
-									help={__('Optionaler Text für den Link', 'container-block-designer')}
-								/>
+			if (linkTextIstAutomatisch) {
+				neu.linkText = autoLinkText(neu.targetBlockTitle);
+			}
 
-								<ToggleControl
-									label={__('Icon anzeigen', 'container-block-designer')}
-									checked={showIcon}
-									onChange={(value) => setAttributes({ showIcon: value })}
-								/>
-							</>
-						)}
-					</PanelBody>
-				</InspectorControls>
+			setAttributes(neu);
+		}
 
-				<div {...blockProps}>
-					{loading ? (
-						<Placeholder
-							icon="admin-links"
-							label={__('Block-Referenz', 'container-block-designer')}
-						>
-							<Spinner />
-							<p>{__('Lade Container-Blöcke...', 'container-block-designer')}</p>
-						</Placeholder>
-					) : !targetBlockId ? (
-						<Placeholder
-							icon="admin-links"
-							label={__('Block-Referenz', 'container-block-designer')}
-							instructions={__('Wähle einen Container-Block in den Einstellungen rechts aus.', 'container-block-designer')}
-						>
-							<p style={{ fontSize: '14px', color: '#666' }}>
-								{cbdBlocks.length > 0
-									? __(`${cbdBlocks.length} Container-Blöcke verfügbar`, 'container-block-designer')
-									: __('Keine Container-Blöcke gefunden', 'container-block-designer')}
-							</p>
-						</Placeholder>
-					) : (
-						<div className="cbd-block-reference-preview">
-							<div className="cbd-block-reference-preview-header">
-								<span className="dashicons dashicons-admin-links"></span>
-								<strong>{__('Block-Referenz:', 'container-block-designer')}</strong>
-							</div>
-							<div className="cbd-block-reference-preview-content">
-								<p className="cbd-block-reference-preview-post">
-									<strong>{__('Seite:', 'container-block-designer')}</strong> {targetPostTitle}
-								</p>
-								<p className="cbd-block-reference-preview-block">
-									<strong>{__('Block:', 'container-block-designer')}</strong> {targetBlockTitle}
-								</p>
-								{linkText && (
-									<div className="cbd-block-reference-preview-link">
-										{showIcon && <span className="dashicons dashicons-arrow-right-alt2"></span>}
-										<span>{linkText}</span>
-									</div>
-								)}
-							</div>
-						</div>
-					)}
-				</div>
-			</>
+		var hatZiel = !!(targetStableId || targetBlockId);
+
+		var seitenleiste = el(InspectorControls, {},
+			el(PanelBody, { title: __('Block-Referenz Einstellungen', TEXTDOMAIN) },
+				el(TextControl, {
+					label: __('Blocksuche', TEXTDOMAIN),
+					value: suche,
+					onChange: function (wert) { setSuche(wert); },
+					help: __('Filtert die Auswahlliste nach Seitentitel und Blocktitel.', TEXTDOMAIN),
+					__next40pxDefaultSize: true,
+					__nextHasNoMarginBottom: true
+				}),
+
+				el(SelectControl, {
+					label: __('Ziel-Block', TEXTDOMAIN),
+					value: aktuellerWert,
+					options: optionen,
+					onChange: waehleZiel,
+					help: laedt
+						? __('Lade Container-Bloecke...', TEXTDOMAIN)
+						: sprintf(__('%s Treffer', TEXTDOMAIN), String(treffer.length)),
+					__next40pxDefaultSize: true,
+					__nextHasNoMarginBottom: true
+				}),
+
+				fehler ? el('p', {
+					className: 'cbd-block-reference-fehler',
+					style: { color: '#b32d2e' }
+				}, fehler) : null,
+
+				hatZiel ? el(TextControl, {
+					label: __('Link-Text', TEXTDOMAIN),
+					value: linkText,
+					onChange: function (wert) { setAttributes({ linkText: wert }); },
+					help: __('Optionaler Text fuer den Link', TEXTDOMAIN),
+					__next40pxDefaultSize: true,
+					__nextHasNoMarginBottom: true
+				}) : null,
+
+				hatZiel ? el(ToggleControl, {
+					label: __('Icon anzeigen', TEXTDOMAIN),
+					checked: showIcon,
+					onChange: function (wert) { setAttributes({ showIcon: !!wert }); },
+					__nextHasNoMarginBottom: true
+				}) : null
+			)
 		);
-	},
 
-	save: () => {
-		// Server-side rendering
-		return null;
+		var inhalt;
+
+		if (laedt) {
+			inhalt = el(Placeholder, {
+				icon: 'admin-links',
+				label: __('Block-Referenz', TEXTDOMAIN)
+			},
+				el(Spinner, {}),
+				el('p', {}, __('Lade Container-Bloecke...', TEXTDOMAIN))
+			);
+		} else if (!hatZiel) {
+			inhalt = el(Placeholder, {
+				icon: 'admin-links',
+				label: __('Block-Referenz', TEXTDOMAIN),
+				instructions: __('Waehle einen Container-Block in den Einstellungen rechts aus.', TEXTDOMAIN)
+			},
+				el('p', {
+					className: 'cbd-block-reference-hinweis',
+					style: { fontSize: '14px', color: '#666' }
+				},
+					bloecke.length > 0
+						? sprintf(__('%s Container-Bloecke verfuegbar', TEXTDOMAIN), String(bloecke.length))
+						: __('Keine Container-Bloecke gefunden', TEXTDOMAIN)
+				)
+			);
+		} else {
+			inhalt = el('div', { className: 'cbd-block-reference-preview' },
+				el('div', { className: 'cbd-block-reference-preview-header' },
+					el('span', { className: 'dashicons dashicons-admin-links' }),
+					el('strong', {}, __('Block-Referenz:', TEXTDOMAIN))
+				),
+				el('div', { className: 'cbd-block-reference-preview-content' },
+					el('p', { className: 'cbd-block-reference-preview-post' },
+						el('strong', {}, __('Seite:', TEXTDOMAIN)),
+						' ' + targetPostTitle
+					),
+					el('p', { className: 'cbd-block-reference-preview-block' },
+						el('strong', {}, __('Block:', TEXTDOMAIN)),
+						' ' + targetBlockTitle
+					),
+					linkText ? el('div', { className: 'cbd-block-reference-preview-link' },
+						showIcon ? el('span', { className: 'dashicons dashicons-arrow-right-alt2' }) : null,
+						el('span', {}, linkText)
+					) : null
+				)
+			);
+		}
+
+		return el(Fragment, {},
+			seitenleiste,
+			el('div', blockProps, inhalt)
+		);
 	}
-});
+
+	wp.blocks.registerBlockType('cbd/block-reference', {
+		// Titel/Kategorie/Attribute liefert die serverseitige Registrierung
+		// aus block.json mit; hier stehen sie zusaetzlich, damit der Block
+		// auch dann vollstaendig ist, wenn die Server-Definition den Editor
+		// nicht erreicht. Aenderungen also in beiden Dateien nachziehen.
+		//
+		// apiVersion gehoert ausdruecklich dazu: Ohne sie faellt der Block
+		// auf Version 1 zurueck, und useBlockProps() im edit() bliebe
+		// wirkungslos (kein Wrapper, keine Auswahl im Canvas).
+		apiVersion: 3,
+		title: __('Block-Referenz', TEXTDOMAIN),
+		description: __('Erstelle einen Link zu einem anderen Container-Block auf dieser oder einer anderen Seite.', TEXTDOMAIN),
+		category: 'container-blocks',
+		icon: 'admin-links',
+		keywords: ['referenz', 'link', 'container', 'cbd', 'verweis'],
+		supports: {
+			html: false,
+			anchor: true,
+			align: ['wide', 'full']
+		},
+		attributes: {
+			targetStableId: { type: 'string', default: '' },
+			targetAnchor: { type: 'string', default: '' },
+			targetBlockId: { type: 'string', default: '' },
+			targetPostId: { type: 'number', default: 0 },
+			targetBlockTitle: { type: 'string', default: '' },
+			targetPostTitle: { type: 'string', default: '' },
+			linkText: { type: 'string', default: '' },
+			showIcon: { type: 'boolean', default: true }
+		},
+		edit: BlockReferenceEdit,
+		save: function () {
+			// Serverseitiges Rendern uebernimmt blocks/block-reference/render.php
+			return null;
+		}
+	});
+})(window.wp);
