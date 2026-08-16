@@ -390,7 +390,11 @@
     function saveIconSelection(iconData) {
         // Save as JSON
         const jsonValue = JSON.stringify(iconData);
-        $('#icon_value').val(jsonValue);
+        // .trigger('change') ist Pflicht (AP-2.3): Ohne das Ereignis reagiert
+        // die Icon-Positions-Vorschau in new-block.php/edit-block.php nicht
+        // auf einen reinen Icon-Wechsel, weil sie an "change" auf #icon_value
+        // gebunden ist, nicht an einen direkten Funktionsaufruf.
+        $('#icon_value').val(jsonValue).trigger('change');
 
         // Update preview
         const $selectedIcon = $('.cbd-selected-icon');
