@@ -121,6 +121,10 @@ class ContainerBlockDesigner {
         // Block Reference - Link to other CBD blocks
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-reference.php';
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-blocks-rest-api.php';
+        // Einzelner Block als HTML (cbd/v1/block-html) — eigene Klasse, weil
+        // dieser Endpunkt ohne Anmeldung auskommt und die Autorisierung
+        // vollständig selbst leistet.
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-content-api.php';
 
         // Content Importer - Markdown to CDB blocks
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-content-importer.php';
@@ -291,6 +295,11 @@ class ContainerBlockDesigner {
             // REST API for Block Reference
             if (class_exists('CBD_Blocks_REST_API')) {
                 CBD_Blocks_REST_API::init();
+            }
+
+            // REST: einzelner Block als HTML für das Referenz-Modal
+            if (class_exists('CBD_Block_Content_API')) {
+                CBD_Block_Content_API::init();
             }
 
             // Migration Tool initialization (Admin only)
