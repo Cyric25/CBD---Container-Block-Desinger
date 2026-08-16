@@ -156,6 +156,19 @@ const excludePatterns = [
     'ttfonts_backup',
 ];
 
+// Exakte, schrägstrich-normierte Pfade, die NICHT ins Paket sollen - anders
+// als excludePatterns oben (Segmentname darf irgendwo im Pfad vorkommen)
+// treffen diese nur genau diese eine Stelle. Wichtig für 'vendor/bin': ein
+// Ausschluss nach Segmentname allein hätte auch einen (heute nicht
+// existierenden) 'bin'-Ordner außerhalb von vendor/ getroffen.
+// Der Autoloader ist nachweislich sauber (0 phpunit-Treffer in
+// autoload_static.php); beide Dateien sind unschädlich, gehören aber nicht
+// ins Produktivpaket (Dev-Reste, siehe AP-1.fix3 / PLAN-Vier-Erweiterungen.md).
+const excludeExactPaths = [
+    'vendor/bin', // Composer-Shims (phpunit, phpcs, phpcbf, php-parse) - keine Laufzeitabhängigkeit
+    'vendor/mpdf/mpdf/phpunit.xml', // reine PHPUnit-Konfiguration von mpdf, nicht autoloaded
+];
+
 // Create output directory if it doesn't exist
 if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
@@ -283,6 +296,11 @@ archive.pipe(output);
 // Helper function to check if path should be excluded
 function shouldExclude(filePath) {
     const relativePath = path.relative(__dirname, filePath);
+
+    const normalizedPath = relativePath.split(path.sep).join('/');
+    if (excludeExactPaths.includes(normalizedPath)) {
+        return true;
+    }
 
     for (const pattern of excludePatterns) {
         if (pattern.includes('*')) {

@@ -386,8 +386,23 @@ store('container-block-designer', {
 				}, 2000);
 
 			} catch (error) {
-				context.screenshotError = true;
 				context.screenshotLoading = false;
+
+				// Bewusster Abbruch des nativen Teilen-Dialogs (Tier 2, tryWebShare)
+				// ist kein Fehler - der AbortError wird dort bewusst weitergereicht
+				// (siehe throw err in tryWebShare) und landet hier. Stillschweigend
+				// auf das Ausgangs-Icon zurückstellen: kein Warn-Icon, kein
+				// console.error. Entspricht resetButton() in interactivity-fallback.js.
+				if (error && error.name === 'AbortError') {
+					const icon = element.ref.querySelector('.dashicons');
+					if (icon) {
+						icon.classList.remove('dashicons-update-alt', 'dashicons-yes-alt', 'dashicons-warning');
+						icon.classList.add('dashicons-camera');
+					}
+					return;
+				}
+
+				context.screenshotError = true;
 
 				// Ursache sichtbar machen - console.error bleibt bewusst
 				// ungegated (siehe CLAUDE.md, Abschnitt Debugging-Konventionen)
