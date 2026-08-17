@@ -433,6 +433,33 @@ check(
 );
 check('1.9 · direkter Aufruf ist per ABSPATH-Pruefung verhindert', false !== strpos($quelle, "!defined('ABSPATH')"));
 
+// AP-4.fix1 (Befund F2): Die URL-Bildungsregel steht an DREI Stellen
+// (ziel_href() hier, render.php, format.js). AP-3.fix5 hatte bereits einen
+// wechselseitigen Kommentar zwischen ziel_href() und render.php gesetzt, aber
+// keine der beiden PHP-Fassungen nannte format.js zurueck. Ein automatischer
+// Waechter ist nicht moeglich (andere Sprache) - diese zwei Pruefungen
+// nageln wenigstens fest, dass die Kommentarzeile nicht wieder verschwindet.
+//
+// 1.10 liest gezielt das DOCBLOCK unmittelbar vor ziel_href() - ein blosses
+// strpos() ueber die GANZE Datei waere hier wertlos, weil die Konstante
+// FORMAT_SCRIPT bereits ganz woanders den Pfad 'blocks/block-reference/format.js'
+// enthaelt und die Zusicherung dadurch nie rot werden koennte.
+$ziel_href_docblock = '';
+if (preg_match('/\/\*\*((?:(?!\*\/).)*)\*\/\s*private static function ziel_href/s', $quelle, $treffer)) {
+    $ziel_href_docblock = $treffer[1];
+}
+check(
+    '1.10 · ziel_href()-Kommentar nennt format.js als dritte Fassung der URL-Regel (AP-4.fix1/F2)',
+    '' !== $ziel_href_docblock && false !== strpos($ziel_href_docblock, 'format.js'),
+    $ziel_href_docblock
+);
+
+$render_quelle = file_get_contents($plugin_dir . 'blocks/block-reference/render.php');
+check(
+    '1.11 · render.php nennt format.js als dritte Fassung der URL-Regel zurueck (AP-4.fix1/F2)',
+    false !== strpos($render_quelle, 'format.js')
+);
+
 // =========================================================================
 // 2 · Hooks und Prioritaet (AK8)
 // =========================================================================
@@ -544,14 +571,22 @@ check(
 $daten = CBD_Inline_Reference::format_script_daten($vorhandene_datei);
 check('3b.4 · jetzt liefert format_script_daten() einen Datensatz', is_array($daten), $daten);
 
+// AP-4.fix1 (Befund F1): `wp-data` ist seit diesem AP eine ausdruecklich
+// deklarierte Abhaengigkeit (format.js ruft wp.data.dispatch('core/notices')
+// fuer die Warnung bei core/link-Konflikten auf). Vorher war das Script nur
+// zufaellig geladen, weil wp-block-editor/wp-components es mitbringen -
+// genau die Fehlerfamilie, vor der class-cbd-block-reference.php:155-158
+// warnt. Die Liste hier wird deshalb um genau einen Eintrag laenger; 3b.6
+// bleibt dieselbe Zusicherung ("keine weiteren als die erwarteten"), nur mit
+// der neuen, groesseren Zahl.
 $erwartete_deps = array(
-    'wp-rich-text', 'wp-block-editor', 'wp-components', 'wp-element', 'wp-i18n', 'wp-api-fetch', 'cbd-block-auswahl',
+    'wp-rich-text', 'wp-block-editor', 'wp-components', 'wp-element', 'wp-i18n', 'wp-api-fetch', 'cbd-block-auswahl', 'wp-data',
 );
 $deps = is_array($daten) ? (array) $daten['deps'] : array();
 foreach ($erwartete_deps as $dep) {
     check('3b.5 · Abhaengigkeit ' . $dep . ' ist deklariert', in_array($dep, $deps, true), $deps);
 }
-check('3b.6 · keine weiteren Abhaengigkeiten', count($deps) === count($erwartete_deps), $deps);
+check('3b.6 · keine weiteren Abhaengigkeiten als die inzwischen acht erwarteten (AP-4.fix1: wp-data ergaenzt)', count($deps) === count($erwartete_deps), $deps);
 check('3b.7 · Handle ist cbd-block-reference-format', is_array($daten) && 'cbd-block-reference-format' === $daten['handle'], $daten['handle'] ?? null);
 check(
     '3b.8 · Quelle zeigt auf die Plugin-URL',
@@ -1130,16 +1165,71 @@ foreach (array('045', '00000000000000000045') as $wert) {
 
 echo "\n== 11 · AP-4.2 (AK14): Duplikatswaechter Klassenzeichenkette ==\n";
 
+// AK6 (AP-4.fix1): Die beiden Pruefungen dieser Gruppe trugen beide die
+// Nummer 11.1 - eine Zaehlvariable gibt jeder Datei ihre eigene Nummer
+// (11.1, 11.2), rein kosmetisch, keine Verhaltensaenderung.
+$duplikatswaechter_nummer = 0;
 foreach (array('blocks/block-reference/format.js', 'blocks/block-reference/view.js') as $js_datei) {
+    $duplikatswaechter_nummer++;
     $js_pfad = $plugin_dir . $js_datei;
     $js_quelle = file_exists($js_pfad) ? file_get_contents($js_pfad) : '';
     check(
-        '11.1 · ' . $js_datei . ' nennt CBD_Inline_Reference::KLASSE ('
+        '11.' . $duplikatswaechter_nummer . ' · ' . $js_datei . ' nennt CBD_Inline_Reference::KLASSE ('
             . CBD_Inline_Reference::KLASSE . ') wortgleich',
         '' !== $js_quelle && false !== strpos($js_quelle, CBD_Inline_Reference::KLASSE),
         $js_pfad
     );
 }
+
+// =========================================================================
+// 12 · AP-4.fix1 (F3): Entfernen-Knopf bei zusammengefallener Auswahl im
+//      aktiven Format bleibt bedienbar
+// =========================================================================
+//
+// AK2 von AP-4.2 verlangte woertlich "Knopf deaktiviert, wenn
+// value.start === value.end" - und traf damit auch den Fall, dass der
+// Cursor OHNE Markierung INNERHALB eines bereits gesetzten Inline-Verweises
+// steht. Der Knopftitel lautet in diesem Moment "Block-Verweis entfernen",
+// die Umschaltlogik dahinter koennte das auch leisten - `removeFormat()`
+// entfernt bei zusammengefallener Auswahl den ganzen zusammenhaengenden Lauf
+// des Formats (nachgesehen in der WordPress-Quelle
+// wp-includes/js/dist/rich-text.js, Funktion removeFormat(), Zweig
+// startIndex === endIndex). Der Knopf sagte also, was er kann, und liess es
+// nicht zu.
+//
+// AK2 wird durch AP-4.fix1 bewusst PRAEZISIERT, nicht verletzt: deaktiviert
+// bleibt der Knopf nur noch, wenn es wirklich nichts zu tun gibt (leere
+// Markierung UND kein aktives Format); bei leerer Markierung MIT aktivem
+// Format wird er bedienbar.
+//
+// Diese Datei kann `format.js` nicht ausfuehren (kein WordPress/React im
+// Harnisch, siehe Kopfkommentar der Datei zu window.cbdBlockAuswahl). Wie
+// bei Gruppe 1 (Quelltext-Zusicherungen) und Gruppe 11 (Duplikatswaechter)
+// pruefen die folgenden Zusicherungen deshalb den Quelltext: die korrigierte
+// Bedingung muss WORTGLEICH vorkommen, und die alte, zu strenge Bedingung
+// darf als alleinige disabled-Zuweisung nicht mehr vorkommen.
+
+echo "\n== 12 · AP-4.fix1 (F3): Entfernen-Knopf bei Cursor im Verweis ==\n";
+
+$format_pfad = $plugin_dir . 'blocks/block-reference/format.js';
+$format_quelle = file_exists($format_pfad) ? file_get_contents($format_pfad) : '';
+
+check('12.0 · Vorbedingung: blocks/block-reference/format.js existiert', '' !== $format_quelle);
+
+check(
+    '12.1 · disabled-Bedingung des Knopfs lautet markierungLeer(wert) && !istAktiv (als "leer && !istAktiv")',
+    1 === preg_match('/disabled:\s*leer\s*&&\s*!istAktiv/', $format_quelle),
+    $format_quelle
+);
+check(
+    '12.2 · die alte, zu strenge Bedingung ("disabled: leer" ohne !istAktiv) kommt nicht mehr vor',
+    0 === preg_match('/disabled:\s*leer\s*[,}]/', $format_quelle),
+    $format_quelle
+);
+check(
+    '12.3 · leer bleibt ueber markierungLeer(wert) hergeleitet (AK2-Grundlage unveraendert)',
+    false !== strpos($format_quelle, 'var leer = markierungLeer(wert)')
+);
 // =========================================================================
 
 $fails = $GLOBALS['fails'];

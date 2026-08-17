@@ -59,6 +59,7 @@ if (!$target_url) {
 }
 
 // SELBE REGEL WIE CBD_Inline_Reference::ziel_href() (includes/class-cbd-inline-reference.php) -- beide Fassungen zusammen aendern, sonst laufen sie auseinander (AP-3.fix5, Befund S7).
+// DRITTE FASSUNG (AP-4.fix1, Befund F2): blocks/block-reference/format.js (Funktion zielHref()) bildet dieselbe Regel fuer den Inline-Verweis nach und verweist im eigenen Kommentar auf diese Datei UND auf ziel_href() zurueck -- diese Zeile schliesst den Kreis in die Gegenrichtung. Kein automatischer Waechter moeglich (andere Sprache); Verhalten unveraendert.
 // Ohne Anker traegt die URL den Bezeichner als Parameter, damit auch der
 // Aufruf einer ANDEREN Seite beim Zielblock landet (view.js wertet ihn beim
 // Laden aus).

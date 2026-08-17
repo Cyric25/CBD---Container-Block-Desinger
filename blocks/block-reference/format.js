@@ -9,10 +9,11 @@
  * blocks/block-reference/index.js und assets/js/block-auswahl.js.
  *
  * Die Abhaengigkeiten (wp-rich-text, wp-block-editor, wp-components,
- * wp-element, wp-i18n, wp-api-fetch, cbd-block-auswahl) meldet
- * CBD_Inline_Reference::register_format_script() an. `wp-rich-text` ist dort
- * ausdruecklich deklariert, obwohl wp-block-editor es meist mitbringt - das
- * Plugin hat an genau dieser Auslassung schon einmal gelitten
+ * wp-element, wp-i18n, wp-api-fetch, cbd-block-auswahl, wp-data) meldet
+ * CBD_Inline_Reference::register_format_script() an. `wp-rich-text` und seit
+ * AP-4.fix1 auch `wp-data` sind dort ausdruecklich deklariert, obwohl
+ * wp-block-editor/wp-components sie meist mitbringen - das Plugin hat an
+ * genau dieser Auslassung schon einmal gelitten
  * (class-cbd-block-reference.php:155-158).
  *
  * ---------------------------------------------------------------------------
@@ -281,10 +282,14 @@
 	/**
 	 * Warnung im Editor: auf der Markierung liegt bereits ein Link.
 	 *
-	 * `wp.data` ist keine deklarierte Abhaengigkeit dieses Scripts, wird aber
-	 * von `wp-block-editor` und `wp-components` zwingend mitgeladen. Der Zugriff
-	 * steht deshalb hinter Existenzpruefungen und faellt notfalls auf die
-	 * Konsole zurueck - eine stille Nichtreaktion des Knopfes waere das
+	 * `wp-data` ist seit AP-4.fix1 (Befund F1) eine ausdruecklich deklarierte
+	 * Abhaengigkeit dieses Scripts (siehe Kopfkommentar sowie
+	 * CBD_Inline_Reference::format_script_daten()) - vorher war es nur
+	 * zufaellig geladen, weil `wp-block-editor` und `wp-components` es
+	 * mitbringen; genau darauf zu bauen verbietet
+	 * class-cbd-block-reference.php:155-158. Die Existenzpruefung unten
+	 * bleibt trotzdem als zweite Absicherung stehen und faellt notfalls auf
+	 * die Konsole zurueck - eine stille Nichtreaktion des Knopfes waere das
 	 * schlechteste Ergebnis.
 	 *
 	 * @returns {void}
@@ -434,10 +439,20 @@
 				: __('Block-Verweis einfuegen', TEXTDOMAIN),
 			onClick: beiKlick,
 			isActive: istAktiv,
-			// AK2: Ohne Markierung gibt es nichts, worauf das Format gelegt
-			// werden koennte. Der Knopf ist dann deaktiviert, statt - wie im
-			// Theme-Vorbild - eine unsichtbare Fehlermeldung zu erzeugen.
-			disabled: leer
+			// AK2 (praezisiert durch AP-4.fix1, Befund F3): Ohne Markierung
+			// gibt es nichts, worauf das Format gelegt werden koennte - dann
+			// bleibt der Knopf deaktiviert, statt wie im Theme-Vorbild eine
+			// unsichtbare Fehlermeldung zu erzeugen. Steht der Cursor aber
+			// OHNE Markierung INNERHALB eines bereits aktiven Verweises
+			// (istAktiv), kann removeFormat() bei zusammengefallener
+			// Auswahl trotzdem den ganzen Lauf entfernen (WordPress-Quelle
+			// wp-includes/js/dist/rich-text.js, Funktion removeFormat(),
+			// Zweig startIndex === endIndex: das Format am Cursor wird
+			// gesucht, start-/endIndex werden ueber den ganzen
+			// zusammenhaengenden Lauf desselben Format-Objekts ausgeweitet).
+			// Der Knopf bleibt in genau diesem Fall bedienbar - deaktiviert
+			// wird nur, wenn es wirklich nichts zu tun gibt.
+			disabled: leer && !istAktiv
 		});
 
 		var dialog = null;
