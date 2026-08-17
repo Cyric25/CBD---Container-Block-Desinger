@@ -58,14 +58,20 @@
 	/**
 	 * Die CSS-Klasse des Inline-Verweises.
 	 *
-	 * DIESE ZEICHENKETTE STEHT AN DREI STELLEN: hier, in
-	 * `CBD_Inline_Reference::KLASSE` (includes/class-cbd-inline-reference.php)
-	 * und im Klick-Selektor von `view.js`. Wird sie geaendert, muessen alle
-	 * drei mitgezogen werden. Dafuer gibt es seit AP-4.2 einen
-	 * Duplikatswaechter: `tools/test-inline-reference.php`, Gruppe 11, schlaegt
-	 * an, sobald eine der beiden JS-Fassungen von der PHP-Konstante abweicht
-	 * (Befund S8 aus AP-3.rev; Praezedenz ist die `:pN`-Zusicherung in
-	 * tools/test-classroom-gate.php).
+	 * DIESE ZEICHENKETTE STEHT AN VIER STELLEN: hier, in
+	 * `CBD_Inline_Reference::KLASSE` (includes/class-cbd-inline-reference.php),
+	 * im Klick-Selektor von `view.js` und in fuenf Selektoren von `style.css`.
+	 * Wird sie geaendert, muessen alle vier mitgezogen werden. Dafuer gibt es
+	 * seit AP-4.2 einen Duplikatswaechter: `tools/test-inline-reference.php`,
+	 * Gruppe 11, schlaegt an, sobald eine der drei Nicht-PHP-Fassungen von der
+	 * PHP-Konstante abweicht (Befund S8 aus AP-3.rev; Praezedenz ist die
+	 * `:pN`-Zusicherung in tools/test-classroom-gate.php).
+	 *
+	 * SEIT AP-4.fix2 (Befund B3) prueft der Waechter den WIRKSAMEN AUSDRUCK,
+	 * nicht das blosse Vorkommen: Die Zeichenkette steht in dieser Datei
+	 * dreimal, zweimal davon in Docblocks - ein `strpos()` blieb deshalb auch
+	 * dann gruen, wenn nur die Zuweisung unten falsch war (gemessen: 167/167).
+	 * `style.css` war ausserdem von keinem Waechter gedeckt.
 	 *
 	 * BEWUSST NICHT `cbd-block-reference-link` (die Klasse des Blocks): Jene
 	 * traegt in style.css `display: block` samt Karten-Layout und `transform`
@@ -76,9 +82,11 @@
 	/**
 	 * Das Kern-Link-Format.
 	 *
-	 * Liegt es auf der Markierung, wird der Dialog NICHT geoeffnet: Ein <a> in
-	 * einem <a> ist ungueltiges HTML und das Klickverhalten waere
-	 * unvorhersehbar (Risiko aus Abschnitt 5 des Plans).
+	 * Liegt es IRGENDWO im markierten Bereich, wird der Dialog NICHT geoeffnet:
+	 * Ein <a> in einem <a> ist ungueltiges HTML und das Klickverhalten waere
+	 * unvorhersehbar (Risiko aus Abschnitt 5 des Plans). Die Pruefung leistet
+	 * `linkImBereich()` weiter unten - dort steht auch, warum das seit
+	 * AP-4.fix2 NICHT mehr `getActiveFormat()` ist.
 	 */
 	var LINK_FORMAT = 'core/link';
 
@@ -105,11 +113,17 @@
 	// Wachposten
 	// -----------------------------------------------------------------------
 
+	// `wp.richText.getActiveFormat` stand hier bis AP-4.fix2 mit in der Liste.
+	// Seit dem Umbau des Link-Waechters auf `linkImBereich()` benutzt diese
+	// Datei die Funktion nicht mehr (`isActive` liefert RichText selbst als
+	// Prop). Eine Anforderung an eine Funktion, die nicht gebraucht wird, ist
+	// kein Netz, sondern ein falsches Negativ: Sie liesse die Registrierung auf
+	// einer WordPress-Fassung ohne diese Funktion ausfallen, obwohl das Format
+	// dort einwandfrei laufen wuerde.
 	if (!wp || !wp.richText || !wp.blockEditor || !wp.components || !wp.element
 		|| 'function' !== typeof wp.richText.registerFormatType
 		|| 'function' !== typeof wp.richText.applyFormat
 		|| 'function' !== typeof wp.richText.removeFormat
-		|| 'function' !== typeof wp.richText.getActiveFormat
 		|| 'function' !== typeof wp.element.createElement
 		|| 'function' !== typeof wp.element.useState
 		|| 'function' !== typeof wp.blockEditor.RichTextToolbarButton) {
@@ -146,7 +160,6 @@
 	var registerFormatType = wp.richText.registerFormatType;
 	var applyFormat = wp.richText.applyFormat;
 	var removeFormat = wp.richText.removeFormat;
-	var getActiveFormat = wp.richText.getActiveFormat;
 
 	var RichTextToolbarButton = wp.blockEditor.RichTextToolbarButton;
 
@@ -190,6 +203,31 @@
 	}
 
 	/**
+	 * Der markierte Bereich als HALBOFFENES Intervall [von, bis).
+	 *
+	 * Fehlt die Auswahl ganz, sind `start` und `end` beide `undefined` - dann
+	 * ergibt sich [0, 0), also ein leerer Bereich.
+	 *
+	 * EINE Herleitung fuer beide Leser: `markierung()` schneidet damit den Text
+	 * zu, `linkImBereich()` laeuft damit ueber die Formate. Zwei getrennte
+	 * Fassungen derselben Rechnung liefen irgendwann auseinander - dieselbe
+	 * Erwaegung wie bei `auswahl_handle()` auf der PHP-Seite.
+	 *
+	 * @param {Object} wert RichText-Wert (props.value)
+	 * @returns {Array} [von, bis]
+	 */
+	function bereich(wert) {
+		if (!wert) {
+			return [0, 0];
+		}
+
+		var von = ('number' === typeof wert.start) ? wert.start : 0;
+		var bis = ('number' === typeof wert.end) ? wert.end : 0;
+
+		return [von, bis];
+	}
+
+	/**
 	 * Markierten Text aus einem RichText-Wert lesen.
 	 *
 	 * @param {Object} wert RichText-Wert (props.value)
@@ -199,10 +237,86 @@
 		if (!wert || 'string' !== typeof wert.text) {
 			return '';
 		}
-		var von = ('number' === typeof wert.start) ? wert.start : 0;
-		var bis = ('number' === typeof wert.end) ? wert.end : 0;
 
-		return wert.text.slice(von, bis);
+		var grenzen = bereich(wert);
+
+		return wert.text.slice(grenzen[0], grenzen[1]);
+	}
+
+	/**
+	 * Liegt IRGENDWO im markierten Bereich ein `core/link`?
+	 *
+	 * WARUM NICHT `getActiveFormat(wert, 'core/link')` - so stand es bis
+	 * AP-4.fix2 hier, und es war der schwerste Fehler dieses Vorhabens:
+	 * `getActiveFormat()` liefert nur Formate, die die GANZE Markierung
+	 * ueberspannen. `getActiveFormats()` in wp-includes/js/dist/rich-text.js
+	 * bricht ab, sobald ein Zeichen im Bereich das Format nicht traegt. Liegt
+	 * der Link INNERHALB der Markierung oder ueberlappt er ihren Rand nur
+	 * teilweise, war der Rueckgabewert `undefined`, der Dialog oeffnete, und
+	 * `applyFormat()` legte das Inline-Format AUSSEN um den Link: ein <a> in
+	 * einem <a>.
+	 *
+	 * DER PRAXISNAHE FALL ist der harmlos aussehende: einen ganzen Satz
+	 * markieren, in dem eine Quellenangabe verlinkt ist. Genau das kommt im
+	 * Inhaltsbestand dieses Projekts vor.
+	 *
+	 * WARUM DAS SCHWERER WIEGT ALS JEDER ANDERE FEHLER HIER: Das Ergebnis von
+	 * `toHTMLString()` ist der String, der in `post_content` landet. Ein
+	 * Plugin-Update holt ihn nicht zurueck. Beim Wiederoeffnen liest Gutenberg
+	 * die abgeflachte Fassung, `getSaveContent()` erzeugt einen anderen String
+	 * als den gespeicherten, und der Absatz gilt als "Block enthaelt
+	 * unerwarteten oder ungueltigen Inhalt" - die harte Grenze aus Abschnitt 3
+	 * des Plans. AP-4.rev hat es mit WordPress' eigenem Baum-Parser belegt
+	 * (`WP_HTML_Processor::normalize()`: ohne Link byte-identisch, mit
+	 * verschachteltem <a> -> NULL, "parsing error: unsupported").
+	 *
+	 * Deshalb sieht diese Funktion JEDES Zeichen des Bereichs an. Drei
+	 * Feinheiten, alle gemessen und keine davon zufaellig:
+	 *
+	 *   1. NUR `core/link`. Ein gleichartiger Inline-Verweis im Bereich ist
+	 *      KEIN Konflikt: `applyFormat()` filtert den eigenen Typ im Bereich
+	 *      vorher heraus, zwei gleichartige Verweise erzeugen nachweislich
+	 *      keine Verschachtelung. Ein Waechter, der auf "irgendein Format mit
+	 *      tagName a" prueft, waere zu scharf und verboete eine erlaubte
+	 *      Verwendung.
+	 *   2. Der Bereich ist HALBOFFEN, [von, bis). Ein Link, der genau dort
+	 *      endet, wo die Markierung beginnt (oder umgekehrt), ist kein
+	 *      Konflikt - die beiden <a> werden Geschwister, nicht verschachtelt.
+	 *      Ein geschlossenes Intervall verboete diesen erlaubten Fall.
+	 *   3. Bei ZUSAMMENGEFALLENER Auswahl (von === bis) laeuft die Schleife
+	 *      nicht, die Antwort ist `false` - und das ist richtig, weil der
+	 *      Waechter in diesem Fall gar nicht befragt wird: `beiKlick()` prueft
+	 *      VORHER `istAktiv` und entfernt dann den Verweis (AP-4.fix1, Befund
+	 *      F3 - ein Cursor in einem bestehenden Verweis muss ihn loeschen
+	 *      koennen, AK2). Ohne aktives Format ist der Knopf bei leerer
+	 *      Markierung `disabled`. Ein Sonderfall waere hier toter Code.
+	 *
+	 * `wert.formats` ist ein LUECKENHAFTES Array - Zeichen ohne Format haben
+	 * keinen Eintrag. Daher die Existenzpruefung in der Schleife.
+	 *
+	 * @param {Object} wert RichText-Wert (props.value)
+	 * @returns {boolean}
+	 */
+	function linkImBereich(wert) {
+		if (!wert || !wert.formats) {
+			return false;
+		}
+
+		var grenzen = bereich(wert);
+
+		for (var i = grenzen[0]; i < grenzen[1]; i++) {
+			var formate = wert.formats[i];
+			if (!formate || !formate.length) {
+				continue;
+			}
+			for (var j = 0; j < formate.length; j++) {
+				if (formate[j] && LINK_FORMAT === formate[j].type) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -389,7 +503,17 @@
 				return;
 			}
 
-			if (getActiveFormat(wert, LINK_FORMAT)) {
+			// AP-4.fix2 (Befund B1): Bereichspruefung, nicht
+			// `getActiveFormat()` - Begruendung und Messwerte im Docblock von
+			// `linkImBereich()`.
+			//
+			// GEPRUEFT WIRD GENAU DER WERT, DER SPAETER ANGEWENDET WIRD: Die
+			// naechste Zeile legt dasselbe `wert`-Objekt als `basis` ab, und
+			// `uebernehme()` rechnet mit `basis || wert`. Zwischen Pruefung und
+			// Anwendung kann sich die Markierung also nicht verschieben - der
+			// Dialog ist eine Fokusfalle, im Absatz laesst sich nichts mehr
+			// aendern, solange er offen ist.
+			if (linkImBereich(wert)) {
 				warneVerschachtelung();
 				return;
 			}
