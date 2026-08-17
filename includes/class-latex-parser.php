@@ -258,10 +258,31 @@ class CBD_LaTeX_Parser {
         }
 
         // Validation: Check for balanced $ signs
-        $dollar_count = substr_count($block_content, '$');
+        //
+        // N1 (AP-1.fix5): Gezählt wird auf dem MASKIERTEN Text, nicht auf dem
+        // Rohtext. Ein gewöhnliches jQuery-Skript
+        // (`jQuery(function($){ … $(".x") … $(".y") … })`) bringt sonst eine
+        // ungerade $-Bilanz zustande und bekommt eine rote Warnbox plus rot
+        // hinterlegte <span> mitten hineingeschrieben — das Skript ist danach
+        // kaputt. Der Blocknamen-Filter oben hilft hier nicht: Container-Blöcke
+        // stehen bewusst nicht in KEIN_LATEX_BLOCK, und `isolate_inline_scripts()`
+        // zeigt, dass Skripte in Blockinhalten gelebtes Muster sind.
+        //
+        // Die Warnung selbst bleibt erhalten — sie bezieht sich jetzt nur noch
+        // auf $ ausserhalb von script/pre/code.
+        $zaehl_speicher = array();
+        $zaehl_counter  = 0;
+        $ohne_geschuetztes = $this->mask_protected_regions(
+            $block_content,
+            $zaehl_speicher,
+            $zaehl_counter,
+            uniqid()
+        );
+
+        $dollar_count = substr_count($ohne_geschuetztes, '$');
         if ($dollar_count > 0 && $dollar_count % 2 !== 0) {
             if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('[CBD LaTeX Parser] Unbalanced $ signs detected in block (' . $dollar_count . ' total). Skipping LaTeX parsing to prevent regex issues.');
+                error_log('[CBD LaTeX Parser] Unbalanced $ signs detected in block (' . $dollar_count . ' total, ohne script/pre/code). Skipping LaTeX parsing to prevent regex issues.');
             }
             // Add visual warning for incomplete formulas (red box)
             $warning = '<div class="cbd-latex-warning" style="background: #fee; border-left: 4px solid #dc3545; padding: 12px; margin: 10px 0; color: #721c24;">'
@@ -272,14 +293,24 @@ class CBD_LaTeX_Parser {
 
             // Highlight incomplete $ signs in red
             // Find $ that are not part of $$
+            // Läuft ebenfalls auf dem maskierten Text: Ein $ im Skript darf
+            // keine rote Markierung bekommen.
             $highlighted_content = preg_replace(
                 '/(?<!\$)\$(?!\$)/',
                 '<span style="background: #dc3545; color: white; padding: 2px 4px; font-weight: bold; border-radius: 2px;">$</span>',
-                $block_content
+                $ohne_geschuetztes
             );
 
-            // Return block content with warning at the top and highlighted $ signs
-            return $warning . $highlighted_content;
+            if (null === $highlighted_content) {
+                // PCRE-Fehler sofort auswerten (N4) und ungehighlightet
+                // weiterarbeiten, statt den Blockinhalt zu verlieren.
+                $this->log_preg_error('parse_latex_in_blocks(), $-Hervorhebung');
+                $highlighted_content = $ohne_geschuetztes;
+            }
+
+            // Return block content with warning at the top and highlighted $ signs.
+            // Die maskierten Bereiche kommen dabei unverändert zurück.
+            return $warning . $this->restore_placeholders($highlighted_content, $zaehl_speicher);
         }
 
         // Parse LaTeX in this block's content
@@ -319,6 +350,16 @@ class CBD_LaTeX_Parser {
         $display_counter = 0;
         $protected_counter = 0;
 
+        // N3 (AP-1.fix5): Die Marken bekommen je Aufruf ein zufälliges Stück.
+        // Mit festen Marken ersetzte der Rücktausch auch einen Nutzertext, der
+        // zufällig `___CBD_PROTECTED_0___` bzw. `___CBD_DISPLAY_FORMULA_0___`
+        // enthielt – das maskierte Skript stand danach doppelt im Text, der
+        // Nutzertext war weg. Ein Text kann die Marke jetzt nicht mehr treffen.
+        //
+        // Der Doppelparse-Schutz oben ist davon NICHT betroffen: Er prüft die
+        // Ausgabe (`cbd-latex-formula`), nicht die Marken.
+        $marke = uniqid();
+
         // Error handling: Catch preg_replace_callback failures
         try {
             // AP-1.fix2 (M1, Ebene 2): Skripte und Codebeispiele ZUERST aus
@@ -327,7 +368,7 @@ class CBD_LaTeX_Parser {
             // greift der Blocknamen-Filter aus parse_latex_in_blocks() nicht.
             // Muss vor allen weiteren Ersetzungen laufen, auch vor der
             // <em>-Reparatur unten.
-            $content = $this->mask_protected_regions($content, $display_formulas, $protected_counter);
+            $content = $this->mask_protected_regions($content, $display_formulas, $protected_counter, $marke);
 
             // CONSERVATIVE: Only decode specific HTML entities, NOT all
             // Be careful with backslashes - WordPress might strip them
@@ -362,8 +403,8 @@ class CBD_LaTeX_Parser {
         // Match anything except $ sign, up to 10000 chars per formula
         $content = preg_replace_callback(
             '/\$\$([^\$]{1,10000}?)\$\$/s',
-            function($matches) use (&$display_formulas, &$display_counter) {
-                $placeholder = '___CBD_DISPLAY_FORMULA_' . $display_counter . '___';
+            function($matches) use (&$display_formulas, &$display_counter, $marke) {
+                $placeholder = '___CBD_DISPLAY_FORMULA_' . $marke . '_' . $display_counter . '___';
                 $display_formulas[$placeholder] = $this->render_display_formula($matches);
                 $display_counter++;
                 return $placeholder;
@@ -378,8 +419,8 @@ class CBD_LaTeX_Parser {
         // OPTIMIZED: Limit length and use atomic grouping
         $content = preg_replace_callback(
             '/\[latex\]([^\]]{1,10000}?)\[\/latex\]/si',
-            function($matches) use (&$display_formulas, &$display_counter) {
-                $placeholder = '___CBD_DISPLAY_FORMULA_' . $display_counter . '___';
+            function($matches) use (&$display_formulas, &$display_counter, $marke) {
+                $placeholder = '___CBD_DISPLAY_FORMULA_' . $marke . '_' . $display_counter . '___';
                 $display_formulas[$placeholder] = $this->render_display_formula($matches);
                 $display_counter++;
                 return $placeholder;
@@ -399,11 +440,11 @@ class CBD_LaTeX_Parser {
             // nächste Formel hinweggreifen. Der leere Treffer wird unten
             // verworfen.
             '/\\\\\[(.{0,10000}?)\\\\\]/s',
-            function($matches) use (&$display_formulas, &$display_counter) {
+            function($matches) use (&$display_formulas, &$display_counter, $marke) {
                 if (trim($matches[1]) === '') {
                     return $matches[0]; // leere Klammer ist keine Formel
                 }
-                $placeholder = '___CBD_DISPLAY_FORMULA_' . $display_counter . '___';
+                $placeholder = '___CBD_DISPLAY_FORMULA_' . $marke . '_' . $display_counter . '___';
                 $display_formulas[$placeholder] = $this->render_display_formula($matches);
                 $display_counter++;
                 return $placeholder;
@@ -423,11 +464,11 @@ class CBD_LaTeX_Parser {
         $content = preg_replace_callback(
             // {0,…} aus demselben Grund wie bei \[…\] oben.
             '/\\\\\((.{0,500}?)\\\\\)/s',
-            function($matches) use (&$display_formulas, &$display_counter) {
+            function($matches) use (&$display_formulas, &$display_counter, $marke) {
                 if (trim($matches[1]) === '') {
                     return $matches[0]; // leere Klammer ist keine Formel
                 }
-                $placeholder = '___CBD_INLINE_FORMULA_' . $display_counter . '___';
+                $placeholder = '___CBD_INLINE_FORMULA_' . $marke . '_' . $display_counter . '___';
                 $display_formulas[$placeholder] = $this->build_inline_formula($matches[1]);
                 $display_counter++;
                 return $placeholder;
@@ -467,21 +508,13 @@ class CBD_LaTeX_Parser {
             return $this->restore_placeholders($content, $display_formulas);
         }
 
-        // Check for PREG errors
-        $preg_error = preg_last_error();
-        if ($preg_error !== PREG_NO_ERROR) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                $error_messages = array(
-                    PREG_INTERNAL_ERROR => 'Internal PCRE error',
-                    PREG_BACKTRACK_LIMIT_ERROR => 'Backtrack limit exhausted',
-                    PREG_RECURSION_LIMIT_ERROR => 'Recursion limit exhausted',
-                    PREG_BAD_UTF8_ERROR => 'Bad UTF8 data',
-                    PREG_BAD_UTF8_OFFSET_ERROR => 'Bad UTF8 offset'
-                );
-                $error_msg = isset($error_messages[$preg_error]) ? $error_messages[$preg_error] : 'Unknown PREG error';
-                error_log('[CBD LaTeX Parser] PREG Error: ' . $error_msg);
-            }
-        }
+        // Check for PREG errors.
+        //
+        // ACHTUNG (N4): Das erfasst nur den ZULETZT gelaufenen preg_*-Aufruf.
+        // Jede Stelle, die einen eigenen Fehlerfall abfangen will, muss
+        // log_preg_error() selbst und unmittelbar aufrufen – so wie es
+        // mask_protected_regions() tut.
+        $this->log_preg_error('parse_latex(), letztes Muster');
 
         return $content;
     }
@@ -501,9 +534,10 @@ class CBD_LaTeX_Parser {
      * @param string $content   Zu maskierender Text
      * @param array  $store     Gemeinsamer Platzhalter-Speicher (Referenz)
      * @param int    $counter   Laufende Nummer der Marken (Referenz)
+     * @param string $marke     Zufallsstück des Aufrufs (N3, siehe parse_latex())
      * @return string
      */
-    private function mask_protected_regions($content, &$store, &$counter) {
+    private function mask_protected_regions($content, &$store, &$counter, $marke) {
         // Billige Vorprüfung: ohne eines dieser Tags gibt es nichts zu tun.
         if (stripos($content, '<script') === false
             && stripos($content, '<pre') === false
@@ -513,8 +547,8 @@ class CBD_LaTeX_Parser {
 
         $masked = preg_replace_callback(
             '#<(script|pre|code)\b[^>]*>.*?</\1\s*>#is',
-            function ($matches) use (&$store, &$counter) {
-                $placeholder = '___CBD_PROTECTED_' . $counter . '___';
+            function ($matches) use (&$store, &$counter, $marke) {
+                $placeholder = '___CBD_PROTECTED_' . $marke . '_' . $counter . '___';
                 $store[$placeholder] = $matches[0];
                 $counter++;
                 return $placeholder;
@@ -523,9 +557,18 @@ class CBD_LaTeX_Parser {
         );
 
         // preg_replace_callback() liefert bei einem PCRE-Fehler null. Dann
-        // lieber ungeschützt weiterarbeiten als den Inhalt zu verlieren –
-        // der Fehler wird unten über preg_last_error() protokolliert.
-        return (null === $masked) ? $content : $masked;
+        // lieber ungeschützt weiterarbeiten als den Inhalt zu verlieren.
+        //
+        // N4 (AP-1.fix5): Der Fehler wird HIER protokolliert, nicht am Ende
+        // von parse_latex(). Jeder nachfolgende erfolgreiche preg_*-Aufruf
+        // setzt preg_last_error() auf PREG_NO_ERROR zurück – eine spätere
+        // Auswertung hätte diesen Fehler nie zu sehen bekommen.
+        if (null === $masked) {
+            $this->log_preg_error('mask_protected_regions()');
+            return $content;
+        }
+
+        return $masked;
     }
 
     /**
@@ -534,15 +577,55 @@ class CBD_LaTeX_Parser {
      * Eine Stelle für beide Sorten (geschützte Bereiche und gerenderte
      * Formeln) – der Speicher ist derselbe.
      *
+     * ZURÜCK IN UMGEKEHRTER EINTRAGSREIHENFOLGE (N2, AP-1.fix5): Die
+     * geschützten Bereiche werden vor den Formeln maskiert und liegen deshalb
+     * vorn im Speicher. Tauschte man sie zuerst zurück, liefe ihr
+     * wiederhergestellter Inhalt anschliessend noch durch die
+     * Formel-Ersetzungen – ein `<code>` mit einer Formel-Marke darin bekäme
+     * die Formel eingesetzt. Zuletzt eingetragen heisst deshalb: zuerst
+     * zurückgetauscht.
+     *
      * @param string $content
      * @param array  $store Platzhalter => Ersatztext
      * @return string
      */
     private function restore_placeholders($content, $store) {
-        foreach ($store as $placeholder => $ersatz) {
+        foreach (array_reverse($store, true) as $placeholder => $ersatz) {
             $content = str_replace($placeholder, $ersatz, $content);
         }
         return $content;
+    }
+
+    /**
+     * Protokolliert einen anliegenden PCRE-Fehler.
+     *
+     * MUSS unmittelbar nach dem fehlgeschlagenen preg_*-Aufruf gerufen werden:
+     * `preg_last_error()` hält nur den Zustand des letzten Aufrufs, jeder
+     * erfolgreiche Aufruf danach setzt ihn auf PREG_NO_ERROR zurück.
+     *
+     * @param string $kontext Fundstelle für die Meldung
+     * @return void
+     */
+    private function log_preg_error($kontext) {
+        $preg_error = preg_last_error();
+        if (PREG_NO_ERROR === $preg_error) {
+            return;
+        }
+
+        if (!defined('WP_DEBUG') || !WP_DEBUG) {
+            return;
+        }
+
+        $error_messages = array(
+            PREG_INTERNAL_ERROR        => 'Internal PCRE error',
+            PREG_BACKTRACK_LIMIT_ERROR => 'Backtrack limit exhausted',
+            PREG_RECURSION_LIMIT_ERROR => 'Recursion limit exhausted',
+            PREG_BAD_UTF8_ERROR        => 'Bad UTF8 data',
+            PREG_BAD_UTF8_OFFSET_ERROR => 'Bad UTF8 offset',
+        );
+        $error_msg = isset($error_messages[$preg_error]) ? $error_messages[$preg_error] : 'Unknown PREG error';
+
+        error_log('[CBD LaTeX Parser] PREG Error in ' . $kontext . ': ' . $error_msg);
     }
 
     /**

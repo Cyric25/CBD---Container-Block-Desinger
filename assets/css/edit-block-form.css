@@ -663,3 +663,117 @@
     color: #666;
     margin-top: 5px;
 }
+
+/* Icon-Position (AP-2.3) -- Eingabefelder in der Features-Sektion.
+   Die Box .cbd-icon-position-controls (Padding/Rahmen/Label) existierte
+   bereits weiter oben in dieser Datei und wird hier bewusst wiederverwendet,
+   siehe Zeile ~414. */
+.cbd-icon-position-controls select {
+    width: 100%;
+    max-width: 320px;
+}
+
+.cbd-icon-offset-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 12px;
+}
+
+.cbd-icon-offset-field label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #23282d;
+}
+
+.cbd-icon-position-controls .description {
+    margin-top: 10px;
+}
+
+/* Icon-Positions-Vorschau (AP-2.3) -- eigenes Element, siehe Kommentar in
+   edit-block.php ("bewusst EIGENES Element, nicht .cbd-preview-content").
+   Klassen/Variablen entsprechen dem Frontend-Rendering aus AP-2.2, damit die
+   Vorschau zeigt, was tatsächlich ausgeliefert wird. */
+.cbd-icon-preview-stage {
+    position: relative;
+    min-height: 120px;
+    margin-top: 12px;
+    padding: 16px;
+    background: #f6f7f7;
+    border: 1px dashed #c3c4c7;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.cbd-icon-preview-label {
+    margin: 0 0 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #646970;
+}
+
+.cbd-icon-preview-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cbd-icon-preview-title {
+    font-weight: 600;
+    color: #1d2327;
+}
+
+.cbd-icon-preview-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* Versatz ausschließlich über die vom Frontend übernommenen Variablen,
+       nie über ein hier fest verdrahtetes transform. */
+    transform: translate(var(--cbd-icon-dx, 0px), var(--cbd-icon-dy, 0px));
+}
+
+/* Eigene SVG-Kacheln (Typ "custom"): CBD_Icon_Library::get_admin_preview_html()
+   vergibt dafür die Klasse .cbd-custom-icon-preview, deren Größe in
+   custom-icons.css ausschließlich über den Vorfahren .cbd-icon-item bzw.
+   .cbd-selected-icon definiert ist. Als Klon innerhalb dieser Vorschau (siehe
+   updateIconPreview() weiter unten in der Datei) griffe keine der beiden
+   Regeln -- das <img> hat keine width/height-Attribute und bliebe in seiner
+   SVG-Intrinsic-Größe, meist deutlich zu groß. Eigene, am Frontend-Basiswert
+   orientierte Regel (32px, wie .cbd-header-icon .cbd-custom-icon in
+   cbd-frontend-clean.css -- die Datei selbst wird auf Formularseiten nicht
+   geladen, deshalb hier dupliziert statt referenziert). */
+.cbd-icon-preview-icon .cbd-custom-icon-preview {
+    display: block;
+    width: calc(32px * var(--cbd-icon-scale, 1));
+    height: calc(32px * var(--cbd-icon-scale, 1));
+}
+
+/* Eckpositionierung: dieselben Klassennamen wie im Frontend
+   (cbd_get_icon_position_class() in includes/functions.php). */
+.cbd-icon-preview-icon.cbd-icon-positioned {
+    position: absolute;
+    z-index: 3;
+}
+
+.cbd-icon-preview-icon.cbd-icon-at-top-left {
+    top: 10px;
+    left: 10px;
+}
+
+.cbd-icon-preview-icon.cbd-icon-at-top-right {
+    top: 10px;
+    right: 10px;
+}
+
+.cbd-icon-preview-icon.cbd-icon-at-bottom-left {
+    bottom: 10px;
+    left: 10px;
+}
+
+.cbd-icon-preview-icon.cbd-icon-at-bottom-right {
+    bottom: 10px;
+    right: 10px;
+}

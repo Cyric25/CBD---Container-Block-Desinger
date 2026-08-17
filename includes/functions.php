@@ -119,6 +119,196 @@ if (!function_exists('cbd_get_icon_scale_css')) {
 }
 
 /**
+ * Icon-Position eines Container-Block-Designs (Einstellungen im Admin-Formular,
+ * AP-2.3; Rendering im Frontend, AP-2.2).
+ *
+ * Ausgangslage — wichtig, um den Standardwert zu verstehen: Es gab bislang
+ * KEINE funktionierende Icon-Positionierung. cbd_parse_features_from_post()
+ * schrieb 'position' ohne Whitelist auf 'top-left' zurück, und gelesen wurde
+ * der Wert nirgends (der Style-Loader zielte auf Selektoren, die es nicht
+ * gibt). In JEDEM bestehenden Design steht deshalb "position":"top-left" —
+ * ein Wert, den nie jemand bewusst gewählt hat.
+ *
+ * Würde 'top-left' künftig "linke obere Container-Ecke" bedeuten, verlöre
+ * jeder vorhandene Block sein Icon aus der Kopfzeile. Deshalb heißt der neue
+ * Standardwert 'header' (= heutiges Verhalten: Icon neben dem Titel in der
+ * Kopfzeile), die vier neuen Positionen tragen das Präfix 'container-', und
+ * ALLE unbekannten bzw. alten Werte ('top-left', 'top-right', 'bottom-left',
+ * 'bottom-right') fallen beim Lesen auf 'header' zurück.
+ *
+ * @since 3.1.89
+ */
+if (!function_exists('cbd_icon_position_defaults')) {
+    function cbd_icon_position_defaults() {
+        return array(
+            'positions' => array(
+                'header',
+                'container-top-left',
+                'container-top-right',
+                'container-bottom-left',
+                'container-bottom-right',
+            ),
+            'default'        => 'header',
+            'offset_min'     => -200,
+            'offset_max'     => 200,
+            'offset_default' => 0,
+        );
+    }
+}
+
+/**
+ * Bereinigt den Positionswert. Alles außerhalb der Whitelist — insbesondere
+ * die vier Altwerte ohne 'container-'-Präfix — fällt auf 'header' zurück.
+ *
+ * @param mixed $raw
+ * @return string
+ */
+if (!function_exists('cbd_sanitize_icon_position')) {
+    function cbd_sanitize_icon_position($raw) {
+        $defaults = cbd_icon_position_defaults();
+
+        // Felder abfangen, bevor der (string)-Cast greift (Befund G1 aus
+        // AP-2.rev): `features[icon][position][]=x` erzeugte sonst die Warnung
+        // „Array to string conversion". Das Ergebnis war schon vorher sicher,
+        // aber die Warnung landete bei WP_DEBUG_LOG im Protokoll.
+        if (is_array($raw) || is_object($raw)) {
+            return $defaults['default'];
+        }
+
+        $value = strtolower(trim((string) wp_unslash($raw)));
+
+        return in_array($value, $defaults['positions'], true) ? $value : $defaults['default'];
+    }
+}
+
+/**
+ * Bereinigt den Feinversatz (Pixel) auf den erlaubten Bereich.
+ *
+ * @param mixed $raw
+ * @return int
+ */
+if (!function_exists('cbd_sanitize_icon_offset')) {
+    function cbd_sanitize_icon_offset($raw) {
+        $defaults = cbd_icon_position_defaults();
+
+        // Siehe cbd_sanitize_icon_position(): Felder abfangen, sonst warnt der
+        // (string)-Cast (Befund G1 aus AP-2.rev).
+        if (is_array($raw) || is_object($raw)) {
+            return $defaults['offset_default'];
+        }
+
+        // Deutsches Dezimalkomma wie beim Icon-Größen-Regler behandeln.
+        $value = str_replace(',', '.', trim((string) wp_unslash($raw)));
+
+        if ('' === $value || !is_numeric($value)) {
+            return $defaults['offset_default'];
+        }
+
+        $value = (int) round((float) $value);
+
+        return max($defaults['offset_min'], min($defaults['offset_max'], $value));
+    }
+}
+
+/**
+ * CSS-Klassen für die Positionierung. 'header' (Standard, heutiges
+ * Verhalten) erzeugt bewusst keine Klasse — es gibt dafür kein eigenes
+ * Positionierungs-CSS, das Icon bleibt Teil der Kopfzeile.
+ *
+ * @param string $position
+ * @return string
+ */
+if (!function_exists('cbd_get_icon_position_class')) {
+    function cbd_get_icon_position_class($position) {
+        $defaults = cbd_icon_position_defaults();
+
+        if ('header' === $position || !in_array($position, $defaults['positions'], true)) {
+            return '';
+        }
+
+        $corner = str_replace('container-', '', $position);
+
+        return 'cbd-icon-positioned cbd-icon-at-' . $corner;
+    }
+}
+
+/**
+ * Inline-Style für den Feinversatz. Transportiert wird über zwei
+ * CSS-Variablen (--cbd-icon-dx / --cbd-icon-dy), NICHT über ein fertiges
+ * transform: .cbd-header-icon trägt bereits ein transform: translateY(...)
+ * zur Grundlinien-Ausrichtung, mit eigenem Wert je Breakpoint. Ein
+ * serverseitig gesetztes transform würde das überschreiben.
+ *
+ * Beide 0 -> leerer String, damit kein unnötiges style-Attribut entsteht.
+ * Zahlen werden immer locale-frei formatiert (sprintf %d kennt kein
+ * Tausendertrennzeichen und kein Dezimalkomma).
+ *
+ * @param int $offset_x
+ * @param int $offset_y
+ * @return string
+ */
+if (!function_exists('cbd_get_icon_position_style')) {
+    function cbd_get_icon_position_style($offset_x, $offset_y) {
+        $offset_x = (int) $offset_x;
+        $offset_y = (int) $offset_y;
+
+        if (0 === $offset_x && 0 === $offset_y) {
+            return '';
+        }
+
+        return sprintf('--cbd-icon-dx:%dpx;--cbd-icon-dy:%dpx;', $offset_x, $offset_y);
+    }
+}
+
+/**
+ * Lesbare Vorschau von Position und Versatz für das Admin-Formular (AP-2.3).
+ *
+ * @param string $position
+ * @param int    $offset_x
+ * @param int    $offset_y
+ * @return array Beschriftung => lesbarer Text
+ */
+if (!function_exists('cbd_icon_position_preview')) {
+    function cbd_icon_position_preview($position, $offset_x, $offset_y) {
+        $defaults = cbd_icon_position_defaults();
+
+        $labels = array(
+            'header'                 => __('Kopfzeile neben dem Titel', 'container-block-designer'),
+            'container-top-left'     => __('Container, oben links', 'container-block-designer'),
+            'container-top-right'    => __('Container, oben rechts', 'container-block-designer'),
+            'container-bottom-left'  => __('Container, unten links', 'container-block-designer'),
+            'container-bottom-right' => __('Container, unten rechts', 'container-block-designer'),
+        );
+
+        if (!in_array($position, $defaults['positions'], true)) {
+            $position = $defaults['default'];
+        }
+
+        $offset_x = (int) $offset_x;
+        $offset_y = (int) $offset_y;
+
+        $parts = array();
+        if ($offset_x > 0) {
+            $parts[] = $offset_x . ' px ' . __('rechts', 'container-block-designer');
+        } elseif ($offset_x < 0) {
+            $parts[] = abs($offset_x) . ' px ' . __('links', 'container-block-designer');
+        }
+        if ($offset_y > 0) {
+            $parts[] = $offset_y . ' px ' . __('tiefer', 'container-block-designer');
+        } elseif ($offset_y < 0) {
+            $parts[] = abs($offset_y) . ' px ' . __('hoch', 'container-block-designer');
+        }
+
+        $versatz = empty($parts) ? __('kein Versatz', 'container-block-designer') : implode(', ', $parts);
+
+        return array(
+            __('Position', 'container-block-designer') => $labels[$position],
+            __('Versatz', 'container-block-designer')   => $versatz,
+        );
+    }
+}
+
+/**
  * Kanonische Capability-Definition der Rolle "Block-Redakteur".
  * EINZIGE Quelle der Wahrheit – von allen Erstellungs-/Reparaturpfaden genutzt,
  * damit die Rolle unabhängig vom Codepfad immer dieselben Rechte erhält.
@@ -272,7 +462,13 @@ if (!function_exists('cbd_parse_features_from_post')) {
                 // -> Fallback auf einen Dashicon-Klassennamen aus dem rohen
                 // JSON -> gar kein Icon sichtbar (Fix v3.1.78).
                 'value' => cbd_sanitize_icon_value($f['icon']['value'] ?? 'dashicons-admin-generic'),
-                'position' => sanitize_text_field($f['icon']['position'] ?? 'top-left')
+                // cbd_sanitize_icon_position() übernimmt Whitelist UND
+                // Rückfall auf 'header' vollständig -- kein zusätzliches
+                // sanitize_text_field() nötig. Altwerte wie 'top-left'
+                // fallen hier auf 'header' zurück (siehe functions.php).
+                'position' => cbd_sanitize_icon_position($f['icon']['position'] ?? ''),
+                'offsetX' => cbd_sanitize_icon_offset($f['icon']['offsetX'] ?? 0),
+                'offsetY' => cbd_sanitize_icon_offset($f['icon']['offsetY'] ?? 0)
             ),
             'collapse' => array(
                 'enabled' => isset($f['collapse']['enabled']),

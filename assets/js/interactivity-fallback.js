@@ -15,6 +15,37 @@
     // Global flag to track if Interactivity API is active
     let interactivityAPIActive = false;
 
+    /**
+     * Erkennt Apple-Geraete (iOS, iPadOS, macOS-Safari) - AP-2.6.
+     *
+     * Deckungsgleich mit istAppleGeraet() in interactivity-store.js (dort mit
+     * Begruendung und Umlauten in den Kommentaren) - diese Datei wird auf
+     * aktuellen WordPress-Versionen zwar nicht geladen (siehe AP-1.4), muss
+     * aber inhaltlich gleich bleiben.
+     *
+     * @return {boolean} true auf iOS/iPadOS/macOS-Safari, sonst false.
+     */
+    function istAppleGeraet() {
+        var ua = navigator.userAgent || '';
+
+        var isIOSDevice = /iPad|iPhone|iPod/.test(ua) ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        if (isIOSDevice) {
+            return true;
+        }
+
+        var vendor = navigator.vendor || '';
+        return vendor.indexOf('Apple') !== -1 &&
+            ua.indexOf('Safari') !== -1 &&
+            ua.indexOf('Chrome') === -1 &&
+            ua.indexOf('Chromium') === -1 &&
+            ua.indexOf('Edg') === -1 &&
+            ua.indexOf('OPR') === -1;
+    }
+
+    // Einmal berechnen statt bei jedem Aufruf neu - siehe interactivity-store.js.
+    var cbdIstAppleGeraet = istAppleGeraet();
+
     // Check immediately and after a delay
     function checkInteractivityAPI() {
         if (typeof window.wp !== 'undefined' && typeof window.wp.interactivity !== 'undefined') {
@@ -86,6 +117,22 @@
                     $collapseIcon.removeClass('dashicons-arrow-up-alt2').addClass('dashicons-arrow-down-alt2');
                 } else {
                     $collapseIcon.removeClass('dashicons-arrow-down-alt2').addClass('dashicons-arrow-up-alt2');
+                }
+
+                // Apple-Geraete (iOS/iPadOS/macOS-Safari): Screenshot-Knopf(-e)
+                // optisch zum Einzelblock-PDF-Knopf umschalten (AP-2.6). Die
+                // eigentliche Umleitung passiert im Klick-Handler weiter unten.
+                // Ist das Screenshot-Feature abgeschaltet, existiert der Knopf
+                // gar nicht - die Auswahl ist dann einfach leer.
+                if (cbdIstAppleGeraet) {
+                    $container.children('.cbd-action-buttons').find('.cbd-screenshot').each(function() {
+                        const $btn = $(this);
+                        const $btnIcon = $btn.find('.dashicons');
+                        $btnIcon.removeClass('dashicons-camera').addClass('dashicons-pdf');
+                        $btn.attr('title', 'Diesen Block als PDF speichern');
+                        $btn.attr('aria-label', 'Diesen Block als PDF speichern');
+                        $btn.attr('data-cbd-apple-pdf', '1');
+                    });
                 }
             });
         }
@@ -223,6 +270,24 @@
 
             const $button = $(this);
             const $container = $button.closest('[data-wp-interactive="container-block-designer"]');
+
+            // Apple-Geraete (iOS/iPadOS/macOS-Safari): auf den bereits
+            // vorhandenen serverseitigen Einzelblock-PDF-Export umleiten,
+            // statt html2canvas zu bemuehen (AP-2.6, identische Begruendung
+            // wie in interactivity-store.js).
+            if (cbdIstAppleGeraet) {
+                if (typeof window.cbdPDFExportServerSide === 'function' && $container.length) {
+                    window.cbdPDFExportServerSide([$container], 'visual');
+                } else {
+                    // Kein funktionsfaehiger PDF-Weg vorhanden - ein Knopf ohne
+                    // Funktion ist schlechter als keiner. console.warn bleibt
+                    // bewusst ungegated (siehe CLAUDE.md, Debugging-Konventionen).
+                    console.warn('[CBD Fallback Screenshot] window.cbdPDFExportServerSide nicht verfuegbar - Apple-PDF-Knopf wird ausgeblendet.');
+                    $button[0].style.setProperty('display', 'none', 'important');
+                }
+                return;
+            }
+
             const context = $container.data('cbd-context') || {};
             const $containerBlock = $container.children('.cbd-container-block');
             const $icon = $button.find('.dashicons');

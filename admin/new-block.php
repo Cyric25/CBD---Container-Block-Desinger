@@ -689,9 +689,42 @@ if ($block_id > 0) {
                                 </div>
                             </div>
                         </div>
+
+                        <?php
+                        // Icon-Größe (AP-2.3): cbd-frontend-clean.css -- und damit die
+                        // Variable --cbd-icon-scale -- wird auf den Formularseiten nicht
+                        // geladen (siehe class-cbd-admin.php, nur auf "cbd-block-preview").
+                        // Ein gewöhnliches wp_enqueue_style()/wp_add_inline_style() liefe hier
+                        // ins Leere: WordPress bindet Seiten-Templates wie diese Datei erst
+                        // NACH admin_print_styles ein (wp-admin/admin-header.php laeuft
+                        // vollstaendig vor do_action($page_hook)), das Handle waere also
+                        // bereits "done" und der Zusatz-Style wuerde nie ausgegeben. Deshalb
+                        // ein eigenes, quellenloses Handle und sofortiges Drucken an dieser
+                        // Stelle -- funktioniert unabhaengig von Kopf/Body-Position, weil
+                        // --cbd-icon-scale nur eine :root-Variable setzt.
+                        if (function_exists('cbd_get_icon_scale_css')) {
+                            wp_enqueue_style('cbd-icon-scale-inline', false);
+                            wp_add_inline_style('cbd-icon-scale-inline', ':root{--cbd-icon-scale:' . cbd_get_icon_scale_css() . ';}');
+                            wp_print_styles(array('cbd-icon-scale-inline'));
+                        }
+                        ?>
+                        <!-- Icon-Positions-Vorschau (AP-2.3): bewusst EIGENES Element, nicht
+                             .cbd-preview-content -- admin-live-preview-fix.js ersetzt dort per
+                             $preview.attr('style', ...) das komplette style-Attribut und würde
+                             jede hier gesetzte Positionierung sofort wieder löschen. Klassen
+                             (cbd-icon-positioned / cbd-icon-at-<ecke>) und Variablen
+                             (--cbd-icon-dx / --cbd-icon-dy) entsprechen dem, was AP-2.2 im
+                             Frontend erzeugt. -->
+                        <div class="cbd-icon-preview-stage" id="cbd-icon-preview-stage">
+                            <p class="cbd-icon-preview-label"><?php _e('Icon-Position (Vorschau)', 'container-block-designer'); ?></p>
+                            <div class="cbd-icon-preview-header">
+                                <span class="cbd-icon-preview-icon" id="cbd-icon-preview-icon"></span>
+                                <span class="cbd-icon-preview-title"><?php _e('Beispieltitel', 'container-block-designer'); ?></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                
+
                 <div class="postbox">
                     <h2 class="hndle"><?php _e('Features', 'container-block-designer'); ?></h2>
                     <div class="inside">
@@ -713,12 +746,52 @@ if ($block_id > 0) {
                                         <button type="button" class="cbd-open-icon-picker button"><?php _e('Icon ändern', 'container-block-designer'); ?></button>
                                     </div>
                                     
-                                    <!-- Icon is now fixed in top-left position with title -->
-                                    <div style="margin-top: 15px; padding: 10px; background: #e8f4f8; border: 1px solid #2196f3; border-radius: 4px;">
-                                        <p style="margin: 0; color: #1976d2; font-weight: 600;">
-                                            <span class="dashicons dashicons-info" style="margin-right: 5px;"></span>
-                                            <?php _e('Das Icon wird automatisch in der linken oberen Ecke neben dem Titel angezeigt.', 'container-block-designer'); ?>
-                                        </p>
+                                    <!-- Icon-Position (AP-2.3): Auswahl aus cbd_icon_position_defaults()
+                                         erzeugt, nicht hart aufgezählt -- bleibt damit automatisch mit der
+                                         Whitelist in includes/functions.php synchron. Speicherformat flach:
+                                         features[icon][position|offsetX|offsetY]. -->
+                                    <?php
+                                    $cbd_icon_pos_defaults = cbd_icon_position_defaults();
+                                    $cbd_icon_position     = cbd_sanitize_icon_position($block['features']['icon']['position'] ?? '');
+                                    $cbd_icon_offset_x     = cbd_sanitize_icon_offset($block['features']['icon']['offsetX'] ?? 0);
+                                    $cbd_icon_offset_y     = cbd_sanitize_icon_offset($block['features']['icon']['offsetY'] ?? 0);
+                                    $cbd_icon_position_labels = array(
+                                        'header'                 => __('Kopfzeile, neben dem Titel (Standard)', 'container-block-designer'),
+                                        'container-top-left'     => __('Container, links oben', 'container-block-designer'),
+                                        'container-top-right'    => __('Container, rechts oben', 'container-block-designer'),
+                                        'container-bottom-left'  => __('Container, links unten', 'container-block-designer'),
+                                        'container-bottom-right' => __('Container, rechts unten', 'container-block-designer'),
+                                    );
+                                    ?>
+                                    <div class="cbd-icon-position-controls">
+                                        <label for="icon_position"><?php _e('Position', 'container-block-designer'); ?></label>
+                                        <select name="features[icon][position]" id="icon_position">
+                                            <?php foreach ($cbd_icon_pos_defaults['positions'] as $cbd_icon_pos_option) : ?>
+                                                <option value="<?php echo esc_attr($cbd_icon_pos_option); ?>" <?php selected($cbd_icon_position, $cbd_icon_pos_option); ?>>
+                                                    <?php echo esc_html($cbd_icon_position_labels[$cbd_icon_pos_option] ?? $cbd_icon_pos_option); ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+
+                                        <div class="cbd-icon-offset-row">
+                                            <div class="cbd-icon-offset-field">
+                                                <label for="icon_offset_x"><?php _e('Versatz waagerecht (px)', 'container-block-designer'); ?></label>
+                                                <input type="number" id="icon_offset_x" name="features[icon][offsetX]"
+                                                       value="<?php echo esc_attr($cbd_icon_offset_x); ?>"
+                                                       min="<?php echo esc_attr($cbd_icon_pos_defaults['offset_min']); ?>"
+                                                       max="<?php echo esc_attr($cbd_icon_pos_defaults['offset_max']); ?>"
+                                                       step="1" class="small-text">
+                                            </div>
+                                            <div class="cbd-icon-offset-field">
+                                                <label for="icon_offset_y"><?php _e('Versatz senkrecht (px)', 'container-block-designer'); ?></label>
+                                                <input type="number" id="icon_offset_y" name="features[icon][offsetY]"
+                                                       value="<?php echo esc_attr($cbd_icon_offset_y); ?>"
+                                                       min="<?php echo esc_attr($cbd_icon_pos_defaults['offset_min']); ?>"
+                                                       max="<?php echo esc_attr($cbd_icon_pos_defaults['offset_max']); ?>"
+                                                       step="1" class="small-text">
+                                            </div>
+                                        </div>
+                                        <p class="description"><?php _e('Positive Werte verschieben das Icon nach rechts bzw. nach unten, negative Werte nach links bzw. oben.', 'container-block-designer'); ?></p>
                                     </div>
 
                                     <!-- Icon Picker Modal -->
@@ -1476,13 +1549,71 @@ jQuery(document).ready(function($) {
             $previewFeatures.append($featureEl);
         });
     }
-    
+
+    // Icon-Positions-Vorschau (AP-2.3). Eigene Funktion, eigenes Element
+    // (#cbd-icon-preview-stage) -- schreibt NICHT in .cbd-preview-content,
+    // weil admin-live-preview-fix.js dort das komplette style-Attribut
+    // ersetzt (siehe updateAdminLivePreview() in admin-live-preview-fix.js).
+    var CBD_ICON_CORNER_CLASSES = 'cbd-icon-positioned cbd-icon-at-top-left cbd-icon-at-top-right cbd-icon-at-bottom-left cbd-icon-at-bottom-right';
+
+    function updateIconPreview() {
+        var $stage = $('#cbd-icon-preview-stage');
+        var $icon = $('#cbd-icon-preview-icon');
+
+        if (!$stage.length || !$icon.length) {
+            return;
+        }
+
+        var enabled = $('input[name="features[icon][enabled]"]').is(':checked');
+
+        if (!enabled) {
+            $stage.hide();
+            return;
+        }
+        $stage.show();
+
+        var position = $('select[name="features[icon][position]"]').val() || 'header';
+        var offsetX = parseInt($('input[name="features[icon][offsetX]"]').val(), 10);
+        var offsetY = parseInt($('input[name="features[icon][offsetY]"]').val(), 10);
+        offsetX = isNaN(offsetX) ? 0 : offsetX;
+        offsetY = isNaN(offsetY) ? 0 : offsetY;
+
+        // Das tatsächlich gewählte Icon zeigen -- aus der bereits vorhandenen
+        // Auswahlanzeige übernehmen (icon-picker.js pflegt sie), statt die
+        // Icon-Typen hier ein zweites Mal auszuwerten.
+        var $selected = $('.cbd-selected-icon').children(
+            '.dashicons, .fa-solid, .fa-regular, .fa-brands, .material-icons, .lucide, .cbd-emoji-icon, .cbd-custom-icon-preview'
+        ).first();
+        $icon.html($selected.length ? $selected.prop('outerHTML') : '');
+
+        // Klassen wie im Frontend (AP-2.2): 'header' bleibt ohne Zusatzklasse
+        // (statisch in der Kopfzeile neben dem Titel), ein container-*-Wert
+        // bekommt cbd-icon-positioned + cbd-icon-at-<ecke>.
+        $icon.removeClass(CBD_ICON_CORNER_CLASSES);
+        if (position !== 'header') {
+            var corner = position.replace('container-', '');
+            $icon.addClass('cbd-icon-positioned cbd-icon-at-' + corner);
+        }
+
+        // Versatz wie im Frontend über CSS-Variablen transportieren, nie über
+        // ein fest berechnetes transform (siehe cbd_get_icon_position_style()).
+        $icon.css('--cbd-icon-dx', offsetX + 'px');
+        $icon.css('--cbd-icon-dy', offsetY + 'px');
+    }
+
     // Initialize preview and bind events
     updateLivePreview();
-    
+    updateIconPreview();
+
     // Bind live preview updates
     $('input[name^="styles"], select[name^="styles"], input[name="title"], textarea[name="description"], input[name^="features"]').on('input change', function() {
         updateLivePreview();
+    });
+
+    // Icon-Vorschau: reagiert auf Positionswechsel, Versatz, Ein-/Ausschalten
+    // des Features und Icon-Wechsel (#icon_value, siehe icon-picker.js).
+    $('select[name="features[icon][position]"], input[name="features[icon][offsetX]"], input[name="features[icon][offsetY]"], input[name="features[icon][enabled]"], #icon_value').on('input change', function() {
+        updateIconPreview();
     });
 
     // Sticky Live Preview Functionality

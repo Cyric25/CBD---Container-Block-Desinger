@@ -39,6 +39,20 @@
 	};
 
 	/**
+	 * Zulaessige Werte von `displayMode`.
+	 *
+	 * Dieselbe Liste steht in block.json (enum) und in render.php. Wird sie
+	 * hier erweitert, muessen beide Stellen mitgezogen werden — render.php
+	 * faellt auf 'modal' zurueck, sobald ein unbekannter Wert ankommt.
+	 */
+	var ANZEIGEMODI = ['modal', 'link'];
+
+	function normalisiereModus(wert) {
+		var text = (wert === null || wert === undefined) ? '' : String(wert);
+		return (ANZEIGEMODI.indexOf(text) !== -1) ? text : 'modal';
+	}
+
+	/**
 	 * Schluessel eines Listeneintrags fuer die Auswahlliste.
 	 *
 	 * Seiten-ID UND stableId, weil CBD_Block_Organizer::should_regenerate_id()
@@ -88,6 +102,7 @@
 		var targetPostTitle = text(attributes.targetPostTitle);
 		var linkText = text(attributes.linkText);
 		var showIcon = attributes.showIcon !== false;
+		var displayMode = normalisiereModus(attributes.displayMode);
 
 		var blockState = useState([]);
 		var bloecke = blockState[0];
@@ -276,6 +291,21 @@
 					checked: showIcon,
 					onChange: function (wert) { setAttributes({ showIcon: !!wert }); },
 					__nextHasNoMarginBottom: true
+				}) : null,
+
+				hatZiel ? el(SelectControl, {
+					label: __('Verhalten beim Klick', TEXTDOMAIN),
+					value: displayMode,
+					options: [
+						{ label: __('Als Modul oeffnen (Standard)', TEXTDOMAIN), value: 'modal' },
+						{ label: __('Zum Block springen', TEXTDOMAIN), value: 'link' }
+					],
+					onChange: function (wert) {
+						setAttributes({ displayMode: normalisiereModus(wert) });
+					},
+					help: __('Als Modul: Der Zielblock erscheint in einem Overlay auf dieser Seite. Zum Block springen: der Verweis fuehrt wie bisher zur Zielstelle.', TEXTDOMAIN),
+					__next40pxDefaultSize: true,
+					__nextHasNoMarginBottom: true
 				}) : null
 			)
 		);
@@ -323,7 +353,21 @@
 					linkText ? el('div', { className: 'cbd-block-reference-preview-link' },
 						showIcon ? el('span', { className: 'dashicons dashicons-arrow-right-alt2' }) : null,
 						el('span', {}, linkText)
-					) : null
+					) : null,
+					el('p', {
+						className: 'cbd-block-reference-preview-modus'
+							+ ('modal' === displayMode ? ' is-modal' : ' is-link')
+					},
+						el('span', {
+							className: 'dashicons '
+								+ ('modal' === displayMode ? 'dashicons-external' : 'dashicons-arrow-down-alt')
+						}),
+						el('span', {},
+							'modal' === displayMode
+								? __('Oeffnet den Block in einem Overlay auf dieser Seite.', TEXTDOMAIN)
+								: __('Springt zum Block bzw. zur Zielseite.', TEXTDOMAIN)
+						)
+					)
 				)
 			);
 		}
@@ -362,7 +406,8 @@
 			targetBlockTitle: { type: 'string', default: '' },
 			targetPostTitle: { type: 'string', default: '' },
 			linkText: { type: 'string', default: '' },
-			showIcon: { type: 'boolean', default: true }
+			showIcon: { type: 'boolean', default: true },
+			displayMode: { type: 'string', default: 'modal' }
 		},
 		edit: BlockReferenceEdit,
 		save: function () {

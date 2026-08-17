@@ -1154,7 +1154,21 @@
     text-align: center; /* Center alignment fallback */
 }
 
-/* Header icon - ALWAYS visible, larger and aligned with title baseline */
+/**
+ * Header icon - ALWAYS visible, larger and aligned with title baseline
+ *
+ * ICON-POSITION (AP-2.2): Der Feinversatz kommt als CSS-Variablenpaar
+ * --cbd-icon-dx / --cbd-icon-dy vom Server (Inline-Style am Icon-Span,
+ * erzeugt von cbd_get_icon_position_style()). Das transform wird bewusst
+ * NICHT serverseitig gesetzt: .cbd-header-icon trägt hier eine manuelle
+ * Grundlinien-Ausrichtung zum Titel mit JE EIGENEM WERT PRO BREAKPOINT
+ * (-6px Desktop / -4px ≤768px / -3px ≤480px). Ein Inline-transform würde
+ * alle drei löschen und das Icon auf Tablet und Handy verrutschen lassen.
+ * Deshalb rechnet jeder Breakpoint die Variable in seinen eigenen Basiswert
+ * ein — ändert sich einer der drei Werte, müssen alle drei Stellen
+ * mitgezogen werden (hier, ≤768px und ≤480px weiter unten).
+ * Ohne gesetzte Variablen ergibt das exakt das frühere translateY().
+ */
 .cbd-header-icon {
     display: inline-flex !important; /* Always visible */
     align-items: center;
@@ -1164,7 +1178,57 @@
     flex-shrink: 0;
     margin-right: 12px; /* More space between icon and title */
     vertical-align: baseline; /* Align with text baseline */
-    transform: translateY(-6px); /* Move icon even higher for perfect alignment */
+    /* entspricht translateY(-6px), solange kein Versatz gesetzt ist */
+    transform: translate(var(--cbd-icon-dx, 0px), calc(-6px + var(--cbd-icon-dy, 0px)));
+}
+
+/**
+ * ICON-POSITION: die vier Container-Ecken (AP-2.2)
+ *
+ * Erzeugt von cbd_get_icon_position_class(): 'cbd-icon-positioned' plus
+ * 'cbd-icon-at-<ecke>'. Der Standardwert 'header' erzeugt KEINE Klasse —
+ * bestehende Designs laufen also nie durch diesen Zweig.
+ *
+ * Bezugsrahmen ist .cbd-container-block (position: relative, :97-116) —
+ * die einzige sichtbare Box. Das Icon verlässt damit den Flex-Fluss von
+ * .cbd-block-header (position: static), sodass dort der Titel allein
+ * zentriert stehen bleibt. Genau das ist gewollt.
+ *
+ * Im Eckmodus gibt es keine Grundlinien-Ausrichtung zum Titel, die man
+ * erhalten müsste: Das transform besteht nur aus dem Versatz. Die
+ * Spezifität (0,3,0) liegt über der der drei Breakpoint-Regeln von
+ * .cbd-header-icon (0,1,0), die deshalb hier nicht dazwischenfunken —
+ * Media Queries erhöhen die Spezifität nicht.
+ *
+ * NICHT verwechseln mit .cbd-icon / .cbd-icon-inside / .cbd-positioned
+ * weiter oben in dieser Datei: Diese Selektoren matchen nichts, weil ihr
+ * Erzeuger render_features() seit Langem auskommentiert ist.
+ */
+.cbd-container .cbd-header-icon.cbd-icon-positioned {
+    position: absolute;
+    z-index: 3;
+    margin-right: 0; /* der Abstand zum Titel entfällt außerhalb der Kopfzeile */
+    transform: translate(var(--cbd-icon-dx, 0px), var(--cbd-icon-dy, 0px));
+}
+
+.cbd-container .cbd-header-icon.cbd-icon-at-top-left {
+    top: 10px;
+    left: 10px;
+}
+
+.cbd-container .cbd-header-icon.cbd-icon-at-top-right {
+    top: 10px;
+    right: 10px;
+}
+
+.cbd-container .cbd-header-icon.cbd-icon-at-bottom-left {
+    bottom: 10px;
+    left: 10px;
+}
+
+.cbd-container .cbd-header-icon.cbd-icon-at-bottom-right {
+    bottom: 10px;
+    right: 10px;
 }
 
 .cbd-header-icon .dashicons {
@@ -1222,7 +1286,8 @@
         width: calc(28px * var(--cbd-icon-scale));
         height: calc(28px * var(--cbd-icon-scale));
         margin-right: 10px;
-        transform: translateY(-4px); /* Higher adjustment for tablets */
+        /* Higher adjustment for tablets; --cbd-icon-dy siehe :1158 */
+        transform: translate(var(--cbd-icon-dx, 0px), calc(-4px + var(--cbd-icon-dy, 0px)));
     }
     .cbd-header-icon .dashicons,
     .cbd-header-icon .material-icons {
@@ -1240,7 +1305,8 @@
         width: calc(24px * var(--cbd-icon-scale));
         height: calc(24px * var(--cbd-icon-scale));
         margin-right: 8px;
-        transform: translateY(-3px); /* Higher adjustment for mobile */
+        /* Higher adjustment for mobile; --cbd-icon-dy siehe :1158 */
+        transform: translate(var(--cbd-icon-dx, 0px), calc(-3px + var(--cbd-icon-dy, 0px)));
     }
     .cbd-header-icon .dashicons,
     .cbd-header-icon .material-icons {

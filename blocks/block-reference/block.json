@@ -45,6 +45,11 @@
 		"showIcon": {
 			"type": "boolean",
 			"default": true
+		},
+		"displayMode": {
+			"type": "string",
+			"default": "modal",
+			"enum": ["modal", "link"]
 		}
 	},
 	"textdomain": "container-block-designer",

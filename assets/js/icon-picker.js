@@ -418,6 +418,20 @@
         $selectedIcon.prepend(iconHTML);
         $('.cbd-icon-name').text(`${iconData.type}: ${iconData.value}`);
 
+        // .trigger('change') ist Pflicht (AP-2.3): Ohne das Ereignis reagiert
+        // die Icon-Positions-Vorschau in new-block.php/edit-block.php nicht auf
+        // einen reinen Icon-Wechsel, weil sie an "change" auf #icon_value
+        // gebunden ist, nicht an einen direkten Funktionsaufruf.
+        //
+        // MUSS AM ENDE STEHEN (Befund M1 aus AP-2.rev, behoben in AP-2.fix1):
+        // jQuery ruft die Handler SYNCHRON auf. Stand das Ereignis oben direkt
+        // hinter dem .val(), lief updateIconPreview() noch bevor .prepend()
+        // die Anzeige .cbd-selected-icon aktualisiert hatte — die Vorschau
+        // uebernimmt deren outerHTML und zeigte deshalb das VORHERIGE Icon.
+        // Gemessen: nach Wahl von dashicons-lightbulb stand dort noch
+        // dashicons-info. Diese Zeile nicht nach oben verschieben.
+        $('#icon_value').trigger('change');
+
         // Trigger live preview update if available
         if (typeof updateLivePreview === 'function') {
             updateLivePreview();

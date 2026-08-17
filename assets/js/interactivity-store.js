@@ -9,6 +9,47 @@
 import { store, getContext, getElement } from '@wordpress/interactivity';
 
 /**
+ * Erkennt Apple-Geräte (iOS, iPadOS, macOS-Safari) - AP-2.6.
+ *
+ * Auf diesen Geräten ist der Screenshot-Weg (html2canvas + Clipboard/Web-Share)
+ * unzuverlässig: Safari verlangt `navigator.clipboard.write()` innerhalb
+ * derselben User-Aktivierung, die durch das vorgelagerte `await html2canvas(...)`
+ * verloren geht; iOS begrenzt zusätzlich die Canvas-Fläche und ignoriert
+ * `<a download>` mit Data-URL. Reine, seiteneffektfreie Funktion, damit sie
+ * sich isoliert mit gefälschten `navigator`-Werten testen lässt.
+ *
+ * @return {boolean} true auf iOS/iPadOS/macOS-Safari, sonst false.
+ */
+function istAppleGeraet() {
+	const ua = navigator.userAgent || '';
+
+	// iOS/iPadOS - dieselbe Erkennung wie beim Canvas-Flächendeckel in
+	// createScreenshot() (isIOSDevice): iPadOS 13+ meldet sich als „MacIntel",
+	// ist aber über maxTouchPoints > 1 vom echten Mac unterscheidbar.
+	const isIOSDevice = /iPad|iPhone|iPod/.test(ua) ||
+		(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+	if (isIOSDevice) {
+		return true;
+	}
+
+	// macOS-Safari: kein Touch, aber trotzdem Apple. Chromium-Abkömmlinge
+	// (Chrome, Chromium, Edge, Opera) führen "Safari" ebenfalls im UA-String
+	// und werden deshalb explizit ausgeschlossen.
+	const vendor = navigator.vendor || '';
+	return vendor.indexOf('Apple') !== -1 &&
+		ua.indexOf('Safari') !== -1 &&
+		ua.indexOf('Chrome') === -1 &&
+		ua.indexOf('Chromium') === -1 &&
+		ua.indexOf('Edg') === -1 &&
+		ua.indexOf('OPR') === -1;
+}
+
+// Einmal berechnen statt bei jedem Aufruf neu - navigator.userAgent/vendor
+// ändern sich während einer Sitzung nicht. Genutzt in callbacks.onInit
+// (Knopf-Umschaltung) und actions.createScreenshot (Umleitung).
+const cbdIstAppleGeraet = istAppleGeraet();
+
+/**
  * Helper: Show class selector dialog for "Behandelt" feature
  * (Defined outside store to avoid 'this' context issues)
  */
@@ -204,7 +245,28 @@ store('container-block-designer', {
 			const context = getContext();
 			const element = getElement();
 
-			// Prüfe ob html2canvas verfügbar ist
+			// Apple-Geraete (iOS/iPadOS/macOS-Safari): auf den bereits
+			// vorhandenen serverseitigen Einzelblock-PDF-Export umleiten,
+			// statt html2canvas zu bemuehen (AP-2.6). Derselbe Aufruf wie in
+			// actions.createPDF weiter unten.
+			if (cbdIstAppleGeraet) {
+				const mainContainer = element.ref.closest('[data-wp-interactive="container-block-designer"]');
+
+				if (typeof window.cbdPDFExportServerSide === 'function' && window.jQuery && mainContainer) {
+					const $ = window.jQuery;
+					window.cbdPDFExportServerSide([$(mainContainer)], 'visual');
+					return;
+				}
+
+				// Kein funktionsfaehiger PDF-Weg vorhanden - ein Knopf ohne
+				// Funktion ist schlechter als keiner. console.warn bleibt
+				// bewusst ungegated (siehe CLAUDE.md, Debugging-Konventionen).
+				console.warn('[CBD Screenshot] window.cbdPDFExportServerSide nicht verfuegbar - Apple-PDF-Knopf wird ausgeblendet.');
+				element.ref.style.setProperty('display', 'none', 'important');
+				return;
+			}
+
+			// Pruefe ob html2canvas verfuegbar ist
 			if (typeof html2canvas === 'undefined') {
 				context.screenshotError = true;
 				return;
@@ -768,6 +830,26 @@ store('container-block-designer', {
 			if (contentElement) {
 				contentElement.setAttribute('aria-hidden', context.isCollapsed ? 'true' : 'false');
 				contentElement.setAttribute('role', 'region');
+			}
+
+			// Apple-Geraete (iOS/iPadOS/macOS-Safari): Screenshot-Knopf(-e)
+			// optisch zum Einzelblock-PDF-Knopf umschalten (AP-2.6). Die
+			// eigentliche Umleitung passiert in actions.createScreenshot;
+			// hier geht es nur um Icon/Beschriftung. Bleibt das Screenshot-
+			// Feature abgeschaltet, existiert der Knopf gar nicht - die
+			// NodeList ist dann einfach leer.
+			if (cbdIstAppleGeraet) {
+				const screenshotButtons = element.ref.querySelectorAll('.cbd-screenshot');
+				screenshotButtons.forEach((button) => {
+					const screenshotIcon = button.querySelector('.dashicons');
+					if (screenshotIcon) {
+						screenshotIcon.classList.remove('dashicons-camera');
+						screenshotIcon.classList.add('dashicons-pdf');
+					}
+					button.setAttribute('title', 'Diesen Block als PDF speichern');
+					button.setAttribute('aria-label', 'Diesen Block als PDF speichern');
+					button.setAttribute('data-cbd-apple-pdf', '1');
+				});
 			}
 
 			// Logging für Debug

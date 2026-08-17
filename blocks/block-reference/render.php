@@ -22,6 +22,14 @@ $target_post_title = isset($attributes['targetPostTitle']) ? (string) $attribute
 $link_text = isset($attributes['linkText']) ? (string) $attributes['linkText'] : '';
 $show_icon = isset($attributes['showIcon']) ? (bool) $attributes['showIcon'] : true;
 
+// Anzeigemodus. Zulaessig sind ausschliesslich 'modal' und 'link'; alles
+// andere faellt auf 'modal' zurueck (Vorgabe aus block.json). Der Wert wird
+// als data-Attribut ausgegeben und steuert view.js.
+$display_mode = isset($attributes['displayMode']) ? (string) $attributes['displayMode'] : 'modal';
+if ('link' !== $display_mode && 'modal' !== $display_mode) {
+	$display_mode = 'modal';
+}
+
 // Sprungmarke bestimmen:
 // 1. der echte HTML-Anker des Ziels (liegt am inneren .cbd-container-block)
 // 2. ALTBESTAND: frueher wurde targetBlockId als Anker verwendet
@@ -68,9 +76,18 @@ $is_same_page = ($current_post_id === $target_post_id);
 
 // Block wrapper attributes
 $wrapper_attributes = get_block_wrapper_attributes(array(
-	'class' => 'cbd-block-reference-wrapper',
+	'class' => 'cbd-block-reference-wrapper cbd-block-reference-mode-' . $display_mode,
 	'data-same-page' => $is_same_page ? 'true' : 'false',
+	'data-display-mode' => $display_mode,
 ));
+
+// Der Verweis bleibt in BEIDEN Modi ein <a> mit vollstaendiger Ziel-URL, nie
+// ein <button>: Ohne JavaScript fuehrt er dann immer noch zur Zielseite
+// (fortschreitende Verbesserung). Das Modal entsteht erst durch
+// preventDefault() in view.js.
+$titel_text = 'modal' === $display_mode
+	? sprintf(__('Block anzeigen: %s', 'container-block-designer'), $target_block_title)
+	: sprintf(__('Gehe zu Block: %s', 'container-block-designer'), $target_block_title);
 
 ?>
 <div <?php echo $wrapper_attributes; ?>>
@@ -81,7 +98,10 @@ $wrapper_attributes = get_block_wrapper_attributes(array(
 		data-target-anchor="<?php echo esc_attr($fragment); ?>"
 		data-target-post="<?php echo esc_attr((string) $target_post_id); ?>"
 		data-same-page="<?php echo $is_same_page ? 'true' : 'false'; ?>"
-		title="<?php echo esc_attr(sprintf(__('Gehe zu Block: %s', 'container-block-designer'), $target_block_title)); ?>"
+		data-display-mode="<?php echo esc_attr($display_mode); ?>"
+		data-target-title="<?php echo esc_attr($target_block_title); ?>"
+		<?php if ('modal' === $display_mode) : ?>aria-haspopup="dialog"<?php endif; ?>
+		title="<?php echo esc_attr($titel_text); ?>"
 	>
 		<div class="cbd-block-reference-content">
 			<?php if ($show_icon) : ?>
