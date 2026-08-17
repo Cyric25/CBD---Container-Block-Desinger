@@ -311,12 +311,25 @@ Phase 1 `window.cbdRenderLatex` gebaut wurde. Die Integration prüft AP-4.3.
 `container-block-designer.php` anfasst** (zwei Zeilen: `require_once` und
 `::init()`). Kein anderes AP darf diese Datei ändern.
 
-**Phase 4: AP-4.1 und AP-4.2 laufen gleichzeitig.**
+**Nach AP-3.rev: AP-4.1 und die drei Korrektur-APs laufen gleichzeitig.**
+AP-3.fix3/4/5 sind Nachträge aus dem Review; sie halten Welle 2 nicht auf,
+weil ihre Dateimengen zu allem in Phase 4 disjunkt sind:
 
 | AP | Dateien |
 |---|---|
 | AP-4.1 | `blocks/block-reference/index.js` |
-| AP-4.2 | `blocks/block-reference/format.js` (neu), `blocks/block-reference/style.css`, `blocks/block-reference/view.js` |
+| AP-3.fix3 | `includes/class-cbd-blocks-rest-api.php`, `tools/test-seitenbaum.php` |
+| AP-3.fix4 | `assets/js/block-auswahl.js`, `tools/test-block-auswahl.js` |
+| AP-3.fix5 | `includes/class-cbd-inline-reference.php`, `blocks/block-reference/render.php`, `tools/test-inline-reference.php` |
+
+AP-4.1 benutzt den Auswahlbaustein, den AP-3.fix4 gleichzeitig ändert. Das ist
+zulässig: AP-3.fix4 fasst **Vertrag C nicht an**, es behebt nur ein Verhalten
+innerhalb der Komponente. AP-4.1 programmiert weiter gegen den Vertrag.
+
+**AP-4.2 startet erst, wenn AP-3.fix5 fertig ist.** Beide brauchen
+`tools/test-inline-reference.php` — AP-3.fix5 für die zwei Fälle zu den
+führenden Nullen, AP-4.2 für den Duplikatswächter aus AK14. Zwei APs
+gleichzeitig in derselben Testdatei ist genau der Fall, den Regel C verbietet.
 
 Danach AP-4.3 (Abnahme), AP-4.rev (Review), AP-4.doc (Dokumentation) —
 sequenziell in dieser Reihenfolge.
@@ -389,6 +402,14 @@ Sicherheitsmodell wie `cbd/v1/blocks`, daher dieselbe Klasse.
   Lehrpersonen reserviert", nicht „darf der aktuelle Nutzer sie sehen".
 - Verwaiste Knoten (Elternteil nicht `publish`) fehlen samt Unterbaum. Das
   ist die dokumentierte Eigenschaft der Breitensuche, kein Fehler.
+- **Tiefenbegrenzung 20** (in AP-3.1 ergänzt, hier nachgetragen nach Befund
+  Anmerkung 1 aus AP-3.rev): Seiten jenseits von Ebene 22 fallen samt
+  Unterbaum heraus, mit einem Eintrag im Log bei `WP_DEBUG`. Gemessene Tiefe
+  des Projekts ist 3–4; die Grenze ist ein Schutz gegen verstümmelte Daten,
+  keine fachliche Aussage. **Vertragsbestandteil, nicht zu entfernen.**
+- `knoten` und `kinder` sind **JSON-Objekte**, auch wenn ihre Schlüssel
+  zufällig `0..n-1` lauten (siehe `AP-3.fix3`, Befund S1). Ein Client, der
+  eine Liste bekommt, verwirft sie.
 
 #### Vertrag C — `window.cbdBlockAuswahl`
 
@@ -529,8 +550,11 @@ Ablauf, in dieser Reihenfolge:
    - `aria-haspopup` auf `dialog` setzen
    - `href` neu berechnen: `get_permalink($ziel_post)`, daran `#<anchor>`
      falls `data-target-anchor` nicht leer ist, sonst
-     `?cbd-ref=<stable_id>`. Liefert `get_permalink()` einen leeren oder
-     falschen Wert, bleibt der gespeicherte `href` stehen.
+     `?cbd-ref=<stable_id>`. **Ist auch `stable_id` leer, bleibt es beim
+     nackten Permalink** — kein `?cbd-ref=` ohne Wert (Wortlautlücke,
+     nachgetragen nach AP-3.rev, Anmerkung 2; der Code tat es von Anfang an
+     richtig, genau wie `render.php`). Liefert `get_permalink()` einen leeren
+     oder falschen Wert, bleibt der gespeicherte `href` stehen.
 4. Ein `<a>` ohne brauchbares `data-target-post` bleibt unverändert.
 5. Wurde mindestens ein Verweis bearbeitet: das View-Script einbinden
    (`wp_enqueue_script(CBD_Block_Reference::view_script_handle())`) und den
@@ -1181,7 +1205,268 @@ gespeicherter Inhalt ist davon nicht betroffen (der Filter wirkt nur auf die
 Ausgabe). Nur zu wissen, damit niemand eine feste Attributreihenfolge
 erwartet.
 
-**Übergabenotiz:** _(vom Agenten zu füllen — dieses AP ist offen)_
+**Übergabenotiz (erledigt, zweiter Anlauf):** Alle neun Prüfschwerpunkte
+abgearbeitet. Selbst gefahren: alle 13 PHP-Harnische, beide Betriebsarten des
+Inline-Harnischs, `node --check` auf beide geänderten JS-Dateien,
+`check-php74.php`, dazu **zwei eigene Angriffssonden** (33 neue Fälle auf den
+Filter, 20 auf `block-auswahl.js`). `git diff` auf
+`class-cbd-block-content-api.php`: **0 Byte.**
+
+**Urteil: Welle 2 darf starten**, unter der Bedingung, dass Befund B1 vor
+AP-4.1 in den Plantext gezogen wird. **Das ist erledigt** — AP-4.1 Schritt 2
+und 3 sind neu gefasst, AK4 verlangt jetzt fünf statt vier Stellen, und AK9
+ist neu. Ohne diese Korrektur hätte AP-4.1 eine Doppelung stehen lassen und
+im Editor „Keine Container-Blöcke gefunden" behauptet, während welche da
+sind — beides mit grünem AK4.
+
+**Aus dem Review in andere APs übernommen:** die Rückgabe von `wert` nach
+AP-4.2 Schritt 6 samt AK13, der Duplikatswächter als AK14, die Hierarchie-
+Prüfmenge in AK7 von AP-4.3, die Archivmessung und die ausdrückliche
+Beurteilung der zwei bekannten Grenzen als Schritt 11 von AP-4.3.
+
+**Bestätigungen, die Gewicht haben** (kein Befund, aber vorher unbewiesen):
+
+- Der Filter ist **idempotent** — zweifache und dreifache Anwendung ist
+  byte-identisch. Wichtig, weil `do_shortcode` auf Priorität 11 liegt und ein
+  Shortcode `the_content` erneut anwenden kann.
+- `<a>` mit der Klasse in `<iframe>`, `<title>`, unbeendetem und bedingtem
+  HTML-Kommentar bleibt zeichengleich; in `<code>`, `<pre>`, `<noscript>`,
+  `<template>` und `<svg><desc>` wird bearbeitet — richtig, dort ist ein
+  `<a>` ein echtes Element.
+- **Lastverhalten gemessen, nicht vermutet:** ≤ 4 Abfragen für
+  `cbd/v1/seitenbaum` auf 260 Seiten mit gesperrter Seite,
+  seitenzahlunabhängig. AP-3.fix1 hat den O(n)-Pfad wirklich beseitigt.
+- `ladeDaten()` ist **echt** memoisiert (Objektidentität bei drei
+  gleichzeitigen Aufrufen); das Merken geschieht synchron vor `Promise.all`,
+  greift also auch bei echter Parallelität.
+- Zusicherung 4 aus Vertrag C ist saubere Mechanik: Die manuelle Navigation
+  liegt in einer Überschreibung, die genau dann verfällt, wenn `wert` sich
+  ändert. Suche und Kaskade sind wirklich zwei Sichten auf einen Zustand.
+- Die Zusicherung „genau eine Zeile in `view.js`" **trägt**:
+  `entschaerfeInhalt()` arbeitet klassenagnostisch über
+  `[data-display-mode="modal"]`, `imModal()` ist ein zweites Netz.
+  Modal-in-Modal ist für den Inline-Verweis ohne weitere Änderung
+  ausgeschlossen.
+- Kein camelCase in irgendeinem `data-`Namen; alle erfüllen
+  `data(-[a-z0-9_]+)+` und überleben `wp_kses_post()`.
+- Phase 3 fügt **keine vierte** Fassung der `stableId`-Extraktion hinzu.
+
+---
+
+### AP-3.fix3: Antwortform, überflüssige Abfrage und Sortierung der Baum-Route
+
+**Modell:** sonnet
+**Abhängigkeiten:** AP-3.1, AP-3.fix1
+**Dateien:** `includes/class-cbd-blocks-rest-api.php`, `tools/test-seitenbaum.php`
+**Anlass:** Befunde S1, S2 und S5 aus AP-3.rev. Alle drei in derselben Datei,
+deshalb ein AP. **Parallel zu Welle 2 zulässig** — kein AP der Phase 4 fasst
+diese Dateien an.
+
+**S1 — `kinder` und `knoten` können als JSON-*Liste* statt als Objekt
+herausgehen.** `json_encode()` liefert für ein PHP-Array mit den Schlüsseln
+`0..n-1` eine JSON-Liste. Gemessen im Review:
+
+```
+flach (nur Wurzeln) : {"kinder":[[43,44,45]]}          ← Liste, nicht Objekt
+hierarchisch        : {"kinder":{"0":[12],"12":[34]}}  ← Objekt (Regelfall)
+leerer Baum         : {"knoten":[],"kinder":[]}
+```
+
+`block-auswahl.js:189-191` (`normalisiereBaum`) lehnt Listen ab und ersetzt
+sie **stillschweigend** durch `{}`. Vertrag B schreibt ausdrücklich Objekte
+vor, und **keine der 82 Prüfungen sieht die JSON-Form** an. Der Fall braucht
+`kinder`-Schlüssel von genau `0..n-1` und ist damit praktisch unerreichbar —
+aber die Abhilfe ist ein Wort, und ein stiller Datenverlust an einer
+Vertragsgrenze soll nicht von Zufall abhängen.
+
+*Umsetzung:* `'knoten' => (object) $knoten` und
+`'kinder' => (object) $kinder_gefiltert`. Prüfung ergänzen, die
+`json_encode()` der Antwort für eine **flache** Seitenmenge gegen
+`{"kinder":{"0":[…]}}` hält — also die Serialisierung prüft, nicht nur das
+PHP-Array.
+
+**S2 — `update_meta_cache()` ist in der genutzten Stufe 1 eine überflüssige
+Abfrage, und der Kommentar behauptet das Gegenteil.**
+`includes/class-cbd-blocks-rest-api.php:392-397` sagt „für Stufe 1 kostet er
+nichts". Falsch: Es ist ein `SELECT … WHERE post_id IN (…260 IDs…)`, das
+**alle** Postmeta aller Seiten in den Objektcache lädt — während Stufe 1
+(`simple_clean_gesperrte_seiten_mit_unterbaum()`) überhaupt keine Meta liest.
+Nicht O(n) Abfragen, aber O(n) Datenvolumen bei jedem Öffnen des Editors.
+
+*Umsetzung:* `update_meta_cache()` in den `elseif`-Zweig (Stufe 2)
+verschieben, wo es wirklich gebraucht wird. Den Kommentar berichtigen.
+**Die Harnisch-Zusicherungen `10.4`, `F1-AK5.2` und `F1-AK5.6` zählen den
+Aufruf und müssen mitgezogen werden** — sie erwarten ihn heute in Stufe 1.
+Das ist der Grund, warum das ein eigenes AP ist und keine stille Änderung:
+Wer nur den Code ändert, macht drei Prüfungen rot und ist versucht, sie
+abzuschwächen. Sie sind **umzuformulieren, nicht zu entfernen**: „genau ein
+`update_meta_cache()` in Stufe 2, **keiner** in Stufe 1".
+
+*Ausdrücklich zu dokumentieren, nicht zu beheben:* Stufe 2 bleibt in der
+Wirklichkeit **O(n) Abfragen** (`get_post_ancestors()` → `get_post()`, der
+Post-Cache wird von der rohen Abfrage nicht gefüllt). Das ist laut AK2 von
+AP-3.fix1 gewollt und betrifft nur ein Theme älteren Stands — es steht aber
+nirgends, dass der Rückfallpfad teuer ist. Ein Kommentar genügt.
+
+**S5 — `orderby => 'menu_order title'` verschlechtert die flache Trefferliste,
+ohne seinen Zweck zu erfüllen.** `:76`. Begründet war die Änderung in AP-3.1
+mit „damit die Reihenfolge innerhalb einer Ebene nicht willkürlich ist" — die
+Ebenenreihenfolge liefert aber **Vertrag B** über `kinder`; `ebenen()` benutzt
+die Reihenfolge von `bloecke` für Seiten überhaupt nicht. Wirksam wird die
+Sortierung nur dort, wo die Liste **flach** gelesen wird: in der Trefferliste
+der Suche (`block-auswahl.js:949`). Dort steht jetzt statt alphabetisch: erst
+alle `menu_order = 0` alphabetisch, dann alle `menu_order = 1` usw. — quer
+über Beiträge, Seiten und Hierarchieebenen. Für eine Suchtrefferliste ist das
+schlechter als vorher.
+
+*Umsetzung:* zurück auf `'orderby' => 'title'`. Die Begründung aus AP-3.1
+war ein Denkfehler des Plans, kein Fehler des Agenten; das im Kommentar
+festhalten, damit es nicht ein drittes Mal geändert wird.
+
+**Akzeptanzkriterien:**
+
+- AK1: `json_encode()` der Antwort liefert für `knoten` und `kinder` **immer**
+  ein Objekt — geprüft für flache Seitenmenge, hierarchische Seitenmenge,
+  einzelne Wurzel und leeren Baum.
+- AK2: `update_meta_cache()` wird bei vorhandener Stufe 1 **gar nicht**
+  aufgerufen, bei Stufe 2 **genau einmal**.
+- AK3: Die Abfragenzahl bleibt in beiden Stufen seitenzahlunabhängig (5 und
+  50 Seiten, mindestens eine gesperrt).
+- AK4: `orderby` ist `title`; eine Prüfung hält die SQL-Zeichenkette darauf
+  fest.
+- AK5: Die 82 bestehenden Prüfungen bleiben grün. Die drei zu S2 genannten
+  werden **umformuliert, nicht entfernt** — die Zahl der Prüfungen darf nicht
+  sinken.
+- AK6: `php tools/check-php74.php` grün.
+
+**Tests (TDD):** rote Fälle zuerst.
+
+**Übergabenotiz:** _(vom Agenten zu füllen)_
+
+---
+
+### AP-3.fix4: „(gespeichertes Ziel)" darf das Ziel nicht löschen
+
+**Modell:** sonnet
+**Abhängigkeiten:** AP-3.2
+**Dateien:** `assets/js/block-auswahl.js`, `tools/test-block-auswahl.js`
+**Anlass:** Befund S4 aus AP-3.rev. **Parallel zu Welle 2 zulässig** — kein
+AP der Phase 4 fasst diese Dateien an.
+
+**Der Befund.** `assets/js/block-auswahl.js:885-892` in Verbindung mit
+`:839-845`. Ist `wert` gesetzt, der zugehörige Eintrag aber nicht mehr in
+`bloecke` (der Zielblock wurde gelöscht), erscheint in der Blockstufe eine
+Option `{label: '(gespeichertes Ziel)', value: wert}`. **Wählt der Nutzer
+diese Option, wird sein Ziel gelöscht:** `waehleZiel(wert)` →
+`eintragZuSchluessel()` → `null` → `melde(null)` → der Konsument leert das
+Ziel. Vertrag C sagt aber: „`null` **beim Abwählen**".
+
+Eine Option, die aussieht wie „das ist dein gespeichertes Ziel", und die beim
+Anklicken genau dieses Ziel wegwirft, ist die unangenehmste Sorte Fehler —
+sie zerstört Daten bei einer Handlung, die harmlos aussieht. Die Gegenstelle
+im Suchfeld macht es richtig (`:969` prüft zusätzlich `aktuellerEintrag`).
+
+*Umsetzung, zwei gleichwertige Wege — einen wählen und begründen:*
+1. `:885` um `&& aktuellerEintrag` ergänzen. Dann verschwindet die
+   inhaltsleere Option ganz. Vorteil: der Nutzer sieht keine Option, die
+   nichts tun kann.
+2. `waehleZiel()` bei einem nicht auflösbaren, aber nicht-leeren Schlüssel
+   **nichts** melden lassen. Vorteil: die Option bleibt als Anzeige des
+   gespeicherten Zustands sichtbar.
+
+Der Weg 1 ist der einfachere; Weg 2 erhält dem Nutzer die Information, dass
+überhaupt ein Ziel gespeichert ist. **Entscheidung des Agenten**, mit
+Begründung in der Übergabenotiz.
+
+**Akzeptanzkriterien:**
+
+- AK1: Ein gesetzter `wert`, dessen Eintrag nicht in `bloecke` steht, führt
+  bei **keiner** Bedienhandlung zu `melde(null)` — außer beim ausdrücklichen
+  Abwählen der Leeroption.
+- AK2: Das ausdrückliche Abwählen meldet weiterhin `null`.
+- AK3: Der Fall „Eintrag ist vorhanden" verhält sich unverändert.
+- AK4: `melde()` wird weiterhin **nur** aus `onChange` heraus gerufen, nie aus
+  einem Effekt — ein gespeichertes Ziel kann nicht von selbst verloren gehen.
+  Das hat AP-3.rev geprüft und ist die Grundlage von AK2/AK6 in AP-4.1; es
+  muss so bleiben.
+- AK5: Die 133 bestehenden Prüfungen bleiben grün und werden nicht
+  abgeschwächt.
+- AK6: `node --check` grün, Hausstil eingehalten (kein `import`/`export`,
+  kein JSX, ES5).
+
+**Tests (TDD):** rote Fälle zuerst. Der Fall braucht keine React-Umgebung:
+`waehleZiel()` und die Optionsbildung sind über die reinen Funktionen und die
+Stub-`window`-Technik des Harnischs erreichbar, sofern sie exportiert bzw.
+über `ebenen()` erreichbar sind. Ist die Funktion nur intern, ist die
+Prüfung über den beobachtbaren Vertrag zu führen — **nicht** durch
+Aufweichen der Kapselung.
+
+**Übergabenotiz:** _(vom Agenten zu füllen)_
+
+---
+
+### AP-3.fix5: Führende Nullen dokumentieren, URL-Regel beidseitig kommentieren
+
+**Modell:** sonnet
+**Abhängigkeiten:** AP-3.fix2
+**Dateien:** `includes/class-cbd-inline-reference.php`,
+`blocks/block-reference/render.php`, `tools/test-inline-reference.php`
+**Anlass:** Befunde S3 und S7 aus AP-3.rev. **Parallel zu Welle 2 zulässig** —
+kein AP der Phase 4 fasst `render.php` an. Vorsicht: AP-4.2 arbeitet im
+selben Verzeichnis, aber an `format.js`, `style.css` und `view.js`.
+
+**S3 — `ziel_post_id()` lehnt seit AP-3.fix2 führende Nullen ab, undokumentiert
+und ungetestet.** `filter_var('045', FILTER_VALIDATE_INT)` ist **`false`**;
+vor fix2 ergab `(int)'045'` = 45. Der Doc-Kommentar (`:338-343`) sagt „Nur
+eine reine Ziffernfolge zählt" — `045` **ist** eine. AK4 von AP-3.fix2 listet
+die Ablehnungen einzeln auf, `045` fehlt, und keine der 155 Prüfungen deckt
+es ab.
+
+Die Auswirkung ist praktisch null: Der Wert kann nicht aus der Zielauswahl
+kommen, eine Beitrags-ID hat keine führenden Nullen. **Der Punkt ist nicht
+die Auswirkung, sondern dass ein Korrektur-AP eine zweite, unbemerkte
+Verhaltensänderung mitgebracht hat.** Genau so entsteht der Zustand, in dem
+niemand mehr sagen kann, was eine Funktion eigentlich zusichert.
+
+*Umsetzung:* Die Ablehnung **beibehalten** — sie ist inhaltlich richtig — und
+den Doc-Kommentar berichtigen, sodass er sie nennt und begründet. Zwei
+Prüfungen ergänzen: `045` und `00000000000000000045` bleiben zeichengleich.
+Wer stattdessen normalisieren will (`ltrim($roh, '0')`), muss das begründen;
+die Vorgabe ist Dokumentieren, nicht Ändern.
+
+**S7 — die URL-Bildungsregel steht an zwei Stellen, kommentiert ist nur eine.**
+`CBD_Inline_Reference::ziel_href()` (`:410-431`) und
+`blocks/block-reference/render.php:64-71` bilden die Ziel-URL nach derselben
+Regel (Anker gewinnt gegen `cbd-ref`, leerer Bezeichner → nackter Permalink).
+`ziel_href()` verweist auf `render.php`; **`render.php` verweist nicht
+zurück.** Wer künftig `render.php` ändert, findet die zweite Fassung nicht.
+
+Ein Duplikatswächter lohnt hier **nicht** — er müsste rendern. Ein Kommentar
+genügt, **aber nur, wenn er an beiden Stellen steht.**
+
+*Umsetzung:* Eine Kommentarzeile in `render.php` über der Stelle, die auf
+`CBD_Inline_Reference::ziel_href()` zeigt und sagt, dass beide Fassungen
+zusammen zu ändern sind. Nichts am Verhalten von `render.php`.
+
+**Zusätzlich, eine Wortlautlücke in Vertrag E** (Anmerkung 2 aus AP-3.rev):
+Der Vertrag sagt „sonst `?cbd-ref=<stable_id>`". Bei **leerem** Bezeichner
+setzt der Code korrekt den nackten Permalink — genau wie `render.php`. Der
+Code hat recht, der Vertragstext ist unvollständig. **Diese Korrektur nimmt
+der Orchestrator am Plan vor, nicht der Agent.**
+
+**Akzeptanzkriterien:**
+
+- AK1: `045` und `00000000000000000045` lassen das Element zeichengleich; je
+  eine Prüfung.
+- AK2: Der Doc-Kommentar an `ziel_post_id()` nennt die Ablehnung führender
+  Nullen ausdrücklich.
+- AK3: `render.php` trägt einen Kommentar, der auf `ziel_href()` zeigt.
+  **Sonst ändert sich an `render.php` nichts** — Nachweis: der Diff enthält
+  nur Kommentarzeilen.
+- AK4: Die 155 Prüfungen bleiben grün, beide Betriebsarten.
+- AK5: `php tools/check-php74.php` grün.
+
+**Übergabenotiz:** _(vom Agenten zu füllen)_
 
 ---
 
@@ -1215,11 +1500,30 @@ mit Optionen `"<Seitentitel> → <Blocktitel>"` (`:192-199`). Datenladung im
 2. Den eigenen `useEffect`-Ladeblock (`:125-153`) entfernen; die Komponente
    lädt selbst. Ebenso `Placeholder`/`Spinner` als Ladeanzeige (`:315-322`),
    soweit sie nur die Zielliste betraf.
-3. **Die nach AP-3.2 doppelt vorhandenen Funktionen aus `index.js`
-   entfernen** — `schluessel()` (`:62-67`), `text()` (`:69-71`),
-   `passtZurSuche()` (`:80-92`) und den Optionsaufbau (`:159-199`). Sie
-   leben ab jetzt nur in `block-auswahl.js`. Verbleibende Verwendungen auf
-   `window.cbdBlockAuswahl.*` umstellen.
+
+   **Und damit auch alles, was aus dem Ladeblock gespeist wurde** (Befund B1b
+   aus AP-3.rev). Die Zustände `bloecke`, `laedt` und `fehler` (`:107-117`)
+   verlieren ihre Quelle. `bloecke` wäre danach dauerhaft `[]` — und die
+   Hinweiszeile im Canvas (`:333-336`) behauptete
+   **„Keine Container-Blöcke gefunden", während reichlich vorhanden sind.**
+   Betroffen sind mindestens `:268-270`, `:275-278`, `:313-337`. Entweder die
+   Zeile ganz weglassen oder ihre Zahl aus der Komponente beziehen; einen
+   Zustand stehen zu lassen, den niemand mehr füllt, ist keine Option.
+3. **Die nach AP-3.2 doppelt vorhandenen Stellen aus `index.js` entfernen —
+   es sind FÜNF, nicht vier** (Befund B1a aus AP-3.rev):
+
+   | Fundstelle | Was | Verwendungen, die mitzuziehen sind |
+   |---|---|---|
+   | `:62-67` (Docblock ab `:55`) | `schluessel()` | `:170`, `:197`, `:224` |
+   | `:69-71` | `text()` | `:98-103`, `:194-196`, `:235-240` — am einfachsten ein lokaler Alias `var text = window.cbdBlockAuswahl.text;` |
+   | `:80-92` | `passtZurSuche()` | einziger Aufrufer `:166`, entfällt mit dem Optionsaufbau |
+   | `:159-199` | Optionsaufbau, darin die Regel „gewählte Option behalten" (`:180-190`) | ersatzlos, die Komponente bringt beides mit |
+   | **`:155-157`** | **`aktuellerWert`** — eine **vierte, wortgleiche Fassung der Schlüsselregel** `<postId>\|<stableId>`, geschrieben von Hand statt über `schluessel()` | wird Prop `wert` von `HierarchieAuswahl`; ersetzen durch `window.cbdBlockAuswahl.schluessel({postId: targetPostId, stableId: targetStableId})` |
+
+   Die letzte Zeile ist der Grund, warum dieser Schritt neu gefasst wurde:
+   Sie lag knapp außerhalb der ursprünglichen Liste, ist heute wertgleich mit
+   `schluessel()` und hat **keinen Wächter**. AK4 wäre in der alten Fassung
+   grün geworden, während die Doppelung stehen bleibt.
 4. Wächter: `if (!window.cbdBlockAuswahl)` → eine `Notice` mit dem Hinweis,
    dass der Auswahlbaustein nicht geladen ist, statt eines Absturzes der
    Seitenleiste.
@@ -1236,8 +1540,15 @@ mit Optionen `"<Seitentitel> → <Blocktitel>"` (`:192-199`). Datenladung im
   an, und die Kaskade steht auf dem Pfad dieses Ziels.
 - AK3: Die Suche findet ein Ziel über Seiten- und Blocktitel und stellt die
   Kaskade auf den Trefferpfad.
-- AK4: Die vier in Schritt 3 genannten Funktionen existieren in `index.js`
-  **nicht mehr**. Nachweis über `grep`.
+- AK4: Alle **fünf** in Schritt 3 genannten Stellen existieren in `index.js`
+  **nicht mehr**. Nachweis über `grep`, und zwar ausdrücklich auch nach der
+  handgeschriebenen Schlüsselregel: `grep -n "'|'" blocks/block-reference/index.js`
+  darf nichts liefern.
+- AK9: Die Hinweiszeile im Canvas nennt eine **richtige** Zahl oder gar
+  keine. Nachweis: Editor mit mindestens einem vorhandenen Container-Block
+  öffnen — es darf nicht „Keine Container-Blöcke gefunden" dastehen. Kein
+  Zustand (`bloecke`, `laedt`, `fehler`) bleibt zurück, den niemand mehr
+  füllt; Nachweis über `grep` auf die drei Namen.
 - AK5: `linkText`, `showIcon` und `displayMode` verhalten sich unverändert.
 - AK6: Ein gespeicherter Block bleibt nach dem Öffnen und Schließen des
   Editors ohne Änderung gültig — kein „Block enthält unerwarteten Inhalt",
@@ -1311,6 +1622,16 @@ Verweis, der den Zielblock als Modal öffnet.
    die nicht garantiert ist). Inhalt: `window.cbdBlockAuswahl.HierarchieAuswahl`
    plus zwei `Button` (`variant: 'tertiary'` Abbrechen / `'primary'`
    Übernehmen). `Übernehmen` ist deaktiviert, solange kein Ziel gewählt ist.
+
+   **Der Dialog muss den Wert zurückgeben, den er bekommt** (Befund aus
+   AP-3.rev, im Plan zuvor nicht gesagt): Den in `onWaehle` erhaltenen
+   Eintrag in lokalen Zustand legen **und** denselben Zustand als Prop `wert`
+   an `HierarchieAuswahl` zurückgeben. Die Komponente leitet den Kaskadenpfad
+   aus `wert` ab und verwirft ihre manuelle Navigation genau dann, wenn `wert`
+   sich ändert (`block-auswahl.js:766-768`, `:803-810`). Ein Dialog, der
+   `wert` nicht nachzieht, lässt die Kaskade nach dem ersten Suchtreffer
+   stehen — Zusicherung 4 aus Vertrag C hängt am Aufrufer, nicht an der
+   Komponente.
 7. Anwenden über `applyFormat(value, { type: 'cbd/block-reference-inline',
    attributes: { … } })` → `onChange(neuerWert)`. Die Attribute nach Vertrag
    D; `href` aus `postUrl` + Anker bzw. `?cbd-ref=`, `titel` aus
@@ -1359,6 +1680,18 @@ Verweis, der den Zielblock als Modal öffnet.
   `core/button`-Beschriftung. Wo sie fehlt, ist der Grund benannt
   (`allowedFormats` bzw. `withoutInteractiveFormatting`) — das ist eine
   Eigenschaft von Gutenberg, kein Befund.
+- AK13: Ein Suchtreffer im Dialog stellt die Kaskade auf den Pfad des
+  Treffers. Das ist der Nachweis für die Rückgabe von `wert` aus Schritt 6 —
+  ohne sie bleibt die Kaskade stehen und der Fehler sieht wie ein Fehler der
+  Komponente aus.
+- AK14: **Duplikatswächter für die Klassenzeichenkette** (Befund S8 aus
+  AP-3.rev). `tools/test-inline-reference.php` bekommt eine Zusicherung, die
+  anschlägt, wenn `CBD_Inline_Reference::KLASSE` **nicht** wortgleich in
+  `blocks/block-reference/format.js` **und** in `blocks/block-reference/view.js`
+  vorkommt. Die Zeichenkette steht ab diesem AP an drei Stellen; der Harnisch
+  liest ohnehin Quelltext (Prüfung 1.5), der Wächter kostet drei Zeilen.
+  Präzedenz: die `:pN`-Zusicherung in `tools/test-classroom-gate.php`, die
+  beim Bauen genau so einen Fall gemeldet hat.
 
 **Tests:** Manuell im Editor und Frontend des Testservers, protokolliert in
 AP-4.3, plus `node --check`. Für dieses AP zusätzlich der Rundlauf:
@@ -1416,8 +1749,22 @@ funktioniert, und ein auslieferbares ZIP bauen.
    ansehen — überleben alle fünf Attribute `wp_kses_post()`?
 10. Ladezeit beider Editor-Routen mit `curl` messen (Kopfzeile
     `Host: fos.localhost` und `X-WP-Nonce` nicht vergessen) und die Werte
-    festhalten.
-11. Plugin einmal deaktivieren, Frontend von Seite A aufrufen: Die
+    festhalten. **Zusätzlich eine Archivseite messen** (Befund aus AP-3.rev,
+    Anmerkung 14): Der `the_content`-Filter läuft auch in
+    `wp_trim_excerpt()` und reiht dort das View-Script ein, obwohl der
+    Verweis im Auszug abgeschnitten sein kann. Erwartung: unauffällig — aber
+    gemessen, nicht vermutet.
+11. **Die zwei bekannten Grenzen ausdrücklich beurteilen** und das Urteil
+    festhalten, statt sie zu übergehen:
+    a) `ladeDaten()` merkt sich auch den **Fehlerpfad** dauerhaft. Scheitert
+       der Abruf beim Editorstart, bleibt die Auswahl die ganze Sitzung leer
+       (mit Fehlermeldung); Abhilfe ist ein Neuladen der Seite. Störend?
+    b) Ein in einem zweiten Tab angelegter Container-Block erscheint in der
+       schon offenen Auswahl erst nach einem Neuladen. Störend?
+    Fällt eines von beidem als störend auf, gehört es als `AP-4.fixN` in den
+    Vertrag — **nicht** als stille Ergänzung, sie würde AK1 von AP-3.2
+    verletzen.
+12. Plugin einmal deaktivieren, Frontend von Seite A aufrufen: Die
     Inline-Verweise müssen gewöhnliche Links zum Ziel sein, die Absätze im
     Editor gültig bleiben.
 
@@ -1435,6 +1782,12 @@ funktioniert, und ein auslieferbares ZIP bauen.
 - AK6: Als Block-Redakteur gespeichert, stehen alle fünf Attribute aus
   Vertrag D unverändert in der Datenbank.
 - AK7: Die Kaskade funktioniert an **beiden** Stellen über vier Ebenen.
+  **Zwingend auf einer Prüfmenge mit echter Hierarchie abnehmen, nicht auf
+  den flachen Bestandsseiten 43–47** (Befund S1 aus AP-3.rev): Bei einer
+  durchweg flachen Seitenmenge hat die Kaskade nur eine Stufe, und ein
+  Fehler in den Ebenen darunter fiele nicht auf. Also vorher eine Kette
+  Klasse → Fach → Thema → Seite anlegen, mit Container-Blöcken auf mehr als
+  einer Ebene.
 - AK8: Bei deaktiviertem Plugin sind die Inline-Verweise gewöhnliche Links
   und die Absätze im Editor gültig.
 - AK9: Eine Bestandsseite mit Blockreferenz-Block (55, 62) verhält sich
@@ -1554,7 +1907,10 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.3 | Serverseite des Inline-Verweises | opus | – | ☑ |
 | AP-3.fix1 | `gesperrt` ohne Abfrage je Seite ermitteln | sonnet | 3.1 | ☑ |
 | AP-3.fix2 | `ziel_post_id()` ohne `(int)`-Cast auf überlange Ziffernfolgen | sonnet | 3.3 | ☑ |
-| AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1 | ✗ |
+| AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1, 3.fix2 | ☑ (2. Anlauf) |
+| AP-3.fix3 | Antwortform, überflüssige Abfrage und Sortierung der Baum-Route | sonnet | 3.1, 3.fix1 | ☐ |
+| AP-3.fix4 | „(gespeichertes Ziel)" darf das Ziel nicht löschen | sonnet | 3.2 | ☐ |
+| AP-3.fix5 | Führende Nullen dokumentieren, URL-Regel beidseitig kommentieren | sonnet | 3.fix2 | ☐ |
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☐ |
 | AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev | ☐ |
 | AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2 | ☐ |
@@ -1585,7 +1941,13 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.3 | AK12: `class-cbd-block-content-api.php` unverändert | bestätigt, `git diff` leer | 2026-08-17 |
 | AP-3.3 | `container-block-designer.php` nur zwei funktionale Zeilen | bestätigt, beide hinter `class_exists()` | 2026-08-17 |
 | AP-3.3 | `view.js` verkraftet fehlendes `data-same-page` | bestätigt, `=== 'true'` an `:565` und `:816` — keine Anpassung nötig | 2026-08-17 |
-| AP-3.rev | Review-Befunde | **✗ erster Anlauf am Sitzungslimit abgebrochen**, bevor der Agent den Plan gelesen hatte. Neu zu starten | 2026-08-17 |
+| AP-3.rev | Review-Befunde | **✗ erster Anlauf am Sitzungslimit abgebrochen**, bevor der Agent den Plan gelesen hatte | 2026-08-17 |
+| AP-3.rev | Review, zweiter Anlauf: alle neun Prüfschwerpunkte | **☑ Welle 2 freigegeben.** 1 blockierender Befund (B1, Plantext — erledigt), 8 „sollte" (→ AP-3.fix3/4/5 und AKs in Welle 2), 14 Anmerkungen. Selbst gefahren: 13 PHP-Harnische, beide Betriebsarten, `node --check`, `check-php74`, plus zwei eigene Angriffssonden (33 + 20 neue Fälle) | 2026-08-17 |
+| AP-3.rev | Idempotenz des Filters (zwei- und dreifache Anwendung) | byte-identisch — wichtig wegen `do_shortcode` auf Priorität 11 | 2026-08-17 |
+| AP-3.rev | Abfragenzahl `cbd/v1/seitenbaum` in der Wirklichkeit | **≤ 4, seitenzahlunabhängig** bei 260 Seiten mit gesperrter Seite. AP-3.fix1 hat den O(n)-Pfad wirklich beseitigt | 2026-08-17 |
+| AP-3.fix3 | S1/S2/S5: JSON-Form, Meta-Cache, Sortierung | – | – |
+| AP-3.fix4 | S4: gespeichertes Ziel wird nicht gelöscht | – | – |
+| AP-3.fix5 | S3/S7: führende Nullen, URL-Regel beidseitig | – | – |
 | AP-3.rev | Vorprüfung des Orchestrators zu Schwerpunkt 1 (Angriffssonde, 40 Fälle) | **39/40**; der eine Fehlschlag → `AP-3.fix2`. Gruppe A (Zeichengleichheit, 12 Fälle) vollständig grün. Ersetzt das AP **nicht** — acht Schwerpunkte offen | 2026-08-17 |
 | AP-3.fix2 | `php tools/test-inline-reference.php` | **155/155**, im Doppel-Modus **151/151** mit **4 sichtbar** übersprungenen Fällen. Beides vom Orchestrator nachgeprüft | 2026-08-17 |
 | AP-3.fix2 | Angriffssonde des Orchestrators erneut gefahren | **40/40** — der Fehlschlag B9 ist behoben | 2026-08-17 |
