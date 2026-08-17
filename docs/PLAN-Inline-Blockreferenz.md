@@ -1401,7 +1401,33 @@ Stub-`window`-Technik des Harnischs erreichbar, sofern sie exportiert bzw.
 Prüfung über den beobachtbaren Vertrag zu führen — **nicht** durch
 Aufweichen der Kapselung.
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+**Übergabenotiz (vom Orchestrator aus dem Diff erhoben, nicht vom Agenten
+gemeldet):** Der Agent starb am Monatsbudget der Organisation, nachdem die
+Behebung fertig und grün war, aber bevor er committen konnte. Der Code stand
+unversioniert auf der Platte und wurde vom Orchestrator gesichert (`7331e97`).
+Der rote Test lag bereits als `27259ad` vor — die Rot-vor-Grün-Kette ist
+nachweisbar.
+
+**Gewählter Weg: Nummer 1** (`:885` um `&& aktuellerEintrag` ergänzt). Damit
+verschwindet die Option ganz, sobald der Zielblock gelöscht ist — und mit ihr
+die irreführende Ersatzbeschriftung „(gespeichertes Ziel)", die es nun
+nirgends mehr gibt. Der Kommentar im Code begründet die Wahl ausführlich und
+nennt das Vorbild: Die Suchtreffer-Liste prüfte dieselbe Bedingung bereits
+richtig; der Fehler bestand darin, dass die Blockstufe es nicht tat.
+
+Die Option erscheint jetzt **nur noch** in dem Fall, für den sie gedacht war:
+Der Eintrag existiert noch in `bloecke`, taucht aber in der aktuellen Stufe
+nicht auf (etwa weil er auf einer anderen Seite liegt).
+
+**Was nicht nachgeholt werden konnte:** Die Angabe des Agenten, welche
+Aspekte der Behebung sich **nicht** automatisiert prüfen ließen. Der
+Orchestrator hat das aus dem Code beurteilt: Die reine Optionsbildung ist über
+`ebenen()` erreichbar und getestet; dass beim Anklicken der Option kein
+`melde(null)` mehr läuft, hängt an `onChange` der Komponente und ist ohne
+React-Umgebung nicht prüfbar. **AP-4.3 muss diesen Fall an der Oberfläche
+abnehmen:** Zielblock löschen, Editor mit dem Verweis öffnen, prüfen, dass
+das gespeicherte Ziel nicht von selbst verschwindet und keine anklickbare
+Option es löscht.
 
 ---
 
@@ -1561,7 +1587,42 @@ dieses AP genügt: Editor öffnen, die Kaskade über vier Ebenen durchklicken,
 einen Bestandsblock (Seite 55 oder 62) öffnen und die Vorbelegung prüfen,
 speichern und erneut öffnen. Zusätzlich `node --check`.
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+**Übergabenotiz (vom Orchestrator aus dem Code erhoben, nicht vom Agenten
+gemeldet):** Der Agent meldete die Umsetzung als fertig und starb am
+Monatsbudget der Organisation, bevor er committen konnte. Der Code stand
+unversioniert auf der Platte und wurde gesichert (`15f93fe`, 66 Zeilen neu,
+176 entfernt).
+
+Vom Orchestrator vor der Sicherung nachgeprüft: `node --check` grün; `grep`
+auf die handgeschriebene Schlüsselregel liefert nichts (AK4); `schluessel()`,
+`passtZurSuche()` und der Optionsaufbau sind entfernt; keine verwaisten
+Zustände `bloecke`, `laedt`, `fehler` (AK9); die Zielauswahl läuft über
+`window.cbdBlockAuswahl.HierarchieAuswahl`.
+
+**Zwei bewusste Abweichungen des Agenten, beide im Code begründet und vom
+Orchestrator als richtig beurteilt:**
+
+1. **`text()` bleibt in `index.js` stehen** — aber als *delegierende Hülle*,
+   nicht als eigene Fassung. Der Kommentar begründet es: Ein bloßer Alias
+   (`var text = window.cbdBlockAuswahl.text`) würde beim Fehlen des Bausteins
+   schon bei der Zuweisung bzw. beim ersten Aufruf werfen und die **ganze
+   Seitenleiste** mitreißen — genau der Absturz, den der Wächter um die
+   Zielauswahl herum verhindern soll. Ist der Baustein da, ruft die Hülle
+   ausschließlich seine Fassung auf: Es gibt weiterhin **eine**
+   Verhaltensdefinition. Der Wortlaut von AK4 („existiert nicht mehr") ist
+   damit formal nicht erfüllt, sein Zweck („keine zweite Fassung derselben
+   Logik") schon.
+2. **`aktuellerWert` bleibt als Variablenname**, bezieht seinen Wert aber
+   ausschließlich aus `cbdAuswahl.schluessel({postId, stableId})`. Die
+   Doppelung aus Befund B1a ist damit beseitigt; nur der Name blieb, was
+   nichts verdoppelt.
+
+**Was nicht nachgeholt werden konnte:** Die Liste des Agenten, was AP-4.3 an
+der Oberfläche prüfen muss. Nach Beurteilung des Orchestrators ist das der
+gesamte Sichtteil: Kaskade über vier Ebenen, Vorbelegung eines
+Bestandsblocks, die Hinweiszeile im Canvas (AK9 lässt sich statisch nur
+teilweise belegen), und dass ein gespeicherter Block beim Öffnen nicht als
+geändert markiert wird (AK6).
 
 ---
 
@@ -1908,11 +1969,11 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.fix1 | `gesperrt` ohne Abfrage je Seite ermitteln | sonnet | 3.1 | ☑ |
 | AP-3.fix2 | `ziel_post_id()` ohne `(int)`-Cast auf überlange Ziffernfolgen | sonnet | 3.3 | ☑ |
 | AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1, 3.fix2 | ☑ (2. Anlauf) |
-| AP-3.fix3 | Antwortform, überflüssige Abfrage und Sortierung der Baum-Route | sonnet | 3.1, 3.fix1 | ☐ |
-| AP-3.fix4 | „(gespeichertes Ziel)" darf das Ziel nicht löschen | sonnet | 3.2 | ☐ |
+| AP-3.fix3 | Antwortform, überflüssige Abfrage und Sortierung der Baum-Route | sonnet | 3.1, 3.fix1 | ◐ (2. Anlauf) |
+| AP-3.fix4 | „(gespeichertes Ziel)" darf das Ziel nicht löschen | sonnet | 3.2 | ☑ |
 | AP-3.fix5 | Führende Nullen dokumentieren, URL-Regel beidseitig kommentieren | sonnet | 3.fix2 | ☑ |
-| AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☐ |
-| AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev | ☐ |
+| AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☑ |
+| AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev, 3.fix5 | ◐ (2. Anlauf) |
 | AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2 | ☐ |
 | AP-4.rev | Unabhängiges Review Phase 4 | opus | 4.3 | ☐ |
 | AP-4.doc | Dokumentation und Projektabschluss | sonnet | 4.rev | ☐ |
@@ -1946,7 +2007,8 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.rev | Idempotenz des Filters (zwei- und dreifache Anwendung) | byte-identisch — wichtig wegen `do_shortcode` auf Priorität 11 | 2026-08-17 |
 | AP-3.rev | Abfragenzahl `cbd/v1/seitenbaum` in der Wirklichkeit | **≤ 4, seitenzahlunabhängig** bei 260 Seiten mit gesperrter Seite. AP-3.fix1 hat den O(n)-Pfad wirklich beseitigt | 2026-08-17 |
 | AP-3.fix3 | S1/S2/S5: JSON-Form, Meta-Cache, Sortierung | – | – |
-| AP-3.fix4 | S4: gespeichertes Ziel wird nicht gelöscht | – | – |
+| AP-3.fix4 | `node tools/test-block-auswahl.js`, `node --check` | **grün** (vom Orchestrator gefahren, bevor er den unversionierten Stand sicherte). Weg 1 gewählt, Rot-vor-Grün über `27259ad` → `7331e97` nachweisbar | 2026-08-17 |
+| **Zwischenfall** | Vier Agenten gleichzeitig am **Monatsbudget der Organisation** gestorben | Kein Verlust. Der Orchestrator hat jeden Zustand geprüft und getrennt committet: AP-4.1 (`15f93fe`, fertig), AP-3.fix4 (`7331e97`, fertig und grün), AP-3.fix3 (`d30becf`, **absichtlich rot**, ausdrücklich als UNVOLLSTAENDIG beschriftet), AP-4.2 (**nichts** auf der Platte, neu zu machen). `main` unversehrt und grün | 2026-08-17 |
 | AP-3.fix5 | `php tools/test-inline-reference.php`, beide Betriebsarten | **157/157** und **153/153** (weiterhin genau 4 sichtbare Skips, keine neuen). Vom Orchestrator nachgeprüft | 2026-08-17 |
 | AP-3.fix5 | AK3: `render.php` nur Kommentar | bestätigt — der Diff enthält **genau eine** Zeile, einen Kommentar; in `class-cbd-inline-reference.php` keine einzige Nicht-Kommentarzeile geändert | 2026-08-17 |
 | AP-3.fix5 | Kein rotes Testfundament | **richtig so und ausdrücklich gemeldet:** Beide Befunde verlangten „dokumentieren statt ändern", die neuen Prüfungen bestanden also sofort. Der Agent hat vorher einen Baseline-Lauf gefahren (155/151), um das zu belegen, statt eine rote Phase zu erfinden | 2026-08-17 |
