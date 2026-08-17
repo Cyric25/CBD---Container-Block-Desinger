@@ -2427,7 +2427,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☑ |
 | AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev, 3.fix5 | ☑ (2. Anlauf) |
 | AP-4.fix1 | Fehlende Abhängigkeit, dritte URL-Fassung, Verweis ohne Markierung | sonnet | 4.2 | ☑ |
-| AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2, 4.fix1 | ◐ **wartet auf den Nutzer** (Klickliste, AK11) |
+| AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2, 4.fix1, 4.fix2 | ☑ **vom Nutzer bestätigt** |
 | AP-4.rev | Unabhängiges Review Phase 4 | opus | 4.3 | ☑ — **1 Blocker (B1)**, 2 „sollte", 11 Anmerkungen |
 | AP-4.fix2 | Link-Wächter greift zu spät, zwei Wächter-Härtungen | opus | 4.2, 4.fix1, 4.rev | ☑ |
 | AP-4.doc | Dokumentation und Projektabschluss | sonnet | 4.rev, 4.fix2 | ☐ |
@@ -2500,8 +2500,9 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-4.3 | Filter-Idempotenz und Bestandsseiten im Betrieb | ein-/zwei-/dreifache Anwendung byte-identisch; Seiten 55 und 62 **zeichengleich** | 2026-08-17 |
 | AP-4.3 | Plugin deaktiviert | Verweise sind gewöhnliche Links, gespeicherter Inhalt **identische MD5** vor/nach Deaktivierung und Reaktivierung | 2026-08-17 |
 | AP-4.3 | `debug.log` | **keine** neue Warnung; Restzeilen als vorbestehend nachgewiesen (148× vor der Baseline) | 2026-08-17 |
-| AP-4.3 | Klickliste Seite A, B, C | `docs/KLICKLISTE-AP-4.3.md`, 5 Durchgänge, 38 Häkchen, **Abschnittsnummern der Seiten** — **wartet auf den Nutzer** | – |
-| AP-4.3 | Beurteilung der zwei bekannten Grenzen | Vorschlag des Agenten liegt vor (beide hinnehmbar), **letztes Wort beim Nutzer** | – |
+| AP-4.3 | Klickliste Seite A, B, C (5 Durchgänge, 40 Häkchen) | **vom Nutzer bestätigt**, einschließlich `A3` im privaten Fenster (gesperrte Seite zeigt abgemeldet keinen Inhalt) und der beiden in AP-4.fix2 ergänzten Fälle `B8 (Fall C)` und `B8 (Fall D)` samt Gegenprobe | 2026-08-17 |
+| AP-4.3 | Beurteilung der zwei bekannten Grenzen | **vom Nutzer bestätigt: beide hinnehmbar.** Die Kaskade wirkt bei vier Ebenen nicht erschlagend; die fehlende Frische der Zielliste im zweiten Tab stört im Arbeiten nicht. Damit bleibt Vertrag C unverändert — **kein `AP-4.fixN`** | 2026-08-17 |
+| AP-4.3 | Auslieferungspaket | **`container-block-designer-3.1.93.zip`.** Nachgeprüft: `format.js` im Paket MD5-identisch mit der korrigierten Arbeitsfassung, Wächter `linkImBereich` enthalten, keine Dev-Pakete in Autoloader und `vendor`, entpacktes `vendor/autoload.php` lädt ohne Fatal, Dev-Autoloader lokal wiederhergestellt. **Das Paket 3.1.92 wurde entfernt** — es entstand vor dem Fix und trug die fehlerhafte `format.js` | 2026-08-17 |
 | AP-4.rev | Review-Befunde | **☑ Auslieferung zunächst verweigert.** 1 blockierender Befund (B1: verschachtelte `<a>` im gespeicherten Inhalt), 2 „sollte" (Wächter-Härtungen), 11 Anmerkungen. Selbst gefahren: 13 PHP-Harnische, beide Betriebsarten, JS-Harnisch, `check-php74`, `node --check` ×5, dazu eigene Sonden mit den echten WordPress-Bündeln, `WP_HTML_Processor::normalize()`, Mutationstests und ein echter WordPress-Bootstrap | 2026-08-17 |
 | AP-4.rev | Filterkosten im Betrieb, unabhängig gemessen | 87 KB **ohne** Verweis: **0,011 ms**, Rückgabe zeichengleich. 40 Verweise: **2,69 ms** | 2026-08-17 |
 | AP-4.rev | Abfragen `cbd/v1/seitenbaum` live | **1** beim ersten Aufruf, **0** beim zweiten (memoisiert) — besser als die im Protokoll notierten „≤ 4" | 2026-08-17 |
