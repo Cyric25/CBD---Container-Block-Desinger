@@ -167,6 +167,14 @@ if (!function_exists('cbd_sanitize_icon_position')) {
     function cbd_sanitize_icon_position($raw) {
         $defaults = cbd_icon_position_defaults();
 
+        // Felder abfangen, bevor der (string)-Cast greift (Befund G1 aus
+        // AP-2.rev): `features[icon][position][]=x` erzeugte sonst die Warnung
+        // „Array to string conversion". Das Ergebnis war schon vorher sicher,
+        // aber die Warnung landete bei WP_DEBUG_LOG im Protokoll.
+        if (is_array($raw) || is_object($raw)) {
+            return $defaults['default'];
+        }
+
         $value = strtolower(trim((string) wp_unslash($raw)));
 
         return in_array($value, $defaults['positions'], true) ? $value : $defaults['default'];
@@ -182,6 +190,12 @@ if (!function_exists('cbd_sanitize_icon_position')) {
 if (!function_exists('cbd_sanitize_icon_offset')) {
     function cbd_sanitize_icon_offset($raw) {
         $defaults = cbd_icon_position_defaults();
+
+        // Siehe cbd_sanitize_icon_position(): Felder abfangen, sonst warnt der
+        // (string)-Cast (Befund G1 aus AP-2.rev).
+        if (is_array($raw) || is_object($raw)) {
+            return $defaults['offset_default'];
+        }
 
         // Deutsches Dezimalkomma wie beim Icon-Größen-Regler behandeln.
         $value = str_replace(',', '.', trim((string) wp_unslash($raw)));

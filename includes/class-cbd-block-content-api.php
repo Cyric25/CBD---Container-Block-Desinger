@@ -38,7 +38,7 @@
  * schon einmal behoben.
  *
  * @package ContainerBlockDesigner
- * @since 3.1.88
+ * @since 3.1.89
  */
 
 // Sicherheit: Direkten Zugriff verhindern
