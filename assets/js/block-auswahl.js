@@ -880,13 +880,24 @@
 						}
 					}
 					// Zusicherung 3, hier fuer den Fall, dass das gespeicherte
-					// Ziel gar nicht mehr in der Liste steht (Block geloescht,
-					// Seite nicht mehr veroeffentlicht).
-					if (wert && !trefferDabei) {
+					// Ziel in der AKTUELLEN Stufe nicht (mehr) auftaucht, der
+					// Eintrag selbst aber noch in `bloecke` existiert (z. B.
+					// auf einer anderen Seite) - dann bleibt er ueber diese
+					// Zusatzoption erreichbar.
+					//
+					// NUR wenn `aktuellerEintrag` gesetzt ist: Ist der Block
+					// komplett geloescht (kein Eintrag mehr in `bloecke`),
+					// entfaellt die Option ganz (AP-3.fix4, Befund S4). Vorher
+					// zeigte die Blockstufe in diesem Fall eine Option
+					// "(gespeichertes Ziel)" mit value = wert; sie sah aus wie
+					// "das ist dein gespeichertes Ziel", loeschte es aber beim
+					// Anklicken: waehleZiel(wert) -> eintragZuSchluessel() ->
+					// null -> melde(null). Die Suchtreffer-Liste unten
+					// (Zusicherung 3 dort) prueft dieselbe Bedingung bereits
+					// und war das Vorbild fuer diesen Fix.
+					if (wert && !trefferDabei && aktuellerEintrag) {
 						blockListe.push({
-							label: (aktuellerEintrag
-								? (text(aktuellerEintrag.blockTitle) || text(aktuellerEintrag.stableId))
-								: uebersetze('(gespeichertes Ziel)')),
+							label: text(aktuellerEintrag.blockTitle) || text(aktuellerEintrag.stableId),
 							value: wert
 						});
 					}
