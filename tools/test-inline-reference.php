@@ -830,7 +830,199 @@ check('7.9 · und kein Stil wird geraten', empty($GLOBALS['test_enqueued_styles'
 check('7.10 · waehrend aller Pruefungen kein _doing_it_wrong()', 0 === $GLOBALS['test_doing_it_wrong'], $GLOBALS['test_doing_it_wrong']);
 
 // =========================================================================
+// 8 · AP-3.fix2, AK1-AK4: ziel_post_id() ohne (int)-Cast-Warnung
+// =========================================================================
+//
+// Befund: ziel_post_id() prueft korrekt mit ctype_digit(), lief aber danach
+// in (int) $roh. Eine ueberlange Ziffernfolge besteht ctype_digit(), aber
+// (int) warnt ab PHP 8.1 ("not representable as an int, cast occurred") und
+// liefert PHP_INT_MAX statt eines Fehlschlags -- der Wert gaelte faelschlich
+// als gueltige Beitrags-ID. Siehe docs/PLAN-Inline-Blockreferenz.md,
+// Abschnitt "AP-3.fix2", und die dort referenzierte Vorlage in
+// class-cbd-design-transfer.php (md_read_value(), Zeile ~911-915).
+
+echo "\n== 8 · AP-3.fix2: ueberlange Ziffernfolgen ohne (int)-Cast-Warnung ==\n";
+
+/**
+ * inhalt_auffrischen() aufrufen und jede PHP-Warnung/Notice waehrend des
+ * Aufrufs zaehlen. Dasselbe Muster wie Pruefung 3c.4/3c.5: set_error_handler
+ * macht eine Warnung zum sichtbaren Fehlschlag, statt sie im Ablauf
+ * verschwinden zu lassen (die Warnung selbst unterbricht nichts).
+ *
+ * @return array [0 => string $ergebnis, 1 => int $warnungen]
+ */
+function mit_warnzaehler($inhalt) {
+    $GLOBALS['test_warnungen'] = 0;
+    set_error_handler(function ($no, $str) {
+        $GLOBALS['test_warnungen']++;
+        return true;
+    });
+    $ergebnis = CBD_Inline_Reference::inhalt_auffrischen($inhalt);
+    restore_error_handler();
+    return array($ergebnis, $GLOBALS['test_warnungen']);
+}
+
+$GLOBALS['test_aktuelle_post'] = 999;
+
+// --- AK1: 20-stellige Ziffernfolge ---------------------------------------
+$GLOBALS['test_permalinks'] = array(45 => 'https://example.test/ir-spektroskopie/');
+$ziffern_20 = str_repeat('9', 20);
+$eingabe = verweis($ziffern_20);
+list($aus, $warnungen) = mit_warnzaehler($eingabe);
+check('8.1 · AK1: 20-stellige Ziffernfolge bleibt zeichengleich', $eingabe === $aus, $aus);
+check('8.2 · AK1: dabei entsteht keine PHP-Warnung', 0 === $warnungen, $warnungen);
+
+// --- AK2: 30-stellige und 100-stellige Ziffernfolge ----------------------
+foreach (array(30, 100) as $laenge) {
+    $ziffern = str_repeat('7', $laenge);
+    $eingabe = verweis($ziffern);
+    list($aus, $warnungen) = mit_warnzaehler($eingabe);
+    check('8.3 · AK2: ' . $laenge . '-stellige Ziffernfolge bleibt zeichengleich', $eingabe === $aus, $aus);
+    check('8.4 · AK2: ' . $laenge . '-stellige Ziffernfolge erzeugt keine Warnung', 0 === $warnungen, $warnungen);
+}
+
+// --- AK3: genau PHP_INT_MAX bleibt eine gueltige Ziel-ID -----------------
+// Auf 64-Bit-PHP (Projektumgebung) ist 9223372036854775807 = PHP_INT_MAX.
+// filter_var() akzeptiert die Grenze noch, lehnt aber die naechstgroessere
+// Ziffernfolge ab (in PHP direkt verifiziert) -- die Grenze wird also nicht
+// zu weit gezogen.
+$GLOBALS['test_permalinks'] = array(9223372036854775807 => 'https://example.test/riesige-id/');
+$eingabe = verweis('9223372036854775807');
+list($aus, $warnungen) = mit_warnzaehler($eingabe);
+check('8.5 · AK3: PHP_INT_MAX wird weiterhin als gueltige ID gelesen (Verweis bearbeitet)', false !== strpos($aus, 'data-display-mode="modal"'), $aus);
+check('8.6 · AK3: href zeigt auf die zugehoerige Seite', enthaelt_href($aus, 'https://example.test/riesige-id/?cbd-ref=cbd-container-abc123'), $aus);
+check('8.7 · AK3: dabei entsteht keine PHP-Warnung', 0 === $warnungen, $warnungen);
+
+// --- AK4: die bestehenden Ablehnungen bleiben unveraendert ---------------
+// Ergaenzt die schon vorhandenen Faelle aus Abschnitt 5 (AK6) um genau die
+// im AP genannten Werte, die dort mit anderen, aber gleichwertigen Werten
+// geprueft wurden (z. B. "-5" statt "-7", "4.5" statt "4,5").
+$ak4_ungueltig = array('+45', '4e2', '0x2d', '4,5', '  ', '-7', '0', 'abc');
+foreach ($ak4_ungueltig as $wert) {
+    $eingabe = verweis($wert);
+    check('8.8 · AK4: data-target-post="' . $wert . '" bleibt zeichengleich', $eingabe === CBD_Inline_Reference::inhalt_auffrischen($eingabe));
+}
+$leer = '<p><a class="cbd-block-reference-inline" href="/x/" data-target-post="">Text</a></p>';
+check('8.9 · AK4: leeres data-target-post bleibt zeichengleich', $leer === CBD_Inline_Reference::inhalt_auffrischen($leer));
+$fehlend = '<p><a class="cbd-block-reference-inline" href="/x/">Text</a></p>';
+check('8.10 · AK4: fehlendes data-target-post bleibt zeichengleich', $fehlend === CBD_Inline_Reference::inhalt_auffrischen($fehlend));
+
+// =========================================================================
+// 9 · AP-3.fix2: elf Struktur-Randfaelle des Tag-Processors
+// =========================================================================
+//
+// Aus der Angriffssonde des Orchestrators (docs/PLAN-Inline-Blockreferenz.md,
+// Abschnitt "AP-3.fix2") in den Bestand uebernommen. VIER Faelle (Skript,
+// Stil, Textarea, HTML-Kommentar) verlangen, dass der Tag-Processor
+// Rohtext-Elemente und Kommentare erkennt -- eine Eigenschaft, die
+// CBD_Test_Tag_Processor laut seinem eigenen Kopfkommentar ausdruecklich
+// NICHT hat ("kennt keine Rohtext-Elemente ... in WordPress nicht").
+// Empirisch bestaetigt: Mit demselben Eingabe-HTML liefert die echte Klasse
+// `found=0/unveraendert`, das Doppel dagegen `found=1/veraendert`. Diese vier
+// laufen deshalb NUR mit der echten WordPress-Klasse; im erzwungenen
+// Doppel-Modus werden sie SICHTBAR uebersprungen (SKIP-Zeile), nicht
+// stillschweigend ausgelassen. Die uebrigen sieben Faelle verhalten sich in
+// beiden Betriebsarten nachweislich gleich und laufen in beiden mit.
+
+echo "\n== 9 · AP-3.fix2: elf Struktur-Randfaelle ==\n";
+
+$GLOBALS['test_permalinks'] = array(
+    45 => 'https://example.test/ir-spektroskopie/',
+    12 => 'https://example.test/grundlagen/',
+);
+$GLOBALS['test_aktuelle_post'] = 999; // andere Seite als jedes Ziel in diesem Abschnitt
+
+$GLOBALS['skips'] = 0;
+function skip($label, $grund) {
+    $GLOBALS['skips']++;
+    echo "  SKIP $label -> $grund\n";
+}
+
+// $weg kommt aus Abschnitt 4 (tag_processor_bereitstellen()).
+$mit_echtem_tag_processor = (false === strpos($weg, 'Doppel'));
+
+// 1) Klasse an einem <span> statt <a>
+$fall = '<p><span class="cbd-block-reference-inline" data-target-post="45">Text</span></p>';
+check('9.1 · Klasse an <span> statt <a> -> zeichengleich', $fall === CBD_Inline_Reference::inhalt_auffrischen($fall));
+
+// 2) <a> mit der Klasse in einem <script>-Block
+$fall = '<div><script>// <a class="cbd-block-reference-inline" data-target-post="45">note</a></script></div>';
+if ($mit_echtem_tag_processor) {
+    check('9.2 · <a> mit Klasse in <script> -> zeichengleich', $fall === CBD_Inline_Reference::inhalt_auffrischen($fall));
+} else {
+    skip('9.2 · <a> mit Klasse in <script> -> zeichengleich', 'Doppel kennt keine Rohtext-Elemente (siehe Kopfkommentar CBD_Test_Tag_Processor)');
+}
+
+// 3) ... in einem <style>-Block
+$fall = '<style>/* <a class="cbd-block-reference-inline" data-target-post="45">note</a> */</style>';
+if ($mit_echtem_tag_processor) {
+    check('9.3 · <a> mit Klasse in <style> -> zeichengleich', $fall === CBD_Inline_Reference::inhalt_auffrischen($fall));
+} else {
+    skip('9.3 · <a> mit Klasse in <style> -> zeichengleich', 'Doppel kennt keine Rohtext-Elemente (siehe Kopfkommentar CBD_Test_Tag_Processor)');
+}
+
+// 4) ... in einem <textarea>
+$fall = '<textarea><a class="cbd-block-reference-inline" data-target-post="45">note</a></textarea>';
+if ($mit_echtem_tag_processor) {
+    check('9.4 · <a> mit Klasse in <textarea> -> zeichengleich', $fall === CBD_Inline_Reference::inhalt_auffrischen($fall));
+} else {
+    skip('9.4 · <a> mit Klasse in <textarea> -> zeichengleich', 'Doppel kennt keine Rohtext-Elemente (siehe Kopfkommentar CBD_Test_Tag_Processor)');
+}
+
+// 5) Klasse in einem HTML-Kommentar
+$fall = '<!-- <a class="cbd-block-reference-inline" data-target-post="45">note</a> --><p>Text</p>';
+if ($mit_echtem_tag_processor) {
+    check('9.5 · Klasse in HTML-Kommentar -> zeichengleich', $fall === CBD_Inline_Reference::inhalt_auffrischen($fall));
+} else {
+    skip('9.5 · Klasse in HTML-Kommentar -> zeichengleich', 'Doppel erkennt keine Kommentare (siehe Kopfkommentar CBD_Test_Tag_Processor)');
+}
+
+// 6) Klasse als Wert eines fremden Attributs
+$fall = '<p><a href="/x/" alt="Beschreibung mit cbd-block-reference-inline als Text">Text</a></p>';
+check('9.6 · Klasse nur als Wert von alt -> zeichengleich', $fall === CBD_Inline_Reference::inhalt_auffrischen($fall));
+
+// 7) Klasse in Grossschreibung
+$fall = '<p><a class="CBD-BLOCK-REFERENCE-INLINE" data-target-post="45">Text</a></p>';
+check('9.7 · Klasse in Grossschreibung -> zeichengleich', $fall === CBD_Inline_Reference::inhalt_auffrischen($fall));
+
+// 8) unvollstaendiges Tag am Textende
+$fall = '<p>Text <a class="cbd-block-reference-inline" data-target-post="45"';
+check('9.8 · unvollstaendiges Tag am Textende -> zeichengleich', $fall === CBD_Inline_Reference::inhalt_auffrischen($fall));
+
+// 9) zwei Klassen am Element, Reihenfolge erhalten
+$fall = '<p><a class="cbd-block-reference-inline foo" data-target-post="45">Text</a></p>';
+$aus = CBD_Inline_Reference::inhalt_auffrischen($fall);
+check('9.9 · zwei Klassen: Verweis wurde bearbeitet', false !== strpos($aus, 'data-display-mode="modal"'), $aus);
+check('9.9 · zwei Klassen: class-Attribut unveraendert (Reihenfolge erhalten)', false !== strpos($aus, 'class="cbd-block-reference-inline foo"'), $aus);
+
+// 10) einfache Anfuehrungszeichen am Attribut
+$fall = "<p><a class='cbd-block-reference-inline' data-target-post='45'>Text</a></p>";
+$aus = CBD_Inline_Reference::inhalt_auffrischen($fall);
+check('9.10 · einfache Anfuehrungszeichen: bearbeitet', $aus !== $fall && false !== strpos($aus, 'data-display-mode="modal"'), $aus);
+check('9.10 · einfache Anfuehrungszeichen: Text erhalten', false !== strpos($aus, 'Text</a>'), $aus);
+
+// 11) ganz ohne Anfuehrungszeichen am Attribut
+$fall = '<p><a class=cbd-block-reference-inline data-target-post=45>Text</a></p>';
+$aus = CBD_Inline_Reference::inhalt_auffrischen($fall);
+check('9.11 · ohne Anfuehrungszeichen: bearbeitet', $aus !== $fall && false !== strpos($aus, 'data-display-mode="modal"'), $aus);
+check('9.11 · ohne Anfuehrungszeichen: Text erhalten', false !== strpos($aus, 'Text</a>'), $aus);
+
+// 12) verschachtelte <a> mit der Klasse
+$fall = '<p><a class="cbd-block-reference-inline" data-target-post="45">Aussen <a class="cbd-block-reference-inline" data-target-post="12">Innen</a></a></p>';
+$aus = CBD_Inline_Reference::inhalt_auffrischen($fall);
+check('9.12 · verschachtelte <a>: beide bearbeitet', 2 === substr_count($aus, 'data-display-mode="modal"'), $aus);
+check('9.12 · verschachtelte <a>: aussen-Text erhalten', false !== strpos($aus, 'Aussen'), $aus);
+check('9.12 · verschachtelte <a>: innen-Text erhalten', false !== strpos($aus, 'Innen'), $aus);
+
+if ($GLOBALS['skips'] > 0) {
+    echo "\n  [" . $GLOBALS['skips'] . " Pruefung(en) im Doppel-Modus SICHTBAR uebersprungen -- siehe SKIP-Zeilen oben]\n";
+}
+
+// =========================================================================
 
 $fails = $GLOBALS['fails'];
-echo "\n" . $GLOBALS['pruefungen'] . " Pruefungen, " . (0 === $fails ? "ALLE TESTS BESTANDEN\n" : "$fails FEHLER\n");
+$skips = isset($GLOBALS['skips']) ? $GLOBALS['skips'] : 0;
+echo "\n" . $GLOBALS['pruefungen'] . " Pruefungen"
+    . ($skips > 0 ? " (" . $skips . " im Doppel-Modus sichtbar uebersprungen)" : "") . ", "
+    . (0 === $fails ? "ALLE TESTS BESTANDEN\n" : "$fails FEHLER\n");
 exit(0 === $fails ? 0 : 1);
