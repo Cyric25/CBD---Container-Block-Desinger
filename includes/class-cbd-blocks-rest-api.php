@@ -390,14 +390,42 @@ class CBD_Blocks_REST_API {
         }
 
         // `gesperrt` je ueberlebenden Knoten. update_meta_cache() VOR der
-        // Schleife, sonst entsteht eine Abfrage je Seite (N+1). Fehlt die
-        // Theme-Funktion, bleibt jedes `gesperrt` false — kein Fatal Error.
+        // Schleife, sonst entsteht eine Abfrage je Seite (N+1). Stufe 2
+        // braucht ihn weiterhin, fuer Stufe 1 kostet er nichts.
         $alle_ids = array_keys($knoten);
         if (function_exists('update_meta_cache') && !empty($alle_ids)) {
             update_meta_cache('post', $alle_ids);
         }
 
-        if (function_exists('simple_clean_seite_nur_lehrpersonen')) {
+        // Dreistufige Kette (AP-3.fix1), jede Stufe hinter function_exists().
+        //
+        // Stufe 2 allein (simple_clean_seite_nur_lehrpersonen() JE SEITE)
+        // ruft intern get_post_ancestors() auf, sobald ueberhaupt eine Seite
+        // gesperrt ist (Theme/includes/sichtbarkeit.php:229-233). Die rohe
+        // $wpdb-Abfrage oben fuellt den WordPress-Post-Cache nicht — auf
+        // einer Installation mit 258 Seiten und mindestens einer gesperrten
+        // Seite waeren das bis zu mehrere hundert Einzelabfragen.
+        //
+        // Stufe 1 nutzt stattdessen die vom Theme bereits memoisierte
+        // Nachschlagekarte simple_clean_gesperrte_seiten_mit_unterbaum()
+        // (Theme/includes/sichtbarkeit.php:142-190): liefert ALLE gesperrten
+        // Seiten EINSCHLIESSLICH ihres gesamten Unterbaums in hoechstens
+        // zwei Abfragen insgesamt, unabhaengig von der Seitenzahl, und
+        // entfaellt komplett, wenn nichts gesperrt ist. Ein `isset()` auf
+        // dieser Karte ist inhaltlich dasselbe wie
+        // simple_clean_seite_nur_lehrpersonen($id) je Seite.
+        //
+        // Stufe 2 bleibt als Rueckfall erhalten fuer ein Theme aelteren
+        // Stands, das die Karten-Funktion noch nicht kennt (identisches
+        // Verhalten zu AP-3.1). Stufe 3: kein Theme vorhanden, jedes
+        // `gesperrt` bleibt false (Vorgabewert oben).
+        if (function_exists('simple_clean_gesperrte_seiten_mit_unterbaum')) {
+            $gesperrte_karte = simple_clean_gesperrte_seiten_mit_unterbaum();
+            foreach ($knoten as $id => &$eintrag) {
+                $eintrag['gesperrt'] = isset($gesperrte_karte[$id]);
+            }
+            unset($eintrag);
+        } elseif (function_exists('simple_clean_seite_nur_lehrpersonen')) {
             foreach ($knoten as $id => &$eintrag) {
                 $eintrag['gesperrt'] = (bool) simple_clean_seite_nur_lehrpersonen($id);
             }
