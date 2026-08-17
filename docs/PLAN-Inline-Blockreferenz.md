@@ -2114,6 +2114,243 @@ Auswirkung, Vorschlag. Kritische Befunde führen zu `AP-4.fixN`.
 
 ---
 
+### AP-4.fix2: Der Link-Wächter greift zu spät — verschachtelte `<a>` im gespeicherten Inhalt
+
+**Modell:** opus
+**Abhängigkeiten:** AP-4.2, AP-4.fix1, AP-4.rev
+**Dateien:** `blocks/block-reference/format.js`,
+`tools/test-inline-reference.php`,
+`includes/class-cbd-inline-reference.php` (nur Kommentar),
+`docs/KLICKLISTE-AP-4.3.md`
+**Anlass:** Befunde B1, B2 und B3 aus AP-4.rev. **B1 blockiert die
+Auslieferung.**
+
+#### B1 — der eigentliche Blocker
+
+`blocks/block-reference/format.js:392` prüft den Link-Konflikt mit
+`getActiveFormat(wert, 'core/link')`. **`getActiveFormat()` liefert nur
+Formate, die die ganze Markierung überspannen** — `getActiveFormats()` in
+`rich-text.js` bricht ab, sobald ein Zeichen im Bereich das Format nicht
+trägt. Liegt der Link **innerhalb** der Markierung oder überlappt er sie nur
+teilweise, ist der Rückgabewert `undefined`, der Dialog öffnet, und
+`applyFormat()` legt das Inline-Format **außen** um den Link.
+
+Von AP-4.rev mit den echten Bündeln `rich-text.js`/`escape-html.js`/`data.js`
+aus WordPress 7.0.4 gemessen:
+
+| Fall | Wächter | Ergebnis |
+|---|---|---|
+| A — Markierung ohne Link | öffnet | korrekt, 0 verschachtelte `<a>` |
+| B — Markierung **=** Link | **blockiert** | korrekt |
+| C — Link **innerhalb** der Markierung | öffnet | **1 verschachteltes `<a>`** |
+| D — Markierung überlappt den Linkrand | öffnet | **1 verschachteltes `<a>`** |
+
+**Fall C ist der praxisnahe:** einen ganzen Satz markieren, in dem eine
+Quellenangabe verlinkt ist. Genau das kommt im Inhaltsbestand dieses Projekts
+vor.
+
+**Warum das die Auslieferung blockiert.** Das Ergebnis von `toHTMLString()`
+ist der String, der in `post_content` landet — die **einzige** Stelle im
+ganzen Vorhaben, an der ein Fehler nicht durch ein Plugin-Update reparierbar
+ist. Verschachteltes `<a>` ist ungültiges HTML; AP-4.rev hat mit WordPress'
+eigenem Baum-Parser gegengeprüft:
+
+```
+WP_HTML_Processor::normalize()
+  Fall A : GLEICH        (Roundtrip byte-identisch)
+  Fall C : ABWEICHEND -> NULL, parsing error: unsupported
+  Fall D : ABWEICHEND -> NULL, parsing error: unsupported
+```
+
+Beim Wiederöffnen liest Gutenberg die abgeflachte Fassung, `getSaveContent()`
+erzeugt einen anderen String als den gespeicherten → **„Block enthält
+unerwarteten oder ungültigen Inhalt"**. Das verletzt AK7 von AP-4.2, die harte
+Grenze aus Abschnitt 3 („Bestehende Seiteninhalte dürfen im Editor nicht als
+ungültiger Block erscheinen") — und die Risikozeile in Abschnitt 5 verbucht
+diesen Fall fälschlich als abgefangen. **Das ist der achte Planfehler dieses
+Vorhabens.**
+
+Im Frontend degradiert es gnädig und der `the_content`-Filter kommt damit
+zurecht (`WP_HTML_Tag_Processor` ist kein Baum-Parser). Der Schaden liegt
+ausschließlich im gespeicherten Markup — und ist dort dauerhaft.
+
+**Die Klickliste hätte es nicht gefunden.** Schritt `B8`
+(`docs/KLICKLISTE-AP-4.3.md:218-223`) prüft ausdrücklich nur Fall B: „Genau
+den Text ‚gewöhnlichen Link' markieren (der schon ein Link ist)."
+
+*Umsetzung:* `getActiveFormat()` durch eine **Bereichsprüfung** ersetzen, die
+jedes Zeichen der Markierung ansieht. Sie deckt B, C und D ab. AP-4.rev hat
+einen tragfähigen Entwurf geliefert:
+
+```js
+function linkImBereich(wert) {
+    if (!wert || !wert.formats) { return false; }
+    var von = ('number' === typeof wert.start) ? wert.start : 0;
+    var bis = ('number' === typeof wert.end) ? wert.end : 0;
+    for (var i = von; i < bis; i++) {
+        var f = wert.formats[i];
+        if (!f) { continue; }
+        for (var j = 0; j < f.length; j++) {
+            if (f[j] && LINK_FORMAT === f[j].type) { return true; }
+        }
+    }
+    return false;
+}
+```
+
+Der Meldungstext bleibt unverändert. **Den Entwurf prüfen, nicht blind
+übernehmen** — insbesondere den Fall zusammengefallener Auswahl
+(`von === bis`, Schleife läuft nicht) im Zusammenspiel mit
+`disabled: leer && !istAktiv` aus AP-4.fix1: Ein Cursor **in** einem
+bestehenden Inline-Verweis muss weiterhin entfernen können.
+
+*Entwarnungen, ebenfalls gemessen und nicht anzufassen:* Zwei **gleichartige**
+Inline-Verweise erzeugen keine Verschachtelung (`applyFormat()` filtert den
+eigenen Typ im Bereich vorher heraus).
+
+#### B2 — der Duplikatswächter wird still grün, wenn der wirksame Wert falsch ist
+
+`tools/test-inline-reference.php:1172-1182` prüft mit `strpos()`, ob die
+Klassenzeichenkette in `format.js` und `view.js` **irgendwo** vorkommt. In
+`format.js` steht sie **dreimal**: `:25` und `:126` in Docblocks, `:74` als
+wirksamer Wert. AP-4.rev hat mutiert und gemessen:
+
+| Mutation | Gruppe 11 | Harnisch |
+|---|---|---|
+| PHP-Konstante geändert, JS unberührt | **FAIL** | rot ✓ |
+| nur `format.js:74` auf `'cbd-kaputt'`, Docblocks unberührt | **OK** | **167/167 grün** ✗ |
+
+Die beiden Kommentare halten den Wächter allein am Leben. In `view.js` steht
+die Zeichenkette genau einmal, dort ist er scharf.
+
+*Umsetzung:* Auf den **wirksamen Ausdruck** prüfen, nicht auf Vorkommen —
+`"var KLASSE = '<wert>';"` in `format.js`, den vollständigen Klick-Selektor in
+`view.js`. **Das Verfahren ist im Projekt erprobt:** Prüfung `1.10` liest
+gezielt nur den Docblock vor `ziel_href()`, weil ein naives `strpos()` nie rot
+geworden wäre (Übergabenotiz AP-4.fix1). Die Lehre wurde auf Gruppe 1
+angewandt, auf Gruppe 11 nicht.
+
+#### B3 — die Zeichenkette steht an vier Stellen, nicht an drei
+
+`blocks/block-reference/style.css` nennt sie in **fünf** Selektoren
+(`:342, 352, 353, 359, 384`) und ist von keinem Wächter gedeckt. Drei
+Kommentare behaupten „drei Stellen":
+`includes/class-cbd-inline-reference.php:68-70`,
+`blocks/block-reference/format.js:61-64`,
+`tools/test-inline-reference.php:1146`.
+
+Bei der Mutation M3 blieb Gruppe 11 grün, während `style.css` den alten Namen
+trug — der Inline-Verweis hätte `display: inline`, Unterstreichung und den
+`::after`-Pfeil verloren, mitten im Satz, ohne Testmeldung.
+
+*Umsetzung:* `style.css` als dritten Eintrag in die Schleife von Gruppe 11,
+Prüfung auf `'.' . KLASSE`. Die drei Kommentare auf „vier Stellen"
+berichtigen.
+
+**Akzeptanzkriterien:**
+
+- AK1: Fall C (Link innerhalb der Markierung) und Fall D (teilweise
+  Überlappung) öffnen den Dialog **nicht** mehr, sondern zeigen die Warnung.
+  Fall B bleibt blockiert, Fall A bleibt möglich.
+- AK2: Ein Cursor **in** einem bestehenden Inline-Verweis kann ihn weiterhin
+  entfernen (AP-4.fix1, F3 darf nicht zurückfallen).
+- AK3: Zwei gleichartige Inline-Verweise erzeugen weiterhin keine
+  Verschachtelung.
+- AK4: Gruppe 11 wird **rot**, wenn nur der wirksame Wert in `format.js`
+  geändert wird und die Docblocks unberührt bleiben. **Nachzuweisen durch eine
+  Mutation auf einer Kopie im Scratchpad**, nicht im Repository.
+- AK5: Gruppe 11 wird **rot**, wenn nur `style.css` den alten Namen trägt.
+  Gleicher Nachweis.
+- AK6: Die drei Kommentare nennen **vier** Stellen.
+- AK7: Die Klickliste enthält zwei neue Zeilen für Fall C und Fall D, mit den
+  Abschnittsnummern der Prüfseite — **keine eigene Nummerierung**.
+- AK8: Die 167 Prüfungen bleiben grün, beide Betriebsarten; nichts
+  abgeschwächt, Fallzahl steigt.
+- AK9: `node --check blocks/block-reference/format.js` und
+  `php tools/check-php74.php` grün.
+
+**Tests:** Der Harnisch kann React nicht ausführen, die Bereichsprüfung ist
+also nur als **Quelltext-Zusicherung** in den Bestand aufnehmbar (Muster
+`12.1`/`12.2`). Führe die vier Überlappungsfälle zusätzlich als Messung mit
+den echten `rich-text`-Bündeln aus (Wegwerf-Skript im Scratchpad, wie AP-4.rev
+es gemacht hat) und berichte die Zahlen — das ist der eigentliche Nachweis für
+AK1.
+
+**Übergabenotiz (erledigt):** Commits `79b9c10` (B1) und `acd4dd6`
+(B2/B3/AK7). **181/177** grün (vorher 167/163), `node --check` und
+`check-php74` grün, Arbeitsbaum sauber.
+
+**Der Nachweis ist eine Messung, keine Zusicherung.** Der Agent hat die echten
+Bündel `rich-text.js` und `escape-html.js` in einen `vm`-Kontext geladen, nur
+das Drumherum gemockt und **die echte `format.js` ausgeführt** — Knopf
+klicken, Ziel wählen, übernehmen, `toHTMLString()`, verschachtelte `<a>`
+zählen:
+
+| Fall | vorher | nachher | versch. `<a>` |
+|---|---|---|---|
+| A Markierung ohne Link | öffnet | öffnet | 0 → 0 |
+| B Markierung **=** Link | blockiert | blockiert | 0 → 0 |
+| C Link **innerhalb** der Markierung | öffnet | **blockiert** | **1 → 0** |
+| D Markierung überlappt den Rand | öffnet | **blockiert** | **1 → 0** |
+
+Dazu fünf Zusatzfälle, damit der Wächter nicht zu scharf wurde: Cursor in
+aktivem Verweis entfernt weiterhin (AK2), gleichartiger Verweis im Bereich
+öffnet (AK3), Link genau am Markierungsrand ergibt Geschwister-`<a>`, kein
+verschachteltes.
+
+**Vier begründete Abweichungen vom Entwurf im Plantext:**
+
+1. **`bereich(wert)` extrahiert.** Der Entwurf hätte die `von`/`bis`-Herleitung
+   ein zweites Mal geschrieben — `markierung()` hat sie schon. In einem
+   Projekt, das gegen dreifache `stableId`-Extraktion Wächter schreibt, wäre
+   eine dritte Fassung falsch. Prüfung `13.7` schneidet die zwei erlaubten
+   Rümpfe aus und verlangt, dass danach kein `wert.start`/`wert.end` übrig
+   ist.
+2. **Kein Sonderfall für zusammengefallene Auswahl nötig** —
+   `beiKlick()` prüft `istAktiv` **vor** dem Wächter und ruft `removeFormat()`;
+   die zusammengefallene Auswahl erreicht ihn nie. Gemessen als Fall E.
+3. **`getActiveFormat` aus Wachposten und Kürzeln entfernt.** Die Datei nutzt
+   es nicht mehr; eine Anforderung an eine ungebrauchte Funktion ist kein
+   Netz, sondern ein falsches Negativ. Die sechs verbliebenen Vorkommen sind
+   **Kommentare**, die erklären, warum sie fehlt (vom Orchestrator
+   nachgeprüft).
+4. **Gruppe 11 hat je Datei drei statt einer Prüfung.** Der AP verlangte nur
+   den Umbau auf den wirksamen Ausdruck; der Agent hat zusätzlich das
+   **Anschlagen** in den Bestand geholt — eine Mutation im Speicher an einer
+   Kopie, die Datei auf der Platte bleibt unberührt. Damit ist B2 dauerhaft
+   ausführbar statt Anekdote, und wer den Wächter künftig zurück auf
+   Vorkommen stellt, macht `11.2`/`11.5`/`11.8` rot.
+
+**Die Mutationsnachweise sind erbracht:** Nur den wirksamen Wert in
+`format.js` kaputtmachen → neuer Harnisch **rot**, HEAD-Harnisch **167/167
+grün** (B2 reproduziert). Nur `style.css` umbenennen → neuer Harnisch **rot**,
+HEAD-Harnisch grün (B3 reproduziert). Beide Mutationen auf einer Kopie im
+Scratchpad, `git status` danach sauber.
+
+**Nicht mit B3 verwechseln:** Der Kommentar bei `format.js:238` nennt „drei
+Fassungen" — er betrifft die **URL-Bildungsregel**, nicht die
+Klassenzeichenkette. Dort sind drei richtig.
+
+**Vorschlag für ein künftiges AP:** Das Wegwerf-Skript des Agenten fährt die
+echte `format.js` mit einem 60-zeiligen Mock in node. Als versionierte Datei
+unter `tools/` wäre das der **erste laufzeitbasierte JS-Harnisch des
+Projekts** und würde die Quelltext-Zusicherungen der Gruppen 12 und 13 durch
+echte Messungen ersetzen. Lag außerhalb der Dateigrenze dieses APs.
+
+**Zwei Bedingungen für die Auslieferung, vom Orchestrator festgehalten:**
+
+1. **`format.js` und `class-cbd-inline-reference.php` sind auf den Testserver
+   kopiert** (erledigt, MD5 gegengeprüft) — die Plugins liegen dort als Kopie,
+   sonst prüfte der Nutzer den alten Stand.
+2. **Das ZIP `container-block-designer-3.1.92.zip` ist veraltet** — es wurde
+   **vor** diesem Fix gebaut und enthält die fehlerhafte `format.js`. Es darf
+   **nicht** ausgeliefert werden. Vor der Verteilung neu bauen; da
+   `create-plugin-zip.js` die Version selbst erhöht, wird daraus **3.1.93**.
+   Das ist richtig so: Das ausgelieferte Paket soll sich von dem
+   unterscheiden, das den Fehler trug.
+
+---
+
 ### AP-4.doc: Dokumentation und Projektabschluss
 
 **Modell:** sonnet
@@ -2191,8 +2428,9 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev, 3.fix5 | ☑ (2. Anlauf) |
 | AP-4.fix1 | Fehlende Abhängigkeit, dritte URL-Fassung, Verweis ohne Markierung | sonnet | 4.2 | ☑ |
 | AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2, 4.fix1 | ◐ **wartet auf den Nutzer** (Klickliste, AK11) |
-| AP-4.rev | Unabhängiges Review Phase 4 | opus | 4.3 | ☐ |
-| AP-4.doc | Dokumentation und Projektabschluss | sonnet | 4.rev | ☐ |
+| AP-4.rev | Unabhängiges Review Phase 4 | opus | 4.3 | ☑ — **1 Blocker (B1)**, 2 „sollte", 11 Anmerkungen |
+| AP-4.fix2 | Link-Wächter greift zu spät, zwei Wächter-Härtungen | opus | 4.2, 4.fix1, 4.rev | ☑ |
+| AP-4.doc | Dokumentation und Projektabschluss | sonnet | 4.rev, 4.fix2 | ☐ |
 
 ## 9. Testprotokoll
 
@@ -2264,7 +2502,14 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-4.3 | `debug.log` | **keine** neue Warnung; Restzeilen als vorbestehend nachgewiesen (148× vor der Baseline) | 2026-08-17 |
 | AP-4.3 | Klickliste Seite A, B, C | `docs/KLICKLISTE-AP-4.3.md`, 5 Durchgänge, 38 Häkchen, **Abschnittsnummern der Seiten** — **wartet auf den Nutzer** | – |
 | AP-4.3 | Beurteilung der zwei bekannten Grenzen | Vorschlag des Agenten liegt vor (beide hinnehmbar), **letztes Wort beim Nutzer** | – |
-| AP-4.rev | Review-Befunde | – | – |
+| AP-4.rev | Review-Befunde | **☑ Auslieferung zunächst verweigert.** 1 blockierender Befund (B1: verschachtelte `<a>` im gespeicherten Inhalt), 2 „sollte" (Wächter-Härtungen), 11 Anmerkungen. Selbst gefahren: 13 PHP-Harnische, beide Betriebsarten, JS-Harnisch, `check-php74`, `node --check` ×5, dazu eigene Sonden mit den echten WordPress-Bündeln, `WP_HTML_Processor::normalize()`, Mutationstests und ein echter WordPress-Bootstrap | 2026-08-17 |
+| AP-4.rev | Filterkosten im Betrieb, unabhängig gemessen | 87 KB **ohne** Verweis: **0,011 ms**, Rückgabe zeichengleich. 40 Verweise: **2,69 ms** | 2026-08-17 |
+| AP-4.rev | Abfragen `cbd/v1/seitenbaum` live | **1** beim ersten Aufruf, **0** beim zweiten (memoisiert) — besser als die im Protokoll notierten „≤ 4" | 2026-08-17 |
+| AP-4.fix2 | `php tools/test-inline-reference.php`, beide Betriebsarten | **181/181** und **177/177** (4 sichtbare Skips). Vom Orchestrator nachgeprüft | 2026-08-17 |
+| AP-4.fix2 | Die vier Überlappungsfälle, mit der echten `format.js` gemessen | C und D: **1 → 0** verschachtelte `<a>`; A und B unverändert richtig. Dazu fünf Zusatzfälle gegen Überschärfe | 2026-08-17 |
+| AP-4.fix2 | Mutationsnachweise für beide Wächter | erbracht: neuer Harnisch rot, HEAD-Harnisch grün — B2 und B3 damit reproduziert und dauerhaft abgesichert | 2026-08-17 |
+| AP-4.fix2 | `view.js` weiterhin genau eine Zeile, `style.css` von fix2 unberührt | bestätigt | 2026-08-17 |
+| AP-4.fix2 | Fix auf den Testserver kopiert | MD5 gegengeprüft (`3e136d36…`) — die Plugins liegen dort als Kopie | 2026-08-17 |
 
 ## 10. Dokumentation
 
