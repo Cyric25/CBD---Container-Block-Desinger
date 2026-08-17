@@ -9,10 +9,17 @@
  * existiert — genau das ist AK9: Die Datei darf `wp.element` beim LADEN nicht
  * beruehren, sondern erst innerhalb der Komponentenfunktion.
  *
- * NICHT geprueft wird die Komponente `HierarchieAuswahl` ueber ihren
- * Wachposten hinaus (fehlt `wp`, liefert sie `null`). Ohne React-Umgebung ist
- * mehr nicht sinnvoll moeglich; ihre Pruefung erfolgt in AP-4.3 an der
- * Oberflaeche.
+ * NICHT geprueft wird das vollstaendige, echte Rendern der Komponente
+ * `HierarchieAuswahl` (kein echtes React/Preact, keine Ereignisschleife) —
+ * dafuer bleibt AP-4.3 an der Oberflaeche zustaendig. Fuer einzelne
+ * Verhaltenszusicherungen genuegt aber ein minimaler Hooks-/Vdom-Fake um die
+ * Komponente ueber ihren OEFFENTLICHEN Einstiegspunkt zu betreiben (siehe
+ * "Mini-Vdom + Hooks" weiter unten) — `HierarchieAuswahl` gehoert zu
+ * Vertrag C, ihr Ergebnisbaum ist also Teil des beobachtbaren Vertrags.
+ * `waehleZiel()` und die Optionsbildung selbst sind rein interne Funktionen
+ * im Rumpf der Komponente und nicht separat exportiert; sie werden deshalb
+ * NICHT durch Aufweichen der Kapselung erreicht, sondern ausschliesslich
+ * ueber den Baum, den `HierarchieAuswahl(props)` zurueckgibt (AP-3.fix4).
  *
  * Aufruf:  node tools/test-block-auswahl.js
  *
@@ -200,6 +207,123 @@ function apiStub(antworten) {
 			return Promise.resolve(antwort);
 		}
 	};
+}
+
+// --- Mini-Vdom + Hooks fuer HierarchieAuswahl (AP-3.fix4) ------------------
+//
+// Kein echtes React/Preact: `createElement` liefert nur ein einfaches
+// {type, props, children}-Objekt, `useState`/`useEffect` kommen aus einem
+// winzigen Hook-Treiber mit vorbelegten Werten (kein automatisches
+// Neu-Rendern noetig, siehe unten). Das reicht, um den Baum zu inspizieren,
+// den die ECHTE Komponente ueber ihren oeffentlichen Einstiegspunkt
+// zurueckgibt — ohne deren Innenleben (`waehleZiel`, Optionsbau) separat
+// erreichen zu muessen.
+
+const MARKE_SELECT = 'SelectControl';
+const MARKE_TEXT = 'TextControl';
+const MARKE_SPINNER = 'Spinner';
+const MARKE_NOTICE = 'Notice';
+
+function element(type, props) {
+	return { type: type, props: props || {}, children: Array.prototype.slice.call(arguments, 2) };
+}
+
+/**
+ * Hook-Treiber mit vorbelegten Werten je useState()-Aufruf, in der
+ * Reihenfolge, in der die Komponente sie erzeugt (daten, suchbegriff,
+ * ueberschreibung — siehe HierarchieAuswahl()). useEffect() wird bewusst
+ * NICHT ausgefuehrt: ladeDaten() bräuchte wp.apiFetch und einen
+ * Mikrotask-Umlauf; der Test praepariert den Ladezustand stattdessen direkt
+ * ueber das erste useState()-Element.
+ *
+ * @param {Array} anfangswerte
+ * @returns {{useState: function, useEffect: function}}
+ */
+function neuerHookTreiber(anfangswerte) {
+	const werte = (anfangswerte || []).slice();
+	let index = 0;
+	return {
+		useState: function (initial) {
+			const i = index++;
+			if (undefined === werte[i]) {
+				werte[i] = initial;
+			}
+			return [werte[i], function (neu) { werte[i] = neu; }];
+		},
+		useEffect: function () {}
+	};
+}
+
+/** Minimaler wp-Fake, ausreichend fuer den Wachposten und `zeichne()`. */
+function wpFakeFuerRendern(hooks) {
+	return {
+		element: {
+			createElement: element,
+			Fragment: 'Fragment',
+			useState: hooks.useState,
+			useEffect: hooks.useEffect
+		},
+		components: {
+			SelectControl: MARKE_SELECT,
+			TextControl: MARKE_TEXT,
+			Spinner: MARKE_SPINNER,
+			Notice: MARKE_NOTICE
+		}
+	};
+}
+
+/** Tiefensuche im Fake-Baum nach dem ersten Treffer von praedikat(knoten). */
+function sucheElement(knoten, praedikat) {
+	if (!knoten) {
+		return null;
+	}
+	if (Array.isArray(knoten)) {
+		for (let i = 0; i < knoten.length; i++) {
+			const treffer = sucheElement(knoten[i], praedikat);
+			if (treffer) {
+				return treffer;
+			}
+		}
+		return null;
+	}
+	if ('object' !== typeof knoten) {
+		return null;
+	}
+	if (praedikat(knoten)) {
+		return knoten;
+	}
+	return sucheElement(knoten.children, praedikat);
+}
+
+/**
+ * Rendert HierarchieAuswahl() ueber den Mini-Vdom-Fake mit vorab geladenen
+ * Daten (kein ladeDaten()-Umlauf) und liefert den Ergebnisbaum plus die
+ * Liste der ueber onWaehle gemeldeten Werte.
+ *
+ * @param {string} wert
+ * @param {Array} bloecke Vertrag A (fuer dieses Szenario zusammengestellt)
+ * @param {Object} baumDaten Vertrag B
+ * @returns {{baum: Object, gemeldet: Array}}
+ */
+function renderHierarchieAuswahl(wert, bloecke, baumDaten) {
+	const hooks = neuerHookTreiber([
+		{ bloecke: bloecke, baum: baumDaten, fehler: '' }, // useState() Nr. 1: daten
+		'', // useState() Nr. 2: suchbegriff
+		null // useState() Nr. 3: ueberschreibung
+	]);
+	const modul = frischesModul({ wp: wpFakeFuerRendern(hooks) });
+	const gemeldet = [];
+	const baum = modul.HierarchieAuswahl({
+		wert: wert,
+		onWaehle: function (eintrag) { gemeldet.push(eintrag); }
+	});
+	return { baum: baum, gemeldet: gemeldet };
+}
+
+function blockFeldAus(baum) {
+	return sucheElement(baum, function (k) {
+		return MARKE_SELECT === k.type && 'block' === k.props.key;
+	});
 }
 
 // --------------------------------------------------------------------------
@@ -531,14 +655,84 @@ async function main() {
 	});
 
 	await gruppe('HierarchieAuswahl(): nur der Wachposten', function () {
-		// Bewusst NICHT weiter geprueft: Ohne React-Umgebung ist das Rendern
-		// nicht sinnvoll pruefbar. Die Komponente wird in AP-4.3 an der
-		// Oberflaeche abgenommen.
+		// Das volle Rendern (Zustand, Mehrfach-Interaktion) bleibt AP-4.3 an
+		// der Oberflaeche vorbehalten. Fuer den Befund S4 (Gruppe direkt
+		// darunter) genuegt ein einzelner, gezielt praeparierter Render ueber
+		// den Mini-Vdom-Fake weiter oben.
 		const modul = frischesModul();
 
 		check('ist eine Funktion', 'function' === typeof modul.HierarchieAuswahl);
 		check('ohne wp -> null statt Ausnahme', null === modul.HierarchieAuswahl({}));
 		check('ohne Props und ohne wp -> null', null === modul.HierarchieAuswahl());
+	});
+
+	await gruppe('HierarchieAuswahl(): S4 - "(gespeichertes Ziel)" darf das Ziel nicht loeschen', function () {
+		const b = baum();
+
+		// Seite 45 traegt nur noch cbd-a2 - der urspruenglich referenzierte
+		// Block cbd-a wurde geloescht. `wert` zeigt weiterhin auf ihn.
+		const bloeckeOhneA = [{
+			stableId: 'cbd-a2', anchor: '', blockId: '',
+			blockTitle: 'Anderer Block auf Seite 45',
+			postId: 45, postTitle: 'IR-Spektroskopie', postUrl: 'http://x/ir/',
+			blockType: 'container-block-designer/basic-container',
+			postParent: 34, menuOrder: 0, postType: 'page'
+		}];
+
+		// --- AK1: Ziel geloescht -> keine Option verweist mehr darauf ------
+		const geloescht = renderHierarchieAuswahl('45|cbd-a', bloeckeOhneA, b);
+		const blockFeld = blockFeldAus(geloescht.baum);
+
+		check('Block-Auswahlfeld wird trotz geloeschtem Ziel gerendert', !!blockFeld, blockFeld);
+
+		if (blockFeld) {
+			const werteDerOptionen = blockFeld.props.options.map(function (o) { return o.value; });
+			const labelDerOptionen = blockFeld.props.options.map(function (o) { return o.label; });
+
+			check(
+				'AK1: keine Option traegt den Wert des geloeschten Ziels',
+				-1 === werteDerOptionen.indexOf('45|cbd-a'),
+				werteDerOptionen
+			);
+			check(
+				'AK1: keine Option zeigt den Text "(gespeichertes Ziel)"',
+				-1 === labelDerOptionen.indexOf('(gespeichertes Ziel)'),
+				labelDerOptionen
+			);
+			check(
+				'AK1: nur Platzhalter und der real vorhandene Block cbd-a2',
+				2 === blockFeld.props.options.length && '' === blockFeld.props.options[0].value
+					&& '45|cbd-a2' === blockFeld.props.options[1].value,
+				blockFeld.props.options
+			);
+
+			// --- AK2: ausdrueckliches Abwaehlen meldet weiterhin null ------
+			blockFeld.props.onChange('');
+			check(
+				'AK2: Abwaehlen (leerer Wert) meldet weiterhin null',
+				1 === geloescht.gemeldet.length && null === geloescht.gemeldet[0],
+				geloescht.gemeldet
+			);
+		}
+
+		// --- AK3: vorhandener Eintrag verhaelt sich unveraendert -----------
+		const vorhanden = renderHierarchieAuswahl('45|cbd-a2', bloeckeOhneA, b);
+		const blockFeldVorhanden = blockFeldAus(vorhanden.baum);
+
+		check(
+			'AK3: vorhandener Eintrag zeigt weiterhin genau eine Option (plus Platzhalter)',
+			!!blockFeldVorhanden && 2 === blockFeldVorhanden.props.options.length,
+			blockFeldVorhanden && blockFeldVorhanden.props.options
+		);
+
+		if (blockFeldVorhanden) {
+			blockFeldVorhanden.props.onChange('45|cbd-a2');
+			check(
+				'AK3: Auswahl eines vorhandenen Blocks meldet den Eintrag, nicht null',
+				1 === vorhanden.gemeldet.length && !!vorhanden.gemeldet[0] && 'cbd-a2' === vorhanden.gemeldet[0].stableId,
+				vorhanden.gemeldet
+			);
+		}
 	});
 
 	console.log('\n' + (0 === fehlschlaege ? 'ALLE TESTS BESTANDEN' : fehlschlaege + ' FEHLER'));
