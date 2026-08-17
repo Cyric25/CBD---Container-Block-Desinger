@@ -1910,7 +1910,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1, 3.fix2 | ☑ (2. Anlauf) |
 | AP-3.fix3 | Antwortform, überflüssige Abfrage und Sortierung der Baum-Route | sonnet | 3.1, 3.fix1 | ☐ |
 | AP-3.fix4 | „(gespeichertes Ziel)" darf das Ziel nicht löschen | sonnet | 3.2 | ☐ |
-| AP-3.fix5 | Führende Nullen dokumentieren, URL-Regel beidseitig kommentieren | sonnet | 3.fix2 | ☐ |
+| AP-3.fix5 | Führende Nullen dokumentieren, URL-Regel beidseitig kommentieren | sonnet | 3.fix2 | ☑ |
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☐ |
 | AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev | ☐ |
 | AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2 | ☐ |
@@ -1947,7 +1947,9 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.rev | Abfragenzahl `cbd/v1/seitenbaum` in der Wirklichkeit | **≤ 4, seitenzahlunabhängig** bei 260 Seiten mit gesperrter Seite. AP-3.fix1 hat den O(n)-Pfad wirklich beseitigt | 2026-08-17 |
 | AP-3.fix3 | S1/S2/S5: JSON-Form, Meta-Cache, Sortierung | – | – |
 | AP-3.fix4 | S4: gespeichertes Ziel wird nicht gelöscht | – | – |
-| AP-3.fix5 | S3/S7: führende Nullen, URL-Regel beidseitig | – | – |
+| AP-3.fix5 | `php tools/test-inline-reference.php`, beide Betriebsarten | **157/157** und **153/153** (weiterhin genau 4 sichtbare Skips, keine neuen). Vom Orchestrator nachgeprüft | 2026-08-17 |
+| AP-3.fix5 | AK3: `render.php` nur Kommentar | bestätigt — der Diff enthält **genau eine** Zeile, einen Kommentar; in `class-cbd-inline-reference.php` keine einzige Nicht-Kommentarzeile geändert | 2026-08-17 |
+| AP-3.fix5 | Kein rotes Testfundament | **richtig so und ausdrücklich gemeldet:** Beide Befunde verlangten „dokumentieren statt ändern", die neuen Prüfungen bestanden also sofort. Der Agent hat vorher einen Baseline-Lauf gefahren (155/151), um das zu belegen, statt eine rote Phase zu erfinden | 2026-08-17 |
 | AP-3.rev | Vorprüfung des Orchestrators zu Schwerpunkt 1 (Angriffssonde, 40 Fälle) | **39/40**; der eine Fehlschlag → `AP-3.fix2`. Gruppe A (Zeichengleichheit, 12 Fälle) vollständig grün. Ersetzt das AP **nicht** — acht Schwerpunkte offen | 2026-08-17 |
 | AP-3.fix2 | `php tools/test-inline-reference.php` | **155/155**, im Doppel-Modus **151/151** mit **4 sichtbar** übersprungenen Fällen. Beides vom Orchestrator nachgeprüft | 2026-08-17 |
 | AP-3.fix2 | Angriffssonde des Orchestrators erneut gefahren | **40/40** — der Fehlschlag B9 ist behoben | 2026-08-17 |
