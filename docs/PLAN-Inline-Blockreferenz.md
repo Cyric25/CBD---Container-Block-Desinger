@@ -789,6 +789,97 @@ committen.
 
 ---
 
+### AP-3.fix1: `gesperrt` ohne Abfrage je Seite ermitteln
+
+**Modell:** sonnet
+**Abhängigkeiten:** AP-3.1
+**Dateien:** `includes/class-cbd-blocks-rest-api.php`, `tools/test-seitenbaum.php`
+**Anlass:** Befund des Orchestrators bei der Abnahme von AP-3.1.
+
+**Der Befund.** AP-3.1 erfüllt Vertrag B korrekt und AK6 ist im Prüfharnisch
+grün — aber **AK6 war zu schwach formuliert.** Der Harnisch stubbt
+`simple_clean_seite_nur_lehrpersonen()` und zählt deshalb nur die Abfragen
+des Plugins, nicht die der Theme-Funktion. In der Wirklichkeit gilt:
+
+- `simple_clean_seite_nur_lehrpersonen()`
+  (`Theme/includes/sichtbarkeit.php:214-236`) prüft zuerst die eigene Meta
+  (billig, durch `update_meta_cache()` vorgewärmt), dann
+  `simple_clean_gesperrte_seiten()` (memoisiert, **eine** Abfrage) — und
+  läuft danach, **sofern überhaupt eine Seite gesperrt ist**, für jede Seite
+  durch `get_post_ancestors()` (`:229-233`).
+- `get_post_ancestors()` löst die Elternkette über `get_post()` auf. Die
+  rohe `$wpdb`-Abfrage aus AP-3.1 füllt den Post-Cache **nicht**. Auf einer
+  Installation mit 258 Seiten und mindestens einer gesperrten Seite entstehen
+  dadurch bis zu mehrere hundert Einzelabfragen — genau das, was AK6
+  verhindern sollte.
+- **Nebenbei berichtigt:** Die Übergabenotiz von AP-3.1 vermerkt, die
+  Theme-Funktion prüfe „nur die Seite selbst, keine Vererbung über
+  Vorfahren". Das ist falsch — `:229-233` vererbt die Sperre auf den
+  Unterbaum. Vertrag B ist damit inhaltlich schon richtig, es gibt für
+  AP-4.1 nichts zu klären, und der Sperrhinweis in der Auswahl ist korrekt.
+
+**Die Abhilfe.** Das Theme hat für genau diesen Fall bereits eine Funktion:
+`simple_clean_gesperrte_seiten_mit_unterbaum()`
+(`Theme/includes/sichtbarkeit.php:142-190`) liefert `array<int,bool>` aller
+gesperrten Seiten **einschließlich ihres gesamten Unterbaums**, statisch
+memoisiert, und kostet insgesamt höchstens zwei Abfragen — unabhängig von der
+Seitenzahl. Ist keine Seite gesperrt, entfällt der Baumaufbau dort ganz. Ein
+`isset($karte[$id])` ist für Seiten inhaltlich dasselbe wie
+`simple_clean_seite_nur_lehrpersonen($id)`.
+
+**Umsetzung:**
+
+1. In `baue_seitenbaum()` bzw. `get_seitenbaum()` die Ermittlung von
+   `gesperrt` auf eine **dreistufige** Kette umstellen, jede Stufe hinter
+   `function_exists()`:
+   1. `simple_clean_gesperrte_seiten_mit_unterbaum()` vorhanden →
+      **einmal** aufrufen, Ergebnis als Karte halten, je Knoten
+      `isset($karte[$id])`.
+   2. sonst `simple_clean_seite_nur_lehrpersonen($id)` je Knoten (heutiges
+      Verhalten, als Rückfall erhalten — ein Theme älteren Stands hat die
+      Karte womöglich nicht).
+   3. sonst durchgehend `false`.
+2. Die Wahl der Stufe als Kommentar begründen, mit Verweis auf die
+   Abfragenzahl — sonst sieht eine künftige Änderung nur eine überflüssige
+   Verzweigung.
+3. `update_meta_cache()` bleibt: Stufe 2 braucht es weiterhin, und für
+   Stufe 1 kostet es nichts.
+
+**Akzeptanzkriterien:**
+
+- AK1: Ist `simple_clean_gesperrte_seiten_mit_unterbaum()` vorhanden, wird
+  sie **genau einmal** je Anfrage aufgerufen und
+  `simple_clean_seite_nur_lehrpersonen()` **gar nicht**.
+- AK2: Fehlt sie, aber `simple_clean_seite_nur_lehrpersonen()` existiert,
+  gilt unverändert das Verhalten aus AP-3.1 (gleiche Ergebnisse).
+- AK3: Fehlen beide, ist jedes `gesperrt` `false` und es entsteht kein Fatal
+  Error.
+- AK4: Eine Unterseite einer gesperrten Seite hat `gesperrt: true`, auch
+  wenn sie selbst keine Meta trägt. **Dieser Fall fehlte im Harnisch von
+  AP-3.1 vollständig** — er ist der eigentliche Grund, warum der Irrtum in
+  der Übergabenotiz nicht aufgefallen ist.
+- AK5: **AK6 aus AP-3.1 neu gefasst:** Die Zahl der Abfragen ist auch dann
+  konstant, wenn die Sperrprüfung mitgezählt wird. Nachweis im Harnisch über
+  einen Zähler auf **beiden** Theme-Funktionen, geprüft mit 5 und mit 50
+  Seiten und mit mindestens einer gesperrten Seite.
+- AK6: Die 63 bestehenden Prüfungen aus `tools/test-seitenbaum.php` bleiben
+  grün und werden **nicht** abgeschwächt.
+- AK7: `php tools/check-php74.php` ist grün.
+
+**Tests (TDD):** Die neuen Fälle zu AK1–AK5 zuerst schreiben, Fehlschlag
+bestätigen, roter Commit, dann umstellen. Der Stub für
+`simple_clean_gesperrte_seiten_mit_unterbaum()` gehört in denselben Abschnitt
+des Harnischs wie der bestehende Theme-Stub.
+
+**Nebenbefund, nur zu notieren, nicht zu beheben:** Prüfung 3.0 des
+Harnischs sucht das erste `$wpdb->get_results(` **in der ganzen Datei**, nicht
+das in `get_seitenbaum()`. Heute gibt es nur eines; kommt später ein zweites
+davor, prüft der Test die falsche Zeichenkette. Für dieses AP unerheblich.
+
+**Übergabenotiz:** _(vom Agenten zu füllen)_
+
+---
+
 ### AP-3.rev: Unabhängiges Review Phase 3
 
 **Modell:** opus
@@ -1192,10 +1283,11 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 
 | AP | Titel | Modell | Abhängig von | Status |
 |---|---|---|---|---|
-| AP-3.1 | Hierarchiedaten in den Editor-Routen | sonnet | – | ☐ |
-| AP-3.2 | Gemeinsamer Auswahlbaustein `window.cbdBlockAuswahl` | opus | – | ☐ |
-| AP-3.3 | Serverseite des Inline-Verweises | opus | – | ☐ |
-| AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3 | ☐ |
+| AP-3.1 | Hierarchiedaten in den Editor-Routen | sonnet | – | ☑ |
+| AP-3.2 | Gemeinsamer Auswahlbaustein `window.cbdBlockAuswahl` | opus | – | ◐ |
+| AP-3.3 | Serverseite des Inline-Verweises | opus | – | ◐ |
+| AP-3.fix1 | `gesperrt` ohne Abfrage je Seite ermitteln | sonnet | 3.1 | ◐ |
+| AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1 | ☐ |
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☐ |
 | AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev | ☐ |
 | AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2 | ☐ |
@@ -1206,8 +1298,11 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 
 | AP | Test | Ergebnis | Datum |
 |---|---|---|---|
-| AP-3.1 | `php tools/test-seitenbaum.php` | – | – |
-| AP-3.1 | `php tools/check-php74.php` | – | – |
+| AP-3.1 | `php tools/test-seitenbaum.php` | **63/63 bestanden** (vom Orchestrator nachgeprüft) | 2026-08-17 |
+| AP-3.1 | `php tools/check-php74.php` | grün, 567 Dateien | 2026-08-17 |
+| AP-3.1 | Rot-vor-Grün nachweisbar (`85e1bc9` → `3a50704`) | ja; Teständerung dazwischen betraf nur Prüfgruppe 3, vom Orchestrator im Diff geprüft und als Präzisierung auf den Wortlaut von AK3 anerkannt | 2026-08-17 |
+| AP-3.1 | SQL lädt kein `post_content` (unabhängig geprüft) | bestätigt, fünf Spalten einzeln, `:281` | 2026-08-17 |
+| AP-3.fix1 | Abfragenzahl inkl. Sperrprüfung, neue Fälle | – | – |
 | AP-3.2 | `node tools/test-block-auswahl.js` | – | – |
 | AP-3.2 | `node --check assets/js/block-auswahl.js` | – | – |
 | AP-3.3 | `php tools/test-inline-reference.php` | – | – |
