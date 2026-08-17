@@ -212,7 +212,7 @@ check('1.4 - menuOrder vorhanden und int', array_key_exists('menuOrder', $eintra
 check('1.5 - postType vorhanden und string page', array_key_exists('postType', $eintrag) && 'page' === $eintrag['postType'] && is_string($eintrag['postType']), $eintrag['postType'] ?? null);
 
 $argumente = $GLOBALS['test_get_posts_args'][0] ?? array();
-check('1.6 - orderby ist menu_order title (Sortierung je Ebene nicht willkuerlich)', 'menu_order title' === ($argumente['orderby'] ?? null), $argumente['orderby'] ?? null);
+check('1.6 - orderby ist title (AP-3.fix3, Befund S5: menu_order title verschlechterte die flache Suchtrefferliste, ohne die Ebenenreihenfolge zu sichern - die liefert Vertrag B ueber kinder)', 'title' === ($argumente['orderby'] ?? null), $argumente['orderby'] ?? null);
 
 // Ein Beitrag (post_type "post") bekommt dieselben drei Felder.
 $GLOBALS['test_parsed']['INHALT-B'] = array(
@@ -225,6 +225,26 @@ $antwort = CBD_Blocks_REST_API::get_cbd_blocks(new WP_REST_Request());
 $eintrag = $antwort->get_data()[0];
 check('1.7 - postType eines Beitrags ist post', 'post' === ($eintrag['postType'] ?? null), $eintrag['postType'] ?? null);
 check('1.8 - postParent 0 bleibt int 0, kein Fatal', 0 === ($eintrag['postParent'] ?? null));
+
+// =========================================================================
+// AP-3.fix3 - AK4 (S5): orderby bleibt 'title' - Quelltext-Zusicherung
+// =========================================================================
+//
+// 1.6 oben prueft das an get_posts() WEITERGEGEBENE Argument (funktional).
+// Diese Quelltext-Zusicherung schuetzt zusaetzlich davor, dass
+// 'menu_order title' ein drittes Mal eingefuehrt wird - genau die Falle,
+// vor der der Kommentar im Quellcode selbst warnt.
+
+echo "\n== AP-3.fix3 AK4 (S5): orderby-Quelltext in get_cbd_blocks() ==\n";
+
+$quelle_orderby = file_get_contents($plugin_dir . 'includes/class-cbd-blocks-rest-api.php');
+$fn_start = strpos($quelle_orderby, 'function get_cbd_blocks(');
+$fn_ende  = false !== $fn_start ? strpos($quelle_orderby, 'function find_cbd_blocks_recursive', $fn_start) : false;
+$fn_text  = (false !== $fn_start && false !== $fn_ende) ? substr($quelle_orderby, $fn_start, $fn_ende - $fn_start) : '';
+
+check('F3-AK4.1 - Vorbedingung: get_cbd_blocks()-Quelltext isoliert', '' !== $fn_text);
+check("F3-AK4.2 - Quelltext bestaetigt orderby => title in get_cbd_blocks()", false !== strpos($fn_text, "'orderby' => 'title'"));
+check("F3-AK4.3 - menu_order title steht NICHT mehr in get_cbd_blocks() (Regressionsschutz gegen ein drittes Mal)", false === strpos($fn_text, "'menu_order title'"));
 
 // =========================================================================
 // 2 - Route-Registrierung
