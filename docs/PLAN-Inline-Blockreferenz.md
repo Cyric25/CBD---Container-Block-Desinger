@@ -1419,7 +1419,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.1 | Hierarchiedaten in den Editor-Routen | sonnet | – | ☑ |
 | AP-3.2 | Gemeinsamer Auswahlbaustein `window.cbdBlockAuswahl` | opus | – | ☑ |
 | AP-3.3 | Serverseite des Inline-Verweises | opus | – | ☑ |
-| AP-3.fix1 | `gesperrt` ohne Abfrage je Seite ermitteln | sonnet | 3.1 | ◐ |
+| AP-3.fix1 | `gesperrt` ohne Abfrage je Seite ermitteln | sonnet | 3.1 | ☑ |
 | AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1 | ☐ |
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☐ |
 | AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev | ☐ |
@@ -1435,7 +1435,10 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.1 | `php tools/check-php74.php` | grün, 567 Dateien | 2026-08-17 |
 | AP-3.1 | Rot-vor-Grün nachweisbar (`85e1bc9` → `3a50704`) | ja; Teständerung dazwischen betraf nur Prüfgruppe 3, vom Orchestrator im Diff geprüft und als Präzisierung auf den Wortlaut von AK3 anerkannt | 2026-08-17 |
 | AP-3.1 | SQL lädt kein `post_content` (unabhängig geprüft) | bestätigt, fünf Spalten einzeln, `:281` | 2026-08-17 |
-| AP-3.fix1 | Abfragenzahl inkl. Sperrprüfung, neue Fälle | – | – |
+| AP-3.fix1 | `php tools/test-seitenbaum.php` | **82/82 bestanden** (63 + 19 neue). Vom Orchestrator nachgeprüft: der Diff gegen `3a50704` enthält **null Löschungen** — die 63 Bestandsprüfungen sind wörtlich unangetastet | 2026-08-17 |
+| AP-3.fix1 | Rot-vor-Grün nachweisbar (`1194e2b` → `e933ee0`) | ja; roter Commit enthält nur den Harnisch, 7 gemeldete Fehlschläge | 2026-08-17 |
+| **Phase 3** | Regressionslauf **aller 13** Prüfharnische des Plugins | alle grün (vom Orchestrator gefahren). `test-block-serializer.php` meldet „71 Prüfungen, 0 Fehler" in anderer Formulierung — Exitcode 0, kein Fehlschlag | 2026-08-17 |
+| **Phase 3** | `php tools/check-php74.php` nach allen vier APs | grün, 568 Dateien | 2026-08-17 |
 | AP-3.2 | `node tools/test-block-auswahl.js` | **133/133 bestanden** (vom Orchestrator nachgeprüft) | 2026-08-17 |
 | AP-3.2 | `node --check assets/js/block-auswahl.js` | grün | 2026-08-17 |
 | AP-3.2 | Rot-vor-Grün nachweisbar (`5d34cf2` → `5fb4e8c`) | ja; roter Commit enthält **nur** den Harnisch, kein Test nachträglich geändert | 2026-08-17 |
