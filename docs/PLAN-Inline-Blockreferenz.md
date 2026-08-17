@@ -1341,7 +1341,52 @@ festhalten, damit es nicht ein drittes Mal geändert wird.
 
 **Tests (TDD):** rote Fälle zuerst.
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+**Übergabenotiz (erledigt, zweiter Anlauf):** Der erste Agent starb am
+Monatsbudget mitten in der roten Phase (`d30becf`, drei rote Prüfungen zu S5).
+Der zweite hat darauf aufgebaut, ohne sie neu zu bauen. Rote Phase `bf0bbfc`
+(85 grün + 12 rot), grüne Phase `db58678`. **97/97 grün**, `check-php74` grün.
+
+**Der Agent hat einen Zähler gefunden, den dieser Plan nicht nannte.** Der
+Plantext führt drei Prüfungen auf, die beim Verschieben von
+`update_meta_cache()` rot werden (`10.4`, `F1-AK5.2`, `F1-AK5.6`). Es waren
+**vier**: `10.2` ist strukturell identisch zu `10.4` (dieselbe Zusicherung,
+5 statt 50 Seiten). Der Agent hat das experimentell festgestellt — Code
+testweise geändert, Tests gefahren, zurückgesetzt — und den vierten Zähler
+mit derselben Begründung mitgezogen, statt ihn rot stehen zu lassen oder
+separat zu melden. Richtig so.
+
+**Nachgeprüft vom Orchestrator, weil hier die eigentliche Gefahr lag:** Der
+Diff enthält **genau fünf** gelöschte `check()`-Zeilen — die vier
+umformulierten Zähler plus `11.3`. Nichts anderes ist verschwunden. Und die
+Zusicherung „genau ein Aufruf in Stufe 2", die bei der Umformulierung hätte
+untergehen können, steht als `F3-AK2.1` an einer **sauber isolierten** Stelle,
+an der nur Stufe 2 definiert ist — das ist stärker als die alte Fassung, die
+sie an einer Stelle prüfte, wo Stufe 1 längst aktiv war und die Zusicherung
+faktisch nichts mehr aussagte.
+
+**Zwei Stellen, an denen der Plantext ungenau war:**
+
+1. **Der `(object)`-Cast gehört nach `get_seitenbaum()`, nicht nach
+   `baue_seitenbaum()`.** Der Plantext nannte die Variablennamen aus dem
+   `return` von `baue_seitenbaum()` — ein Cast dort hätte **rund 60 der 82
+   Bestandsprüfungen zerstört**, weil sie mit Array-Syntax auf
+   `$baum['knoten'][12]['tiefe']` zugreifen und `count()`/Array-Zugriff auf
+   `stdClass` in PHP 8 fatal ist. `baue_seitenbaum()` bleibt reine,
+   array-basierte Aufbaulogik (so sagt es ihr eigener Docblock); der Cast
+   betrifft nur die tatsächlich nach außen gehende JSON-Antwort. Die
+   Entscheidung des Agenten ist richtig, der Plantext war es nicht.
+2. **`11.3` musste als Folge von S1 angepasst werden** (`count((array) …)`),
+   sonst hätte `count()` auf dem `stdClass` einen `TypeError` geworfen. Die
+   Zusicherung selbst — genau drei Knoten — blieb unverändert; nur der
+   Zugriff wurde typrobust.
+
+**Zur O(n)-Dokumentation von Stufe 2:** nichts zu ergänzen, sie stand bereits
+vollständig aus AP-3.fix1 im Code.
+
+**Vertrag B ändert sich inhaltlich nicht.** S1 erfüllt nur zuverlässig, was
+der Vertrag ohnehin verlangte; S2 entfernt eine nutzlose Abfrage ohne
+Feldinhalte zu ändern; S5 betrifft allein die interne Sortierung der
+`/blocks`-Liste, zu der Vertrag A keine Aussage trifft.
 
 ---
 
@@ -1969,7 +2014,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.fix1 | `gesperrt` ohne Abfrage je Seite ermitteln | sonnet | 3.1 | ☑ |
 | AP-3.fix2 | `ziel_post_id()` ohne `(int)`-Cast auf überlange Ziffernfolgen | sonnet | 3.3 | ☑ |
 | AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1, 3.fix2 | ☑ (2. Anlauf) |
-| AP-3.fix3 | Antwortform, überflüssige Abfrage und Sortierung der Baum-Route | sonnet | 3.1, 3.fix1 | ◐ (2. Anlauf) |
+| AP-3.fix3 | Antwortform, überflüssige Abfrage und Sortierung der Baum-Route | sonnet | 3.1, 3.fix1 | ☑ (2. Anlauf) |
 | AP-3.fix4 | „(gespeichertes Ziel)" darf das Ziel nicht löschen | sonnet | 3.2 | ☑ |
 | AP-3.fix5 | Führende Nullen dokumentieren, URL-Regel beidseitig kommentieren | sonnet | 3.fix2 | ☑ |
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☑ |
@@ -2006,7 +2051,11 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.rev | Review, zweiter Anlauf: alle neun Prüfschwerpunkte | **☑ Welle 2 freigegeben.** 1 blockierender Befund (B1, Plantext — erledigt), 8 „sollte" (→ AP-3.fix3/4/5 und AKs in Welle 2), 14 Anmerkungen. Selbst gefahren: 13 PHP-Harnische, beide Betriebsarten, `node --check`, `check-php74`, plus zwei eigene Angriffssonden (33 + 20 neue Fälle) | 2026-08-17 |
 | AP-3.rev | Idempotenz des Filters (zwei- und dreifache Anwendung) | byte-identisch — wichtig wegen `do_shortcode` auf Priorität 11 | 2026-08-17 |
 | AP-3.rev | Abfragenzahl `cbd/v1/seitenbaum` in der Wirklichkeit | **≤ 4, seitenzahlunabhängig** bei 260 Seiten mit gesperrter Seite. AP-3.fix1 hat den O(n)-Pfad wirklich beseitigt | 2026-08-17 |
-| AP-3.fix3 | S1/S2/S5: JSON-Form, Meta-Cache, Sortierung | – | – |
+| AP-3.fix3 | `php tools/test-seitenbaum.php` | **97/97 bestanden** (82 Bestand + 12 neu + 4 umformuliert – 1 Zählweise). Rot-vor-Grün über `d30becf` → `bf0bbfc` → `db58678` | 2026-08-17 |
+| AP-3.fix3 | Keine Prüfung heimlich entfernt | **nachgeprüft:** genau **fünf** gelöschte `check()`-Zeilen im Diff, exakt die gemeldeten (vier Zähler + `11.3`) | 2026-08-17 |
+| AP-3.fix3 | Die Zusicherung „genau ein Aufruf in Stufe 2" | **erhalten und verstärkt** als `F3-AK2.1`, jetzt an einer Stelle, an der nur Stufe 2 definiert ist — vorher stand sie dort, wo Stufe 1 längst aktiv war und sagte faktisch nichts aus | 2026-08-17 |
+| AP-3.fix3 | JSON-Objektform für alle vier Baumformen | `F3-AK1.1`–`F3-AK1.8` grün (flach, hierarchisch, einzelne Wurzel, leer × `knoten`/`kinder`) | 2026-08-17 |
+| AP-3.fix3 | `php tools/check-php74.php` | grün, 568 Dateien | 2026-08-17 |
 | AP-3.fix4 | `node tools/test-block-auswahl.js`, `node --check` | **grün** (vom Orchestrator gefahren, bevor er den unversionierten Stand sicherte). Weg 1 gewählt, Rot-vor-Grün über `27259ad` → `7331e97` nachweisbar | 2026-08-17 |
 | **Zwischenfall** | Vier Agenten gleichzeitig am **Monatsbudget der Organisation** gestorben | Kein Verlust. Der Orchestrator hat jeden Zustand geprüft und getrennt committet: AP-4.1 (`15f93fe`, fertig), AP-3.fix4 (`7331e97`, fertig und grün), AP-3.fix3 (`d30becf`, **absichtlich rot**, ausdrücklich als UNVOLLSTAENDIG beschriftet), AP-4.2 (**nichts** auf der Platte, neu zu machen). `main` unversehrt und grün | 2026-08-17 |
 | AP-3.fix5 | `php tools/test-inline-reference.php`, beide Betriebsarten | **157/157** und **153/153** (weiterhin genau 4 sichtbare Skips, keine neuen). Vom Orchestrator nachgeprüft | 2026-08-17 |
