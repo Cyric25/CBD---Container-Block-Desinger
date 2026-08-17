@@ -1140,44 +1140,125 @@ foreach (array('045', '00000000000000000045') as $wert) {
 
 
 // =========================================================================
-// 11 · AP-4.2 (AK14): Duplikatswächter für die Klassenzeichenkette
+// 11 · AP-4.2 (AK14) + AP-4.fix2 (B2, B3): Duplikatswächter für die
+//      Klassenzeichenkette — auf dem WIRKSAMEN AUSDRUCK, nicht auf Vorkommen
 // =========================================================================
 //
-// Die Zeichenkette `cbd-block-reference-inline` steht seit AP-4.2 an DREI
-// Stellen: als `CBD_Inline_Reference::KLASSE` (Prüfling dieses Harnischs),
-// als `className` der Formatregistrierung in
-// `blocks/block-reference/format.js` und im delegierten Klick-Selektor von
-// `blocks/block-reference/view.js`. Driften die drei auseinander, bemerkt das
-// ohne Wächter niemand — dieselbe Lage wie bei der dreifachen
-// `stableId`-Extraktion (CLAUDE.md, Abschnitt „Offener Punkt"). Ein Kommentar
-// an der Konstante nennt die beiden anderen Stellen, hält aber nichts fest.
-//
-// Der Wächter kostet drei Zeilen, weil dieser Harnisch ohnehin Quelltext
-// liest (Gruppe 1). Präzedenz: die `:pN`-Zusicherung in
+// Die Zeichenkette `cbd-block-reference-inline` steht an VIER Stellen (bis
+// AP-4.fix2 stand hier „drei"):
+//   1. als `CBD_Inline_Reference::KLASSE` — Prüfling dieses Harnischs
+//   2. als `className` der Formatregistrierung in
+//      `blocks/block-reference/format.js`
+//   3. im delegierten Klick-Selektor von `blocks/block-reference/view.js`
+//   4. in fünf Selektoren von `blocks/block-reference/style.css`
+// Driften sie auseinander, bemerkt das ohne Wächter niemand — dieselbe Lage
+// wie bei der dreifachen `stableId`-Extraktion (CLAUDE.md, Abschnitt „Offener
+// Punkt"). Befund S8 aus AP-3.rev; Präzedenz ist die `:pN`-Zusicherung in
 // `tools/test-classroom-gate.php`, die beim Bauen genau so einen Fall
-// gemeldet hat. Befund S8 aus AP-3.rev.
+// gemeldet hat.
 //
-// Geprüft wird WORTGLEICHES Vorkommen, nicht „irgendwie ähnlich": Der
-// CSS-Selektor `.cbd-block-reference-inline` und der JS-Wert
-// `'cbd-block-reference-inline'` enthalten die Konstante beide als
-// Teilzeichenkette — eine umbenannte Klasse nicht mehr. Beide Prüfungen
-// laufen unabhängig vom Tag-Processor-Weg, kein SKIP nötig.
+// WARUM DIESE GRUPPE IN AP-4.fix2 UMGEBAUT WURDE, OHNE SCHWÄCHER ZU WERDEN:
+//
+// B2 — Bis AP-4.fix2 prüfte sie mit `strpos()`, ob die Zeichenkette IRGENDWO
+//      in der Datei vorkommt. In `format.js` steht sie dreimal: zweimal in
+//      Docblocks, einmal als wirksamer Wert. AP-4.rev hat mutiert und
+//      gemessen: PHP-Konstante geändert → rot (gut); nur den wirksamen Wert
+//      in `format.js` verbogen, Docblocks unberührt → **167/167 GRÜN**. Der
+//      Wächter prüfte die Kommentare, nicht das Verhalten. Geprüft wird
+//      jetzt je Datei der WIRKSAME AUSDRUCK: die Zuweisung
+//      `var KLASSE = '…';`, der `closest()`-Selektor, der CSS-Regelkopf am
+//      Zeilenanfang. Ein Docblock erfüllt keines dieser Muster.
+//
+//      Dasselbe Verfahren wie in Prüfung `1.10`, die gezielt nur den
+//      Docblock vor `ziel_href()` liest, weil ein naives `strpos()` dort nie
+//      rot geworden wäre (Übergabenotiz AP-4.fix1). Die Lehre war auf
+//      Gruppe 1 angewandt, auf Gruppe 11 nicht.
+//
+// B3 — `style.css` war von keinem Wächter gedeckt, obwohl es die Klasse in
+//      fünf Selektoren nennt. Bei der Mutation M3 blieb Gruppe 11 grün,
+//      während der Inline-Verweis `display: inline`, die Unterstreichung und
+//      den `::after`-Pfeil verloren hätte — mitten im Satz, ohne
+//      Testmeldung.
+//
+// JE DATEI DREI PRÜFUNGEN, und die letzten zwei sind der Grund, warum dieser
+// Wächter diesmal nachweislich scharf ist statt nur gut gemeint:
+//   a) der wirksame Ausdruck ist vorhanden
+//   b) er wird ROT, wenn NUR die wirksamen Vorkommen umbenannt werden
+//      (Mutation im Speicher, an einer Kopie des Quelltextes — die Datei auf
+//      der Platte wird nie angefasst)
+//   c) ein naives `strpos()` bliebe bei genau dieser Mutation GRÜN. Das ist
+//      Befund B2 als dauerhaft ausführbare Zusicherung: Wer den Wächter
+//      künftig wieder auf Vorkommen umstellt, macht ihn damit wieder blind.
+//
+// Alle Prüfungen laufen unabhängig vom Tag-Processor-Weg, kein SKIP nötig.
 
-echo "\n== 11 · AP-4.2 (AK14): Duplikatswaechter Klassenzeichenkette ==\n";
+echo "\n== 11 · AK14 + AP-4.fix2 (B2/B3): Duplikatswaechter Klassenzeichenkette ==\n";
 
-// AK6 (AP-4.fix1): Die beiden Pruefungen dieser Gruppe trugen beide die
-// Nummer 11.1 - eine Zaehlvariable gibt jeder Datei ihre eigene Nummer
-// (11.1, 11.2), rein kosmetisch, keine Verhaltensaenderung.
+// Die Muster werden AUS DER PHP-KONSTANTE gebaut. Sie ist damit die einzige
+// Quelle, gegen die alle drei Nicht-PHP-Fassungen gemessen werden — genau die
+// Rolle, die `AUSWAHL_HANDLE` für das Handle des Auswahlbausteins spielt.
+$klasse       = CBD_Inline_Reference::KLASSE;
+$klasse_regex = preg_quote($klasse, '/');
+
+// `(?![-\w])` verhindert, dass eine LÄNGERE Klasse als Treffer durchgeht:
+// `.cbd-block-reference-inline-extra` ist nicht die gesuchte Klasse. Denselben
+// Fall prüft Prüfung `5.8` für den Filter selbst.
+$wirksame_ausdruecke = array(
+    'blocks/block-reference/format.js' => array(
+        'was'    => "die Zuweisung var KLASSE = '" . $klasse . "';",
+        'muster' => '/\bvar\s+KLASSE\s*=\s*\'' . $klasse_regex . '\'\s*;/',
+    ),
+    'blocks/block-reference/view.js' => array(
+        'was'    => "den Klick-Selektor in closest('… ." . $klasse . "')",
+        'muster' => '/closest\(\s*\'[^\']*\.' . $klasse_regex . '(?![-\w])[^\']*\'\s*\)/',
+    ),
+    'blocks/block-reference/style.css' => array(
+        'was'    => 'mindestens einen Regelkopf .' . $klasse . ' am Zeilenanfang',
+        'muster' => '/^\.' . $klasse_regex . '\s*[{,:]/m',
+    ),
+);
+
+// AK6 (AP-4.fix1): Die Prüfungen dieser Gruppe trugen einmal alle die Nummer
+// 11.1 — eine Zählvariable gibt jeder ihre eigene.
 $duplikatswaechter_nummer = 0;
-foreach (array('blocks/block-reference/format.js', 'blocks/block-reference/view.js') as $js_datei) {
+foreach ($wirksame_ausdruecke as $datei => $regel) {
+    $pfad   = $plugin_dir . $datei;
+    $quelle_datei = file_exists($pfad) ? file_get_contents($pfad) : '';
+
     $duplikatswaechter_nummer++;
-    $js_pfad = $plugin_dir . $js_datei;
-    $js_quelle = file_exists($js_pfad) ? file_get_contents($js_pfad) : '';
     check(
-        '11.' . $duplikatswaechter_nummer . ' · ' . $js_datei . ' nennt CBD_Inline_Reference::KLASSE ('
-            . CBD_Inline_Reference::KLASSE . ') wortgleich',
-        '' !== $js_quelle && false !== strpos($js_quelle, CBD_Inline_Reference::KLASSE),
-        $js_pfad
+        '11.' . $duplikatswaechter_nummer . ' · ' . $datei . ' enthaelt ' . $regel['was'],
+        '' !== $quelle_datei && 1 === preg_match($regel['muster'], $quelle_datei),
+        $pfad
+    );
+
+    // Mutation NUR IM SPEICHER: alle wirksamen Vorkommen bekommen einen
+    // Namenszusatz. Der Zusatz haengt HINTEN an, damit die ursprüngliche
+    // Zeichenkette als Teilzeichenkette erhalten bleibt — nur so lässt sich
+    // in c) zeigen, dass ein `strpos()` das nicht merkt.
+    $mutant = preg_replace_callback(
+        $regel['muster'],
+        function ($treffer) use ($klasse) {
+            return str_replace($klasse, $klasse . '-mutiert', $treffer[0]);
+        },
+        $quelle_datei
+    );
+
+    $duplikatswaechter_nummer++;
+    check(
+        '11.' . $duplikatswaechter_nummer . ' · ' . $datei . ': das Muster wird ROT, sobald nur die'
+            . ' wirksamen Vorkommen umbenannt sind (Mutation im Speicher)',
+        '' !== $quelle_datei && is_string($mutant) && $mutant !== $quelle_datei
+            && 0 === preg_match($regel['muster'], $mutant),
+        $datei
+    );
+
+    $duplikatswaechter_nummer++;
+    check(
+        '11.' . $duplikatswaechter_nummer . ' · ' . $datei . ': ein naives strpos() bliebe bei genau'
+            . ' dieser Mutation GRUEN (Befund B2, deshalb der Ausdruck statt des Vorkommens)',
+        is_string($mutant) && false !== strpos($mutant, $klasse),
+        $datei
     );
 }
 
@@ -1229,6 +1310,130 @@ check(
 check(
     '12.3 · leer bleibt ueber markierungLeer(wert) hergeleitet (AK2-Grundlage unveraendert)',
     false !== strpos($format_quelle, 'var leer = markierungLeer(wert)')
+);
+
+// =========================================================================
+// 13 · AP-4.fix2 (B1): der Link-Waechter prueft den BEREICH, nicht das
+//      ueberspannende Format
+// =========================================================================
+//
+// DER SCHWERSTE BEFUND DES GANZEN VORHABENS. Bis AP-4.fix2 prüfte `beiKlick()`
+// mit `getActiveFormat(wert, 'core/link')`, ob ein Link im Weg liegt. Jene
+// Funktion liefert aber nur Formate, die die GANZE Markierung überspannen —
+// `getActiveFormats()` in `wp-includes/js/dist/rich-text.js` bricht ab, sobald
+// ein Zeichen im Bereich das Format nicht trägt. Liegt der Link INNERHALB der
+// Markierung (praxisnah: einen ganzen Satz markieren, in dem eine
+// Quellenangabe verlinkt ist) oder überlappt er den Rand nur teilweise, war
+// der Rückgabewert `undefined`, der Dialog öffnete, und `applyFormat()` legte
+// das Inline-Format AUSSEN um den Link.
+//
+// Mit den echten Bündeln `rich-text.js`/`escape-html.js` (WordPress 7.0.4)
+// gemessen, vorher → nachher:
+//
+//   Fall A  Markierung ohne Link            öffnet    → öffnet     0 → 0
+//   Fall B  Markierung = Link               BLOCKIERT → BLOCKIERT  0 → 0
+//   Fall C  Link INNERHALB der Markierung   öffnet    → BLOCKIERT  1 → 0
+//   Fall D  Markierung überlappt den Rand   öffnet    → BLOCKIERT  1 → 0
+//
+// Gegengeprüft mit WordPress' eigenem Baum-Parser: `WP_HTML_Processor::
+// normalize()` liefert für A einen byte-identischen Rundlauf, für C und D
+// vorher NULL („parsing error: unsupported"). Der Schaden liegt im
+// GESPEICHERTEN Markup — `toHTMLString()` ist der String, der in
+// `post_content` landet. Das ist die einzige Stelle dieses Vorhabens, an der
+// ein Fehler nicht durch ein Plugin-Update reparierbar ist: Beim
+// Wiederöffnen liest Gutenberg die abgeflachte Fassung, `getSaveContent()`
+// erzeugt einen anderen String als den gespeicherten, und der Absatz gilt als
+// „Block enthält unerwarteten oder ungültigen Inhalt" (harte Grenze aus
+// Abschnitt 3 des Plans).
+//
+// Wie Gruppe 12 sind das QUELLTEXT-Zusicherungen: Dieser Harnisch kann
+// `format.js` nicht ausführen (kein WordPress, kein React). Die Messung oben
+// war ein Wegwerf-Skript, kein Bestandteil des Bestands — die Zusicherungen
+// hier halten fest, dass die gemessene Fassung nicht stillschweigend
+// zurückgedreht wird.
+
+echo "\n== 13 · AP-4.fix2 (B1): Bereichspruefung statt getActiveFormat ==\n";
+
+check(
+    '13.1 · linkImBereich(wert) ist definiert',
+    1 === preg_match('/function\s+linkImBereich\s*\(\s*wert\s*\)/', $format_quelle),
+    $format_pfad
+);
+check(
+    '13.2 · beiKlick() befragt linkImBereich(wert)',
+    1 === preg_match('/if\s*\(\s*linkImBereich\s*\(\s*wert\s*\)\s*\)/', $format_quelle),
+    $format_pfad
+);
+check(
+    '13.3 · getActiveFormat(..., LINK_FORMAT) kommt NICHT mehr vor (der Fehler von AP-4.2)',
+    0 === preg_match('/getActiveFormat\s*\([^)]*LINK_FORMAT/', $format_quelle),
+    $format_pfad
+);
+check(
+    "13.4 · LINK_FORMAT ist unveraendert 'core/link'",
+    1 === preg_match('/\bvar\s+LINK_FORMAT\s*=\s*\'core\/link\'\s*;/', $format_quelle),
+    $format_pfad
+);
+
+// Den Rumpf von linkImBereich() gezielt herausschneiden — dieselbe Erwaegung
+// wie bei Pruefung 1.10: Eine Aussage ueber die GANZE Datei waere hier
+// wertlos, weil `LINK_FORMAT` und `for` an anderen Stellen ohnehin vorkommen
+// und die Zusicherungen 13.5/13.6 dadurch nie rot werden koennten. Der
+// Hausstil rueckt die Funktionen der IIFE mit genau einem Tabulator ein, die
+// schliessende Klammer steht also allein auf einer Zeile als "\n\t}".
+$bereichs_koerper = '';
+if (preg_match('/function\s+linkImBereich\s*\([^)]*\)\s*\{(.*?)\n\t\}/s', $format_quelle, $treffer)) {
+    $bereichs_koerper = $treffer[1];
+}
+
+check(
+    '13.5 · der Rumpf laeuft in einer Schleife ueber den Bereich und vergleicht dort gegen'
+        . ' LINK_FORMAT (Pruefung je ZEICHEN, nicht ueberspannend)',
+    '' !== $bereichs_koerper
+        && 1 === preg_match('/\bfor\s*\(/', $bereichs_koerper)
+        && 1 === preg_match('/LINK_FORMAT\s*===|===\s*LINK_FORMAT/', $bereichs_koerper),
+    $bereichs_koerper
+);
+check(
+    '13.6 · und AUSSCHLIESSLICH gegen LINK_FORMAT: kein Vergleich gegen den eigenen Typ FORMAT,'
+        . ' kein tagName-Vergleich, kein getActiveFormat (AK3 — zwei gleichartige Verweise sind'
+        . ' KEIN Konflikt, der Waechter darf nicht zu scharf werden)',
+    '' !== $bereichs_koerper
+        && 0 === preg_match('/\bFORMAT\s*===|===\s*FORMAT\b/', $bereichs_koerper)
+        && false === strpos($bereichs_koerper, 'tagName')
+        && false === strpos($bereichs_koerper, 'getActiveFormat'),
+    $bereichs_koerper
+);
+
+// Duplikatswaechter fuer die Bereichsgrenzen: `wert.start`/`wert.end` duerfen
+// nur in ZWEI Funktionen gelesen werden - in `bereich()` (EINE Herleitung fuer
+// `markierung()` UND `linkImBereich()`) und in `markierungLeer()` (dort ist
+// die Gleichheit selbst die Aussage, kein Intervall). Eine dritte Fassung
+// liefe irgendwann auseinander; dagegen hat das Projekt an anderer Stelle
+// Waechter geschrieben (CLAUDE.md, Abschnitt "Offener Punkt: stableId-
+// Extraktion existiert dreifach").
+//
+// Geprueft wird durch Ausschneiden der beiden erlaubten Rumpfe: Was danach
+// noch uebrig ist, waere eine dritte Fassung. Ein bloßes Zaehlen haette die
+// innere Gestalt von `bereich()` festgenagelt (dort steht `wert.start`
+// zweimal: typeof-Pruefung und Wert).
+$ohne_bereichsleser = $format_quelle;
+foreach (array('bereich', 'markierungLeer') as $erlaubt) {
+    if (preg_match('/function\s+' . $erlaubt . '\s*\([^)]*\)\s*\{.*?\n\t\}/s', $format_quelle, $treffer)) {
+        $ohne_bereichsleser = str_replace($treffer[0], '', $ohne_bereichsleser);
+    }
+}
+check(
+    '13.7 · die Bereichsgrenzen werden NUR in bereich() und markierungLeer() gelesen, und'
+        . ' markierung() nutzt bereich() mit (eine Herleitung, keine dritte Fassung)',
+    $ohne_bereichsleser !== $format_quelle
+        && 0 === substr_count($ohne_bereichsleser, 'wert.start')
+        && 0 === substr_count($ohne_bereichsleser, 'wert.end')
+        && 1 === preg_match('/function\s+markierung\s*\([^)]*\)\s*\{.*?bereich\s*\(\s*wert\s*\)/s', $format_quelle),
+    array(
+        'wert.start ausserhalb' => substr_count($ohne_bereichsleser, 'wert.start'),
+        'wert.end ausserhalb'   => substr_count($ohne_bereichsleser, 'wert.end'),
+    )
 );
 // =========================================================================
 

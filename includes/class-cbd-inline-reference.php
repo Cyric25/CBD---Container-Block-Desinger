@@ -65,9 +65,21 @@ class CBD_Inline_Reference {
      * Karten-Layout und `transform` beim Überfahren — mitten in einem Absatz
      * zerreißt das den Textfluss.
      *
-     * Diese Zeichenkette steht ein zweites Mal in `format.js` (AP-4.2) als
-     * `className` der Formatregistrierung und ein drittes Mal im Klick-Selektor
-     * von `view.js`. Wird sie hier geändert, müssen beide mitgezogen werden.
+     * DIESE ZEICHENKETTE STEHT AN VIER STELLEN — bis AP-4.fix2 (Befund B3)
+     * behauptete dieser Kommentar „drei" und ließ die vierte unerwähnt:
+     *   1. hier, als Konstante
+     *   2. in `blocks/block-reference/format.js` (AP-4.2) als `className` der
+     *      Formatregistrierung
+     *   3. im delegierten Klick-Selektor von `blocks/block-reference/view.js`
+     *   4. in fünf Selektoren von `blocks/block-reference/style.css`
+     * Wird sie hier geändert, müssen alle drei anderen mitgezogen werden.
+     *
+     * Der Duplikatswächter dafür ist `tools/test-inline-reference.php`,
+     * Gruppe 11. Er prüft seit AP-4.fix2 den WIRKSAMEN AUSDRUCK je Datei, nicht
+     * das bloße Vorkommen: In `format.js` steht die Zeichenkette dreimal,
+     * zweimal davon in Docblocks — ein `strpos()` blieb deshalb auch dann grün,
+     * wenn nur der wirksame Wert falsch war (AP-4.rev hat das mutiert und
+     * gemessen: 167/167 grün). `style.css` war überhaupt nicht gedeckt.
      */
     const KLASSE = 'cbd-block-reference-inline';
 

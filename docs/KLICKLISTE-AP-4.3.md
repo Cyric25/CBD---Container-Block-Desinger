@@ -223,6 +223,41 @@ Editor-Sitzungen von Durchgang 3 weg.
       ein Verweis innerhalb eines Links ergäbe ungültiges HTML."
       → AK3 von AP-4.2
 
+      Dieser Schritt prüft nur den Fall, in dem Markierung **und** Link
+      deckungsgleich sind. Die zwei folgenden Schritte im selben Abschnitt
+      `B8` sind die Fälle, die AP-4.rev als Blocker gefunden hat — sie
+      brauchen die `format.js` **nach AP-4.fix2**.
+
+- [ ] **B8 (Fall C) — Link _innerhalb_ der Markierung → auch hier
+      Warnmeldung** *(der praxisnahe Fall)*
+      Im selben Absatz den **ganzen ersten Satz** markieren, also von
+      „Dieser Absatz enthaelt einen" bis einschließlich „gewoehnlichen Link."
+      — die Markierung ist damit **breiter** als der Link und enthält ihn.
+      Dann den neuen Knopf drücken.
+      *Erwartet:* Genau wie bei `B8` — **kein** Dialog, dieselbe Warnmeldung.
+      Vor AP-4.fix2 öffnete der Dialog hier, und das Übernehmen schrieb ein
+      `<a>` **innerhalb** eines `<a>` in den Seiteninhalt.
+      → AK1 von AP-4.fix2
+
+      **Wenn hier ein Dialog aufgeht, bitte abbrechen und nichts
+      übernehmen** — das gespeicherte Markup wäre dann ungültig und der
+      Absatz beim nächsten Öffnen ein „Block enthält unerwarteten oder
+      ungültigen Inhalt".
+
+- [ ] **B8 (Fall D) — Markierung überlappt den Linkrand → auch hier
+      Warnmeldung**
+      Im selben Absatz eine Markierung ziehen, die **mitten im Linktext
+      beginnt** und **hinter dem Link endet**: von „Link" (dem zweiten Wort
+      des Linktextes) bis „Markiert man" hinein.
+      *Erwartet:* **Kein** Dialog, dieselbe Warnmeldung. Auch dieser Fall
+      erzeugte vor AP-4.fix2 ein verschachteltes `<a>`.
+      → AK1 von AP-4.fix2
+
+      *Gegenprobe, dass der Wächter nicht zu scharf geworden ist:* Danach
+      nur „Markiert man genau diesen Linktext" markieren — also einen
+      Bereich, der den Link **nicht** berührt. Dort **muss** der Dialog
+      aufgehen. Mit „Abbrechen" schließen, es soll kein Verweis entstehen.
+
 - [ ] **B9 — Knopfzustand bei leerer Markierung**
       Cursor in den Absatz setzen, **nichts** markieren.
       *Erwartet:* Der Knopf ist **deaktiviert** (ausgegraut, nicht klickbar).
