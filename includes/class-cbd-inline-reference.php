@@ -337,7 +337,23 @@ class CBD_Inline_Reference {
      * `data-target-post` als positive Ganzzahl lesen.
      *
      * Streng: Nur eine reine Ziffernfolge zählt. `"45abc"` wäre über `(int)`
-     * zu 45 geworden — ein Wert, den niemand geschrieben hat.
+     * zu 45 geworden — ein Wert, den niemand geschrieben hat. `ctype_digit()`
+     * lehnt `+45`, ` 45 ` und `4e2` ab, die `FILTER_VALIDATE_INT` teilweise
+     * akzeptieren würde — die beiden Prüfungen ergänzen sich, die eine
+     * ersetzt die andere nicht.
+     *
+     * WARUM filter_var() UND NICHT (int) FÜR DEN NUMERISCHEN TEIL (AP-3.fix2)
+     * Eine überlange Ziffernfolge besteht `ctype_digit()` trotzdem — sie
+     * enthält ja nur Ziffern. `(int)` würde sie ab PHP 8.1 mit der Warnung
+     * „not representable as an int, cast occurred" auf `PHP_INT_MAX`
+     * abbilden, statt sie abzulehnen: ein Wert, den niemand geschrieben hat,
+     * gälte als gültige Beitrags-ID, und jedes Vorkommen schriebe eine
+     * harmlose Warnung ins Debug-Log. `filter_var()` liefert für Werte
+     * außerhalb des Wertebereichs stattdessen `false`, ohne zu warnen — die
+     * Ziffernfolge fällt damit auf `0` zurück. Dieselbe Regel mit derselben
+     * Begründung steht bereits in `class-cbd-design-transfer.php`
+     * (`md_read_value()`, Zeile ~911-915); diese Stelle hatte sie nicht
+     * übernommen.
      *
      * @param mixed $roh Rückgabe von `get_attribute()` (string, true oder null).
      * @return int 0, wenn nicht lesbar.
@@ -352,9 +368,9 @@ class CBD_Inline_Reference {
             return 0;
         }
 
-        $id = (int) $roh;
+        $id = filter_var($roh, FILTER_VALIDATE_INT);
 
-        return $id > 0 ? $id : 0;
+        return (false !== $id && $id > 0) ? $id : 0;
     }
 
     /**
