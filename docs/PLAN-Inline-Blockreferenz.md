@@ -2190,7 +2190,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☑ |
 | AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev, 3.fix5 | ☑ (2. Anlauf) |
 | AP-4.fix1 | Fehlende Abhängigkeit, dritte URL-Fassung, Verweis ohne Markierung | sonnet | 4.2 | ☑ |
-| AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2, 4.fix1 | ☐ |
+| AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2, 4.fix1 | ◐ **wartet auf den Nutzer** (Klickliste, AK11) |
 | AP-4.rev | Unabhängiges Review Phase 4 | opus | 4.3 | ☐ |
 | AP-4.doc | Dokumentation und Projektabschluss | sonnet | 4.rev | ☐ |
 
@@ -2249,11 +2249,21 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-4.fix1 | `render.php` nur Kommentare | bestätigt: kumulativ **zwei** hinzugefügte Zeilen seit `vor-phase-4`, beide Kommentare, keine Löschung | 2026-08-17 |
 | AP-4.fix1 | `removeFormat` bei zusammengefallener Auswahl | Fundstelle `rich-text.js:1309-1330` nachgesehen **und** das echte `format.js` in node ausgeführt: leer+inaktiv `true`, leer+aktiv `false` | 2026-08-17 |
 | AP-4.fix1 | `node --check`, `php tools/check-php74.php` | grün / grün, 568 Dateien | 2026-08-17 |
-| AP-4.3 | Alle sieben Prüfharnische (Regression) | – | – |
-| AP-4.3 | ZIP-Inhalt und Autoloader | – | – |
-| AP-4.3 | Klickliste Seite A und B | – | – |
-| AP-4.3 | Block-Redakteur: kses-Rundlauf | – | – |
-| AP-4.3 | Ladezeit beider Editor-Routen | – | – |
+| AP-4.3 | Alle 13 PHP-Harnische + JS-Harnisch, `check-php74`, `node --check` ×5 | **alle grün.** 84/71/38/98/31/26/57/31/18/**167**/134/**97**/38 + **140** (JS). Beim Serializer Exitcode geprüft, nicht nach Textmuster gegriffen | 2026-08-17 |
+| AP-4.3 | ZIP-Inhalt und Autoloader | **grün.** `container-block-designer-3.1.92.zip`, die drei neuen Dateien enthalten (vom Orchestrator gegengeprüft), **kein** phpunit/wpcs/php-parser im Autoloader, entpacktes `vendor/autoload.php` lädt ohne Fatal, Dev-Autoloader lokal wiederhergestellt | 2026-08-17 |
+| AP-4.3 | Installation über `Plugin_Upgrader::install()` | 3.1.89 → **3.1.92**, Menü zeigt die Version, Zustand `active`. **Einschränkung:** der HTTP-Upload-Schritt des Admin-Formulars ist **nicht** geprüft — das ZIP ist 47,9 MB, der Testserver erlaubt 32M (all-inkl-typisch). Ursache `vendor/mpdf` (91,9 MB entpackt), nicht neu | 2026-08-17 |
+| AP-4.3 | Vertrag D im gespeicherten Markup (live, 7 Verweise) | genau die fünf Attribute + `class`, **keine** Spur der drei serverseitigen | 2026-08-17 |
+| AP-4.3 | Vertrag E in der Ausgabe (live) | `modal` + `aria-haspopup` an jedem Verweis, `data-same-page="true"` **nur** beim Selbstverweis, `href` neu berechnet. Vom Orchestrator gegengeprüft: 7 Verweise auf Seite 75, 8 auf Seite 76 | 2026-08-17 |
+| AP-4.3 | `view.js` auf einer Seite **ohne** Blockreferenz-Block | **eingebunden**, `restUrl` über `rest_url()` — der Weg trägt auch ohne hübsche Permalinks | 2026-08-17 |
+| AP-4.3 | Block-Redakteur: kses-Rundlauf | **alle fünf Attribute unverändert in der Datenbank**, LaTeX-Backslashes einfach. Und **gemessen, warum Vertrag E nötig ist:** `wp_kses_post()` entfernt `aria-haspopup` tatsächlich | 2026-08-17 |
+| AP-4.3 | Ablehnung und Nichtexistenz zeichengleich (live) | `cmp` grün: Seite 64 anonym und unbekannte Kennung liefern byte-identische 404 | 2026-08-17 |
+| AP-4.3 | Ladezeit beider Editor-Routen | `cbd/v1/blocks` 0,285–0,377 s · `cbd/v1/seitenbaum` 0,291–0,362 s — die neue Route ist **nicht teurer** als die bestehende | 2026-08-17 |
+| AP-4.3 | Archivmessung (AP-3.rev, Anm. 14) | Differenz im Rauschen. Der Filter reiht `view.js` im Auszug ein, obwohl der Verweis dort weggeschnitten ist (0 echte `<a>`) — harmlos, wie vermutet, jetzt **gemessen** | 2026-08-17 |
+| AP-4.3 | Filter-Idempotenz und Bestandsseiten im Betrieb | ein-/zwei-/dreifache Anwendung byte-identisch; Seiten 55 und 62 **zeichengleich** | 2026-08-17 |
+| AP-4.3 | Plugin deaktiviert | Verweise sind gewöhnliche Links, gespeicherter Inhalt **identische MD5** vor/nach Deaktivierung und Reaktivierung | 2026-08-17 |
+| AP-4.3 | `debug.log` | **keine** neue Warnung; Restzeilen als vorbestehend nachgewiesen (148× vor der Baseline) | 2026-08-17 |
+| AP-4.3 | Klickliste Seite A, B, C | `docs/KLICKLISTE-AP-4.3.md`, 5 Durchgänge, 38 Häkchen, **Abschnittsnummern der Seiten** — **wartet auf den Nutzer** | – |
+| AP-4.3 | Beurteilung der zwei bekannten Grenzen | Vorschlag des Agenten liegt vor (beide hinnehmbar), **letztes Wort beim Nutzer** | – |
 | AP-4.rev | Review-Befunde | – | – |
 
 ## 10. Dokumentation
@@ -2269,6 +2279,50 @@ Zu pflegen sind:
 
 **Nicht** zu pflegen: `Theme/CLAUDE.md`,
 `Plugins/Eigene WP Blocks/CLAUDE.md` — beide Komponenten bleiben unberührt.
+
+## 10a. Befunde außerhalb dieses Vorhabens
+
+Bei der Abnahme gefunden, **bewusst nicht behoben**, weil sie älter sind als
+dieses Vorhaben. Hier festgehalten, damit sie nicht wieder verloren gehen.
+
+### KaTeX fehlt im Overlay, wenn die aufrufende Seite selbst keine Formel hat
+
+`CBD_LaTeX_Parser::should_load_katex()` (`includes/class-latex-parser.php:100-142`)
+entscheidet allein aus dem `post_content` der **aufgerufenen** Seite, ob
+`katex.min.js` und `latex-renderer.js` eingebunden werden. Enthält der über ein
+Modal nachgeladene Block eine Formel, die aufrufende Seite aber keine, ist
+`window.cbdRenderLatex` nicht vorhanden — `view.js` prüft korrekt
+`typeof … === 'function'`, überspringt und stürzt **nicht** ab, aber die Formel
+bleibt Rohtext.
+
+**Belegt als vorbestehend, nicht durch dieses Vorhaben verursacht:** Derselbe
+Effekt tritt beim **Bestands**-Blockreferenz-Block auf, der mit dem
+Inline-Verweis nichts zu tun hat; und `git diff vor-phase-3..HEAD` auf
+`class-latex-parser.php` und `latex-renderer.js` ist **leer**. Die Lücke
+besteht seit dem Modal-Modus in 3.1.89.
+
+**Abhilfe für ein künftiges AP:** `should_load_katex()` zusätzlich an das
+Vorkommen eines Verweises binden (Klasse `cbd-block-reference-link` oder
+`cbd-block-reference-inline` im Inhalt). In der Klickliste bei `A1` und `B2`
+als erwartete Eigenart beschrieben, damit sie dem Nutzer nicht als neuer
+Fehler erscheint.
+
+### Das Plugin-ZIP ist zu groß für den Admin-Upload
+
+47,9 MB gegen `upload_max_filesize` von 32M auf dem Testserver
+(all-inkl-typisch kalibriert). Ursache ist `vendor/mpdf` mit 91,9 MB
+entpackt. **Nicht neu** — 3.1.91 war ebenso groß. AP-4.3 hat deshalb über
+`Plugin_Upgrader::install()` installiert: derselbe Entpack-, Ersetzungs- und
+Aktivierungspfad, den der Admin-Upload nach dem HTTP-Upload nimmt. Der
+Auslieferungsweg ist damit geprüft, **der HTTP-Upload-Schritt nicht.**
+
+### Eine Kleinigkeit, in der die Risikotabelle dieses Plans irrt
+
+Abschnitt 5 behauptet, `data-targetStableId` würde von `wp_kses_post()`
+**entfernt**. Auf WordPress 7.0.4 wird es nur **kleingeschrieben**
+(`data-targetstableid`). Die Entscheidung für durchgehend kleine Namen bleibt
+richtig, und dass `aria-haspopup` wirklich wegfällt, ist bei der Abnahme
+**gemessen** — die Begründung stimmt im Ergebnis, in diesem Detail nicht.
 
 ## 11. Rückblick
 
