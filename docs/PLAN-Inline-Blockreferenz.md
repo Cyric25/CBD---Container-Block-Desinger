@@ -843,7 +843,65 @@ entfernt werden), und ein Inhalt, in dem die Klassenzeichenkette nur im
 Fließtext vorkommt (kein `<a>` — Inhalt zeichengleich). Rote Tests zuerst
 committen.
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+**Übergabenotiz (erledigt, vom Orchestrator abgenommen):** 119 Prüfungen
+grün, und zwar **zweimal** — einmal gegen die echte
+`WP_HTML_Tag_Processor`-Klasse (aus der Installation des Testservers geborgt,
+ohne WordPress zu booten) und einmal gegen ein schmales Doppel
+(`CBD_TEST_TAG_PROCESSOR=doppel`). Roter Commit `d2e0597`, grüner `0df80cd`.
+AK12 nachgeprüft: `git diff vor-phase-3..HEAD -- includes/class-cbd-block-content-api.php`
+ist leer. `container-block-designer.php` enthält genau die zwei funktionalen
+Zeilen, beide hinter `class_exists()`.
+
+**Fehler im Plantext, vom Orchestrator korrigiert:** Schritt 2 dieses APs
+verlangte `register_format_script()` auf `enqueue_block_editor_assets` und
+verwies gleichzeitig auf `register_editor_script()` als Muster — das aber
+**nur registriert**, weil `block.json` das Handle unter `editorScript` nennt
+und WordPress es deshalb selbst einreiht. Ein Textformat hängt an keinem
+Block; niemand würde das Handle je einreihen, das Script wäre nie geladen.
+Der Agent hat das erkannt und `register_format_script()` **registriert und
+eingereiht**. Richtig so — dasselbe tut das Theme-Vorbild
+(`Theme/functions.php:2317`, `wp_enqueue_script` auf
+`enqueue_block_editor_assets`).
+
+**Für AP-4.2 vorbereitet:** Handle `cbd-block-reference-format`, Quelle
+`blocks/block-reference/format.js`, Abhängigkeiten in dieser Reihenfolge:
+`wp-rich-text`, `wp-block-editor`, `wp-components`, `wp-element`, `wp-i18n`,
+`wp-api-fetch`, `CBD_Block_Reference::AUSWAHL_HANDLE`. `$in_footer = true`.
+**An der PHP-Seite ist für AP-4.2 nichts zu tun** — nur JS und CSS.
+
+**Eine Sorge des Agenten ist gegenstandslos:** `render.php` schreibt
+`data-same-page="false"`, der Filter **entfernt** das Attribut stattdessen
+(so schreibt Vertrag E es vor). `view.js` prüft an beiden Stellen
+(`:565`, `:816`) auf `=== 'true'` — Abwesenheit und `"false"` ergeben
+gleichermaßen `false`. AP-4.2 muss dafür nichts tun.
+
+**Drei Punkte für AP-3.rev, vom Agenten gemeldet:**
+
+1. Die Klassenzeichenkette `cbd-block-reference-inline` steht ab AP-4.2 an
+   **drei** Stellen: `CBD_Inline_Reference::KLASSE`, `className` in
+   `format.js`, Klick-Selektor in `view.js`. Kein Duplikatswächter —
+   dieselbe Familie wie die dreifache `stableId`-Extraktion. Der Kommentar
+   an der Konstante nennt die beiden anderen Stellen.
+2. `CBD_Inline_Reference::ziel_href()` und `render.php` bauen die Ziel-URL
+   nach **derselben** Regel (Anker → Fragment, sonst
+   `add_query_arg('cbd-ref', …)`) an zwei Stellen. Kandidat für eine
+   geteilte statische Methode; `render.php` gehörte nicht zu diesem AP.
+3. Der Filter läuft auch in Auszügen und Archiven und reiht dort `view.js`
+   ein, obwohl der Verweis im Auszug abgeschnitten sein kann. Harmlos (ein
+   Footer-Script), aber AP-4.3 soll es beim Messen der Ladezeit im Blick
+   behalten.
+
+**Test-Seam, angenommen:** `auswahl_handle($klasse)` und
+`format_script_daten($relativ)` sind parametrisiert, damit der Harnisch alle
+drei Zweige des Wächters prüfen kann, **ohne** `format.js` anzulegen — die
+Datei gehört AP-4.2. Präzedenz: `stable_id_factory` im Block-Serializer.
+
+**Lehre, die der Harnisch selbst gefangen hat:** Die erste Fassung
+deklarierte das `CBD_Block_Reference`-Doppel unbedingt; PHP band es beim
+Kompilieren (Hoisting), und der Nachweis „fehlender Vertragspartner erzeugt
+keinen Fatal Error" wäre wertlos gewesen. Prüfung 3a.0 hat es gemeldet, das
+Doppel steht jetzt in einem `eval()`. Dieselbe Fehlerfamilie wie der
+`sidebar.php`-Fatal in Theme v1.5.57→58.
 
 ---
 
@@ -970,8 +1028,22 @@ Ausgeführt von einem Agenten, der keines der Phase-3-APs implementiert hat.
    Meldung der APs vertrauen.
 6. **JS-Syntax.** `node --check` auf jede geänderte JS-Datei.
 7. **Übergangsdoppel.** AP-3.2 verschiebt Funktionen aus `index.js`, ohne
-   `index.js` zu ändern. Festhalten, welche Funktionen jetzt doppelt
-   existieren, damit AP-4.1 sie sicher entfernt.
+   `index.js` zu ändern. Die Liste steht in der Übergabenotiz von AP-3.2 —
+   prüfen, ob sie vollständig ist, damit AP-4.1 nichts stehen lässt.
+8. **Die drei gemeldeten Doppelungen beurteilen** (Fundstellen in der
+   Übergabenotiz von AP-3.3): die Klassenzeichenkette an drei Stellen, die
+   URL-Bildungsregel in `ziel_href()` und `render.php`, und ob der Wert von
+   `CBD_Block_Reference::AUSWAHL_HANDLE` mit dem Doppel im Harnisch von
+   AP-3.3 übereinstimmt (`cbd-block-auswahl`) — beide entstanden zeitgleich
+   in getrennten APs und haben sich vor dem Merge nie gesehen. Für jede
+   Doppelung: lohnt ein Wächter, oder genügt der Kommentar? Der Plan
+   verbietet ausdrücklich, in diesem Vorhaben die bestehende dreifache
+   `stableId`-Extraktion aufzuräumen — aber eine **neue** Doppelung ohne
+   Wächter ist ein Befund.
+9. **Der Umfang von `AP-3.fix1`.** Es entstand erst bei der Abnahme von
+   AP-3.1 und hat als einziges AP dieser Phase kein eigenes rotes
+   Testfundament aus dem ursprünglichen Plan. Prüfen, ob die 63 Prüfungen
+   aus AP-3.1 unverändert grün sind und **nicht** abgeschwächt wurden.
 
 Befunde nach Schwere sortiert melden, je Befund: Fundstelle mit Zeilennummer,
 Auswirkung, Vorschlag. Kritische Befunde führen zu `AP-3.fixN`.
@@ -1346,7 +1418,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 |---|---|---|---|---|
 | AP-3.1 | Hierarchiedaten in den Editor-Routen | sonnet | – | ☑ |
 | AP-3.2 | Gemeinsamer Auswahlbaustein `window.cbdBlockAuswahl` | opus | – | ☑ |
-| AP-3.3 | Serverseite des Inline-Verweises | opus | – | ◐ |
+| AP-3.3 | Serverseite des Inline-Verweises | opus | – | ☑ |
 | AP-3.fix1 | `gesperrt` ohne Abfrage je Seite ermitteln | sonnet | 3.1 | ◐ |
 | AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1 | ☐ |
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☐ |
@@ -1370,8 +1442,12 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.2 | Öffentliche Namen = genau die sieben aus Vertrag C | bestätigt, `block-auswahl.js:1054-1062` | 2026-08-17 |
 | AP-3.2 | `blocks/block-reference/index.js` unverändert | bestätigt, `git diff` leer | 2026-08-17 |
 | AP-3.2 | Registrierungsreihenfolge trägt die Abweichung | bestätigt: `register_auswahl_script()` läuft vor `register_editor_script()`, `:65-72` | 2026-08-17 |
-| AP-3.3 | `php tools/test-inline-reference.php` | – | – |
-| AP-3.3 | `php tools/check-php74.php` | – | – |
+| AP-3.3 | `php tools/test-inline-reference.php` | **119/119 bestanden**, und zwar zweimal: gegen die echte `WP_HTML_Tag_Processor` und gegen das Doppel (`CBD_TEST_TAG_PROCESSOR=doppel`). Vom Orchestrator beide Wege nachgeprüft | 2026-08-17 |
+| AP-3.3 | `php tools/check-php74.php` | grün, 568 Dateien (vom Orchestrator nachgeprüft) | 2026-08-17 |
+| AP-3.3 | Rot-vor-Grün nachweisbar (`d2e0597` → `0df80cd`) | ja; roter Commit enthält nur den Harnisch | 2026-08-17 |
+| AP-3.3 | AK12: `class-cbd-block-content-api.php` unverändert | bestätigt, `git diff` leer | 2026-08-17 |
+| AP-3.3 | `container-block-designer.php` nur zwei funktionale Zeilen | bestätigt, beide hinter `class_exists()` | 2026-08-17 |
+| AP-3.3 | `view.js` verkraftet fehlendes `data-same-page` | bestätigt, `=== 'true'` an `:565` und `:816` — keine Anpassung nötig | 2026-08-17 |
 | AP-3.rev | Review-Befunde | – | – |
 | AP-4.1 | `node --check blocks/block-reference/index.js` | – | – |
 | AP-4.1 | Kaskade über vier Ebenen, Bestandsblock | – | – |
