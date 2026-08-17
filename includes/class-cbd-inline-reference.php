@@ -93,12 +93,16 @@ class CBD_Inline_Reference {
     const BLOCK_NAME = 'cbd/block-reference';
 
     /**
-     * Klasse, die den gemeinsamen Auswahlbaustein registriert (AP-3.2).
+     * Die Nachbarklasse, von der zwei Dinge geborgt werden.
      *
-     * Als Konstante, damit der Klassenname nicht über die Datei verstreut
-     * steht; gelesen wird er ausschließlich in `auswahl_handle()`.
+     * `CBD_Block_Reference` registriert BEIDES, was der Inline-Verweis
+     * mitbenutzt: den gemeinsamen Auswahlbaustein (Konstante
+     * `AUSWAHL_HANDLE`, gelesen in `auswahl_handle()`) und das Handle des
+     * Frontend-Scripts (`view_script_handle()`, gelesen in
+     * `frontend_einbinden()`). Als Konstante, damit der Klassenname nicht über
+     * die Datei verstreut steht.
      */
-    const AUSWAHL_KLASSE = 'CBD_Block_Reference';
+    const REFERENZ_KLASSE = 'CBD_Block_Reference';
 
     /**
      * Hooks anmelden.
@@ -133,7 +137,7 @@ class CBD_Inline_Reference {
      * @param string $klasse Nur für den Prüfharnisch überschreibbar.
      * @return string|null
      */
-    public static function auswahl_handle($klasse = self::AUSWAHL_KLASSE) {
+    public static function auswahl_handle($klasse = self::REFERENZ_KLASSE) {
         if (!is_string($klasse) || '' === $klasse || !class_exists($klasse)) {
             return null;
         }
@@ -463,9 +467,9 @@ class CBD_Inline_Reference {
         $block_typ = self::block_typ();
 
         // --- Script ---
-        if (class_exists(self::AUSWAHL_KLASSE)
-            && method_exists(self::AUSWAHL_KLASSE, 'view_script_handle')) {
-            $handle = call_user_func(array(self::AUSWAHL_KLASSE, 'view_script_handle'), $block_typ);
+        if (class_exists(self::REFERENZ_KLASSE)
+            && method_exists(self::REFERENZ_KLASSE, 'view_script_handle')) {
+            $handle = call_user_func(array(self::REFERENZ_KLASSE, 'view_script_handle'), $block_typ);
 
             if (is_string($handle) && '' !== $handle && wp_script_is($handle, 'registered')) {
                 wp_enqueue_script($handle);
