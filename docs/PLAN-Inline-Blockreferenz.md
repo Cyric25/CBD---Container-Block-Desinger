@@ -996,6 +996,96 @@ davor, prüft der Test die falsche Zeichenkette. Für dieses AP unerheblich.
 
 ---
 
+### AP-3.fix2: `ziel_post_id()` ohne `(int)`-Cast auf überlange Ziffernfolgen
+
+**Modell:** sonnet
+**Abhängigkeiten:** AP-3.3
+**Dateien:** `includes/class-cbd-inline-reference.php`, `tools/test-inline-reference.php`
+**Anlass:** Vorprüfung des Orchestrators mit einer Angriffssonde (40 Fälle,
+siehe „Vorprüfung" unter AP-3.rev). Ein Fall schlug fehl.
+
+**Der Befund.** `ziel_post_id()`
+(`includes/class-cbd-inline-reference.php`, Zeile ~355) prüft korrekt mit
+`ctype_digit()` und lehnt Text, Komma, Vorzeichen, Hex und Exponent
+zuverlässig ab — geprüft, alle grün. Eine **20-stellige Ziffernfolge**
+besteht `ctype_digit()` aber und läuft danach in `(int) $roh`:
+
+```
+data-target-post="99999999999999999999"
+→ PHP Warning: The float-string "99999999999999999999" is not
+  representable as an int, cast occurred        (PHP 8.1+)
+→ $ziel = 9223372036854775807  (also NICHT < 1, gilt als gültig)
+→ das Element wird bearbeitet, href zeigt auf eine unmögliche Seite
+```
+
+**Das Projekt hat dagegen bereits eine ausdrückliche Regel.**
+`includes/class-cbd-design-transfer.php:911-915` begründet in einem
+Kommentar, warum dort `filter_var(..., FILTER_VALIDATE_INT)` statt `(int)`
+steht — genau wegen dieser Warnung ab PHP 8.1 und der „den Wertebereich
+verstümmelten Zahl". AP-3.3 hat diese Lehre nicht mitbekommen.
+
+**Warum es kein Blocker ist:** Der Wert kann nicht aus der Zielauswahl
+kommen — die Beitrags-IDs stammen aus `cbd/v1/blocks`. Es braucht
+handgeschriebenes Markup. Die Folge ist auch kein Sicherheitsproblem: In der
+Wirklichkeit liefert `get_permalink()` für eine unmögliche ID `false`, der
+gespeicherte `href` bleibt stehen, und der Modal-Endpunkt autorisiert
+unabhängig. **Was bleibt, ist eine PHP-Warnung je Vorkommen im
+`debug.log`** — und ein Log voller harmloser Warnungen verdeckt die echten.
+
+**Umsetzung:**
+
+1. In `ziel_post_id()` den `(int)`-Cast durch
+   `filter_var($roh, FILTER_VALIDATE_INT)` ersetzen. Die Funktion liefert
+   für Werte außerhalb des Wertebereichs `false` — die Ziffernfolge fällt
+   damit auf `0` und das Element bleibt **zeichengleich**, was der
+   eigentlich gewollten Zusicherung entspricht.
+2. `ctype_digit()` **bleibt** als vorgeschaltete Prüfung stehen: Es lehnt
+   `+45`, ` 45 ` und `4e2` ab, die `FILTER_VALIDATE_INT` teilweise
+   akzeptieren würde. Die beiden Prüfungen ergänzen sich, die eine ersetzt
+   die andere nicht.
+3. Einen Kommentar setzen, der auf
+   `class-cbd-design-transfer.php:911-915` verweist — damit die Regel beim
+   nächsten Mal gefunden wird.
+
+**Akzeptanzkriterien:**
+
+- AK1: `data-target-post="99999999999999999999"` lässt das Element
+  **zeichengleich** und erzeugt **keine** PHP-Warnung. Nachweis im Harnisch
+  über einen eigenen `set_error_handler`, der jede Warnung zum Fehlschlag
+  macht.
+- AK2: Dasselbe für eine 30-stellige und eine 100-stellige Ziffernfolge.
+- AK3: `data-target-post="9223372036854775807"` (genau `PHP_INT_MAX`) wird
+  weiterhin als gültige Zahl gelesen — die Grenze wird nicht zu weit
+  gezogen.
+- AK4: Die Ablehnung von `+45`, `4e2`, `0x2d`, `4,5`, `  `, `-7`, `0`,
+  `abc`, leer und fehlend bleibt unverändert.
+- AK5: Die 119 bestehenden Prüfungen bleiben grün und werden **nicht**
+  abgeschwächt.
+- AK6: `php tools/check-php74.php` ist grün. `filter_var` mit
+  `FILTER_VALIDATE_INT` ist in PHP 7.4 verfügbar.
+
+**Tests (TDD):** Rote Fälle zuerst. **Zusätzlich in den Harnisch
+übernehmen** — die Angriffssonde des Orchestrators hat sie geprüft, sie
+gehören aber dauerhaft in den Bestand, nicht in ein Wegwerf-Skript:
+
+| Fall | Erwartung |
+|---|---|
+| Klasse an einem `<span>` statt `<a>` | zeichengleich |
+| `<a>` mit der Klasse **in** einem `<script>`-Block | zeichengleich |
+| … in einem `<style>`-Block | zeichengleich |
+| … in einem `<textarea>` | zeichengleich |
+| Klasse in einem HTML-Kommentar | zeichengleich |
+| Klasse als Wert eines fremden Attributs (`alt="… Klasse …"`) | zeichengleich |
+| Klasse in Großschreibung | zeichengleich |
+| unvollständiges Tag am Textende | zeichengleich |
+| zwei Klassen am Element, Reihenfolge erhalten | bearbeitet, `class` unverändert |
+| einfache Anführungszeichen / ganz ohne Anführungszeichen am Attribut | bearbeitet |
+| verschachtelte `<a>` mit der Klasse | beide bearbeitet, Text heil |
+
+**Übergabenotiz:** _(vom Agenten zu füllen)_
+
+---
+
 ### AP-3.rev: Unabhängiges Review Phase 3
 
 **Modell:** opus
@@ -1048,7 +1138,50 @@ Ausgeführt von einem Agenten, der keines der Phase-3-APs implementiert hat.
 Befunde nach Schwere sortiert melden, je Befund: Fundstelle mit Zeilennummer,
 Auswirkung, Vorschlag. Kritische Befunde führen zu `AP-3.fixN`.
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+#### Vorprüfung des Orchestrators (2026-08-17) — ersetzt dieses AP NICHT
+
+Der erste Anlauf dieses APs brach am Sitzungslimit ab, bevor der Agent den
+Plan gelesen hatte. Der Orchestrator hat daraufhin **Prüfschwerpunkt 1**
+(der `the_content`-Filter) mit einer eigenen Angriffssonde vorgezogen:
+40 Fälle, jeder mit `===` gegen die Eingabe bzw. gegen eine erwartete
+Bedingung, gegen die **echte** `WP_HTML_Tag_Processor` aus der Installation
+des Testservers. Wegwerf-Skript, absichtlich nicht im Repository.
+
+**Das ist keine Erledigung dieses APs.** Der Orchestrator hat den Plan
+geschrieben und die vier APs abgenommen — er ist damit nicht unabhängig, und
+Regel 11 verlangt einen frischen Agenten. Die acht übrigen
+Prüfschwerpunkte sind unberührt. Was die Sonde erbracht hat, ist ein
+Zwischenstand, der Welle 2 nicht freigibt.
+
+**Ergebnis: 39 von 40 Fällen grün.**
+
+| Gruppe | Inhalt | Ergebnis |
+|---|---|---|
+| A (12) | Klassenzeichenkette vorhanden, aber **kein echter Verweis**: Fließtext, HTML-Kommentar, maskiertes Tag, Klasse an einem `<span>`, `<a>` innerhalb `<script>` / `<style>` / `<textarea>`, Klasse als Teilzeichenkette (`…-gross`, `extra-…`), Großschreibung, unvollständiges Tag am Textende, Klasse in einem `alt`-Attribut | **alle zeichengleich** |
+| B (11) | echter Verweis ohne brauchbares Ziel: fehlend, leer, `abc`, `0`, `-7`, `4,5`, `1e3`, `0x2d`, `  `, `+45` | 10 zeichengleich, **1 Fehlschlag** → `AP-3.fix2` |
+| C (8) | Verweis mit Ziel: nur die erwarteten Attribute geändert, Linktext, Titel und Umfeld unangetastet, `data-same-page` korrekt gesetzt bzw. entfernt | alle grün |
+| D (8) | Struktur-Randfälle: verschachtelte `<a>`, zwei Klassen am Element, einfache und fehlende Anführungszeichen, gültiger neben ungültigem Verweis, Anker gewinnt gegen `cbd-ref`, LaTeX im Linktext, Umlaute und Entities im Umfeld | alle grün |
+| E (2) | Masse und Kosten | siehe unten |
+
+**Der eine Fehlschlag** ist der `(int)`-Cast auf eine 20-stellige
+Ziffernfolge → `AP-3.fix2`, nicht blockierend.
+
+**Zwei Messwerte, die die Entscheidungen aus Abschnitt 4 bestätigen:**
+
+- Wächter 2 (`strpos` auf die Klassenzeichenkette) kostet auf **89 KB
+  Inhalt ohne Verweis 0,02 ms**. Der billige Ausstieg für den häufigsten
+  Fall trägt.
+- 200 Verweise in einem Inhalt brauchen **73 ms**. Für die Praxis
+  reichlich; 200 Inline-Verweise auf einer Seite sind unrealistisch.
+
+**Eine Beobachtung ohne Befundcharakter:** `WP_HTML_Tag_Processor` setzt neue
+Attribute **vor** die bestehenden — im Ergebnis steht `aria-haspopup` und
+`data-display-mode` links von `class`. Für die Darstellung gleichgültig, und
+gespeicherter Inhalt ist davon nicht betroffen (der Filter wirkt nur auf die
+Ausgabe). Nur zu wissen, damit niemand eine feste Attributreihenfolge
+erwartet.
+
+**Übergabenotiz:** _(vom Agenten zu füllen — dieses AP ist offen)_
 
 ---
 
@@ -1420,7 +1553,8 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.2 | Gemeinsamer Auswahlbaustein `window.cbdBlockAuswahl` | opus | – | ☑ |
 | AP-3.3 | Serverseite des Inline-Verweises | opus | – | ☑ |
 | AP-3.fix1 | `gesperrt` ohne Abfrage je Seite ermitteln | sonnet | 3.1 | ☑ |
-| AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1 | ☐ |
+| AP-3.fix2 | `ziel_post_id()` ohne `(int)`-Cast auf überlange Ziffernfolgen | sonnet | 3.3 | ☐ |
+| AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1 | ✗ |
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☐ |
 | AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev | ☐ |
 | AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2 | ☐ |
@@ -1451,7 +1585,9 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.3 | AK12: `class-cbd-block-content-api.php` unverändert | bestätigt, `git diff` leer | 2026-08-17 |
 | AP-3.3 | `container-block-designer.php` nur zwei funktionale Zeilen | bestätigt, beide hinter `class_exists()` | 2026-08-17 |
 | AP-3.3 | `view.js` verkraftet fehlendes `data-same-page` | bestätigt, `=== 'true'` an `:565` und `:816` — keine Anpassung nötig | 2026-08-17 |
-| AP-3.rev | Review-Befunde | – | – |
+| AP-3.rev | Review-Befunde | **✗ erster Anlauf am Sitzungslimit abgebrochen**, bevor der Agent den Plan gelesen hatte. Neu zu starten | 2026-08-17 |
+| AP-3.rev | Vorprüfung des Orchestrators zu Schwerpunkt 1 (Angriffssonde, 40 Fälle) | **39/40**; der eine Fehlschlag → `AP-3.fix2`. Gruppe A (Zeichengleichheit, 12 Fälle) vollständig grün. Ersetzt das AP **nicht** — acht Schwerpunkte offen | 2026-08-17 |
+| AP-3.fix2 | Überlange Ziffernfolge ohne Warnung, elf Struktur-Randfälle in den Bestand | – | – |
 | AP-4.1 | `node --check blocks/block-reference/index.js` | – | – |
 | AP-4.1 | Kaskade über vier Ebenen, Bestandsblock | – | – |
 | AP-4.2 | `node --check format.js`, `view.js` | – | – |
