@@ -1553,7 +1553,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.2 | Gemeinsamer Auswahlbaustein `window.cbdBlockAuswahl` | opus | – | ☑ |
 | AP-3.3 | Serverseite des Inline-Verweises | opus | – | ☑ |
 | AP-3.fix1 | `gesperrt` ohne Abfrage je Seite ermitteln | sonnet | 3.1 | ☑ |
-| AP-3.fix2 | `ziel_post_id()` ohne `(int)`-Cast auf überlange Ziffernfolgen | sonnet | 3.3 | ☐ |
+| AP-3.fix2 | `ziel_post_id()` ohne `(int)`-Cast auf überlange Ziffernfolgen | sonnet | 3.3 | ☑ |
 | AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1 | ✗ |
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☐ |
 | AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev | ☐ |
@@ -1587,7 +1587,10 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.3 | `view.js` verkraftet fehlendes `data-same-page` | bestätigt, `=== 'true'` an `:565` und `:816` — keine Anpassung nötig | 2026-08-17 |
 | AP-3.rev | Review-Befunde | **✗ erster Anlauf am Sitzungslimit abgebrochen**, bevor der Agent den Plan gelesen hatte. Neu zu starten | 2026-08-17 |
 | AP-3.rev | Vorprüfung des Orchestrators zu Schwerpunkt 1 (Angriffssonde, 40 Fälle) | **39/40**; der eine Fehlschlag → `AP-3.fix2`. Gruppe A (Zeichengleichheit, 12 Fälle) vollständig grün. Ersetzt das AP **nicht** — acht Schwerpunkte offen | 2026-08-17 |
-| AP-3.fix2 | Überlange Ziffernfolge ohne Warnung, elf Struktur-Randfälle in den Bestand | – | – |
+| AP-3.fix2 | `php tools/test-inline-reference.php` | **155/155**, im Doppel-Modus **151/151** mit **4 sichtbar** übersprungenen Fällen. Beides vom Orchestrator nachgeprüft | 2026-08-17 |
+| AP-3.fix2 | Angriffssonde des Orchestrators erneut gefahren | **40/40** — der Fehlschlag B9 ist behoben | 2026-08-17 |
+| AP-3.fix2 | Die 119 Bestandsprüfungen unverändert | bestätigt: die einzige Löschung im Diff ist die Zusammenfassungszeile, die um den Skip-Zähler erweitert wurde — kein entschärfter Test | 2026-08-17 |
+| AP-3.fix2 | `php tools/check-php74.php` | grün, 568 Dateien | 2026-08-17 |
 | AP-4.1 | `node --check blocks/block-reference/index.js` | – | – |
 | AP-4.1 | Kaskade über vier Ebenen, Bestandsblock | – | – |
 | AP-4.2 | `node --check format.js`, `view.js` | – | – |
