@@ -259,7 +259,7 @@ check(
 );
 
 // =========================================================================
-// 3 - Quelltext-Zusicherung: kein SELECT *, kein post_content in der Abfrage
+// 3 - Quelltext-Zusicherung (AK3): die SQL-Zeichenkette selbst
 // =========================================================================
 
 echo "\n== Quelltext-Zusicherungen (AK3) ==\n";
@@ -267,26 +267,28 @@ echo "\n== Quelltext-Zusicherungen (AK3) ==\n";
 $quelldatei = $plugin_dir . 'includes/class-cbd-blocks-rest-api.php';
 $quelle     = file_get_contents($quelldatei);
 
-// Die Methode isoliert herausschneiden, damit die Pruefung nicht durch
-// post_content in get_cbd_blocks() (dort legitim: parse_blocks($post->post_content))
-// verfaelscht wird.
-$start = strpos($quelle, 'function get_seitenbaum');
-check('3.0 - Vorbedingung: get_seitenbaum() existiert im Quelltext', false !== $start);
+// AK3 verlangt eine Aussage ueber die SQL-ZEICHENKETTE selbst ("nennt die
+// fuenf Spalten einzeln, kein SELECT *"), nicht ueber die ganze Methode samt
+// Doc-Kommentaren — sonst wuerde ein erklaerender Kommentar wie "laedt KEIN
+// post_content" die Pruefung selbst ausloesen, obwohl die Abfrage korrekt
+// ist. Isoliert wird deshalb nur der Aufruf `$wpdb->get_results(...)`.
+$aufruf_start = strpos($quelle, '$wpdb->get_results(');
+check('3.0 - Vorbedingung: $wpdb->get_results()-Aufruf in get_seitenbaum() gefunden', false !== $aufruf_start);
 
-$naechste_methode = false !== $start ? strpos($quelle, 'function ', $start + 20) : false;
-$methodenkoerper  = (false !== $start)
-    ? substr($quelle, $start, (false !== $naechste_methode ? $naechste_methode - $start : null))
+$aufruf_ende = false !== $aufruf_start ? strpos($quelle, ');', $aufruf_start) : false;
+$sql_text    = (false !== $aufruf_start && false !== $aufruf_ende)
+    ? substr($quelle, $aufruf_start, $aufruf_ende - $aufruf_start)
     : '';
 
 check('3.1 - fuenf Spalten einzeln benannt (ID, post_parent, post_title, menu_order, post_type)',
-    false !== strpos($methodenkoerper, 'ID') &&
-    false !== strpos($methodenkoerper, 'post_parent') &&
-    false !== strpos($methodenkoerper, 'post_title') &&
-    false !== strpos($methodenkoerper, 'menu_order') &&
-    false !== strpos($methodenkoerper, 'post_type')
+    false !== strpos($sql_text, 'ID') &&
+    false !== strpos($sql_text, 'post_parent') &&
+    false !== strpos($sql_text, 'post_title') &&
+    false !== strpos($sql_text, 'menu_order') &&
+    false !== strpos($sql_text, 'post_type')
 );
-check('3.2 - kein SELECT * in get_seitenbaum()', false === strpos($methodenkoerper, 'SELECT *'));
-check('3.3 - kein post_content in get_seitenbaum()', false === strpos($methodenkoerper, 'post_content'));
+check('3.2 - kein SELECT * in der Abfrage', false === strpos($sql_text, 'SELECT *'));
+check('3.3 - kein post_content in der Abfrage', false === strpos($sql_text, 'post_content'));
 
 // =========================================================================
 // 4 - Vertrag B: Baumaufbau (baue_seitenbaum) - Grundfall ueber vier Ebenen
