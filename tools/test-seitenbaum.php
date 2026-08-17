@@ -403,6 +403,7 @@ check('8.3 - der Beitrag steht auch nicht in wurzeln', !in_array(77, $baum['wurz
 echo "\n== gesperrt: Theme-Funktion fehlt ==\n";
 
 check('9.0 - Vorbedingung: Theme-Funktion existiert wirklich nicht', !function_exists('simple_clean_seite_nur_lehrpersonen'));
+check('F1-AK3.0 - Vorbedingung (AP-3.fix1): auch Stufe-1-Funktion simple_clean_gesperrte_seiten_mit_unterbaum() existiert noch nicht - AK3 prueft den Fall, dass BEIDE Theme-Funktionen fehlen', !function_exists('simple_clean_gesperrte_seiten_mit_unterbaum'));
 
 $zeilen = array(
     zeile(12, 0, '4. Klasse'),
@@ -410,14 +411,20 @@ $zeilen = array(
 );
 $baum = CBD_Blocks_REST_API::baue_seitenbaum($zeilen);
 check('9.1 - jedes gesperrt ist false, kein Fatal Error', false === $baum['knoten'][12]['gesperrt'] && false === $baum['knoten'][34]['gesperrt']);
+check('F1-AK3.1 - AK3 (AP-3.fix1) bestaetigt: beide Theme-Funktionen fehlen, gesperrt bleibt ueberall false, kein Fatal Error (identisch zu 9.1, hier fuer AP-3.fix1 explizit benannt)', false === $baum['knoten'][12]['gesperrt'] && false === $baum['knoten'][34]['gesperrt']);
 
 echo "\n== gesperrt: Theme-Funktion vorhanden ==\n";
 
 // eval(), weil PHP eine einmal definierte Funktion nicht wieder vergisst -
 // dieser Abschnitt muss deshalb NACH dem "Theme fehlt"-Abschnitt stehen
 // (gleiches Vorgehen wie in tools/test-block-content-api.php).
+// Zaehler ergaenzt fuer AP-3.fix1 (AK1/AK2/AK5): macht nachweisbar, ob und
+// wie oft Stufe 2 (dieser Rueckfall) tatsaechlich aufgerufen wird. Die
+// Rueckgabe selbst bleibt unveraendert - keine bestehende Pruefung 9.2-9.5
+// wird dadurch beeinflusst.
 eval('
 function simple_clean_seite_nur_lehrpersonen($post_id) {
+    $GLOBALS["test_stufe2_aufrufe"] = ($GLOBALS["test_stufe2_aufrufe"] ?? 0) + 1;
     return !empty($GLOBALS["test_gesperrt"][(int) $post_id]);
 }
 ');
@@ -437,6 +444,73 @@ check('9.4 - nicht gesperrte Knoten bleiben false', false === ($baum['knoten'][1
 // nicht simple_clean_seite_sichtbar() - "ist diese Seite fuer Lehrpersonen
 // reserviert", nicht "darf der aktuelle Nutzer sie sehen" (Vertrag B).
 check('9.5 - Sperrung ist unabhaengig von einer Vererbung ueber Vorfahren (nur die Theme-Funktion selbst entscheidet je Knoten)', true === ($baum['knoten'][45]['gesperrt'] ?? null) && false === ($baum['knoten'][34]['gesperrt'] ?? null));
+
+// =========================================================================
+// AP-3.fix1 - AK1 + AK4: Stufe 1 (simple_clean_gesperrte_seiten_mit_unterbaum)
+// =========================================================================
+//
+// Befund des Orchestrators bei der Abnahme von AP-3.1: Die bisherige
+// Ermittlung ruft simple_clean_seite_nur_lehrpersonen() JE SEITE auf; diese
+// Funktion durchsucht bei mindestens einer gesperrten Seite ueber
+// get_post_ancestors() die Elternkette - der rohe $wpdb-Aufbau oben fuellt
+// den WordPress-Post-Cache nicht, auf 258 Seiten entstehen so potenziell
+// hunderte Einzelabfragen. Das Theme haelt fuer genau diesen Fall bereits
+// eine memoisierte Nachschlagekarte bereit
+// (Theme/includes/sichtbarkeit.php:142-201), die den gesamten Unterbaum
+// gesperrter Seiten in hoechstens zwei Abfragen liefert.
+
+echo "\n== AP-3.fix1 AK1/AK4: Stufe 1 (simple_clean_gesperrte_seiten_mit_unterbaum) vorhanden ==\n";
+
+check('F1-AK1.0 - Vorbedingung: Stufe-1-Funktion existiert noch nicht', !function_exists('simple_clean_gesperrte_seiten_mit_unterbaum'));
+
+// Stub simuliert die vom Theme gelieferte, bereits vererbte Karte: Schluessel
+// sind ALLE gesperrten Seiten EINSCHLIESSLICH ihres gesamten Unterbaums (so
+// wie Theme/includes/sichtbarkeit.php:142-201 sie tatsaechlich liefert). Ein
+// Zaehler macht AK1 pruefbar (Stufe 1 darf je Anfrage nur EINMAL aufgerufen
+// werden).
+eval('
+function simple_clean_gesperrte_seiten_mit_unterbaum() {
+    $GLOBALS["test_stufe1_aufrufe"] = ($GLOBALS["test_stufe1_aufrufe"] ?? 0) + 1;
+    return $GLOBALS["test_gesperrt_mit_unterbaum"] ?? array();
+}
+');
+
+check('F1-AK1.1 - Vorbedingung: Stufe-1-Funktion ist jetzt da', function_exists('simple_clean_gesperrte_seiten_mit_unterbaum'));
+
+// Klasse(12) -> Fach(34) -> Thema(45, GESPERRT) -> Uebung(50, KEINE eigene
+// Meta - erbt die Sperre ausschliesslich ueber die von Stufe 1 bereits
+// vorberechnete Karte). Genau dieser Fall (AK4) fehlte im Harnisch von
+// AP-3.1 vollstaendig - er ist der eigentliche Grund, warum der Irrtum in
+// der Uebergabenotiz ("Theme-Funktion vererbt die Sperre nicht") nicht
+// aufgefallen ist. Sie vererbt sie (sichtbarkeit.php:229-233).
+$GLOBALS['test_gesperrt_mit_unterbaum'] = array(45 => true, 50 => true);
+$zeilen = array(
+    zeile(12, 0, '4. Klasse'),
+    zeile(34, 12, 'ACH'),
+    zeile(45, 34, 'IR-Spektroskopie (gesperrt)'),
+    zeile(50, 45, 'Uebung 1 (erbt die Sperre, keine eigene Meta)'),
+);
+
+$GLOBALS['test_stufe1_aufrufe'] = 0;
+$stufe2_vor_f1_ak1 = $GLOBALS['test_stufe2_aufrufe'] ?? 0;
+
+$baum = CBD_Blocks_REST_API::baue_seitenbaum($zeilen);
+
+check('F1-AK1.2 - Stufe 1 wird genau einmal je Anfrage aufgerufen', 1 === $GLOBALS['test_stufe1_aufrufe'], $GLOBALS['test_stufe1_aufrufe']);
+check('F1-AK1.3 - Stufe 2 wird dabei GAR NICHT aufgerufen', $stufe2_vor_f1_ak1 === ($GLOBALS['test_stufe2_aufrufe'] ?? 0), $GLOBALS['test_stufe2_aufrufe'] ?? null);
+check('F1-AK4.1 - direkt gesperrter Knoten (45) traegt gesperrt = true', true === ($baum['knoten'][45]['gesperrt'] ?? null));
+check('F1-AK4.2 - Unterseite OHNE eigene Meta (50) erbt gesperrt = true ueber die Karte aus Stufe 1', true === ($baum['knoten'][50]['gesperrt'] ?? null));
+check('F1-AK4.3 - unbeteiligte Knoten (12, 34) bleiben false', false === ($baum['knoten'][12]['gesperrt'] ?? null) && false === ($baum['knoten'][34]['gesperrt'] ?? null));
+
+echo "\n== AP-3.fix1 AK2: Stufe 2 bleibt unveraendertes Rueckfallverhalten, wenn Stufe 1 fehlt ==\n";
+
+// Die Pruefungen 9.2-9.5 weiter oben liefen, BEVOR Stufe 1 in diesem Skript
+// definiert wurde - zu diesem Zeitpunkt war ausschliesslich Stufe 2
+// verfuegbar und wurde tatsaechlich als Rueckfall benutzt (Zaehler > 0).
+// Damit ist AK2 ("gleiche Ergebnisse wie AP-3.1, solange nur Stufe 2
+// existiert") durch 9.2-9.5 bereits nachgewiesen; dieser Zaehler macht die
+// Benutzung von Stufe 2 zusaetzlich explizit sichtbar.
+check('F1-AK2.1 - Stufe 2 wurde tatsaechlich als Rueckfall benutzt, solange Stufe 1 nicht existierte', ($GLOBALS['test_stufe2_aufrufe'] ?? 0) > 0, $GLOBALS['test_stufe2_aufrufe'] ?? null);
 
 // =========================================================================
 // 10 - AK6: Abfragenzahl konstant, unabhaengig von der Seitenzahl
@@ -480,6 +554,70 @@ $meta_gross     = $GLOBALS['test_meta_cache_aufrufe'];
 check('10.3 - weiterhin genau eine $wpdb-Abfrage bei fuenfzig Seiten', 1 === $abfragen_gross, $abfragen_gross);
 check('10.4 - weiterhin genau ein update_meta_cache()-Aufruf bei fuenfzig Seiten', 1 === $meta_gross, $meta_gross);
 check('10.5 - Abfragenzahl ist unabhaengig von der Seitenzahl (5 vs. 50 Seiten gleich)', $abfragen_klein === $abfragen_gross && $meta_klein === $meta_gross);
+
+// =========================================================================
+// AP-3.fix1 - AK5: Abfragenzahl bleibt konstant, AUCH wenn die Sperrpruefung
+// mitgezaehlt wird. AK6 aus AP-3.1 (Abschnitt 10 oben) war zu schwach
+// formuliert: Der dortige Harnisch stubbt simple_clean_seite_nur_lehrpersonen()
+// und zaehlt deshalb nur die Abfragen des Plugins, nie die Aufrufe der
+// Theme-Funktion selbst - und in Abschnitt 10 ist ausserdem KEINE Seite
+// gesperrt. Dieser Abschnitt zaehlt beide Theme-Funktionen mit UND es gibt
+// in jedem Durchlauf mindestens eine gesperrte Seite (5 und 50 Seiten).
+// =========================================================================
+
+echo "\n== AP-3.fix1 AK5: Abfragenzahl inkl. Sperrpruefung (Stufe 1) unabhaengig von der Seitenzahl ==\n";
+
+// Fall A: fuenf Seiten, mindestens eine davon gesperrt.
+$GLOBALS['test_gesperrt_mit_unterbaum'] = array(202 => true);
+$GLOBALS['test_wpdb_zeilen'] = array(
+    zeile(201, 0, 'Wurzel-F1-AK5'),
+    zeile(202, 201, 'A (gesperrt)'),
+    zeile(203, 201, 'B'),
+    zeile(204, 201, 'C'),
+    zeile(205, 201, 'D'),
+);
+$wpdb->abfragen = 0;
+$GLOBALS['test_meta_cache_aufrufe'] = 0;
+$GLOBALS['test_stufe1_aufrufe'] = 0;
+$stufe2_vor_f1_ak5_klein = $GLOBALS['test_stufe2_aufrufe'] ?? 0;
+CBD_Blocks_REST_API::seitenbaum_cache_vergessen();
+CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request());
+
+$abfragen_klein_f1  = $wpdb->abfragen;
+$meta_klein_f1      = $GLOBALS['test_meta_cache_aufrufe'];
+$stufe1_klein_f1    = $GLOBALS['test_stufe1_aufrufe'];
+$stufe2_delta_klein = ($GLOBALS['test_stufe2_aufrufe'] ?? 0) - $stufe2_vor_f1_ak5_klein;
+
+check('F1-AK5.1 - genau eine $wpdb-Abfrage bei fuenf Seiten (inkl. gesperrter Seite)', 1 === $abfragen_klein_f1, $abfragen_klein_f1);
+check('F1-AK5.2 - genau ein update_meta_cache()-Aufruf bei fuenf Seiten', 1 === $meta_klein_f1, $meta_klein_f1);
+check('F1-AK5.3 - Stufe 1 genau einmal aufgerufen bei fuenf Seiten', 1 === $stufe1_klein_f1, $stufe1_klein_f1);
+check('F1-AK5.4 - Stufe 2 dabei gar nicht aufgerufen', 0 === $stufe2_delta_klein, $stufe2_delta_klein);
+
+// Fall B: fuenfzig Seiten, ebenfalls mit mindestens einer gesperrten Seite -
+// keine der Zahlen darf sich aendern.
+$GLOBALS['test_gesperrt_mit_unterbaum'] = array(301 => true);
+$viele_f1_ak5 = array(zeile(300, 0, 'Wurzel-F1-AK5-gross'));
+for ($i = 301; $i <= 350; $i++) {
+    $viele_f1_ak5[] = zeile($i, 300, 'Seite ' . $i);
+}
+$GLOBALS['test_wpdb_zeilen'] = $viele_f1_ak5;
+$wpdb->abfragen = 0;
+$GLOBALS['test_meta_cache_aufrufe'] = 0;
+$GLOBALS['test_stufe1_aufrufe'] = 0;
+$stufe2_vor_f1_ak5_gross = $GLOBALS['test_stufe2_aufrufe'] ?? 0;
+CBD_Blocks_REST_API::seitenbaum_cache_vergessen();
+CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request());
+
+$abfragen_gross_f1  = $wpdb->abfragen;
+$meta_gross_f1      = $GLOBALS['test_meta_cache_aufrufe'];
+$stufe1_gross_f1    = $GLOBALS['test_stufe1_aufrufe'];
+$stufe2_delta_gross = ($GLOBALS['test_stufe2_aufrufe'] ?? 0) - $stufe2_vor_f1_ak5_gross;
+
+check('F1-AK5.5 - weiterhin genau eine $wpdb-Abfrage bei fuenfzig Seiten (inkl. gesperrter Seite)', 1 === $abfragen_gross_f1, $abfragen_gross_f1);
+check('F1-AK5.6 - weiterhin genau ein update_meta_cache()-Aufruf bei fuenfzig Seiten', 1 === $meta_gross_f1, $meta_gross_f1);
+check('F1-AK5.7 - Stufe 1 weiterhin genau einmal aufgerufen bei fuenfzig Seiten', 1 === $stufe1_gross_f1, $stufe1_gross_f1);
+check('F1-AK5.8 - Stufe 2 weiterhin gar nicht aufgerufen', 0 === $stufe2_delta_gross, $stufe2_delta_gross);
+check('F1-AK5.9 - Abfragen-/Aufrufzahlen sind unabhaengig von der Seitenzahl (5 vs. 50 Seiten gleich)', $abfragen_klein_f1 === $abfragen_gross_f1 && $meta_klein_f1 === $meta_gross_f1 && $stufe1_klein_f1 === $stufe1_gross_f1);
 
 // =========================================================================
 // 11 - get_seitenbaum() liefert die Antwortform aus Vertrag B
