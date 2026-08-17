@@ -1940,7 +1940,42 @@ tun gibt, und wird bedienbar, wenn es etwas zu entfernen gibt.
   `php tools/check-php74.php` grün.
 - AK6: Die Doppelnummerierung `11.1`/`11.1` ist berichtigt.
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+**Übergabenotiz (erledigt):** `wp-data` ist als achte Abhängigkeit
+deklariert, `3b.5`/`3b.6` entsprechend umformuliert. `ziel_href()` und
+`render.php` nennen `format.js` jetzt als dritte Fassung der URL-Regel
+zurück — reine Dokumentation, der `render.php`-Diff ist eine einzelne
+Kommentarzeile. Der Werkzeugleisten-Knopf ist jetzt
+`disabled: leer && !istAktiv`. **167/163** grün, `node --check` und
+`check-php74` grün. Commit `cf49bdc`.
+
+**AK2 von AP-4.2 ist damit bewusst präzisiert, nicht verletzt:** Der Knopf
+bleibt deaktiviert, wenn nichts zu tun ist, und wird bedienbar, sobald etwas
+zu entfernen ist. Wer den Diff später liest, soll das nicht für eine
+Regression halten.
+
+**Der Agent hat eine Falle in seinem eigenen Test gefunden.** Ein naives
+`strpos($quelle, 'format.js')` über die Klassendatei wäre **nie rot
+geworden**, weil die Konstante `FORMAT_SCRIPT` diesen String bereits enthält —
+die Prüfung hätte bestanden, ohne etwas zu prüfen. Prüfung `1.10` liest
+deshalb gezielt nur den Docblock unmittelbar vor `ziel_href()` und war
+dadurch echt rot, bis der Kommentar stand. (Der reguläre Ausdruck steht im
+Harnisch, nicht im Prüfling — Prüfung `1.1` verbietet sie nur in
+`class-cbd-inline-reference.php` selbst.)
+
+**Die Fundstelle zu `removeFormat` ist nachgesehen, nicht übernommen:**
+`wp-includes/js/dist/rich-text.js:1309-1330` (WordPress 7.0.4). Bei
+zusammengefallener Auswahl weitet die Funktion `startIndex`/`endIndex` so
+lange aus, wie dasselbe Format-Objekt (Referenzgleichheit) dort liegt — sie
+entfernt also den ganzen zusammenhängenden Lauf. Zusätzlich hat der Agent das
+echte `format.js` mit gemockten `wp.*`-Globalen **in node ausgeführt** und die
+vier Zustände gemessen: leer+inaktiv `true`, leer+aktiv `false`,
+markiert+inaktiv `false`, markiert+aktiv `false`.
+
+**Grenze der Prüfung, ausdrücklich gemeldet:** Die Abdeckung von AK3 im
+versionierten Bestand ist **quelltextbasiert** (Gruppe 12), nicht
+laufzeitbasiert — der PHP-Harnisch kann React nicht ausführen, und eine neue
+JS-Testdatei lag außerhalb der Vier-Dateien-Grenze. Die Node-Ausführung war
+eine Verifikation, kein Ersatz. **AP-4.3 nimmt das an der Oberfläche ab.**
 
 ---
 
@@ -2154,7 +2189,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.fix5 | Führende Nullen dokumentieren, URL-Regel beidseitig kommentieren | sonnet | 3.fix2 | ☑ |
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☑ |
 | AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev, 3.fix5 | ☑ (2. Anlauf) |
-| AP-4.fix1 | Fehlende Abhängigkeit, dritte URL-Fassung, Verweis ohne Markierung | sonnet | 4.2 | ◐ |
+| AP-4.fix1 | Fehlende Abhängigkeit, dritte URL-Fassung, Verweis ohne Markierung | sonnet | 4.2 | ☑ |
 | AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2, 4.fix1 | ☐ |
 | AP-4.rev | Unabhängiges Review Phase 4 | opus | 4.3 | ☐ |
 | AP-4.doc | Dokumentation und Projektabschluss | sonnet | 4.rev | ☐ |
@@ -2210,7 +2245,10 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-4.2 | Rundlauf Vertrag D und E zeichenweise | **gemessen**, nicht abgeleitet: die echten Bündel `escape-html.js`/`rich-text.js` vom Testserver in node geladen, `applyFormat`/`toHTMLString` gerufen. Attributmenge = Vertrag D; die drei serverseitigen Attribute fehlen korrekt; Filter zweimal angewandt byte-identisch | 2026-08-17 |
 | AP-4.2 | AK14: Duplikatswächter | zwei Prüfungen, beide grün — `format.js` **und** `view.js` nennen die Konstante wortgleich | 2026-08-17 |
 | AP-4.2 | Gruppe 3c umformuliert (Grenzüberschreitung) | **geprüft und angenommen:** genau drei gelöschte Prüfzeilen; `3c.1` prüft den Fehlt-Fall jetzt **dauerhaft** über den Test-Seam statt über die Nichtexistenz der Datei, `3c.2`/`3c.3` prüfen den vorher unbeweisbaren positiven Fall, `3c.4`/`3c.5`/`4.2`/`5.9` wortgleich erhalten. Abdeckung gestiegen | 2026-08-17 |
-| AP-4.fix1 | `wp-data`, dritte URL-Fassung, Knopf bei Cursor im Verweis | – | – |
+| AP-4.fix1 | `php tools/test-inline-reference.php`, beide Betriebsarten | **167/167** und **163/163** (4 sichtbare Skips). Vom Orchestrator nachgeprüft; genau **eine** umformulierte Prüfzeile im Diff | 2026-08-17 |
+| AP-4.fix1 | `render.php` nur Kommentare | bestätigt: kumulativ **zwei** hinzugefügte Zeilen seit `vor-phase-4`, beide Kommentare, keine Löschung | 2026-08-17 |
+| AP-4.fix1 | `removeFormat` bei zusammengefallener Auswahl | Fundstelle `rich-text.js:1309-1330` nachgesehen **und** das echte `format.js` in node ausgeführt: leer+inaktiv `true`, leer+aktiv `false` | 2026-08-17 |
+| AP-4.fix1 | `node --check`, `php tools/check-php74.php` | grün / grün, 568 Dateien | 2026-08-17 |
 | AP-4.3 | Alle sieben Prüfharnische (Regression) | – | – |
 | AP-4.3 | ZIP-Inhalt und Autoloader | – | – |
 | AP-4.3 | Klickliste Seite A und B | – | – |
