@@ -466,6 +466,30 @@ check('9.4 - nicht gesperrte Knoten bleiben false', false === ($baum['knoten'][1
 check('9.5 - Sperrung ist unabhaengig von einer Vererbung ueber Vorfahren (nur die Theme-Funktion selbst entscheidet je Knoten)', true === ($baum['knoten'][45]['gesperrt'] ?? null) && false === ($baum['knoten'][34]['gesperrt'] ?? null));
 
 // =========================================================================
+// AP-3.fix3 - AK2 (Befund S2), erste Haelfte: Stufe 2 allein
+// =========================================================================
+//
+// An dieser Stelle im Skript existiert ausschliesslich Stufe 2
+// (simple_clean_seite_nur_lehrpersonen) - Stufe 1
+// (simple_clean_gesperrte_seiten_mit_unterbaum) wird erst weiter unten per
+// eval() definiert. Genau der richtige Moment, um die "genau einmal"-Haelfte
+// von AK2 zu pruefen: Stufe 2 braucht Post-Meta (get_post_ancestors() intern)
+// und muss update_meta_cache() VOR ihrer Schleife genau einmal aufrufen.
+
+echo "\n== AP-3.fix3 AK2 (S2), Teil 1: update_meta_cache() bei Stufe 2 allein ==\n";
+
+check('F3-AK2.0 - Vorbedingung: nur Stufe 2 ist bislang definiert, Stufe 1 noch nicht', function_exists('simple_clean_seite_nur_lehrpersonen') && !function_exists('simple_clean_gesperrte_seiten_mit_unterbaum'));
+
+$GLOBALS['test_meta_cache_aufrufe'] = 0;
+$zeilen = array(
+    zeile(12, 0, '4. Klasse'),
+    zeile(34, 12, 'ACH'),
+    zeile(45, 34, 'IR-Spektroskopie (gesperrt)'),
+);
+CBD_Blocks_REST_API::baue_seitenbaum($zeilen);
+check('F3-AK2.1 - genau ein update_meta_cache()-Aufruf, wenn nur Stufe 2 verfuegbar ist', 1 === $GLOBALS['test_meta_cache_aufrufe'], $GLOBALS['test_meta_cache_aufrufe']);
+
+// =========================================================================
 // AP-3.fix1 - AK1 + AK4: Stufe 1 (simple_clean_gesperrte_seiten_mit_unterbaum)
 // =========================================================================
 //
@@ -533,11 +557,46 @@ echo "\n== AP-3.fix1 AK2: Stufe 2 bleibt unveraendertes Rueckfallverhalten, wenn
 check('F1-AK2.1 - Stufe 2 wurde tatsaechlich als Rueckfall benutzt, solange Stufe 1 nicht existierte', ($GLOBALS['test_stufe2_aufrufe'] ?? 0) > 0, $GLOBALS['test_stufe2_aufrufe'] ?? null);
 
 // =========================================================================
+// AP-3.fix3 - AK2 (Befund S2), zweite Haelfte: Stufe 1 vorhanden
+// =========================================================================
+//
+// Ab hier ist Stufe 1 (simple_clean_gesperrte_seiten_mit_unterbaum) dauerhaft
+// definiert - PHP vergisst eine einmal definierte Funktion nicht wieder. Die
+// zweite Haelfte von AK2: Stufe 1 braucht keine Post-Meta (sie nutzt die vom
+// Theme bereits vorberechnete Karte), update_meta_cache() darf hier GAR NICHT
+// mehr aufgerufen werden. Vorher (Befund S2) lief der Aufruf unbedingt VOR
+// der Verzweigung und lud damit bei jedem Editor-Aufruf unnoetig alle
+// Postmeta aller Seiten in den Objektcache, obwohl Stufe 1 sie nie liest.
+
+echo "\n== AP-3.fix3 AK2 (S2), Teil 2: KEIN update_meta_cache()-Aufruf bei Stufe 1 ==\n";
+
+check('F3-AK2.2 - Vorbedingung: Stufe 1 ist jetzt definiert', function_exists('simple_clean_gesperrte_seiten_mit_unterbaum'));
+
+$GLOBALS['test_meta_cache_aufrufe'] = 0;
+$zeilen = array(
+    zeile(12, 0, '4. Klasse'),
+    zeile(34, 12, 'ACH'),
+    zeile(45, 34, 'IR-Spektroskopie (gesperrt)'),
+);
+CBD_Blocks_REST_API::baue_seitenbaum($zeilen);
+check('F3-AK2.3 - kein update_meta_cache()-Aufruf, wenn Stufe 1 verfuegbar ist', 0 === $GLOBALS['test_meta_cache_aufrufe'], $GLOBALS['test_meta_cache_aufrufe']);
+
+// =========================================================================
 // 10 - AK6: Abfragenzahl konstant, unabhaengig von der Seitenzahl
 // =========================================================================
 
-echo "\n== AK6: Datenbankabfragen unabhaengig von der Seitenzahl (2: Seiten + Meta-Cache) ==\n";
+echo "\n== AK6: Datenbankabfragen unabhaengig von der Seitenzahl ==\n";
 
+// Umformuliert fuer AP-3.fix3 (Befund S2): Ab hier im Skript ist Stufe 1
+// (simple_clean_gesperrte_seiten_mit_unterbaum) bereits per eval() definiert
+// (siehe Abschnitt "AP-3.fix1 AK1/AK4" weiter oben) und wird von
+// baue_seitenbaum() bevorzugt verwendet. Vor der Behebung von S2 rief der
+// Code update_meta_cache() unbedingt VOR der Verzweigung auf, weshalb hier
+// vorher "genau ein Aufruf" stand, obwohl Stufe 1 gar keine Post-Meta liest.
+// Seit der Behebung entsteht in diesem Kontext (Stufe 1 aktiv) GAR KEIN
+// update_meta_cache()-Aufruf mehr - die eigentliche "genau einmal in Stufe
+// 2"-Haelfte von AK2 pruefen die neuen Faelle F3-AK2.0/F3-AK2.1 weiter oben,
+// wo im Skript noch ausschliesslich Stufe 2 existiert.
 $wpdb = $GLOBALS['wpdb'];
 
 // Fall A: fuenf Seiten.
@@ -556,7 +615,7 @@ $abfragen_klein = $wpdb->abfragen;
 $meta_klein     = $GLOBALS['test_meta_cache_aufrufe'];
 
 check('10.1 - genau eine $wpdb-Abfrage bei fuenf Seiten', 1 === $abfragen_klein, $abfragen_klein);
-check('10.2 - genau ein update_meta_cache()-Aufruf bei fuenf Seiten', 1 === $meta_klein, $meta_klein);
+check('10.2 - kein update_meta_cache()-Aufruf bei fuenf Seiten (Stufe 1 ist hier bereits aktiv und braucht keine Post-Meta - AP-3.fix3, Befund S2)', 0 === $meta_klein, $meta_klein);
 
 // Fall B: fuenfzig Seiten - Abfragenzahl darf sich NICHT aendern.
 $viele = array(zeile(100, 0, 'Wurzel-B'));
@@ -572,7 +631,7 @@ $abfragen_gross = $wpdb->abfragen;
 $meta_gross     = $GLOBALS['test_meta_cache_aufrufe'];
 
 check('10.3 - weiterhin genau eine $wpdb-Abfrage bei fuenfzig Seiten', 1 === $abfragen_gross, $abfragen_gross);
-check('10.4 - weiterhin genau ein update_meta_cache()-Aufruf bei fuenfzig Seiten', 1 === $meta_gross, $meta_gross);
+check('10.4 - weiterhin kein update_meta_cache()-Aufruf bei fuenfzig Seiten (Stufe 1 aktiv - AP-3.fix3, Befund S2)', 0 === $meta_gross, $meta_gross);
 check('10.5 - Abfragenzahl ist unabhaengig von der Seitenzahl (5 vs. 50 Seiten gleich)', $abfragen_klein === $abfragen_gross && $meta_klein === $meta_gross);
 
 // =========================================================================
@@ -583,6 +642,13 @@ check('10.5 - Abfragenzahl ist unabhaengig von der Seitenzahl (5 vs. 50 Seiten g
 // Theme-Funktion selbst - und in Abschnitt 10 ist ausserdem KEINE Seite
 // gesperrt. Dieser Abschnitt zaehlt beide Theme-Funktionen mit UND es gibt
 // in jedem Durchlauf mindestens eine gesperrte Seite (5 und 50 Seiten).
+//
+// Umformuliert fuer AP-3.fix3 (Befund S2): Dieser gesamte Abschnitt laeuft
+// ausschliesslich im Stufe-1-Zweig (F1-AK5.4/.8 bestaetigen "Stufe 2 dabei
+// gar nicht aufgerufen"). Seit der Behebung von S2 entsteht hier deshalb
+// KEIN update_meta_cache()-Aufruf mehr (vorher: unbedingt "genau einer", weil
+// der Aufruf vor der Verzweigung stand). Die "genau einmal in Stufe
+// 2"-Haelfte von AK2 pruefen F3-AK2.0/F3-AK2.1 weiter oben.
 // =========================================================================
 
 echo "\n== AP-3.fix1 AK5: Abfragenzahl inkl. Sperrpruefung (Stufe 1) unabhaengig von der Seitenzahl ==\n";
@@ -609,7 +675,7 @@ $stufe1_klein_f1    = $GLOBALS['test_stufe1_aufrufe'];
 $stufe2_delta_klein = ($GLOBALS['test_stufe2_aufrufe'] ?? 0) - $stufe2_vor_f1_ak5_klein;
 
 check('F1-AK5.1 - genau eine $wpdb-Abfrage bei fuenf Seiten (inkl. gesperrter Seite)', 1 === $abfragen_klein_f1, $abfragen_klein_f1);
-check('F1-AK5.2 - genau ein update_meta_cache()-Aufruf bei fuenf Seiten', 1 === $meta_klein_f1, $meta_klein_f1);
+check('F1-AK5.2 - kein update_meta_cache()-Aufruf bei fuenf Seiten (Stufe 1 aktiv - AP-3.fix3, Befund S2)', 0 === $meta_klein_f1, $meta_klein_f1);
 check('F1-AK5.3 - Stufe 1 genau einmal aufgerufen bei fuenf Seiten', 1 === $stufe1_klein_f1, $stufe1_klein_f1);
 check('F1-AK5.4 - Stufe 2 dabei gar nicht aufgerufen', 0 === $stufe2_delta_klein, $stufe2_delta_klein);
 
@@ -634,7 +700,7 @@ $stufe1_gross_f1    = $GLOBALS['test_stufe1_aufrufe'];
 $stufe2_delta_gross = ($GLOBALS['test_stufe2_aufrufe'] ?? 0) - $stufe2_vor_f1_ak5_gross;
 
 check('F1-AK5.5 - weiterhin genau eine $wpdb-Abfrage bei fuenfzig Seiten (inkl. gesperrter Seite)', 1 === $abfragen_gross_f1, $abfragen_gross_f1);
-check('F1-AK5.6 - weiterhin genau ein update_meta_cache()-Aufruf bei fuenfzig Seiten', 1 === $meta_gross_f1, $meta_gross_f1);
+check('F1-AK5.6 - weiterhin kein update_meta_cache()-Aufruf bei fuenfzig Seiten (Stufe 1 aktiv - AP-3.fix3, Befund S2)', 0 === $meta_gross_f1, $meta_gross_f1);
 check('F1-AK5.7 - Stufe 1 weiterhin genau einmal aufgerufen bei fuenfzig Seiten', 1 === $stufe1_gross_f1, $stufe1_gross_f1);
 check('F1-AK5.8 - Stufe 2 weiterhin gar nicht aufgerufen', 0 === $stufe2_delta_gross, $stufe2_delta_gross);
 check('F1-AK5.9 - Abfragen-/Aufrufzahlen sind unabhaengig von der Seitenzahl (5 vs. 50 Seiten gleich)', $abfragen_klein_f1 === $abfragen_gross_f1 && $meta_klein_f1 === $meta_gross_f1 && $stufe1_klein_f1 === $stufe1_gross_f1);
@@ -656,7 +722,14 @@ $antwort = CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request());
 check('11.1 - HTTP 200', 200 === $antwort->get_status());
 $daten = $antwort->get_data();
 check('11.2 - genau die Schluessel knoten, kinder, wurzeln', array('knoten', 'kinder', 'wurzeln') === array_keys($daten), array_keys($daten));
-check('11.3 - drei Knoten im Ergebnis', 3 === count($daten['knoten']), array_keys($daten['knoten']));
+// (array)-Cast statt direktem array-Zugriff/count(): $daten['knoten'] ist seit
+// AP-3.fix3 (Befund S1) im tatsaechlichen REST-Ergebnis ein stdClass-Objekt
+// (siehe die AK1-Faelle F3-AK1.* unten), damit json_encode() daraus zuverlaessig
+// ein JSON-Objekt macht. count()/array_keys() auf einem stdClass wuerde in
+// PHP 8 einen TypeError werfen. (array) liefert in beiden Faellen (Array wie
+// bisher, stdClass wie kuenftig) dieselben Elemente - die Pruefung bleibt also
+// unabhaengig davon bestehen, ob S1 schon implementiert ist.
+check('11.3 - drei Knoten im Ergebnis', 3 === count((array) $daten['knoten']), array_keys((array) $daten['knoten']));
 
 // Innerhalb derselben Anfrage/desselben Prozesses: zweiter Aufruf liefert
 // dasselbe Objekt, ohne die Datenquelle erneut zu befragen.
@@ -664,6 +737,73 @@ $wpdb->abfragen = 0;
 $antwort2 = CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request());
 check('11.4 - zweiter Aufruf im selben Prozess fragt $wpdb nicht erneut (Memoisierung)', 0 === $wpdb->abfragen, $wpdb->abfragen);
 check('11.5 - zweiter Aufruf liefert dasselbe Ergebnis', $antwort2->get_data() === $daten);
+
+// =========================================================================
+// AP-3.fix3 - AK1 (Befund S1): knoten und kinder sind IMMER JSON-Objekte
+// =========================================================================
+//
+// json_encode() eines PHP-Arrays mit den Schluesseln 0..n-1 ergibt eine
+// JSON-Liste statt eines Objekts. Gemessen im Review: eine rein flache
+// Seitenmenge (nur Wurzeln) hat in `kinder` ausschliesslich den Schluessel 0
+// - {"kinder":[[...]]}, eine Liste. block-auswahl.js (normalisiereBaum)
+// verwirft eine solche Liste stillschweigend und ersetzt sie durch {}.
+//
+// Geprueft wird bewusst die SERIALISIERUNG (json_encode() + json_decode()
+// OHNE den assoziativ-Modus), nicht nur das PHP-Array: json_decode() ohne
+// zweiten Parameter dekodiert ein JSON-Objekt als stdClass, eine JSON-Liste
+// bleibt ein Array - genau der Unterschied, um den es hier geht. Mit
+// json_decode(..., true) waeren beide Faelle nicht mehr unterscheidbar und
+// die Pruefung wertlos.
+
+echo "\n== AP-3.fix3 AK1 (S1): Serialisierung liefert JSON-Objekte fuer knoten und kinder ==\n";
+
+// Fall 1: flache Seitenmenge (nur Wurzeln) - der im Review gemessene Fall.
+$GLOBALS['test_wpdb_zeilen'] = array(
+    zeile(43, 0, 'A'),
+    zeile(44, 0, 'B'),
+    zeile(45, 0, 'C'),
+);
+CBD_Blocks_REST_API::seitenbaum_cache_vergessen();
+$antwort_json = CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request());
+$json = json_encode($antwort_json->get_data());
+$dekodiert = json_decode($json);
+check('F3-AK1.1 - flache Seitenmenge: kinder ist ein JSON-Objekt', is_object($dekodiert->kinder), $json);
+check('F3-AK1.2 - flache Seitenmenge: knoten ist ein JSON-Objekt', is_object($dekodiert->knoten), $json);
+
+// Fall 2: hierarchische Seitenmenge (Regelfall).
+$GLOBALS['test_wpdb_zeilen'] = array(
+    zeile(12, 0, '4. Klasse', 0),
+    zeile(34, 12, 'ACH', 1),
+    zeile(45, 34, 'IR-Spektroskopie', 0),
+);
+CBD_Blocks_REST_API::seitenbaum_cache_vergessen();
+$antwort_json = CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request());
+$json = json_encode($antwort_json->get_data());
+$dekodiert = json_decode($json);
+check('F3-AK1.3 - hierarchische Seitenmenge: kinder ist ein JSON-Objekt', is_object($dekodiert->kinder), $json);
+check('F3-AK1.4 - hierarchische Seitenmenge: knoten ist ein JSON-Objekt', is_object($dekodiert->knoten), $json);
+
+// Fall 3: einzelne Wurzel ohne Kinder - kinder hat wie in Fall 1 nur den
+// Schluessel 0.
+$GLOBALS['test_wpdb_zeilen'] = array(
+    zeile(5, 0, 'Einsame Wurzel'),
+);
+CBD_Blocks_REST_API::seitenbaum_cache_vergessen();
+$antwort_json = CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request());
+$json = json_encode($antwort_json->get_data());
+$dekodiert = json_decode($json);
+check('F3-AK1.5 - einzelne Wurzel: kinder ist ein JSON-Objekt', is_object($dekodiert->kinder), $json);
+check('F3-AK1.6 - einzelne Wurzel: knoten ist ein JSON-Objekt', is_object($dekodiert->knoten), $json);
+
+// Fall 4: leerer Baum - beide sind leere PHP-Arrays, json_encode() eines
+// leeren Arrays ergibt IMMER "[]", nie "{}", unabhaengig von den Schluesseln.
+$GLOBALS['test_wpdb_zeilen'] = array();
+CBD_Blocks_REST_API::seitenbaum_cache_vergessen();
+$antwort_json = CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request());
+$json = json_encode($antwort_json->get_data());
+$dekodiert = json_decode($json);
+check('F3-AK1.7 - leerer Baum: kinder ist ein JSON-Objekt', is_object($dekodiert->kinder), $json);
+check('F3-AK1.8 - leerer Baum: knoten ist ein JSON-Objekt', is_object($dekodiert->knoten), $json);
 
 // =========================================================================
 // 12 - Randfaelle
