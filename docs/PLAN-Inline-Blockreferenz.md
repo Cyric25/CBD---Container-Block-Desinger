@@ -407,8 +407,10 @@ window.cbdBlockAuswahl = {
     // Unbekannte postId -> [].
     pfadVon: function (baum, postId) {},      // -> Array<int>
 
-    // Kaskadenstufen für einen Pfad: je Stufe die wählbaren Seiten und den
+    // Kaskadenstufen für einen Pfad: je Stufe die wählbaren Einträge und den
     // aktuellen Wert. Zweige ohne erreichbaren Zielblock sind beschnitten.
+    // Die LETZTE Stufe ist die Block-Auswahl der gewählten Seite, sofern
+    // diese Zielblöcke hat (siehe AK4).
     ebenen: function (baum, bloecke, pfad) {},  // -> Array<{tiefe, optionen, wert}>
 
     // wp.element-Komponente. Siehe Props unten.
@@ -440,6 +442,41 @@ Zusicherungen der Komponente:
    Seite Kinder mit erreichbaren Zielblöcken hat. Das Block-Auswahlfeld
    erscheint, sobald die gewählte Seite selbst Zielblöcke hat — beide dürfen
    gleichzeitig sichtbar sein.
+
+**Präzisierungen, in AP-3.2 festgelegt** (Lücken des ursprünglichen Vertrags,
+verbindlich für AP-4.1 und AP-4.2 — kein Befund für AP-3.rev):
+
+1. Die Blockstufe aus `ebenen()` trägt `tiefe: null`; Seitenstufen tragen
+   `tiefe` = Baumtiefe = Stufenindex. Ein vierter Schlüssel am Stufenobjekt
+   wäre eine Abweichung gewesen.
+2. Der `wert` der Blockstufe ist **immer** `''`. `ebenen()` kennt nur den
+   Seitenpfad, nicht die Zielwahl; die Komponente setzt ihn aus ihrem Prop
+   `wert`.
+3. `ebenen()` akzeptiert als **erstes** Pfadelement zusätzlich die Marke
+   `'beitraege'` („Beiträge gewählt, aber noch kein Beitrag"). `pfadVon()`
+   liefert weiterhin strikt `Array<int>`.
+4. Optionsobjekte sind `{value, label, gesperrt}`, in der Blockstufe
+   zusätzlich `eintrag` (das Element aus Vertrag A). Ohne
+   Platzhalter-Option — die setzt die Komponente.
+5. Die Wurzeloption „Beiträge" sammelt **alles, was nicht im Baum steht** —
+   also auch verwaiste Seiten und, falls `cbd/v1/seitenbaum` ausfällt,
+   schlicht alle Ziele. Damit bleibt bei einem Baumausfall jedes Ziel
+   wählbar, statt die Auswahl leer zu lassen.
+6. CSS-Haken der Komponente, alle **ungestylt** (WordPress-Komponenten
+   tragen ihre Optik selbst): `.cbd-block-auswahl`, `…__titel`, `…__leer`,
+   `…__hinweis`, `…__fehler`, `.is-laedt`.
+
+**Bekannte Grenze, für AP-4.3 zu beurteilen:** `ladeDaten()` hat **keine**
+Möglichkeit, die Memoisierung zu verwerfen. Legt eine Redakteurin in einem
+zweiten Tab einen Container-Block an, bleibt die Liste in der laufenden
+Editor-Sitzung veraltet, bis die Seite neu geladen wird. Eine achte
+Eigenschaft hätte AK1 verletzt, deshalb bewusst nicht ergänzt. Fällt es in
+AP-4.3 als störend auf, gehört es als `AP-4.fixN` in den Vertrag — **nicht**
+als stille Ergänzung.
+
+**Kein `onGeladen`-Prop nötig:** AP-4.2 gibt „Übernehmen" frei, sobald ein
+Ziel gewählt ist — und eine Wahl setzt geladene Daten voraus. Der Ladezustand
+muss den Aufrufer also nicht erreichen.
 
 #### Vertrag D — gespeichertes Markup des Inline-Verweises
 
@@ -678,7 +715,28 @@ leerem Baum, Memoisierung von `ladeDaten` (Zähler), Fehlerpfad von
 AP-4.3 an der Oberfläche. Diese Grenze ausdrücklich in die Übergabenotiz.
 Rote Tests zuerst committen.
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+**Übergabenotiz (erledigt, vom Orchestrator abgenommen):** 133 Prüfungen
+grün, roter Commit `5d34cf2` enthält nur den Harnisch, grüner Commit
+`5fb4e8c`. Die Vertragslücken sind oben bei Vertrag C nachgetragen.
+
+**Abweichung, vom Orchestrator geprüft und angenommen:** Plan-Schritt 8
+verlangte, `EDITOR_HANDLE` bekommt `AUSWAHL_HANDLE` als Abhängigkeit. Der
+Agent hat das an `wp_script_is(AUSWAHL_HANDLE, 'registered')` gebunden, weil
+`register_auswahl_script()` einen `file_exists()`-Wächter hat: Fehlte
+`block-auswahl.js` in einem ZIP, wäre die Abhängigkeit unbekannt und
+WordPress gäbe das Editor-Script **stillschweigend gar nicht** aus — der
+Block „Block-Referenz" wäre komplett verschwunden, statt nur seine neue
+Auswahl zu verlieren. Angenommen, weil die Reihenfolge trägt:
+`register_auswahl_script()` läuft in `register_block()` **vor**
+`register_editor_script()` (`class-cbd-block-reference.php:65-72`), im
+Normalfall ist die Abhängigkeit also gesetzt. **Diese Reihenfolge ist damit
+Vertragsbestandteil** — wer sie umstellt, verliert die Abhängigkeit
+stillschweigend.
+
+**Grenze der Prüfung:** `HierarchieAuswahl` ist inhaltlich **nicht** getestet
+(ohne React-Umgebung nicht sinnvoll möglich); geprüft ist nur ihr Wachposten.
+Kaskadenverhalten, Suchtreffer→Pfad, Sperrhinweis und Zusicherung 3 werden in
+AP-4.3 an der Oberfläche abgenommen.
 
 ---
 
@@ -1271,7 +1329,10 @@ Wurzel-`CLAUDE.md` (nur falls eine neue Naht entstand)
   offenen ◐, keine leeren Testprotokollzeilen.
 - AK4: Abschnitt 11 nennt mindestens die bewusst nicht behobenen Punkte.
 - AK5: Keine Mojibake in einer der geänderten Markdown-Dateien. Nachweis:
-  `grep -c 'Ã\|â€' <datei>` liefert 0.
+  `grep -c 'Ã\|â€' <datei>` liefert 0 für `CLAUDE.md` und
+  `reference_file_map.md`. **Für diesen Plan selbst liefert die Prüfung 1** —
+  die Fundstelle ist dieses Akzeptanzkriterium, das das Suchmuster als Text
+  enthält. Kein Befund; nicht „reparieren".
 
 **Übergabenotiz:** _(vom Agenten zu füllen)_
 
@@ -1284,7 +1345,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP | Titel | Modell | Abhängig von | Status |
 |---|---|---|---|---|
 | AP-3.1 | Hierarchiedaten in den Editor-Routen | sonnet | – | ☑ |
-| AP-3.2 | Gemeinsamer Auswahlbaustein `window.cbdBlockAuswahl` | opus | – | ◐ |
+| AP-3.2 | Gemeinsamer Auswahlbaustein `window.cbdBlockAuswahl` | opus | – | ☑ |
 | AP-3.3 | Serverseite des Inline-Verweises | opus | – | ◐ |
 | AP-3.fix1 | `gesperrt` ohne Abfrage je Seite ermitteln | sonnet | 3.1 | ◐ |
 | AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1 | ☐ |
@@ -1303,8 +1364,12 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.1 | Rot-vor-Grün nachweisbar (`85e1bc9` → `3a50704`) | ja; Teständerung dazwischen betraf nur Prüfgruppe 3, vom Orchestrator im Diff geprüft und als Präzisierung auf den Wortlaut von AK3 anerkannt | 2026-08-17 |
 | AP-3.1 | SQL lädt kein `post_content` (unabhängig geprüft) | bestätigt, fünf Spalten einzeln, `:281` | 2026-08-17 |
 | AP-3.fix1 | Abfragenzahl inkl. Sperrprüfung, neue Fälle | – | – |
-| AP-3.2 | `node tools/test-block-auswahl.js` | – | – |
-| AP-3.2 | `node --check assets/js/block-auswahl.js` | – | – |
+| AP-3.2 | `node tools/test-block-auswahl.js` | **133/133 bestanden** (vom Orchestrator nachgeprüft) | 2026-08-17 |
+| AP-3.2 | `node --check assets/js/block-auswahl.js` | grün | 2026-08-17 |
+| AP-3.2 | Rot-vor-Grün nachweisbar (`5d34cf2` → `5fb4e8c`) | ja; roter Commit enthält **nur** den Harnisch, kein Test nachträglich geändert | 2026-08-17 |
+| AP-3.2 | Öffentliche Namen = genau die sieben aus Vertrag C | bestätigt, `block-auswahl.js:1054-1062` | 2026-08-17 |
+| AP-3.2 | `blocks/block-reference/index.js` unverändert | bestätigt, `git diff` leer | 2026-08-17 |
+| AP-3.2 | Registrierungsreihenfolge trägt die Abweichung | bestätigt: `register_auswahl_script()` läuft vor `register_editor_script()`, `:65-72` | 2026-08-17 |
 | AP-3.3 | `php tools/test-inline-reference.php` | – | – |
 | AP-3.3 | `php tools/check-php74.php` | – | – |
 | AP-3.rev | Review-Befunde | – | – |
