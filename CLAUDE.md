@@ -648,7 +648,8 @@ Stufe).
 | Eigene SVG-Kacheln | `custom-icons.css` | `.cbd-header-icon .cbd-custom-icon` | 32/28/24px |
 | Nummerierungs-Kacheln | `custom-icons.css` | `.cbd-container-number.cbd-number-as-icon` | 34px (≤480px: 28px) |
 | … deren Überstand | `custom-icons.css` | `.cbd-outside-number.cbd-number-as-icon` | top/left −14px (≤480px: −10px) |
-| Positionierte Icons | `cbd-frontend-clean.css` | `.cbd-icon`, `.cbd-icon-inside` | 24px, Dashicons 18px |
+| Positionierte Icons (alt, **wirkungslos**) | `cbd-frontend-clean.css` | `.cbd-icon`, `.cbd-icon-inside` | 24px, Dashicons 18px — Erzeuger `render_features()` ist seit Langem auskommentiert, matcht nichts |
+| Icon-Position, Container-Ecke (seit 3.1.89) | `cbd-frontend-clean.css` | `.cbd-header-icon.cbd-icon-positioned`, `.cbd-icon-at-top-left` u. a. | Grundabstand 10px je Ecke; Feinversatz über `--cbd-icon-dx`/`--cbd-icon-dy` — Details im Abschnitt „Icon-Position: Kopfzeile oder Container-Ecke" |
 
 ### Tote Dateien — nicht anfassen
 
@@ -686,9 +687,12 @@ steht deshalb in `render_icon()` selbst, mit Fallback `var(--cbd-icon-scale, 1)`
 
 ### Nicht mitskaliert
 
-- `.cbd-header-icon { transform: translateY(-6px) }` — manuelle
-  Grundlinien-Ausrichtung zum Titel, kein Größenwert. Bei stark abweichenden
-  Prozentwerten kann die Ausrichtung zum Titel leicht verrutschen.
+- `.cbd-header-icon`s Grundlinien-Ausrichtung zum Titel — kein Größenwert.
+  Bis 3.1.88 ein festes `transform: translateY(-6px)`; seit 3.1.89 rechnet
+  `transform: translate(var(--cbd-icon-dx, 0px), calc(-6px + var(--cbd-icon-dy, 0px)))`
+  zusätzlich den Feinversatz der Icon-Position ein (Abschnitt „Icon-Position:
+  Kopfzeile oder Container-Ecke"). Bei stark abweichenden Prozentwerten kann
+  die Ausrichtung zum Titel leicht verrutschen.
 - Icon-Picker im Admin (`.cbd-icon-item .cbd-custom-icon-preview`, 32px) und
   Board-Modus-Werkzeugleiste (`board-mode.css`, 16–22px): Admin-UI.
 - Gutenberg-Editor: `block-editor.css` ist eine eigene Datei; die
@@ -1113,6 +1117,468 @@ Doppelparse-Schutz, das Lade-Gate `should_load_katex()`, die Folgen der
 `the_content`-Priorität 11 (Spuren von `wpautop`/`wptexturize` in der Formel)
 sowie — seit AP-1.fix2 — die Code-Block-Ausnahme und die
 Entity-Auflösung.
+
+## Icon-Position: Kopfzeile oder Container-Ecke (seit 3.1.89)
+
+Die Position des Block-Icons ist wieder einstellbar: die bisherige Kopfzeile
+neben dem Titel, oder eine der vier Container-Ecken mit Feinversatz in
+Pixeln. Datenschicht (Grenzen, Bereinigung, CSS-Erzeugung) in
+`includes/functions.php`; Rendering im Frontend in
+`class-cbd-block-registration.php`/`cbd-frontend-clean.css`; Einstellung
+samt Live-Vorschau in beiden Admin-Formularen (`admin/new-block.php`,
+`admin/edit-block.php`).
+
+### Die fünf Positionswerte und das Speicherformat
+
+| Wert | Bedeutung |
+|---|---|
+| `header` | **Standard.** Icon bleibt Teil der Kopfzeile neben dem Titel — heutiges Aussehen |
+| `container-top-left` | Container, oben links |
+| `container-top-right` | Container, oben rechts |
+| `container-bottom-left` | Container, unten links |
+| `container-bottom-right` | Container, unten rechts |
+
+Gespeichert wird **flach** im `features`-JSON, drei zusätzliche Schlüssel
+unter `icon`:
+
+| Schlüssel | Typ | Vorgabe |
+|---|---|---|
+| `icon.position` | string, einer der fünf Werte oben | `header` |
+| `icon.offsetX` | int, geklemmt auf −200…200 | `0` |
+| `icon.offsetY` | int, geklemmt auf −200…200 | `0` |
+
+Flach, nicht als `icon.position.x` verschachtelt — aus demselben Grund wie
+sonst im `features`-JSON: `CBD_Design_Transfer` serialisiert Designs nach
+Markdown über flache Punkt-Pfade und begrenzt in `sanitize_json_field()` die
+Verschachtelungstiefe (Abschnitt „Designs exportieren / importieren"); eine
+zusätzliche Ebene könnte am Export scheitern.
+
+### Die sechs Funktionen
+
+Alle in `includes/functions.php`, nach dem Muster des Icon-Größen-Reglers
+(Abschnitt „Icon-Größen: wo sie stehen") in `if (!function_exists(…))`
+gewickelt:
+
+```php
+cbd_icon_position_defaults(): array
+// ['positions' => [5 Werte], 'default' => 'header',
+//  'offset_min' => -200, 'offset_max' => 200, 'offset_default' => 0]
+
+cbd_sanitize_icon_position($raw): string
+// wp_unslash(), trim, Kleinschreibung; alles außerhalb der Whitelist -> 'header'
+
+cbd_sanitize_icon_offset($raw): int
+// wp_unslash(); deutsches Komma -> Punkt; nicht numerisch -> 0; runden;
+// auf [-200, 200] klemmen
+
+cbd_get_icon_position_class(string $position): string
+// 'header' -> ''; sonst 'cbd-icon-positioned cbd-icon-at-<ecke>'
+
+cbd_get_icon_position_style(int $offset_x, int $offset_y): string
+// beide 0 -> ''; sonst '--cbd-icon-dx:<x>px;--cbd-icon-dy:<y>px;' (nie Komma)
+
+cbd_icon_position_preview(string $position, int $offset_x, int $offset_y): array
+// lesbare Beschriftung => Text, für die Admin-Vorschau
+```
+
+`cbd_sanitize_icon_position()` und `cbd_sanitize_icon_offset()` werden
+**zweimal** aufgerufen: einmal beim Speichern in
+`cbd_parse_features_from_post()`, ein zweites Mal beim Rendern in
+`class-cbd-block-registration.php`. Werte aus einem JSON-Feld der Datenbank
+gelten grundsätzlich nicht als vertrauenswürdig — auch nicht die eigenen.
+
+### Warum der Standardwert `header` heißt und die vier Altwerte darauf zurückfallen
+
+Es gab bislang **keine** funktionierende Icon-Positionierung. Das
+Eingabefeld war vor Längerem aus beiden Admin-Formularen entfernt worden; an
+seiner Stelle stand nur ein Hinweistext („Das Icon wird automatisch in der
+linken oberen Ecke … angezeigt."). `cbd_parse_features_from_post()` schrieb
+den Wert trotzdem bei **jedem** Speichern ungeprüft auf `'top-left'` zurück —
+die einzige lesende Stelle zielte zudem auf einen CSS-Selektor, der im
+Markup nie vorkam. In **jedem** bestehenden Design steht deshalb heute
+`"position":"top-left"` — ein Wert, den nie jemand bewusst gewählt hat, weil
+das Feld dafür gar nicht zur Verfügung stand.
+
+Würde `top-left` künftig „linke obere Container-Ecke" bedeuten, verlöre
+jeder vorhandene Block sein Icon aus der Kopfzeile, ohne dass jemand das
+Design angefasst hätte. Deshalb heißt der neue Standardwert `header`
+(= heutiges Aussehen), die vier neuen Eck-Werte tragen zur Unterscheidung
+das Präfix `container-`, und `cbd_sanitize_icon_position()` lässt **alles**
+außerhalb der Fünferliste — insbesondere die Altwerte `top-left`,
+`top-right`, `bottom-left`, `bottom-right`, dazu leere und bösartige
+Eingaben — auf `header` zurückfallen.
+
+Bei `position = header`, `offsetX = 0`, `offsetY = 0` — dem Zustand
+**jedes** Bestandsdesigns — liefern `cbd_get_icon_position_class()` und
+`cbd_get_icon_position_style()` beide einen leeren String. Es entsteht damit
+weder eine zusätzliche CSS-Klasse noch ein `style`-Attribut am
+Icon-`<span>`: Das gerenderte Markup bleibt in diesem Fall **zeichengleich**
+mit dem Stand vor dieser Erweiterung.
+
+### Warum kein serverseitiges `transform` gesetzt wird
+
+`.cbd-header-icon` trägt in `cbd-frontend-clean.css` bereits ein
+`transform: translateY(…)` zur Grundlinien-Ausrichtung am Titel — mit **je
+eigenem Wert pro Breakpoint**: −6px Desktop, −4px ≤768px, −3px ≤480px. Ein
+serverseitig gesetztes `transform`-Attribut hätte alle drei Regeln
+überschrieben und das Icon auf Tablet und Handy verrutschen lassen.
+
+Transportiert wird der Feinversatz deshalb über zwei CSS-Variablen —
+`--cbd-icon-dx` und `--cbd-icon-dy`, als Inline-Style am Icon-`<span>` von
+`cbd_get_icon_position_style()` erzeugt —, und jede der drei
+Breakpoint-Regeln rechnet sie in ihren eigenen Basiswert ein, z. B. Desktop:
+
+```css
+transform: translate(var(--cbd-icon-dx, 0px), calc(-6px + var(--cbd-icon-dy, 0px)));
+```
+
+Ändert sich einer der drei Basiswerte künftig, müssen **alle drei Stellen**
+(Desktop, ≤768px, ≤480px) mitgezogen werden. Im Eckmodus (`container-*`)
+entfällt die Grundlinien-Ausrichtung zum Titel, die man erhalten müsste —
+dort besteht das `transform` nur aus dem Versatz:
+`translate(var(--cbd-icon-dx, 0px), var(--cbd-icon-dy, 0px))`. Bezugsrahmen
+für die absolute Positionierung ist `.cbd-container-block` (der nächste
+positionierte Vorfahr im Markup), nicht der äußere, unsichtbare
+`.cbd-container`-Wrapper — die neuen CSS-Regeln stehen zwar unter dem
+Selektor-Präfix `.cbd-container …`, das bestimmt aber nur die Spezifität,
+nicht den Positionierungskontext.
+
+### Bekannte, unbehobene Kollision mit der Aktionsleiste
+
+`.cbd-action-buttons` (Klappen/Kopieren/Screenshot/PDF/Tafel/Behandelt) sitzt
+mit `position: absolute !important; top: 10px !important; right: 10px
+!important; z-index: 9999 !important` im selben Positionierungsrahmen wie
+ein Icon in `container-top-right` — dessen Grundabstand ebenfalls
+`top: 10px; right: 10px` beträgt, allerdings mit `z-index: 3`. Ein Icon in
+dieser Ecke ohne Feinversatz wird beim Überfahren des Containers von der
+dann eingeblendeten Knopfleiste verdeckt. **Bewusst nicht behoben** in
+diesem Vorhaben — Abhilfe ist ein Feinversatz über `offsetX`/`offsetY`, der
+das Icon aus dem Bereich der Knopfleiste herausschiebt.
+
+### Fundstellen-Karte „Icon-Größen: wo sie stehen" ergänzt
+
+Die Tabelle „Lebende Dateien (Frontend)" im gleichnamigen Abschnitt führt
+jetzt zusätzlich die beiden Positionierungs-Selektoren
+`.cbd-header-icon.cbd-icon-positioned` und `.cbd-icon-at-<ecke>` — beide in
+`cbd-frontend-clean.css`, mit 10px Grundabstand je Ecke. Nicht zu
+verwechseln mit den älteren `.cbd-icon`/`.cbd-icon-inside` in derselben
+Datei: Deren Erzeuger `render_features()` ist seit Langem auskommentiert,
+sie matchen nichts.
+
+### Prüfharnisch
+
+`php tools/test-icon-position.php` — 57 Prüfungen ohne WordPress, per TDD
+entstanden (roter Commit vor dem grünen). Geprüft werden alle fünf
+Positionswerte, der Rückfall der vier Altwerte auf `header`,
+Groß-/Kleinschreibung und umgebender Whitespace, bösartige Eingaben, die
+Pixel-Klemmung auf −200…200 inklusive deutschem Dezimalkomma (`12,5` → `13`),
+ein Rundlauf mit vorab addierten Slashes wie aus `$_POST`, das Fehlen jedes
+Kommas in `cbd_get_icon_position_style()`, sowie die Integration in
+`cbd_parse_features_from_post()` (fehlende Felder → `header`/`0`/`0`,
+Altwert `top-left` aus `$_POST` → `header`).
+
+## Block-Referenz als Modul (seit 3.1.89)
+
+Der Block „Block-Referenz" (`cbd/block-reference`) öffnet seinen Zielblock
+standardmäßig in einem Overlay auf derselben Seite, statt zur Zielseite zu
+springen. Editorfähigkeit und der Sprung selbst existierten bereits vorher;
+dieser Abschnitt beschreibt den neu hinzugekommenen Modal-Modus.
+
+### Das Attribut `displayMode`
+
+`block.json` kennt seit diesem Stand ein neuntes Attribut:
+
+| Attribut | Typ | Vorgabe | Werte |
+|---|---|---|---|
+| `displayMode` | string | `modal` | `modal`, `link` |
+
+`link` entspricht dem ursprünglichen Verhalten (Sprung zum Zielblock bzw.
+Navigation zur Zielseite). `modal` öffnet das Overlay. In **beiden** Modi
+gibt `render.php` ein `<a href="…">` mit der vollständigen Ziel-URL aus,
+**nie** ein `<button>`: Ohne JavaScript bleibt der Verweis ein gewöhnlicher
+Link, das Modal entsteht erst durch `preventDefault()` in `view.js`
+(fortschreitende Verbesserung).
+
+### Rückwärtskompatibilitätsfolge
+
+Bestehende, vor dieser Erweiterung gespeicherte Block-Referenz-Blöcke
+enthalten `displayMode` nicht in ihrem gespeicherten Markup — das Attribut
+gab es noch nicht. WordPress füllt fehlende Attribute beim Rendern aus dem
+Vorgabewert der Blockdefinition auf
+(`WP_Block_Type::prepare_attributes_for_render()`); für jeden dieser
+Altbestände liest der Renderer deshalb `displayMode === 'modal'`.
+**Bestehende Verweise öffnen künftig ein Overlay, statt zum Ziel zu
+springen** — eine Verhaltensänderung ganz ohne Datenmigration. Das
+gespeicherte Markup bleibt gültig, `href` unverändert; ohne JavaScript (oder
+wenn das Skript nicht lädt) verhält sich der Verweis weiterhin wie ein
+gewöhnlicher Link zur Zielstelle. Wer den Sprung ausdrücklich beibehalten
+will, stellt im Editor „Verhalten beim Klick" auf „Zum Block springen".
+
+### Die zwei Wege zum Inhalt
+
+1. **DOM-Klon**, wenn der Zielblock auf **derselben** Seite liegt
+   (`data-same-page="true"` am Verweis). Kein Netzverkehr, keine
+   Autorisierung nötig — der Block liegt schon im DOM.
+2. **Nachladen** über den Endpunkt unten, sonst.
+
+**Verschärfung gegenüber der ursprünglichen Planung:** Der DOM-Pfad wird
+ausschließlich über `data-same-page` entschieden, nicht durch eine bloße
+Suche nach `[data-stable-id="…"]` auf der Seite. Grund: `CBD_Block_Organizer`
+vergibt beim Kopieren eines Blocks (`copy_block()`) die `stableId` **nicht**
+neu — dieselbe Kennung kann also auf zwei Seiten liegen. Ein ungeprüfter
+DOM-Treffer könnte still der falsche Block sein (der auf der eigenen Seite
+liegende Zwilling statt des tatsächlichen Ziels). Mit `data-same-page` als
+Bedingung entscheidet stattdessen `render.php` serverseitig anhand der
+`post_id`, ob Referenz und Ziel dieselbe Seite teilen — dort ist die Antwort
+eindeutig.
+
+Im DOM-Klon werden **alle** `id`-Attribute umbenannt (Präfix je Öffnung
+eindeutig), nicht gelöscht — samt aller Verweise darauf (`aria-controls`,
+`aria-labelledby`, `aria-describedby`, `aria-owns`, `aria-flowto`,
+`aria-details`, `aria-errormessage`, `for`, `headers`, `list`, `form`,
+`href="#…"`). Löschen hätte interne Bezüge im Modal (z. B. eines
+verschachtelten Accordions) zerstört; ohne Umbenennung existierte jede ID
+zweimal auf der Seite, und Sprungmarken oder `aria-controls` im **Original**
+träfen je nach Fundreihenfolge plötzlich den Klon.
+
+### Der Endpunkt `cbd/v1/block-html`
+
+```
+GET /wp-json/cbd/v1/block-html?post_id=<int>&stable_id=<string>[&classroom=<int>&token=<string>]
+```
+
+| Parameter | Pflicht | Zweck |
+|---|---|---|
+| `post_id` | ja | Seite, auf der der Block liegt. **Die Rechteprüfung hängt an diesem Wert**, nicht an `stable_id` — dieselbe Kennung kann nach `copy_block()` auf zwei Seiten liegen |
+| `stable_id` | ja | Bezeichner des gesuchten Container-Blocks |
+| `classroom` | nein | Klassen-ID einer laufenden Klassensitzung |
+| `token` | nein | Token der Klassensitzung |
+
+**Erfolg, HTTP 200:**
+```json
+{"html": "<div class=\"cbd-container\">…</div>", "title": "Titel des Blocks"}
+```
+`title` kommt aus den Blockattributen (`blockTitle`, sonst `title`), **nie**
+aus dem Seitentitel oder dem Permalink.
+
+**Jeder Fehlschlag, HTTP 404, immer zeichengleich:**
+```json
+{"code":"cbd_block_not_available","message":"Der Block ist nicht verfügbar."}
+```
+Dieselbe Antwort für: Seite existiert nicht, ist kein `publish`, ist
+passwortgeschützt, ist gesperrt, Klassensitzung fehlt oder ist ungültig,
+Block ist für die Klasse nicht freigegeben, Block existiert nicht,
+`stable_id` gehört zu keinem Container-Block. **Absichtlich so knapp:**
+Unterschiedliche Antworten ließen sich durch Durchprobieren von IDs zum
+Kartieren der gesperrten Lösungsseiten nutzen — genau diesen Fehler hat das
+Theme in `simple_clean_lehrerseite_kanonisch()` bereits einmal behoben.
+
+Implementiert in `includes/class-cbd-block-content-api.php`
+(`CBD_Block_Content_API`), **einer eigenen Klasse** neben
+`class-cbd-blocks-rest-api.php`: Dort gilt „nur Redakteure"
+(`current_user_can('edit_posts')`), hier „jeder, aber nur was er sehen darf"
+— Schülerinnen und Schüler melden sich nie an, sie kommen über das
+Klassenpasswort. Zwei derart gegensätzliche Sicherheitsmodelle in einer
+Datei laden dazu ein, dass irgendwann eine Route den falschen
+`permission_callback` bekommt. Der `permission_callback` dieser Route ist
+deshalb `'__return_true'` — **die gesamte Autorisierung steckt im
+Callback.**
+
+#### Die Autorisierungskette, in dieser Reihenfolge
+
+Jeder Fehlschlag endet sofort in der einheitlichen 404-Ablehnung von oben:
+
+1. `nocache_headers()` — **immer und als Erstes**, ohne Bedingung. Dieselbe
+   URL liefert für Lehrperson, Klassensitzung und anonymen Besucher
+   unterschiedliche Inhalte; ein Cache dürfte sie nie verwechseln.
+2. Die geteilten Helfer müssen existieren
+   (`CBD_Classroom_Gate::block_erlaubt()`,
+   `CBD_Classroom::basis_container_id()`) — sonst sofortige Ablehnung statt
+   eines Fatal Errors.
+3. `post_id` und `stable_id` müssen skalare, positive bzw. nicht-leere Werte
+   sein.
+4. Der Beitrag muss existieren, vom Typ `page` oder `post` sein und den
+   Status `publish` tragen.
+5. `post_password_required()` darf nicht zutreffen.
+6. **Sichtbarkeit:** `simple_clean_seite_sichtbar($post_id)` —
+   Theme-Funktion, hinter `function_exists()`. Sie ist die
+   **Gesamtentscheidung** (deckt Lehrperson, Sperre samt Vererbung auf den
+   Unterbaum und den Freigabe-Filter ab); ausdrücklich **nicht**
+   `simple_clean_seite_nur_lehrpersonen()`, die kennt den Klassen-Durchlass
+   nicht.
+7. Ist die Seite zusätzlich gesperrt (`simple_clean_seite_nur_lehrpersonen()`
+   ohne Lehrperson), muss eine gültige Klassensitzung vorliegen
+   (`CBD_Classroom_Gate::sitzung()`, liest `classroom`/`token` aus denselben
+   Query-Parametern) **und** der angefragte Block muss für diese Klasse
+   freigegeben sein (`CBD_Classroom::behandelte_container()`). Standard ist
+   Ablehnung: Was nicht in der Freigabeliste steht, gibt es für die Klasse
+   nicht.
+8. Der Block wird gesucht (rekursiv über `innerBlocks`) und muss zum
+   Namensraum `container-block-designer/` gehören — die Suche übernimmt
+   `CBD_Classroom_Gate::block_erlaubt()` (siehe unten), die
+   Namensraumprüfung erfolgt **zusätzlich** noch einmal im Endpunkt selbst.
+9. Gerendert wird mit `render_block($block)` bei temporär gesetztem
+   `$GLOBALS['post']` (der vorherige Wert wird in jedem Fall
+   wiederhergestellt) — **nicht** `do_blocks()` auf den ganzen Beitrag
+   (rendert zu viel) und **nicht** `serialize_blocks()` mit eigener Ausgabe
+   (der dokumentierte Whitespace-Unterschied zwischen JavaScript- und
+   PHP-Serializer, Abschnitt „Block-Serializer"). Ein `Throwable` beim
+   Rendern führt ebenfalls zur Ablehnung.
+
+**Keine vierte Fassung der `stableId`-Extraktion:** Die Blocksuche ruft
+`CBD_Classroom_Gate::block_erlaubt()` auf (Attribut `stableId`, sonst
+Rückfall auf `data-stable-id` im gespeicherten Markup) statt eine eigene
+Regel zu schreiben. Eine eigene Fassung wäre nach
+`class-cbd-block-registration.php`, `class-cbd-classroom-gate.php` und
+`class-cbd-blocks-rest-api.php` bereits die vierte Kopie (siehe Abschnitt
+„Offener Punkt: `stableId`-Extraktion existiert dreifach" weiter oben — die
+Zahl der Fassungen bleibt durch diesen Endpunkt unverändert bei drei).
+
+### Die REST-Basis kommt aus `rest_url()`, nie aus dem JavaScript
+
+`class-cbd-block-reference.php::localize_view_script()` übergibt dem
+Frontend-Script die vollständige URL über
+`esc_url_raw(rest_url('cbd/v1/block-html'))`, zusammen mit einem Nonce für
+angemeldete Nutzer. `view.js` setzt daraus **nie selbst** einen Pfad
+zusammen: Auf Installationen ohne hübsche Permalinks liefert `/wp-json/…`
+einen Apache-404, dort funktioniert nur `?rest_route=/cbd/v1/block-html`.
+Welche Form gilt, weiß ausschließlich `rest_url()` auf dem Server. **Der
+Nonce ist keine Autorisierung** — er sorgt nur dafür, dass ein angemeldeter
+Nutzer bei einem REST-Aufruf als angemeldet erkannt wird (ohne ihn gilt eine
+Cookie-Anfrage als anonym). Die gesamte Rechteprüfung leistet ausschließlich
+`CBD_Block_Content_API`.
+
+### Das Modal ist eine Leseansicht
+
+Die WordPress-Interactivity-API hydriert nur Markup, das beim Laden der
+Seite bereits dastand — nachträglich eingefügtes, ob geklont oder
+nachgeladen, bekommt keine Hydrierung. `view.js` entfernt deshalb aus dem
+Modalinhalt die Aktionsleiste `.cbd-action-buttons` (Klappen, Kopieren,
+Screenshot, PDF, Tafelmodus, Behandelt) vollständig, statt sie nur
+unsichtbar zu machen: Jeder dieser Knöpfe hängt an
+`data-wp-on--click`-Direktiven, die im Modal wirkungslos blieben — ein
+sichtbarer, aber toter Knopf ist schlechter als keiner, und ein Screenreader
+kündigte ihn trotzdem als bedienbar an. Eingeklappte Container werden
+zusätzlich aufgeklappt, weil der entfernte Umschalter sie nicht mehr öffnen
+könnte. Verweise **innerhalb** des Modals werden auf `displayMode = 'link'`
+zurückgestuft — ein Modal im Modal ist damit ausgeschlossen.
+
+Nach dem Einsetzen des Inhalts prüft `view.js`
+`typeof window.cbdRenderLatex === 'function'` (Abschnitt „LaTeX-Formeln:
+Renderpfad und Wiederholrendern") und rendert Formeln im Modalinhalt nach.
+Geklonte Formeln tragen bereits `data-cbd-latex-rendered="1"` und werden
+übersprungen; nachgeladene brauchen den Aufruf.
+
+### Vierte Naht zwischen den Komponenten
+
+Nach dem Menü-Slug `page-manager` (Abschnitt „Seiten aus Markdown erzeugen"
+im Wurzel-`CLAUDE.md`), dem Filter `simple_clean_lehrerseite_freigeben`
+(Abschnitt „Klassen-Durchlass für gesperrte Seiten") und dem LaTeX-Renderer
+`window.cbdRenderLatex` (Abschnitt „LaTeX-Formeln: Renderpfad und
+Wiederholrendern") ist dieser Endpunkt die **vierte** Stelle, an der Theme
+und Plugins über eine Schnittstelle zusammenwirken — und die zweite (neben
+der Klassen-Freigabe), an der das Plugin aktiv eine Theme-Funktion aufruft,
+statt umgekehrt einen Filter zu bedienen. Fehlt das Theme, greift
+`function_exists()`: Es gibt dann schlicht keine Sperre, Schritt 6 lehnt nie
+ab — der Endpunkt stirbt aber auch nicht an einem unbekannten
+Funktionsaufruf.
+
+### Prüfharnisch
+
+`php tools/test-block-content-api.php` — 84 Prüfungen ohne WordPress.
+Geprüft werden: Fund über das Attribut `stableId` und über den
+`data-stable-id`-Rückfall, Rekursion in `innerBlocks`, unbekannte
+`stable_id` → Ablehnung, fremder Namensraum (z. B. `core/paragraph`) →
+Ablehnung, die Theme-Funktion liefert `false` → Ablehnung, die
+Theme-Funktion ist **nicht** definiert → kein Fatal Error, Ablehnung und
+Nichtexistenz sind zeichengleich, keine Antwort nennt Seitentitel oder
+Permalink, eine Ausnahme beim Rendern führt zu 404 statt eines Fatal Errors,
+und der globale `$post` wird in jedem Fall wiederhergestellt.
+
+## Screenshot auf Apple-Geräten (seit 3.1.89)
+
+Auf iOS, iPadOS und macOS-Safari wird der Screenshot-Knopf eines
+Container-Blocks zum **Einzelblock-PDF-Knopf**. Grund: Der Screenshot-Weg
+(`html2canvas` + `navigator.clipboard.write()`/Web-Share) ist auf diesen
+Geräten strukturell unzuverlässig — Safari verlangt den Aufruf von
+`clipboard.write()` innerhalb derselben Nutzer-Aktivierung, die durch das
+vorgelagerte `await html2canvas(...)` verloren geht, iOS begrenzt zusätzlich
+die nutzbare Canvas-Fläche, und `<a download>` mit Data-URL wird von
+iOS-Safari ignoriert. Diese Ursachen liegen außerhalb der Kontrolle des
+Plugins und werden **nicht** repariert, sondern umgangen.
+
+Umgangen wird über den bereits vorhandenen serverseitigen
+Einzelblock-PDF-Export (`window.cbdPDFExportServerSide([...], 'visual')`,
+`assets/js/interactivity-store.js`, sonst identisch zum regulären
+PDF-Knopf): Er kommt für reine DOM-Blöcke ohne `html2canvas` aus und trifft
+damit keine der genannten iOS-Klippen. Nutzer verlieren dadurch keine
+Funktion — sie bekommen dieselbe Datei über einen anderen Weg.
+
+### Erkennung: `istAppleGeraet()`
+
+In `assets/js/interactivity-store.js` (und identisch nachgezogen in
+`assets/js/interactivity-fallback.js`), einmal pro Seitenaufruf berechnet:
+
+```js
+function istAppleGeraet() {
+	// iOS/iPadOS
+	const isIOSDevice = /iPad|iPhone|iPod/.test(ua) ||
+		(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+	if (isIOSDevice) { return true; }
+
+	// macOS-Safari
+	return vendor.indexOf('Apple') !== -1 &&
+		ua.indexOf('Safari') !== -1 &&
+		ua.indexOf('Chrome') === -1 && ua.indexOf('Chromium') === -1 &&
+		ua.indexOf('Edg') === -1 && ua.indexOf('OPR') === -1;
+}
+```
+
+Auf Apple-Geräten schaltet `callbacks.onInit` jeden vorhandenen
+`.cbd-screenshot`-Knopf beim Initialisieren optisch um (Dashicon
+`dashicons-camera` → `dashicons-pdf`, `title`/`aria-label` → „Diesen Block
+als PDF speichern", Attribut `data-cbd-apple-pdf="1"`), und
+`actions.createScreenshot` leitet **vor jeder Berührung von `html2canvas`**
+auf den PDF-Export um. Fehlt `window.cbdPDFExportServerSide` (z. B. weil das
+Skript aus irgendeinem Grund nicht geladen wurde), versteckt der Code den
+Knopf per `display: none !important` und gibt einmalig `console.warn` aus —
+ein Knopf ohne Funktion gilt als schlechter als gar kein Knopf.
+
+**Die Erkennung schließt macOS-Safari ein — anders als die ältere Erkennung
+in `assets/js/pdf-server-side.js`:**
+
+```js
+/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+```
+
+Dieses Muster (unverändert weiter in Gebrauch für den Canvas-Flächendeckel
+in `createScreenshot()`) erkennt iOS und iPadOS, aber **keinen** Mac ohne
+Touchscreen — ein Nutzer auf echtem macOS-Safari fiele durch dieses Raster.
+`istAppleGeraet()` ergänzt deshalb die zweite, unabhängige Bedingung über
+`navigator.vendor`/`navigator.userAgent`. Beide Erkennungen bestehen bewusst
+nebeneinander: `pdf-server-side.js` betrifft ausschließlich die
+Canvas-Flächenbegrenzung von `html2canvas` (dort ist macOS-Safari
+irrelevant, weil `html2canvas` dort ohnehin funktioniert), `istAppleGeraet()`
+entscheidet über die Knopf-Umschaltung insgesamt.
+
+### Warum die Umschaltung clientseitig geschieht
+
+Der Knopf selbst wird serverseitig erzeugt
+(`class-cbd-block-registration.php`, gebunden an das Feature-Flag
+`screenshot`) — **diese Datei bleibt in diesem Vorhaben unverändert.** Eine
+Apple-Erkennung im gerenderten HTML hätte die Seitenausgabe vom User-Agent
+abhängig gemacht und damit jeden Full-Page-Cache vergiftet: Ein und dieselbe
+zwischengespeicherte Seite müsste dann für iPhone- und Windows-Besucher
+unterschiedlich aussehen, was ein HTML-Cache nicht abbilden kann. Das
+Plugin führt an anderer Stelle bereits eigene Cache-Logik
+(`class-cbd-block-registration.php`); ein zweiter, User-Agent-abhängiger
+Cache-Sonderfall dort wäre eine vermeidbare Fehlerquelle.
+
+Der Knopf folgt weiterhin ausschließlich seinem Feature-Flag: Ist
+„Screenshot" für ein Design abgeschaltet, existiert gar kein Knopf — weder
+Screenshot- noch PDF-Symbol. Das entspricht der Projektentscheidung „Buttons
+folgen Feature-Flags" (`docs/VERBESSERUNGSPLAN.md`, AP12).
 
 ## Debugging-Konventionen
 
