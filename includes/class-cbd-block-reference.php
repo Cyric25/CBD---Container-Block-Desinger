@@ -23,6 +23,16 @@ class CBD_Block_Reference {
     const EDITOR_HANDLE = 'cbd-block-reference-editor';
 
     /**
+     * Handle des gemeinsamen Auswahlbausteins (assets/js/block-auswahl.js).
+     *
+     * Die Datei veroeffentlicht `window.cbdBlockAuswahl` und wird von ZWEI
+     * Stellen gebraucht: der Seitenleiste dieses Blocks und dem Textformat
+     * fuer Inline-Verweise (CBD_Inline_Reference). Beide haengen ueber DIESE
+     * Konstante daran, nicht ueber eine wiederholte Zeichenkette.
+     */
+    const AUSWAHL_HANDLE = 'cbd-block-auswahl';
+
+    /**
      * Rueckfall-Handle des Frontend-Scripts.
      *
      * Aus `viewScript` in block.json bildet WordPress das Handle
@@ -52,6 +62,10 @@ class CBD_Block_Reference {
         if (!file_exists($block_json_path)) {
             return;
         }
+
+        // Der gemeinsame Auswahlbaustein zuerst: register_editor_script()
+        // nimmt ihn als Abhaengigkeit auf, sobald er registriert ist.
+        self::register_auswahl_script();
 
         // Editor-Script VOR der Blockregistrierung anmelden — block.json
         // verweist nur noch auf das Handle.
@@ -170,21 +184,76 @@ class CBD_Block_Reference {
             return;
         }
 
-        // Cache-Busting ueber filemtime(): Die Datei aendert sich auch
-        // zwischen zwei Plugin-Versionen, CBD_VERSION allein genuegt nicht.
-        $version = defined('CBD_VERSION') ? CBD_VERSION : '';
-        $mtime = filemtime($pfad);
-        if ($mtime) {
-            $version = $version . '.' . $mtime;
+        $abhaengigkeiten = array('wp-blocks', 'wp-element', 'wp-block-editor', 'wp-components', 'wp-i18n', 'wp-api-fetch');
+
+        // NUR wenn der Auswahlbaustein wirklich registriert ist. Eine
+        // Abhaengigkeit auf ein unbekanntes Handle laesst WordPress das
+        // Editor-Script stillschweigend GAR NICHT ausgeben — der Block waere
+        // dann komplett verschwunden, nur weil eine Datei fehlt.
+        if (wp_script_is(self::AUSWAHL_HANDLE, 'registered')) {
+            $abhaengigkeiten[] = self::AUSWAHL_HANDLE;
         }
 
         wp_register_script(
             self::EDITOR_HANDLE,
             CBD_PLUGIN_URL . $relativ,
-            array('wp-blocks', 'wp-element', 'wp-block-editor', 'wp-components', 'wp-i18n', 'wp-api-fetch'),
-            $version,
+            $abhaengigkeiten,
+            self::script_version($pfad),
             true
         );
+    }
+
+    /**
+     * Gemeinsamen Auswahlbaustein registrieren
+     *
+     * assets/js/block-auswahl.js veroeffentlicht `window.cbdBlockAuswahl`
+     * (hierarchische Zielauswahl, memoisiertes Laden von /cbd/v1/blocks und
+     * /cbd/v1/seitenbaum). Registriert, NICHT eingebunden: Wer den Baustein
+     * braucht, nennt AUSWAHL_HANDLE als Abhaengigkeit.
+     *
+     * Kein `wp-blocks` und kein `wp-block-editor` in der Liste — die Datei
+     * kennt weder Bloecke noch den Blockeditor, sie baut nur Formularfelder.
+     * Damit bleibt sie auch ausserhalb des Blockeditors verwendbar.
+     */
+    public static function register_auswahl_script() {
+        if (wp_script_is(self::AUSWAHL_HANDLE, 'registered')) {
+            return;
+        }
+
+        $relativ = 'assets/js/block-auswahl.js';
+        $pfad = CBD_PLUGIN_DIR . $relativ;
+
+        if (!file_exists($pfad)) {
+            return;
+        }
+
+        wp_register_script(
+            self::AUSWAHL_HANDLE,
+            CBD_PLUGIN_URL . $relativ,
+            array('wp-element', 'wp-components', 'wp-i18n', 'wp-api-fetch'),
+            self::script_version($pfad),
+            true
+        );
+    }
+
+    /**
+     * Versionszeichenkette fuer das Cache-Busting einer Script-Datei.
+     *
+     * Cache-Busting ueber filemtime(): Die Datei aendert sich auch zwischen
+     * zwei Plugin-Versionen, CBD_VERSION allein genuegt nicht.
+     *
+     * @param string $pfad Absoluter Pfad der Datei
+     * @return string
+     */
+    private static function script_version($pfad) {
+        $version = defined('CBD_VERSION') ? CBD_VERSION : '';
+        $mtime = file_exists($pfad) ? filemtime($pfad) : 0;
+
+        if ($mtime) {
+            $version = $version . '.' . $mtime;
+        }
+
+        return $version;
     }
 
     /**
