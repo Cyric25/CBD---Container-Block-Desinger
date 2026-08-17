@@ -194,6 +194,13 @@ function enthaelt_href($html, $erwartet) {
  * @return string Bezeichnung des verwendeten Wegs
  */
 function tag_processor_bereitstellen() {
+    // Erzwingt das Doppel — damit auch auf dieser Maschine prüfbar bleibt,
+    // dass der Rückfallweg trägt:  CBD_TEST_TAG_PROCESSOR=doppel php tools/…
+    if ('doppel' === getenv('CBD_TEST_TAG_PROCESSOR')) {
+        class_alias('CBD_Test_Tag_Processor', 'WP_HTML_Tag_Processor');
+        return 'Doppel (per CBD_TEST_TAG_PROCESSOR erzwungen)';
+    }
+
     $kandidaten = array();
 
     $aus_umgebung = getenv('CBD_WP_DIR');
@@ -493,10 +500,20 @@ check('3a.3 · dabei wurde kein Script registriert', empty($GLOBALS['test_script
 
 echo "\n== 3b · Format-Script, Vertragspartner vorhanden ==\n";
 
-/** Doppel des Nachbarn — bildet genau den Vertrag von AP-3.2 ab. */
+/**
+ * Doppel des Nachbarn — bildet genau den Vertrag von AP-3.2 ab.
+ *
+ * PER eval(), UND ZWAR ZWINGEND: PHP bindet eine unbedingte, nichts erbende
+ * Klassendeklaration schon beim Kompilieren der Datei (Early Binding). Stünde
+ * `class CBD_Block_Reference` hier einfach so, wäre sie bereits in Gruppe 3a
+ * definiert — und der Nachweis „fehlender Vertragspartner erzeugt keinen Fatal
+ * Error" wäre stillschweigend wertlos. Genau das hat der erste Durchlauf
+ * dieses Harnischs gemeldet (Prüfung 3a.0).
+ */
+eval('
 class CBD_Block_Reference {
-    const AUSWAHL_HANDLE = 'cbd-block-auswahl';
-    const VIEW_HANDLE_FALLBACK = 'cbd-block-reference-view-script';
+    const AUSWAHL_HANDLE = "cbd-block-auswahl";
+    const VIEW_HANDLE_FALLBACK = "cbd-block-reference-view-script";
     public static function view_script_handle($block_type = null) {
         if (is_object($block_type) && !empty($block_type->view_script_handles)) {
             return reset($block_type->view_script_handles);
@@ -508,6 +525,7 @@ class CBD_Block_Reference {
 /** Klasse ohne die Konstante — der zweite Zweig des Waechters. */
 class CBD_Test_Reference_Ohne_Konstante {
 }
+');
 
 check(
     '3b.1 · auswahl_handle() liefert den Wert der Konstante',

@@ -125,6 +125,8 @@ class ContainerBlockDesigner {
         // dieser Endpunkt ohne Anmeldung auskommt und die Autorisierung
         // vollständig selbst leistet.
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-block-content-api.php';
+        // Inline-Verweis als Textformat: the_content-Filter + Format-Script.
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-inline-reference.php';
 
         // Content Importer - Markdown to CDB blocks
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-content-importer.php';
@@ -300,6 +302,11 @@ class ContainerBlockDesigner {
             // REST: einzelner Block als HTML für das Referenz-Modal
             if (class_exists('CBD_Block_Content_API')) {
                 CBD_Block_Content_API::init();
+            }
+
+            // Inline-Verweis (Textformat): Serverseite
+            if (class_exists('CBD_Inline_Reference')) {
+                CBD_Inline_Reference::init();
             }
 
             // Migration Tool initialization (Admin only)
