@@ -565,24 +565,80 @@ check(
     $daten['ver'] ?? null
 );
 
-// AK9 — der eigentliche Zustand nach diesem AP: format.js gibt es noch nicht.
-echo "\n== 3c · AK9: format.js existiert noch nicht ==\n";
+// AK9 (AP-3.3) — der Wächter, jetzt mit vorhandener format.js.
+//
+// WARUM DIESE GRUPPE IN AP-4.2 UMFORMULIERT WURDE, OHNE SCHWÄCHER ZU WERDEN:
+// Bis AP-4.2 prüfte sie die Zusicherung „solange `format.js` FEHLT,
+// registriert `register_format_script()` nichts" — und zwar dadurch, dass die
+// Datei zu diesem Zeitpunkt tatsächlich nicht existierte. Das war eine Aussage
+// über den Kalender, nicht über den Code: AP-4.2 legt `format.js` an, damit
+// wurde die Vorbedingung selbst falsch (`3c.0` schlug fehl) und mit ihr drei
+// Folgeprüfungen.
+//
+// Die Zusicherung selbst gilt unverändert und wird weiterhin geprüft, nur
+// dauerhaft statt zufällig: über den Test-Seam `format_script_daten($relativ)`
+// mit einem Pfad, den es nie geben wird. Genau dafür hat AP-3.3 den Parameter
+// eingeführt („damit der Harnisch alle drei Zweige des Wächters prüfen kann,
+// ohne format.js anzulegen"). Die drei Zweige liegen damit nach wie vor
+// vollständig unter Prüfung:
+//   fehlender Vertragspartner -> Gruppe 3a.2, 3b.2, 3b.3
+//   fehlende Datei            -> 3c.1 (hier, über den Seam)
+//   alles vorhanden           -> 3b.4-3b.9 und 3c.2/3c.3
+//
+// Zusätzlich hält diese Gruppe jetzt fest, was AP-4.2 braucht und vorher
+// niemand prüfen konnte: dass das Format-Script wirklich im Editor landet.
+// Ein Textformat hängt an keinem Block — reiht `register_format_script()` es
+// nicht selbst ein, lädt es niemand (der Fehler im Plantext von AP-3.3,
+// vom Orchestrator korrigiert).
+echo "\n== 3c · AK9: Waechter des Format-Scripts, format.js vorhanden ==\n";
 
 check(
-    '3c.0 · Vorbedingung: blocks/block-reference/format.js existiert wirklich nicht',
-    !file_exists($plugin_dir . 'blocks/block-reference/format.js')
+    '3c.0 · Vorbedingung: blocks/block-reference/format.js existiert jetzt (AP-4.2)',
+    file_exists($plugin_dir . 'blocks/block-reference/format.js')
 );
-check('3c.1 · format_script_daten() liefert null', null === CBD_Inline_Reference::format_script_daten());
+check(
+    '3c.1 · nicht vorhandene Datei -> format_script_daten() liefert null',
+    null === CBD_Inline_Reference::format_script_daten('blocks/block-reference/gibt-es-nicht.js')
+);
 
 $GLOBALS['test_warnungen'] = 0;
 set_error_handler(function ($no, $str) { $GLOBALS['test_warnungen']++; return true; });
 CBD_Inline_Reference::register_format_script();
 restore_error_handler();
 
-check('3c.2 · es wird nichts registriert', empty($GLOBALS['test_scripts']), $GLOBALS['test_scripts']);
-check('3c.3 · es wird nichts eingereiht', empty($GLOBALS['test_enqueued_scripts']), $GLOBALS['test_enqueued_scripts']);
+check(
+    '3c.2 · genau das Handle cbd-block-reference-format wird registriert',
+    array('cbd-block-reference-format') === array_keys($GLOBALS['test_scripts']),
+    $GLOBALS['test_scripts']
+);
+check(
+    '3c.3 · und genau dieses Handle wird eingereiht',
+    array('cbd-block-reference-format') === $GLOBALS['test_enqueued_scripts'],
+    $GLOBALS['test_enqueued_scripts']
+);
 check('3c.4 · dabei entsteht keine Warnung', 0 === $GLOBALS['test_warnungen'], $GLOBALS['test_warnungen']);
 check('3c.5 · und kein _doing_it_wrong()', 0 === $GLOBALS['test_doing_it_wrong'], $GLOBALS['test_doing_it_wrong']);
+
+// Der zweite Zweig von register_format_script(): Ist das Handle schon
+// registriert, wird es nur noch eingereiht — nicht ein zweites Mal
+// registriert. Vorher nicht prüfbar, weil der erste Aufruf nie ankam.
+CBD_Inline_Reference::register_format_script();
+check(
+    '3c.6 · zweiter Aufruf registriert nicht erneut',
+    1 === count($GLOBALS['test_scripts']),
+    $GLOBALS['test_scripts']
+);
+
+// Buchhaltung zurücksetzen — KEINE abgeschwächte Prüfung, sondern ein
+// Schnitt: Die Gruppen 4 und 5 halten kumulativ fest, dass der INHALTSFILTER
+// kein Script einreiht, solange er keinen Verweis bearbeitet hat
+// (`empty($GLOBALS['test_enqueued_scripts'])`). Diese Zusicherung gilt
+// unverändert; sie darf aber nicht am Editor-Script der Werkzeugleiste
+// scheitern, das Gruppe 3c gerade absichtlich eingereiht hat. Vor AP-4.2 waren
+// beide Listen an dieser Stelle leer — der Schnitt stellt genau diesen
+// Ausgangszustand wieder her.
+$GLOBALS['test_scripts'] = array();
+$GLOBALS['test_enqueued_scripts'] = array();
 
 // =========================================================================
 // 4 · AK7: WP_HTML_Tag_Processor fehlt
@@ -1047,6 +1103,43 @@ foreach (array('045', '00000000000000000045') as $wert) {
     );
 }
 
+
+// =========================================================================
+// 11 · AP-4.2 (AK14): Duplikatswächter für die Klassenzeichenkette
+// =========================================================================
+//
+// Die Zeichenkette `cbd-block-reference-inline` steht seit AP-4.2 an DREI
+// Stellen: als `CBD_Inline_Reference::KLASSE` (Prüfling dieses Harnischs),
+// als `className` der Formatregistrierung in
+// `blocks/block-reference/format.js` und im delegierten Klick-Selektor von
+// `blocks/block-reference/view.js`. Driften die drei auseinander, bemerkt das
+// ohne Wächter niemand — dieselbe Lage wie bei der dreifachen
+// `stableId`-Extraktion (CLAUDE.md, Abschnitt „Offener Punkt"). Ein Kommentar
+// an der Konstante nennt die beiden anderen Stellen, hält aber nichts fest.
+//
+// Der Wächter kostet drei Zeilen, weil dieser Harnisch ohnehin Quelltext
+// liest (Gruppe 1). Präzedenz: die `:pN`-Zusicherung in
+// `tools/test-classroom-gate.php`, die beim Bauen genau so einen Fall
+// gemeldet hat. Befund S8 aus AP-3.rev.
+//
+// Geprüft wird WORTGLEICHES Vorkommen, nicht „irgendwie ähnlich": Der
+// CSS-Selektor `.cbd-block-reference-inline` und der JS-Wert
+// `'cbd-block-reference-inline'` enthalten die Konstante beide als
+// Teilzeichenkette — eine umbenannte Klasse nicht mehr. Beide Prüfungen
+// laufen unabhängig vom Tag-Processor-Weg, kein SKIP nötig.
+
+echo "\n== 11 · AP-4.2 (AK14): Duplikatswaechter Klassenzeichenkette ==\n";
+
+foreach (array('blocks/block-reference/format.js', 'blocks/block-reference/view.js') as $js_datei) {
+    $js_pfad = $plugin_dir . $js_datei;
+    $js_quelle = file_exists($js_pfad) ? file_get_contents($js_pfad) : '';
+    check(
+        '11.1 · ' . $js_datei . ' nennt CBD_Inline_Reference::KLASSE ('
+            . CBD_Inline_Reference::KLASSE . ') wortgleich',
+        '' !== $js_quelle && false !== strpos($js_quelle, CBD_Inline_Reference::KLASSE),
+        $js_pfad
+    );
+}
 // =========================================================================
 
 $fails = $GLOBALS['fails'];
