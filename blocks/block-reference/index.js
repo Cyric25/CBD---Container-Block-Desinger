@@ -9,6 +9,13 @@
  * Die Abhaengigkeiten (wp-blocks, wp-element, wp-block-editor, wp-components,
  * wp-i18n, wp-api-fetch) meldet CBD_Block_Reference::register_editor_script()
  * an; block.json verweist nur noch auf das Handle.
+ *
+ * Die hierarchische Zielauswahl in der Seitenleiste kommt seit AP-4.1
+ * (docs/PLAN-Inline-Blockreferenz.md, Vertrag C) aus dem gemeinsamen
+ * Auswahlbaustein assets/js/block-auswahl.js (window.cbdBlockAuswahl). Diese
+ * Datei ruft selbst keine REST-Route mehr ab und haelt keinen eigenen
+ * Zustand fuer die Zielliste - sie liest nur noch das Ergebnis der Auswahl
+ * (den gewaehlten Eintrag bzw. `null`) und schreibt es in die Blockattribute.
  */
 (function (wp) {
 	'use strict';
@@ -19,8 +26,6 @@
 
 	var el = wp.element.createElement;
 	var Fragment = wp.element.Fragment;
-	var useState = wp.element.useState;
-	var useEffect = wp.element.useEffect;
 
 	var InspectorControls = wp.blockEditor.InspectorControls;
 	var useBlockProps = wp.blockEditor.useBlockProps;
@@ -30,7 +35,7 @@
 	var TextControl = wp.components.TextControl;
 	var ToggleControl = wp.components.ToggleControl;
 	var Placeholder = wp.components.Placeholder;
-	var Spinner = wp.components.Spinner;
+	var Notice = wp.components.Notice;
 
 	var TEXTDOMAIN = 'container-block-designer';
 	var __ = (wp.i18n && wp.i18n.__) ? wp.i18n.__ : function (text) { return text; };
@@ -53,20 +58,22 @@
 	}
 
 	/**
-	 * Schluessel eines Listeneintrags fuer die Auswahlliste.
+	 * Null-sichere Textumwandlung.
 	 *
-	 * Seiten-ID UND stableId, weil CBD_Block_Organizer::should_regenerate_id()
-	 * die stableId beim Kopieren NICHT neu vergibt - dieselbe Kennung kann
-	 * also auf zwei Seiten liegen.
+	 * Verschoben nach assets/js/block-auswahl.js (window.cbdBlockAuswahl.text,
+	 * Vertrag C aus docs/PLAN-Inline-Blockreferenz.md) - Befund B1a aus
+	 * AP-3.rev fuehrt diese Fassung als eine von fuenf Doppelungen auf. Kein
+	 * blosser Alias (`var text = window.cbdBlockAuswahl.text`): Fehlt der
+	 * Auswahlbaustein, wuerde ein Alias beim ersten Aufruf werfen und die
+	 * ganze Seitenleiste mitreissen - genau der Absturz, den der Waechter in
+	 * BlockReferenceEdit() um die Zielauswahl herum vermeiden soll. Ist der
+	 * Baustein vorhanden, ruft diese Funktion ausschliesslich seine Fassung
+	 * auf; es gibt also weiterhin nur eine Verhaltensdefinition.
 	 */
-	function schluessel(eintrag) {
-		if (!eintrag || !eintrag.stableId) {
-			return '';
-		}
-		return String(parseInt(eintrag.postId, 10) || 0) + '|' + String(eintrag.stableId);
-	}
-
 	function text(wert) {
+		if (window.cbdBlockAuswahl && 'function' === typeof window.cbdBlockAuswahl.text) {
+			return window.cbdBlockAuswahl.text(wert);
+		}
 		return (wert === null || wert === undefined) ? '' : String(wert);
 	}
 
@@ -75,20 +82,6 @@
 	 */
 	function autoLinkText(titel) {
 		return titel ? sprintf(__('Gehe zu: %s', TEXTDOMAIN), titel) : '';
-	}
-
-	function passtZurSuche(eintrag, begriff) {
-		if (!begriff) {
-			return true;
-		}
-		var heuhaufen = (text(eintrag.postTitle) + ' ' + text(eintrag.blockTitle)).toLowerCase();
-		var teile = begriff.toLowerCase().split(/\s+/);
-		for (var i = 0; i < teile.length; i++) {
-			if (teile[i] && heuhaufen.indexOf(teile[i]) === -1) {
-				return false;
-			}
-		}
-		return true;
 	}
 
 	function BlockReferenceEdit(props) {
@@ -104,106 +97,32 @@
 		var showIcon = attributes.showIcon !== false;
 		var displayMode = normalisiereModus(attributes.displayMode);
 
-		var blockState = useState([]);
-		var bloecke = blockState[0];
-		var setBloecke = blockState[1];
-
-		var ladeState = useState(true);
-		var laedt = ladeState[0];
-		var setLaedt = ladeState[1];
-
-		var fehlerState = useState('');
-		var fehler = fehlerState[0];
-		var setFehler = fehlerState[1];
-
-		var sucheState = useState('');
-		var suche = sucheState[0];
-		var setSuche = sucheState[1];
-
 		var blockProps = useBlockProps({ className: 'cbd-block-reference-editor' });
 
-		useEffect(function () {
-			var abgebrochen = false;
+		// Gemeinsamer Auswahlbaustein (Vertrag C aus
+		// docs/PLAN-Inline-Blockreferenz.md). Kann fehlen, wenn
+		// assets/js/block-auswahl.js aus irgendeinem Grund nicht mitkam
+		// (unvollstaendiges Plugin-ZIP, veralteter Cache) - dafuer sorgt der
+		// Waechter weiter unten fuer eine Notice statt einen Absturz.
+		var cbdAuswahl = window.cbdBlockAuswahl || null;
+		var HierarchieAuswahl = (cbdAuswahl && 'function' === typeof cbdAuswahl.HierarchieAuswahl)
+			? cbdAuswahl.HierarchieAuswahl
+			: null;
 
-			if (!wp.apiFetch) {
-				setLaedt(false);
-				setFehler(__('Die Blockliste konnte nicht geladen werden.', TEXTDOMAIN));
-				return undefined;
-			}
-
-			setLaedt(true);
-			wp.apiFetch({ path: '/cbd/v1/blocks' }).then(function (antwort) {
-				if (abgebrochen) {
-					return;
-				}
-				setBloecke(Array.isArray(antwort) ? antwort : []);
-				setLaedt(false);
-			}).catch(function (error) {
-				if (abgebrochen) {
-					return;
-				}
-				console.error('CBD Block-Referenz: Blockliste konnte nicht geladen werden.', error);
-				setFehler(__('Die Blockliste konnte nicht geladen werden.', TEXTDOMAIN));
-				setLaedt(false);
-			});
-
-			return function () {
-				abgebrochen = true;
-			};
-		}, []);
-
-		var aktuellerWert = targetStableId
-			? (String(targetPostId) + '|' + targetStableId)
+		// Ersetzt die vierte, handgeschriebene Fassung der Schluesselregel
+		// "<postId>|<stableId>" (Befund B1a aus AP-3.rev, dort knapp
+		// ausserhalb der urspruenglichen Liste gefunden). Die Regel liefert
+		// jetzt ausschliesslich window.cbdBlockAuswahl.schluessel().
+		var aktuellerWert = (cbdAuswahl && targetStableId)
+			? cbdAuswahl.schluessel({ postId: targetPostId, stableId: targetStableId })
 			: '';
-
-		var treffer = [];
-		var aktuellerTrefferDabei = false;
-		for (var i = 0; i < bloecke.length; i++) {
-			var eintrag = bloecke[i];
-			if (!eintrag || !eintrag.stableId) {
-				continue;
-			}
-			if (!passtZurSuche(eintrag, suche.trim())) {
-				continue;
-			}
-			treffer.push(eintrag);
-			if (aktuellerWert && schluessel(eintrag) === aktuellerWert) {
-				aktuellerTrefferDabei = true;
-			}
-		}
-
-		var optionen = [{
-			label: __('-- Block auswaehlen --', TEXTDOMAIN),
-			value: ''
-		}];
-
-		// Die getroffene Auswahl bleibt in der Liste, auch wenn der Suchtext
-		// sie gerade herausfiltert - sonst zeigte das Auswahlfeld einen Wert
-		// an, den es nicht kennt, und verwuerfe ihn beim naechsten Rendern.
-		if (aktuellerWert && !aktuellerTrefferDabei) {
-			optionen.push({
-				label: (targetPostTitle || __('(unbekannte Seite)', TEXTDOMAIN))
-					+ ' → '
-					+ (targetBlockTitle || targetStableId),
-				value: aktuellerWert
-			});
-		}
-
-		for (var j = 0; j < treffer.length; j++) {
-			optionen.push({
-				label: (text(treffer[j].postTitle) || __('(ohne Titel)', TEXTDOMAIN))
-					+ ' → '
-					+ (text(treffer[j].blockTitle) || text(treffer[j].stableId)),
-				value: schluessel(treffer[j])
-			});
-		}
 
 		// Ein selbst geschriebener Link-Text bleibt erhalten; nur der
 		// automatisch vorbelegte wird beim Zielwechsel nachgezogen.
 		var linkTextIstAutomatisch = ('' === linkText) || (linkText === autoLinkText(targetBlockTitle));
 
-		function waehleZiel(wert) {
-			if (!wert) {
+		function waehleZiel(gewaehlt) {
+			if (!gewaehlt) {
 				var leer = {
 					targetStableId: '',
 					targetAnchor: '',
@@ -216,18 +135,6 @@
 					leer.linkText = '';
 				}
 				setAttributes(leer);
-				return;
-			}
-
-			var gewaehlt = null;
-			for (var k = 0; k < bloecke.length; k++) {
-				if (schluessel(bloecke[k]) === wert) {
-					gewaehlt = bloecke[k];
-					break;
-				}
-			}
-
-			if (!gewaehlt) {
 				return;
 			}
 
@@ -249,33 +156,26 @@
 
 		var hatZiel = !!(targetStableId || targetBlockId);
 
+		// Hierarchische Zielauswahl aus assets/js/block-auswahl.js: Suchfeld,
+		// Kaskade ueber die Seitenhierarchie und Block-Auswahlfeld in einer
+		// Komponente, die ihre Daten selbst bezieht (Zusicherung 1 aus
+		// Vertrag C) und nie wirft (Zusicherung 2). `onWaehle` bekommt direkt
+		// den gewaehlten Eintrag aus Vertrag A oder `null` beim Abwaehlen -
+		// die Zuordnung Listeneintrag -> Blockattribute in waehleZiel() oben
+		// bleibt dieselbe wie zuvor.
+		var zielAuswahl = HierarchieAuswahl
+			? el(HierarchieAuswahl, {
+				wert: aktuellerWert,
+				onWaehle: waehleZiel
+			})
+			: (Notice ? el(Notice, {
+				status: 'error',
+				isDismissible: false
+			}, __('Der Auswahlbaustein fuer die Zielauswahl (assets/js/block-auswahl.js) ist nicht vorhanden. Seite neu laden; besteht das Problem weiter, das Plugin pruefen.', TEXTDOMAIN)) : null);
+
 		var seitenleiste = el(InspectorControls, {},
 			el(PanelBody, { title: __('Block-Referenz Einstellungen', TEXTDOMAIN) },
-				el(TextControl, {
-					label: __('Blocksuche', TEXTDOMAIN),
-					value: suche,
-					onChange: function (wert) { setSuche(wert); },
-					help: __('Filtert die Auswahlliste nach Seitentitel und Blocktitel.', TEXTDOMAIN),
-					__next40pxDefaultSize: true,
-					__nextHasNoMarginBottom: true
-				}),
-
-				el(SelectControl, {
-					label: __('Ziel-Block', TEXTDOMAIN),
-					value: aktuellerWert,
-					options: optionen,
-					onChange: waehleZiel,
-					help: laedt
-						? __('Lade Container-Bloecke...', TEXTDOMAIN)
-						: sprintf(__('%s Treffer', TEXTDOMAIN), String(treffer.length)),
-					__next40pxDefaultSize: true,
-					__nextHasNoMarginBottom: true
-				}),
-
-				fehler ? el('p', {
-					className: 'cbd-block-reference-fehler',
-					style: { color: '#b32d2e' }
-				}, fehler) : null,
+				zielAuswahl,
 
 				hatZiel ? el(TextControl, {
 					label: __('Link-Text', TEXTDOMAIN),
@@ -312,29 +212,19 @@
 
 		var inhalt;
 
-		if (laedt) {
-			inhalt = el(Placeholder, {
-				icon: 'admin-links',
-				label: __('Block-Referenz', TEXTDOMAIN)
-			},
-				el(Spinner, {}),
-				el('p', {}, __('Lade Container-Bloecke...', TEXTDOMAIN))
-			);
-		} else if (!hatZiel) {
+		if (!hatZiel) {
+			// Kein eigener Ladezustand mehr abzufragen: Die Zielauswahl
+			// bezieht ihre Daten selbst (siehe oben), die Leinwand muss
+			// darauf nicht warten. Die fruehere Hinweiszeile mit der Anzahl
+			// verfuegbarer Container-Block-Eintraege entfaellt ersatzlos
+			// (Befund B1b aus AP-3.rev) - ihre Quelle, der inzwischen
+			// entfernte lokale Zustand fuer die Liste, gibt es nicht mehr;
+			// eine erneut erratene Zahl waere falsch.
 			inhalt = el(Placeholder, {
 				icon: 'admin-links',
 				label: __('Block-Referenz', TEXTDOMAIN),
 				instructions: __('Waehle einen Container-Block in den Einstellungen rechts aus.', TEXTDOMAIN)
-			},
-				el('p', {
-					className: 'cbd-block-reference-hinweis',
-					style: { fontSize: '14px', color: '#666' }
-				},
-					bloecke.length > 0
-						? sprintf(__('%s Container-Bloecke verfuegbar', TEXTDOMAIN), String(bloecke.length))
-						: __('Keine Container-Bloecke gefunden', TEXTDOMAIN)
-				)
-			);
+			});
 		} else {
 			inhalt = el('div', { className: 'cbd-block-reference-preview' },
 				el('div', { className: 'cbd-block-reference-preview-header' },

@@ -433,6 +433,33 @@ check(
 );
 check('1.9 · direkter Aufruf ist per ABSPATH-Pruefung verhindert', false !== strpos($quelle, "!defined('ABSPATH')"));
 
+// AP-4.fix1 (Befund F2): Die URL-Bildungsregel steht an DREI Stellen
+// (ziel_href() hier, render.php, format.js). AP-3.fix5 hatte bereits einen
+// wechselseitigen Kommentar zwischen ziel_href() und render.php gesetzt, aber
+// keine der beiden PHP-Fassungen nannte format.js zurueck. Ein automatischer
+// Waechter ist nicht moeglich (andere Sprache) - diese zwei Pruefungen
+// nageln wenigstens fest, dass die Kommentarzeile nicht wieder verschwindet.
+//
+// 1.10 liest gezielt das DOCBLOCK unmittelbar vor ziel_href() - ein blosses
+// strpos() ueber die GANZE Datei waere hier wertlos, weil die Konstante
+// FORMAT_SCRIPT bereits ganz woanders den Pfad 'blocks/block-reference/format.js'
+// enthaelt und die Zusicherung dadurch nie rot werden koennte.
+$ziel_href_docblock = '';
+if (preg_match('/\/\*\*((?:(?!\*\/).)*)\*\/\s*private static function ziel_href/s', $quelle, $treffer)) {
+    $ziel_href_docblock = $treffer[1];
+}
+check(
+    '1.10 · ziel_href()-Kommentar nennt format.js als dritte Fassung der URL-Regel (AP-4.fix1/F2)',
+    '' !== $ziel_href_docblock && false !== strpos($ziel_href_docblock, 'format.js'),
+    $ziel_href_docblock
+);
+
+$render_quelle = file_get_contents($plugin_dir . 'blocks/block-reference/render.php');
+check(
+    '1.11 · render.php nennt format.js als dritte Fassung der URL-Regel zurueck (AP-4.fix1/F2)',
+    false !== strpos($render_quelle, 'format.js')
+);
+
 // =========================================================================
 // 2 · Hooks und Prioritaet (AK8)
 // =========================================================================
@@ -544,14 +571,22 @@ check(
 $daten = CBD_Inline_Reference::format_script_daten($vorhandene_datei);
 check('3b.4 · jetzt liefert format_script_daten() einen Datensatz', is_array($daten), $daten);
 
+// AP-4.fix1 (Befund F1): `wp-data` ist seit diesem AP eine ausdruecklich
+// deklarierte Abhaengigkeit (format.js ruft wp.data.dispatch('core/notices')
+// fuer die Warnung bei core/link-Konflikten auf). Vorher war das Script nur
+// zufaellig geladen, weil wp-block-editor/wp-components es mitbringen -
+// genau die Fehlerfamilie, vor der class-cbd-block-reference.php:155-158
+// warnt. Die Liste hier wird deshalb um genau einen Eintrag laenger; 3b.6
+// bleibt dieselbe Zusicherung ("keine weiteren als die erwarteten"), nur mit
+// der neuen, groesseren Zahl.
 $erwartete_deps = array(
-    'wp-rich-text', 'wp-block-editor', 'wp-components', 'wp-element', 'wp-i18n', 'wp-api-fetch', 'cbd-block-auswahl',
+    'wp-rich-text', 'wp-block-editor', 'wp-components', 'wp-element', 'wp-i18n', 'wp-api-fetch', 'cbd-block-auswahl', 'wp-data',
 );
 $deps = is_array($daten) ? (array) $daten['deps'] : array();
 foreach ($erwartete_deps as $dep) {
     check('3b.5 · Abhaengigkeit ' . $dep . ' ist deklariert', in_array($dep, $deps, true), $deps);
 }
-check('3b.6 · keine weiteren Abhaengigkeiten', count($deps) === count($erwartete_deps), $deps);
+check('3b.6 · keine weiteren Abhaengigkeiten als die inzwischen acht erwarteten (AP-4.fix1: wp-data ergaenzt)', count($deps) === count($erwartete_deps), $deps);
 check('3b.7 · Handle ist cbd-block-reference-format', is_array($daten) && 'cbd-block-reference-format' === $daten['handle'], $daten['handle'] ?? null);
 check(
     '3b.8 · Quelle zeigt auf die Plugin-URL',
@@ -565,24 +600,80 @@ check(
     $daten['ver'] ?? null
 );
 
-// AK9 — der eigentliche Zustand nach diesem AP: format.js gibt es noch nicht.
-echo "\n== 3c · AK9: format.js existiert noch nicht ==\n";
+// AK9 (AP-3.3) — der Wächter, jetzt mit vorhandener format.js.
+//
+// WARUM DIESE GRUPPE IN AP-4.2 UMFORMULIERT WURDE, OHNE SCHWÄCHER ZU WERDEN:
+// Bis AP-4.2 prüfte sie die Zusicherung „solange `format.js` FEHLT,
+// registriert `register_format_script()` nichts" — und zwar dadurch, dass die
+// Datei zu diesem Zeitpunkt tatsächlich nicht existierte. Das war eine Aussage
+// über den Kalender, nicht über den Code: AP-4.2 legt `format.js` an, damit
+// wurde die Vorbedingung selbst falsch (`3c.0` schlug fehl) und mit ihr drei
+// Folgeprüfungen.
+//
+// Die Zusicherung selbst gilt unverändert und wird weiterhin geprüft, nur
+// dauerhaft statt zufällig: über den Test-Seam `format_script_daten($relativ)`
+// mit einem Pfad, den es nie geben wird. Genau dafür hat AP-3.3 den Parameter
+// eingeführt („damit der Harnisch alle drei Zweige des Wächters prüfen kann,
+// ohne format.js anzulegen"). Die drei Zweige liegen damit nach wie vor
+// vollständig unter Prüfung:
+//   fehlender Vertragspartner -> Gruppe 3a.2, 3b.2, 3b.3
+//   fehlende Datei            -> 3c.1 (hier, über den Seam)
+//   alles vorhanden           -> 3b.4-3b.9 und 3c.2/3c.3
+//
+// Zusätzlich hält diese Gruppe jetzt fest, was AP-4.2 braucht und vorher
+// niemand prüfen konnte: dass das Format-Script wirklich im Editor landet.
+// Ein Textformat hängt an keinem Block — reiht `register_format_script()` es
+// nicht selbst ein, lädt es niemand (der Fehler im Plantext von AP-3.3,
+// vom Orchestrator korrigiert).
+echo "\n== 3c · AK9: Waechter des Format-Scripts, format.js vorhanden ==\n";
 
 check(
-    '3c.0 · Vorbedingung: blocks/block-reference/format.js existiert wirklich nicht',
-    !file_exists($plugin_dir . 'blocks/block-reference/format.js')
+    '3c.0 · Vorbedingung: blocks/block-reference/format.js existiert jetzt (AP-4.2)',
+    file_exists($plugin_dir . 'blocks/block-reference/format.js')
 );
-check('3c.1 · format_script_daten() liefert null', null === CBD_Inline_Reference::format_script_daten());
+check(
+    '3c.1 · nicht vorhandene Datei -> format_script_daten() liefert null',
+    null === CBD_Inline_Reference::format_script_daten('blocks/block-reference/gibt-es-nicht.js')
+);
 
 $GLOBALS['test_warnungen'] = 0;
 set_error_handler(function ($no, $str) { $GLOBALS['test_warnungen']++; return true; });
 CBD_Inline_Reference::register_format_script();
 restore_error_handler();
 
-check('3c.2 · es wird nichts registriert', empty($GLOBALS['test_scripts']), $GLOBALS['test_scripts']);
-check('3c.3 · es wird nichts eingereiht', empty($GLOBALS['test_enqueued_scripts']), $GLOBALS['test_enqueued_scripts']);
+check(
+    '3c.2 · genau das Handle cbd-block-reference-format wird registriert',
+    array('cbd-block-reference-format') === array_keys($GLOBALS['test_scripts']),
+    $GLOBALS['test_scripts']
+);
+check(
+    '3c.3 · und genau dieses Handle wird eingereiht',
+    array('cbd-block-reference-format') === $GLOBALS['test_enqueued_scripts'],
+    $GLOBALS['test_enqueued_scripts']
+);
 check('3c.4 · dabei entsteht keine Warnung', 0 === $GLOBALS['test_warnungen'], $GLOBALS['test_warnungen']);
 check('3c.5 · und kein _doing_it_wrong()', 0 === $GLOBALS['test_doing_it_wrong'], $GLOBALS['test_doing_it_wrong']);
+
+// Der zweite Zweig von register_format_script(): Ist das Handle schon
+// registriert, wird es nur noch eingereiht — nicht ein zweites Mal
+// registriert. Vorher nicht prüfbar, weil der erste Aufruf nie ankam.
+CBD_Inline_Reference::register_format_script();
+check(
+    '3c.6 · zweiter Aufruf registriert nicht erneut',
+    1 === count($GLOBALS['test_scripts']),
+    $GLOBALS['test_scripts']
+);
+
+// Buchhaltung zurücksetzen — KEINE abgeschwächte Prüfung, sondern ein
+// Schnitt: Die Gruppen 4 und 5 halten kumulativ fest, dass der INHALTSFILTER
+// kein Script einreiht, solange er keinen Verweis bearbeitet hat
+// (`empty($GLOBALS['test_enqueued_scripts'])`). Diese Zusicherung gilt
+// unverändert; sie darf aber nicht am Editor-Script der Werkzeugleiste
+// scheitern, das Gruppe 3c gerade absichtlich eingereiht hat. Vor AP-4.2 waren
+// beide Listen an dieser Stelle leer — der Schnitt stellt genau diesen
+// Ausgangszustand wieder her.
+$GLOBALS['test_scripts'] = array();
+$GLOBALS['test_enqueued_scripts'] = array();
 
 // =========================================================================
 // 4 · AK7: WP_HTML_Tag_Processor fehlt
@@ -1018,6 +1109,127 @@ if ($GLOBALS['skips'] > 0) {
     echo "\n  [" . $GLOBALS['skips'] . " Pruefung(en) im Doppel-Modus SICHTBAR uebersprungen -- siehe SKIP-Zeilen oben]\n";
 }
 
+// =========================================================================
+// 10 · AP-3.fix5 (Befund S3): fuehrende Nullen bleiben abgelehnt
+// =========================================================================
+//
+// ziel_post_id() lehnt seit AP-3.fix2 auch Ziffernfolgen mit fuehrender Null
+// ab: ctype_digit('045') ist wahr, filter_var('045', FILTER_VALIDATE_INT)
+// aber false (vor AP-3.fix2 ergab (int)'045' noch 45). Der Doc-Kommentar
+// sagte bislang nur "eine reine Ziffernfolge zaehlt" -- "045" IST eine, und
+// keine der bisherigen 155 Pruefungen deckte den Fall ab. Die Ablehnung ist
+// inhaltlich richtig (eine Beitrags-ID hat keine fuehrenden Nullen) und
+// bleibt unveraendert; diese zwei Pruefungen nageln sie fest, statt sie nur
+// im Kommentar zu behaupten. Beide Faelle laufen unabhaengig vom
+// Tag-Processor-Weg (kein Rohtext-Element, kein Kommentar beteiligt) --
+// kein SKIP noetig.
+
+echo "\n== 10 · AP-3.fix5 (S3): fuehrende Nullen ==\n";
+
+$GLOBALS['test_aktuelle_post'] = 999;
+$GLOBALS['test_permalinks'] = array(45 => 'https://example.test/ir-spektroskopie/');
+
+foreach (array('045', '00000000000000000045') as $wert) {
+    $eingabe = verweis($wert);
+    check(
+        '10.1 · AK1: data-target-post="' . $wert . '" bleibt zeichengleich (fuehrende Null)',
+        $eingabe === CBD_Inline_Reference::inhalt_auffrischen($eingabe),
+        $eingabe
+    );
+}
+
+
+// =========================================================================
+// 11 · AP-4.2 (AK14): Duplikatswächter für die Klassenzeichenkette
+// =========================================================================
+//
+// Die Zeichenkette `cbd-block-reference-inline` steht seit AP-4.2 an DREI
+// Stellen: als `CBD_Inline_Reference::KLASSE` (Prüfling dieses Harnischs),
+// als `className` der Formatregistrierung in
+// `blocks/block-reference/format.js` und im delegierten Klick-Selektor von
+// `blocks/block-reference/view.js`. Driften die drei auseinander, bemerkt das
+// ohne Wächter niemand — dieselbe Lage wie bei der dreifachen
+// `stableId`-Extraktion (CLAUDE.md, Abschnitt „Offener Punkt"). Ein Kommentar
+// an der Konstante nennt die beiden anderen Stellen, hält aber nichts fest.
+//
+// Der Wächter kostet drei Zeilen, weil dieser Harnisch ohnehin Quelltext
+// liest (Gruppe 1). Präzedenz: die `:pN`-Zusicherung in
+// `tools/test-classroom-gate.php`, die beim Bauen genau so einen Fall
+// gemeldet hat. Befund S8 aus AP-3.rev.
+//
+// Geprüft wird WORTGLEICHES Vorkommen, nicht „irgendwie ähnlich": Der
+// CSS-Selektor `.cbd-block-reference-inline` und der JS-Wert
+// `'cbd-block-reference-inline'` enthalten die Konstante beide als
+// Teilzeichenkette — eine umbenannte Klasse nicht mehr. Beide Prüfungen
+// laufen unabhängig vom Tag-Processor-Weg, kein SKIP nötig.
+
+echo "\n== 11 · AP-4.2 (AK14): Duplikatswaechter Klassenzeichenkette ==\n";
+
+// AK6 (AP-4.fix1): Die beiden Pruefungen dieser Gruppe trugen beide die
+// Nummer 11.1 - eine Zaehlvariable gibt jeder Datei ihre eigene Nummer
+// (11.1, 11.2), rein kosmetisch, keine Verhaltensaenderung.
+$duplikatswaechter_nummer = 0;
+foreach (array('blocks/block-reference/format.js', 'blocks/block-reference/view.js') as $js_datei) {
+    $duplikatswaechter_nummer++;
+    $js_pfad = $plugin_dir . $js_datei;
+    $js_quelle = file_exists($js_pfad) ? file_get_contents($js_pfad) : '';
+    check(
+        '11.' . $duplikatswaechter_nummer . ' · ' . $js_datei . ' nennt CBD_Inline_Reference::KLASSE ('
+            . CBD_Inline_Reference::KLASSE . ') wortgleich',
+        '' !== $js_quelle && false !== strpos($js_quelle, CBD_Inline_Reference::KLASSE),
+        $js_pfad
+    );
+}
+
+// =========================================================================
+// 12 · AP-4.fix1 (F3): Entfernen-Knopf bei zusammengefallener Auswahl im
+//      aktiven Format bleibt bedienbar
+// =========================================================================
+//
+// AK2 von AP-4.2 verlangte woertlich "Knopf deaktiviert, wenn
+// value.start === value.end" - und traf damit auch den Fall, dass der
+// Cursor OHNE Markierung INNERHALB eines bereits gesetzten Inline-Verweises
+// steht. Der Knopftitel lautet in diesem Moment "Block-Verweis entfernen",
+// die Umschaltlogik dahinter koennte das auch leisten - `removeFormat()`
+// entfernt bei zusammengefallener Auswahl den ganzen zusammenhaengenden Lauf
+// des Formats (nachgesehen in der WordPress-Quelle
+// wp-includes/js/dist/rich-text.js, Funktion removeFormat(), Zweig
+// startIndex === endIndex). Der Knopf sagte also, was er kann, und liess es
+// nicht zu.
+//
+// AK2 wird durch AP-4.fix1 bewusst PRAEZISIERT, nicht verletzt: deaktiviert
+// bleibt der Knopf nur noch, wenn es wirklich nichts zu tun gibt (leere
+// Markierung UND kein aktives Format); bei leerer Markierung MIT aktivem
+// Format wird er bedienbar.
+//
+// Diese Datei kann `format.js` nicht ausfuehren (kein WordPress/React im
+// Harnisch, siehe Kopfkommentar der Datei zu window.cbdBlockAuswahl). Wie
+// bei Gruppe 1 (Quelltext-Zusicherungen) und Gruppe 11 (Duplikatswaechter)
+// pruefen die folgenden Zusicherungen deshalb den Quelltext: die korrigierte
+// Bedingung muss WORTGLEICH vorkommen, und die alte, zu strenge Bedingung
+// darf als alleinige disabled-Zuweisung nicht mehr vorkommen.
+
+echo "\n== 12 · AP-4.fix1 (F3): Entfernen-Knopf bei Cursor im Verweis ==\n";
+
+$format_pfad = $plugin_dir . 'blocks/block-reference/format.js';
+$format_quelle = file_exists($format_pfad) ? file_get_contents($format_pfad) : '';
+
+check('12.0 · Vorbedingung: blocks/block-reference/format.js existiert', '' !== $format_quelle);
+
+check(
+    '12.1 · disabled-Bedingung des Knopfs lautet markierungLeer(wert) && !istAktiv (als "leer && !istAktiv")',
+    1 === preg_match('/disabled:\s*leer\s*&&\s*!istAktiv/', $format_quelle),
+    $format_quelle
+);
+check(
+    '12.2 · die alte, zu strenge Bedingung ("disabled: leer" ohne !istAktiv) kommt nicht mehr vor',
+    0 === preg_match('/disabled:\s*leer\s*[,}]/', $format_quelle),
+    $format_quelle
+);
+check(
+    '12.3 · leer bleibt ueber markierungLeer(wert) hergeleitet (AK2-Grundlage unveraendert)',
+    false !== strpos($format_quelle, 'var leer = markierungLeer(wert)')
+);
 // =========================================================================
 
 $fails = $GLOBALS['fails'];

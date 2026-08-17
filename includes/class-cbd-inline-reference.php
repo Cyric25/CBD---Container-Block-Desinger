@@ -166,6 +166,13 @@ class CBD_Inline_Reference {
      * hat das Plugin schon einmal gelitten
      * (`class-cbd-block-reference.php:151-160`).
      *
+     * `wp-data` steht seit AP-4.fix1 (Befund F1) aus demselben Grund in der
+     * Liste: `format.js` ruft `wp.data.dispatch('core/notices')` auf, um bei
+     * einem bereits aktiven `core/link` auf der Markierung zu warnen.
+     * `wp-block-editor` und `wp-components` bringen `wp-data` in der Praxis
+     * zwar immer mit — aber genau auf diese zufällige Mitlieferung zu
+     * bauen ist die Fehlerfamilie, die der obige Kommentar beschreibt.
+     *
      * @param string $relativ Pfad des Scripts, relativ zum Plugin-Verzeichnis.
      * @return array|null `null`, wenn nicht registriert werden kann.
      */
@@ -206,6 +213,7 @@ class CBD_Inline_Reference {
                 'wp-i18n',          // __, sprintf
                 'wp-api-fetch',     // von block-auswahl.js gebraucht
                 $auswahl,           // window.cbdBlockAuswahl (Vertrag C)
+                'wp-data',          // wp.data.dispatch('core/notices') bei core/link-Konflikt (format.js, AP-4.fix1/F1)
             ),
             'ver'    => $version,
         );
@@ -355,6 +363,18 @@ class CBD_Inline_Reference {
      * (`md_read_value()`, Zeile ~911-915); diese Stelle hatte sie nicht
      * übernommen.
      *
+     * FÜHRENDE NULLEN WERDEN EBENFALLS ABGELEHNT (AP-3.fix5, Befund S3) —
+     * eine Nebenwirkung von filter_var(), die bis hierher unerwähnt blieb.
+     * `ctype_digit('045')` ist wahr, `filter_var('045', FILTER_VALIDATE_INT)`
+     * liefert trotzdem `false`: Eine führende Null ist keine kanonische
+     * Ganzzahldarstellung. Vor AP-3.fix2 ergab `(int)'045'` noch 45 — die
+     * Ablehnung ist also seit AP-3.fix2 ein zweiter, damals unbemerkter
+     * Verhaltenswechsel. Sie ist inhaltlich richtig (eine Beitrags-ID hat nie
+     * führende Nullen) und bleibt bestehen; betroffen ist jede Ziffernfolge
+     * mit führender Null, beliebig lang, nicht nur `045` selbst. Zwei
+     * Prüfungen in `tools/test-inline-reference.php` (Gruppe 10) nageln das
+     * fest.
+     *
      * @param mixed $roh Rückgabe von `get_attribute()` (string, true oder null).
      * @return int 0, wenn nicht lesbar.
      */
@@ -401,6 +421,13 @@ class CBD_Inline_Reference {
      * auswertet). `add_query_arg()` statt eigener Verkettung, damit auch ein
      * Permalink mit vorhandener Abfrage (`?p=45`, Installationen ohne hübsche
      * Permalinks) richtig ergänzt wird.
+     *
+     * DRITTE FASSUNG (AP-4.fix1, Befund F2): `blocks/block-reference/format.js`
+     * (Funktion `zielHref()`) bildet dieselbe Regel ein drittes Mal nach und
+     * verweist im eigenen Kommentar auf diese Methode UND auf `render.php`
+     * zurück. Diese Zeile schließt den Kreis in die Gegenrichtung — ein
+     * automatischer Wächter ist nicht möglich (andere Sprache). Verhalten
+     * unverändert.
      *
      * @param int   $ziel   Ziel-Beitrag.
      * @param mixed $anker  `data-target-anchor` aus dem Markup.

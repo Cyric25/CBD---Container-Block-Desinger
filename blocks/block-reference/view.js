@@ -855,7 +855,7 @@
 
 		var ziel = event.target;
 		var link = (ziel && typeof ziel.closest === 'function')
-			? ziel.closest('.cbd-block-reference-link')
+			? ziel.closest('.cbd-block-reference-link, .cbd-block-reference-inline')
 			: null;
 
 		if (!link) {

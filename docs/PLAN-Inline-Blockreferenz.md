@@ -1341,7 +1341,52 @@ festhalten, damit es nicht ein drittes Mal geändert wird.
 
 **Tests (TDD):** rote Fälle zuerst.
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+**Übergabenotiz (erledigt, zweiter Anlauf):** Der erste Agent starb am
+Monatsbudget mitten in der roten Phase (`d30becf`, drei rote Prüfungen zu S5).
+Der zweite hat darauf aufgebaut, ohne sie neu zu bauen. Rote Phase `bf0bbfc`
+(85 grün + 12 rot), grüne Phase `db58678`. **97/97 grün**, `check-php74` grün.
+
+**Der Agent hat einen Zähler gefunden, den dieser Plan nicht nannte.** Der
+Plantext führt drei Prüfungen auf, die beim Verschieben von
+`update_meta_cache()` rot werden (`10.4`, `F1-AK5.2`, `F1-AK5.6`). Es waren
+**vier**: `10.2` ist strukturell identisch zu `10.4` (dieselbe Zusicherung,
+5 statt 50 Seiten). Der Agent hat das experimentell festgestellt — Code
+testweise geändert, Tests gefahren, zurückgesetzt — und den vierten Zähler
+mit derselben Begründung mitgezogen, statt ihn rot stehen zu lassen oder
+separat zu melden. Richtig so.
+
+**Nachgeprüft vom Orchestrator, weil hier die eigentliche Gefahr lag:** Der
+Diff enthält **genau fünf** gelöschte `check()`-Zeilen — die vier
+umformulierten Zähler plus `11.3`. Nichts anderes ist verschwunden. Und die
+Zusicherung „genau ein Aufruf in Stufe 2", die bei der Umformulierung hätte
+untergehen können, steht als `F3-AK2.1` an einer **sauber isolierten** Stelle,
+an der nur Stufe 2 definiert ist — das ist stärker als die alte Fassung, die
+sie an einer Stelle prüfte, wo Stufe 1 längst aktiv war und die Zusicherung
+faktisch nichts mehr aussagte.
+
+**Zwei Stellen, an denen der Plantext ungenau war:**
+
+1. **Der `(object)`-Cast gehört nach `get_seitenbaum()`, nicht nach
+   `baue_seitenbaum()`.** Der Plantext nannte die Variablennamen aus dem
+   `return` von `baue_seitenbaum()` — ein Cast dort hätte **rund 60 der 82
+   Bestandsprüfungen zerstört**, weil sie mit Array-Syntax auf
+   `$baum['knoten'][12]['tiefe']` zugreifen und `count()`/Array-Zugriff auf
+   `stdClass` in PHP 8 fatal ist. `baue_seitenbaum()` bleibt reine,
+   array-basierte Aufbaulogik (so sagt es ihr eigener Docblock); der Cast
+   betrifft nur die tatsächlich nach außen gehende JSON-Antwort. Die
+   Entscheidung des Agenten ist richtig, der Plantext war es nicht.
+2. **`11.3` musste als Folge von S1 angepasst werden** (`count((array) …)`),
+   sonst hätte `count()` auf dem `stdClass` einen `TypeError` geworfen. Die
+   Zusicherung selbst — genau drei Knoten — blieb unverändert; nur der
+   Zugriff wurde typrobust.
+
+**Zur O(n)-Dokumentation von Stufe 2:** nichts zu ergänzen, sie stand bereits
+vollständig aus AP-3.fix1 im Code.
+
+**Vertrag B ändert sich inhaltlich nicht.** S1 erfüllt nur zuverlässig, was
+der Vertrag ohnehin verlangte; S2 entfernt eine nutzlose Abfrage ohne
+Feldinhalte zu ändern; S5 betrifft allein die interne Sortierung der
+`/blocks`-Liste, zu der Vertrag A keine Aussage trifft.
 
 ---
 
@@ -1401,7 +1446,33 @@ Stub-`window`-Technik des Harnischs erreichbar, sofern sie exportiert bzw.
 Prüfung über den beobachtbaren Vertrag zu führen — **nicht** durch
 Aufweichen der Kapselung.
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+**Übergabenotiz (vom Orchestrator aus dem Diff erhoben, nicht vom Agenten
+gemeldet):** Der Agent starb am Monatsbudget der Organisation, nachdem die
+Behebung fertig und grün war, aber bevor er committen konnte. Der Code stand
+unversioniert auf der Platte und wurde vom Orchestrator gesichert (`7331e97`).
+Der rote Test lag bereits als `27259ad` vor — die Rot-vor-Grün-Kette ist
+nachweisbar.
+
+**Gewählter Weg: Nummer 1** (`:885` um `&& aktuellerEintrag` ergänzt). Damit
+verschwindet die Option ganz, sobald der Zielblock gelöscht ist — und mit ihr
+die irreführende Ersatzbeschriftung „(gespeichertes Ziel)", die es nun
+nirgends mehr gibt. Der Kommentar im Code begründet die Wahl ausführlich und
+nennt das Vorbild: Die Suchtreffer-Liste prüfte dieselbe Bedingung bereits
+richtig; der Fehler bestand darin, dass die Blockstufe es nicht tat.
+
+Die Option erscheint jetzt **nur noch** in dem Fall, für den sie gedacht war:
+Der Eintrag existiert noch in `bloecke`, taucht aber in der aktuellen Stufe
+nicht auf (etwa weil er auf einer anderen Seite liegt).
+
+**Was nicht nachgeholt werden konnte:** Die Angabe des Agenten, welche
+Aspekte der Behebung sich **nicht** automatisiert prüfen ließen. Der
+Orchestrator hat das aus dem Code beurteilt: Die reine Optionsbildung ist über
+`ebenen()` erreichbar und getestet; dass beim Anklicken der Option kein
+`melde(null)` mehr läuft, hängt an `onChange` der Komponente und ist ohne
+React-Umgebung nicht prüfbar. **AP-4.3 muss diesen Fall an der Oberfläche
+abnehmen:** Zielblock löschen, Editor mit dem Verweis öffnen, prüfen, dass
+das gespeicherte Ziel nicht von selbst verschwindet und keine anklickbare
+Option es löscht.
 
 ---
 
@@ -1561,7 +1632,42 @@ dieses AP genügt: Editor öffnen, die Kaskade über vier Ebenen durchklicken,
 einen Bestandsblock (Seite 55 oder 62) öffnen und die Vorbelegung prüfen,
 speichern und erneut öffnen. Zusätzlich `node --check`.
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+**Übergabenotiz (vom Orchestrator aus dem Code erhoben, nicht vom Agenten
+gemeldet):** Der Agent meldete die Umsetzung als fertig und starb am
+Monatsbudget der Organisation, bevor er committen konnte. Der Code stand
+unversioniert auf der Platte und wurde gesichert (`15f93fe`, 66 Zeilen neu,
+176 entfernt).
+
+Vom Orchestrator vor der Sicherung nachgeprüft: `node --check` grün; `grep`
+auf die handgeschriebene Schlüsselregel liefert nichts (AK4); `schluessel()`,
+`passtZurSuche()` und der Optionsaufbau sind entfernt; keine verwaisten
+Zustände `bloecke`, `laedt`, `fehler` (AK9); die Zielauswahl läuft über
+`window.cbdBlockAuswahl.HierarchieAuswahl`.
+
+**Zwei bewusste Abweichungen des Agenten, beide im Code begründet und vom
+Orchestrator als richtig beurteilt:**
+
+1. **`text()` bleibt in `index.js` stehen** — aber als *delegierende Hülle*,
+   nicht als eigene Fassung. Der Kommentar begründet es: Ein bloßer Alias
+   (`var text = window.cbdBlockAuswahl.text`) würde beim Fehlen des Bausteins
+   schon bei der Zuweisung bzw. beim ersten Aufruf werfen und die **ganze
+   Seitenleiste** mitreißen — genau der Absturz, den der Wächter um die
+   Zielauswahl herum verhindern soll. Ist der Baustein da, ruft die Hülle
+   ausschließlich seine Fassung auf: Es gibt weiterhin **eine**
+   Verhaltensdefinition. Der Wortlaut von AK4 („existiert nicht mehr") ist
+   damit formal nicht erfüllt, sein Zweck („keine zweite Fassung derselben
+   Logik") schon.
+2. **`aktuellerWert` bleibt als Variablenname**, bezieht seinen Wert aber
+   ausschließlich aus `cbdAuswahl.schluessel({postId, stableId})`. Die
+   Doppelung aus Befund B1a ist damit beseitigt; nur der Name blieb, was
+   nichts verdoppelt.
+
+**Was nicht nachgeholt werden konnte:** Die Liste des Agenten, was AP-4.3 an
+der Oberfläche prüfen muss. Nach Beurteilung des Orchestrators ist das der
+gesamte Sichtteil: Kaskade über vier Ebenen, Vorbelegung eines
+Bestandsblocks, die Hinweiszeile im Canvas (AK9 lässt sich statisch nur
+teilweise belegen), und dass ein gespeicherter Block beim Öffnen nicht als
+geändert markiert wird (AK6).
 
 ---
 
@@ -1699,7 +1805,177 @@ Verweis setzen → speichern → Datenbankinhalt der Seite ansehen (Vertrag D
 zeichenweise prüfen) → Frontend aufrufen → Quelltext ansehen (Vertrag E
 zeichenweise prüfen) → klicken.
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+**Übergabenotiz (erledigt, zweiter Anlauf):** Der erste Anlauf starb am
+Monatsbudget **ohne eine Datei anzulegen**. Der zweite hat wie aufgetragen in
+Etappen committet: `ab0b9f2` (`format.js`), `36b93c5` (`style.css` +
+`view.js`), `84a0db1` (Harnisch).
+
+**160/160** grün, im Doppel-Modus **156/156** (weiterhin 4 sichtbare Skips).
+`node --check` grün für beide JS-Dateien. **AK10 bewiesen:** `git diff
+--numstat` auf `view.js` liefert `1 1` — genau eine geänderte Zeile.
+
+**Das gespeicherte Markup ist gemessen, nicht abgeleitet.** Der Agent hat die
+echten WordPress-Bündel `escape-html.js` und `rich-text.js` vom Testserver in
+node geladen und `applyFormat`/`toHTMLString` aufgerufen. Ergebnis: die
+Attributmenge ist identisch mit Vertrag D, `data-display-mode`,
+`data-same-page` und `aria-haspopup` sind **nicht** enthalten (die setzt
+Vertrag E), `data-target-anchor=""` überlebt die Serialisierung, der Linktext
+bleibt unangetastet. Einzige Abweichung ist die **Reihenfolge** — `rich-text`
+hängt `class` hinten an; AP-3.rev hatte bereits festgehalten, dass keine feste
+Attributreihenfolge erwartet werden darf.
+
+**Entscheidungen des Agenten:**
+
+1. **Knopfsymbol** Dashicon `external`, Titel wechselt zwischen „Block-Verweis
+   einfügen" und „entfernen" — deutlich vom Ketten-Symbol des Link-Knopfs
+   unterscheidbar und dasselbe Symbol, das `index.js` für den Modalmodus
+   schon benutzt.
+2. **`::after` ist `\2197` (↗), nicht `\29C9` (⧉)** — der Pfeil existiert in
+   den Standardschriften aller hier benutzten Geräte; ein fehlendes Zeichen
+   ergäbe ein Ersatzkästchen mitten im Satz. `display: inline-block` ist kein
+   Schmuck: Über ein atomares Inline-Element zieht der Vorfahre seine
+   Unterstreichung nicht, der Pfeil bleibt dadurch ohne Linie. Hover ändert
+   nur `text-decoration-thickness`, also keinen Layoutwert — kein Ruckeln im
+   Textfluss.
+3. **Verschachtelte Links:** Der Knopf bleibt bedienbar, der Dialog öffnet
+   nicht, die Begründung kommt als Snackbar über `core/notices` mit
+   `console.warn` als Rückfall.
+4. **Die Markierung wird beim Öffnen gemerkt**, `applyFormat` läuft darauf —
+   das Öffnen kostet dem Editor den Fokus und damit womöglich `start`/`end`.
+5. **Dialog-Layout inline statt über CSS-Klassen**, weil `style.css` das
+   Frontend-Stylesheet ist und `editor.css` nicht zum Auftrag gehörte.
+
+**Grenzüberschreitung, geprüft und angenommen:** Der Auftrag nannte für den
+Harnisch „nur den Duplikatswächter". Der Agent musste **Gruppe 3c
+umformulieren**, und das war richtig: Sie prüfte „solange `format.js` fehlt,
+registriert `register_format_script()` nichts" dadurch, dass die Datei nicht
+existierte — nach seinen eigenen Worten „eine Aussage über den Kalender". Mit
+dem Anlegen der Datei wären `3c.0`–`3c.3` plus `4.2` und `5.9` rot geblieben.
+
+Vom Orchestrator nachgeprüft: **Die Abdeckung ist nicht gesunken, sondern
+gestiegen.** `3c.1` prüft den Fehlt-Fall jetzt **dauerhaft** über den
+Test-Seam `format_script_daten($relativ)` mit einem Pfad, den es nie geben
+wird — genau dafür hatte AP-3.3 den Parameter eingeführt. `3c.2`/`3c.3`
+halten stattdessen fest, was vorher niemand prüfen konnte: dass genau
+`cbd-block-reference-format` registriert **und eingereiht** wird. `3c.4`,
+`3c.5`, `4.2` und `5.9` bestehen wortgleich weiter, `3c.6` ist neu. Genau
+drei gelöschte Prüfzeilen im Diff.
+
+**AK12, aus dem Gutenberg-Quelltext belegt (WordPress 7.0.4):** Sichtbar in
+`core/paragraph`, `core/heading`, `core/list-item`, Tabellenzelle und der
+geteilten `Caption`-Komponente (gilt damit auch für Bildunterschriften).
+**Nicht** sichtbar in `core/button` und rund fünfzehn weiteren Blöcken —
+Ursache ist `withoutInteractiveFormatting` bzw. `allowedFormats`, und
+`tagName: 'a'` steht in `interactiveContentTags`. Eigenschaft von Gutenberg,
+kein Befund.
+
+**Kleinigkeit für AP-4.doc:** Die zwei Prüfungen der neuen Gruppe 11 tragen
+**beide** die Nummer `11.1`. Rein kosmetisch, aber beim nächsten Anfassen der
+Datei zu berichtigen.
+
+---
+
+### AP-4.fix1: Fehlende Abhängigkeit, dritte URL-Fassung, Verweis ohne Markierung entfernen
+
+**Modell:** sonnet
+**Abhängigkeiten:** AP-4.2
+**Dateien:** `includes/class-cbd-inline-reference.php`,
+`blocks/block-reference/render.php`, `blocks/block-reference/format.js`,
+`tools/test-inline-reference.php`
+**Anlass:** drei Punkte, die AP-4.2 selbst gemeldet und bewusst nicht
+umgesetzt hat, weil sie außerhalb seiner Dateigrenze lagen oder dem Wortlaut
+eines Akzeptanzkriteriums widersprachen.
+
+**F1 — `wp-data` ist keine deklarierte Abhängigkeit.** `format.js` benutzt
+`wp.data.dispatch('core/notices')` für die Warnung bei verschachtelten Links
+(AK3 von AP-4.2), aber `format_script_daten()` in
+`includes/class-cbd-inline-reference.php` führt `wp-data` nicht auf. In der
+Praxis ist es geladen — `wp-block-editor` und `wp-components` hängen zwingend
+daran —, und der Zugriff steht hinter Existenzprüfungen. **Es ist dieselbe
+Fehlerfamilie, an der das Plugin schon einmal gelitten hat:**
+`class-cbd-block-reference.php:155-158` beschreibt, wie ein Script ohne
+deklarierte Abhängigkeit ausgeliefert wurde und `wp.blocks` beim Ausführen
+womöglich noch nicht geladen war. Auf eine zufällig vorhandene Abhängigkeit
+zu bauen ist genau das, was dieser Kommentar verbietet.
+
+*Umsetzung:* `wp-data` als achten Eintrag ergänzen. **Die Prüfungen `3b.5`
+und `3b.6` zählen die Abhängigkeiten und verlangen „keine weiteren" — sie
+müssen mitgezogen werden**, umformuliert, nicht abgeschwächt.
+
+**F2 — die URL-Bildungsregel steht jetzt an drei Stellen.** `ziel_href()`,
+`render.php` und neu `format.js`. AP-3.fix5 hat für die ersten beiden
+wechselseitige Kommentare gesetzt; `format.js` verweist auf beide, **aber
+keine der beiden PHP-Fassungen verweist auf `format.js` zurück**. Dieselbe
+Lücke wie damals, nur eine Ebene weiter. Ein automatischer Wächter ist nicht
+möglich (andere Sprache).
+
+*Umsetzung:* je eine Kommentarzeile in `ziel_href()` und in `render.php`, die
+`format.js` als dritte Fassung nennt. Kein Verhalten ändern.
+
+**F3 — ein Verweis lässt sich nicht entfernen, wenn der Cursor darin steht.**
+AK2 von AP-4.2 verlangte wörtlich „Knopf deaktiviert, wenn
+`value.start === value.end`". Folge: Steht der Cursor **innerhalb** eines
+bestehenden Inline-Verweises, ohne dass Text markiert ist, ist der Knopf
+deaktiviert — obwohl sein Titel in diesem Moment „Block-Verweis entfernen"
+lautet und die Umschaltlogik dahinter genau das könnte. Der Knopf sagt also,
+was er kann, und lässt es nicht zu.
+
+*Umsetzung:* `disabled: markierungLeer(wert) && !istAktiv`. `removeFormat`
+löscht bei zusammengefallener Auswahl den ganzen Lauf — der Agent hat das in
+der WordPress-Quelle nachgesehen. **AK2 von AP-4.2 wird damit bewusst
+präzisiert**, nicht verletzt: Der Knopf bleibt deaktiviert, wenn es nichts zu
+tun gibt, und wird bedienbar, wenn es etwas zu entfernen gibt.
+
+**Akzeptanzkriterien:**
+
+- AK1: `format_script_daten()` führt `wp-data` auf; `3b.5`/`3b.6` sind
+  umformuliert und grün, die Fallzahl sinkt nicht.
+- AK2: `ziel_href()` und `render.php` nennen `format.js` als dritte Fassung.
+  Der Diff von `render.php` enthält **nur** Kommentarzeilen.
+- AK3: Bei leerer Markierung **ohne** aktives Format ist der Knopf
+  deaktiviert; bei leerer Markierung **mit** aktivem Format ist er bedienbar.
+- AK4: Die 160 Prüfungen bleiben grün, beide Betriebsarten; nichts
+  abgeschwächt.
+- AK5: `node --check blocks/block-reference/format.js` und
+  `php tools/check-php74.php` grün.
+- AK6: Die Doppelnummerierung `11.1`/`11.1` ist berichtigt.
+
+**Übergabenotiz (erledigt):** `wp-data` ist als achte Abhängigkeit
+deklariert, `3b.5`/`3b.6` entsprechend umformuliert. `ziel_href()` und
+`render.php` nennen `format.js` jetzt als dritte Fassung der URL-Regel
+zurück — reine Dokumentation, der `render.php`-Diff ist eine einzelne
+Kommentarzeile. Der Werkzeugleisten-Knopf ist jetzt
+`disabled: leer && !istAktiv`. **167/163** grün, `node --check` und
+`check-php74` grün. Commit `cf49bdc`.
+
+**AK2 von AP-4.2 ist damit bewusst präzisiert, nicht verletzt:** Der Knopf
+bleibt deaktiviert, wenn nichts zu tun ist, und wird bedienbar, sobald etwas
+zu entfernen ist. Wer den Diff später liest, soll das nicht für eine
+Regression halten.
+
+**Der Agent hat eine Falle in seinem eigenen Test gefunden.** Ein naives
+`strpos($quelle, 'format.js')` über die Klassendatei wäre **nie rot
+geworden**, weil die Konstante `FORMAT_SCRIPT` diesen String bereits enthält —
+die Prüfung hätte bestanden, ohne etwas zu prüfen. Prüfung `1.10` liest
+deshalb gezielt nur den Docblock unmittelbar vor `ziel_href()` und war
+dadurch echt rot, bis der Kommentar stand. (Der reguläre Ausdruck steht im
+Harnisch, nicht im Prüfling — Prüfung `1.1` verbietet sie nur in
+`class-cbd-inline-reference.php` selbst.)
+
+**Die Fundstelle zu `removeFormat` ist nachgesehen, nicht übernommen:**
+`wp-includes/js/dist/rich-text.js:1309-1330` (WordPress 7.0.4). Bei
+zusammengefallener Auswahl weitet die Funktion `startIndex`/`endIndex` so
+lange aus, wie dasselbe Format-Objekt (Referenzgleichheit) dort liegt — sie
+entfernt also den ganzen zusammenhängenden Lauf. Zusätzlich hat der Agent das
+echte `format.js` mit gemockten `wp.*`-Globalen **in node ausgeführt** und die
+vier Zustände gemessen: leer+inaktiv `true`, leer+aktiv `false`,
+markiert+inaktiv `false`, markiert+aktiv `false`.
+
+**Grenze der Prüfung, ausdrücklich gemeldet:** Die Abdeckung von AK3 im
+versionierten Bestand ist **quelltextbasiert** (Gruppe 12), nicht
+laufzeitbasiert — der PHP-Harnisch kann React nicht ausführen, und eine neue
+JS-Testdatei lag außerhalb der Vier-Dateien-Grenze. Die Node-Ausführung war
+eine Verifikation, kein Ersatz. **AP-4.3 nimmt das an der Oberfläche ab.**
 
 ---
 
@@ -1908,12 +2184,13 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.fix1 | `gesperrt` ohne Abfrage je Seite ermitteln | sonnet | 3.1 | ☑ |
 | AP-3.fix2 | `ziel_post_id()` ohne `(int)`-Cast auf überlange Ziffernfolgen | sonnet | 3.3 | ☑ |
 | AP-3.rev | Unabhängiges Review Phase 3 | opus | 3.1, 3.2, 3.3, 3.fix1, 3.fix2 | ☑ (2. Anlauf) |
-| AP-3.fix3 | Antwortform, überflüssige Abfrage und Sortierung der Baum-Route | sonnet | 3.1, 3.fix1 | ☐ |
-| AP-3.fix4 | „(gespeichertes Ziel)" darf das Ziel nicht löschen | sonnet | 3.2 | ☐ |
-| AP-3.fix5 | Führende Nullen dokumentieren, URL-Regel beidseitig kommentieren | sonnet | 3.fix2 | ☐ |
-| AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☐ |
-| AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev | ☐ |
-| AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2 | ☐ |
+| AP-3.fix3 | Antwortform, überflüssige Abfrage und Sortierung der Baum-Route | sonnet | 3.1, 3.fix1 | ☑ (2. Anlauf) |
+| AP-3.fix4 | „(gespeichertes Ziel)" darf das Ziel nicht löschen | sonnet | 3.2 | ☑ |
+| AP-3.fix5 | Führende Nullen dokumentieren, URL-Regel beidseitig kommentieren | sonnet | 3.fix2 | ☑ |
+| AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☑ |
+| AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev, 3.fix5 | ☑ (2. Anlauf) |
+| AP-4.fix1 | Fehlende Abhängigkeit, dritte URL-Fassung, Verweis ohne Markierung | sonnet | 4.2 | ☑ |
+| AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2, 4.fix1 | ☐ |
 | AP-4.rev | Unabhängiges Review Phase 4 | opus | 4.3 | ☐ |
 | AP-4.doc | Dokumentation und Projektabschluss | sonnet | 4.rev | ☐ |
 
@@ -1945,9 +2222,16 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.rev | Review, zweiter Anlauf: alle neun Prüfschwerpunkte | **☑ Welle 2 freigegeben.** 1 blockierender Befund (B1, Plantext — erledigt), 8 „sollte" (→ AP-3.fix3/4/5 und AKs in Welle 2), 14 Anmerkungen. Selbst gefahren: 13 PHP-Harnische, beide Betriebsarten, `node --check`, `check-php74`, plus zwei eigene Angriffssonden (33 + 20 neue Fälle) | 2026-08-17 |
 | AP-3.rev | Idempotenz des Filters (zwei- und dreifache Anwendung) | byte-identisch — wichtig wegen `do_shortcode` auf Priorität 11 | 2026-08-17 |
 | AP-3.rev | Abfragenzahl `cbd/v1/seitenbaum` in der Wirklichkeit | **≤ 4, seitenzahlunabhängig** bei 260 Seiten mit gesperrter Seite. AP-3.fix1 hat den O(n)-Pfad wirklich beseitigt | 2026-08-17 |
-| AP-3.fix3 | S1/S2/S5: JSON-Form, Meta-Cache, Sortierung | – | – |
-| AP-3.fix4 | S4: gespeichertes Ziel wird nicht gelöscht | – | – |
-| AP-3.fix5 | S3/S7: führende Nullen, URL-Regel beidseitig | – | – |
+| AP-3.fix3 | `php tools/test-seitenbaum.php` | **97/97 bestanden** (82 Bestand + 12 neu + 4 umformuliert – 1 Zählweise). Rot-vor-Grün über `d30becf` → `bf0bbfc` → `db58678` | 2026-08-17 |
+| AP-3.fix3 | Keine Prüfung heimlich entfernt | **nachgeprüft:** genau **fünf** gelöschte `check()`-Zeilen im Diff, exakt die gemeldeten (vier Zähler + `11.3`) | 2026-08-17 |
+| AP-3.fix3 | Die Zusicherung „genau ein Aufruf in Stufe 2" | **erhalten und verstärkt** als `F3-AK2.1`, jetzt an einer Stelle, an der nur Stufe 2 definiert ist — vorher stand sie dort, wo Stufe 1 längst aktiv war und sagte faktisch nichts aus | 2026-08-17 |
+| AP-3.fix3 | JSON-Objektform für alle vier Baumformen | `F3-AK1.1`–`F3-AK1.8` grün (flach, hierarchisch, einzelne Wurzel, leer × `knoten`/`kinder`) | 2026-08-17 |
+| AP-3.fix3 | `php tools/check-php74.php` | grün, 568 Dateien | 2026-08-17 |
+| AP-3.fix4 | `node tools/test-block-auswahl.js`, `node --check` | **grün** (vom Orchestrator gefahren, bevor er den unversionierten Stand sicherte). Weg 1 gewählt, Rot-vor-Grün über `27259ad` → `7331e97` nachweisbar | 2026-08-17 |
+| **Zwischenfall** | Vier Agenten gleichzeitig am **Monatsbudget der Organisation** gestorben | Kein Verlust. Der Orchestrator hat jeden Zustand geprüft und getrennt committet: AP-4.1 (`15f93fe`, fertig), AP-3.fix4 (`7331e97`, fertig und grün), AP-3.fix3 (`d30becf`, **absichtlich rot**, ausdrücklich als UNVOLLSTAENDIG beschriftet), AP-4.2 (**nichts** auf der Platte, neu zu machen). `main` unversehrt und grün | 2026-08-17 |
+| AP-3.fix5 | `php tools/test-inline-reference.php`, beide Betriebsarten | **157/157** und **153/153** (weiterhin genau 4 sichtbare Skips, keine neuen). Vom Orchestrator nachgeprüft | 2026-08-17 |
+| AP-3.fix5 | AK3: `render.php` nur Kommentar | bestätigt — der Diff enthält **genau eine** Zeile, einen Kommentar; in `class-cbd-inline-reference.php` keine einzige Nicht-Kommentarzeile geändert | 2026-08-17 |
+| AP-3.fix5 | Kein rotes Testfundament | **richtig so und ausdrücklich gemeldet:** Beide Befunde verlangten „dokumentieren statt ändern", die neuen Prüfungen bestanden also sofort. Der Agent hat vorher einen Baseline-Lauf gefahren (155/151), um das zu belegen, statt eine rote Phase zu erfinden | 2026-08-17 |
 | AP-3.rev | Vorprüfung des Orchestrators zu Schwerpunkt 1 (Angriffssonde, 40 Fälle) | **39/40**; der eine Fehlschlag → `AP-3.fix2`. Gruppe A (Zeichengleichheit, 12 Fälle) vollständig grün. Ersetzt das AP **nicht** — acht Schwerpunkte offen | 2026-08-17 |
 | AP-3.fix2 | `php tools/test-inline-reference.php` | **155/155**, im Doppel-Modus **151/151** mit **4 sichtbar** übersprungenen Fällen. Beides vom Orchestrator nachgeprüft | 2026-08-17 |
 | AP-3.fix2 | Angriffssonde des Orchestrators erneut gefahren | **40/40** — der Fehlschlag B9 ist behoben | 2026-08-17 |
@@ -1955,8 +2239,16 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.fix2 | `php tools/check-php74.php` | grün, 568 Dateien | 2026-08-17 |
 | AP-4.1 | `node --check blocks/block-reference/index.js` | – | – |
 | AP-4.1 | Kaskade über vier Ebenen, Bestandsblock | – | – |
-| AP-4.2 | `node --check format.js`, `view.js` | – | – |
-| AP-4.2 | Rundlauf Vertrag D und E zeichenweise | – | – |
+| AP-4.2 | `node --check format.js`, `view.js` | grün / grün | 2026-08-17 |
+| AP-4.2 | `php tools/test-inline-reference.php`, beide Betriebsarten | **160/160** und **156/156** (4 sichtbare Skips). Vom Orchestrator nachgeprüft | 2026-08-17 |
+| AP-4.2 | AK10: genau eine Zeile in `view.js` | **bewiesen**, `git diff --numstat` liefert `1 1` | 2026-08-17 |
+| AP-4.2 | Rundlauf Vertrag D und E zeichenweise | **gemessen**, nicht abgeleitet: die echten Bündel `escape-html.js`/`rich-text.js` vom Testserver in node geladen, `applyFormat`/`toHTMLString` gerufen. Attributmenge = Vertrag D; die drei serverseitigen Attribute fehlen korrekt; Filter zweimal angewandt byte-identisch | 2026-08-17 |
+| AP-4.2 | AK14: Duplikatswächter | zwei Prüfungen, beide grün — `format.js` **und** `view.js` nennen die Konstante wortgleich | 2026-08-17 |
+| AP-4.2 | Gruppe 3c umformuliert (Grenzüberschreitung) | **geprüft und angenommen:** genau drei gelöschte Prüfzeilen; `3c.1` prüft den Fehlt-Fall jetzt **dauerhaft** über den Test-Seam statt über die Nichtexistenz der Datei, `3c.2`/`3c.3` prüfen den vorher unbeweisbaren positiven Fall, `3c.4`/`3c.5`/`4.2`/`5.9` wortgleich erhalten. Abdeckung gestiegen | 2026-08-17 |
+| AP-4.fix1 | `php tools/test-inline-reference.php`, beide Betriebsarten | **167/167** und **163/163** (4 sichtbare Skips). Vom Orchestrator nachgeprüft; genau **eine** umformulierte Prüfzeile im Diff | 2026-08-17 |
+| AP-4.fix1 | `render.php` nur Kommentare | bestätigt: kumulativ **zwei** hinzugefügte Zeilen seit `vor-phase-4`, beide Kommentare, keine Löschung | 2026-08-17 |
+| AP-4.fix1 | `removeFormat` bei zusammengefallener Auswahl | Fundstelle `rich-text.js:1309-1330` nachgesehen **und** das echte `format.js` in node ausgeführt: leer+inaktiv `true`, leer+aktiv `false` | 2026-08-17 |
+| AP-4.fix1 | `node --check`, `php tools/check-php74.php` | grün / grün, 568 Dateien | 2026-08-17 |
 | AP-4.3 | Alle sieben Prüfharnische (Regression) | – | – |
 | AP-4.3 | ZIP-Inhalt und Autoloader | – | – |
 | AP-4.3 | Klickliste Seite A und B | – | – |

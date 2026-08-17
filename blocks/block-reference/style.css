@@ -319,3 +319,74 @@
 		padding: 12px;
 	}
 }
+
+/* =============================================================
+   INLINE-VERWEIS (Textformat cbd/block-reference-inline, AP-4.2)
+
+   Gilt für den Verweis MITTEN IM TEXT, den blocks/block-reference/format.js
+   erzeugt. Die Regeln des Blocks weiter oben (:5-72) bleiben unangetastet —
+   insbesondere `.cbd-block-reference-link { display: block; … }` samt
+   Karten-Layout und `transform` beim Überfahren: In einem Absatz zerriss das
+   den Textfluss. Genau deshalb hat der Inline-Verweis eine eigene Klasse
+   (Abschnitt 4 des Plans, docs/PLAN-Inline-Blockreferenz.md).
+
+   Er soll aussehen wie ein Link — nichts weiter. Kein `transform` beim
+   Überfahren: mitten in einer Zeile ruckelt das und verschiebt den Text
+   der Nachbarschaft.
+
+   Die Farben kommen über die Projekt-Variablen mit Rückfallwert, damit die
+   Farbeinstellung des Themes (Customizer → Farbeinstellungen) weiterwirkt;
+   feste Hexwerte hätten sie stillschweigend ausgehebelt.
+   ============================================================= */
+
+.cbd-block-reference-inline {
+	display: inline;
+	color: var(--color-special-text, #71230a);
+	text-decoration: underline;
+	text-decoration-color: var(--color-ui-surface, #e24614);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.15em;
+	cursor: pointer;
+}
+
+.cbd-block-reference-inline:hover,
+.cbd-block-reference-inline:focus {
+	color: var(--color-ui-surface-dark, #c93d12);
+	/* Nur die Linie wird dicker — kein Layoutwert, also kein Umbruch. */
+	text-decoration-thickness: 2px;
+}
+
+.cbd-block-reference-inline:focus-visible {
+	outline: 2px solid var(--color-ui-surface, #e24614);
+	outline-offset: 2px;
+}
+
+/* Das unterscheidende Symbol.
+
+   KEIN ZUSÄTZLICHES MARKUP MÖGLICH: `registerFormatType` erzeugt genau das
+   <a> und nichts darin — ein Icon-Element gäbe es nur über einen zweiten
+   Erzeuger. Deshalb ::after.
+
+   U+2197 (↗) statt des naheliegenderen U+29C9 (⧉, „Fenster über Fenster"):
+   Der Pfeil ist in den Standardschriften aller hier benutzten Geräte
+   vorhanden, das Doppelquadrat nicht überall — ein fehlendes Zeichen ergäbe
+   ein Ersatzkästchen mitten im Satz.
+
+   `display: inline-block` ist kein Schmuck: Die Textdekoration eines
+   Vorfahren wird über ein atomares Inline-Element NICHT gezogen. Der Pfeil
+   bleibt dadurch ohne Unterstreichung — `text-decoration: none` allein
+   würde das nicht leisten, weil die Linie vom <a> gezeichnet wird und nicht
+   vom Pseudo-Element.
+
+   Für Hilfstechnik trägt der Verweis `aria-haspopup="dialog"`; das setzt der
+   Filter CBD_Inline_Reference::inhalt_auffrischen() serverseitig (Vertrag E).
+   Der Pfeil ist nur die sichtbare Entsprechung dazu. */
+.cbd-block-reference-inline::after {
+	content: '\2197';
+	display: inline-block;
+	margin-left: 0.15em;
+	font-size: 0.85em;
+	line-height: 1;
+	vertical-align: baseline;
+	text-decoration: none;
+}

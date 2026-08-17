@@ -66,14 +66,23 @@ class CBD_Blocks_REST_API {
         $blocks = [];
 
         // Query all posts and pages
-        // orderby seit AP-3.1: menu_order zuerst, damit die Reihenfolge
-        // innerhalb einer Hierarchieebene der Redaktionsreihenfolge folgt
-        // statt rein alphabetisch ueber Beitraege und Seiten gemischt zu sein.
+        // orderby ist 'title' (AP-3.fix3, Befund S5). AP-3.1 hatte hier
+        // testweise zuerst nach menu_order und danach nach title sortiert,
+        // mit der Begruendung "damit die Reihenfolge innerhalb einer
+        // Hierarchieebene nicht willkuerlich ist" - das war ein Denkfehler
+        // des Plans: Die Ebenenreihenfolge liefert Vertrag B ueber `kinder`,
+        // ebenen() in block-auswahl.js benutzt die Reihenfolge dieser
+        // flachen Liste fuer Seiten gar nicht. Wirksam wurde die
+        // menu_order-Sortierung ausschliesslich in der flachen
+        // Suchtrefferliste (block-auswahl.js) und verschlechterte sie dort
+        // gegenueber rein alphabetisch (erst alle menu_order=0 alphabetisch,
+        // dann alle menu_order=1, quer ueber Beitraege/Seiten/Ebenen). Bitte
+        // nicht ein drittes Mal auf diese zweiteilige Sortierung aendern.
         $posts = get_posts([
             'post_type' => ['post', 'page'],
             'post_status' => 'publish',
             'posts_per_page' => -1,
-            'orderby' => 'menu_order title',
+            'orderby' => 'title',
             'order' => 'ASC',
         ]);
 
@@ -284,7 +293,28 @@ class CBD_Blocks_REST_API {
              ORDER BY menu_order ASC, post_title ASC"
         );
 
-        self::$seitenbaum_cache = new WP_REST_Response(self::baue_seitenbaum($zeilen), 200);
+        $baum = self::baue_seitenbaum($zeilen);
+
+        // Vertrag B / AP-3.fix3, Befund S1: `knoten` und `kinder` muessen als
+        // JSON-OBJEKT herausgehen, auch wenn ihre Schluessel zufaellig
+        // 0..n-1 lauten - z. B. eine rein flache Seitenmenge (nur Wurzeln),
+        // dann hat `kinder` ausschliesslich den Schluessel 0.
+        // json_encode() eines PHP-Arrays mit sequentiellen Schluesseln
+        // 0..n-1 ergibt sonst eine JSON-LISTE statt eines Objekts, und
+        // block-auswahl.js (normalisiereBaum) verwirft eine solche Liste
+        // stillschweigend und ersetzt sie durch {}.
+        //
+        // Der Cast steht bewusst HIER und nicht in baue_seitenbaum() selbst:
+        // Diese Methode bleibt reine, mit PHP-Arrays arbeitende Aufbaulogik
+        // (siehe ihr eigener Docblock) - der weit ueberwiegende Teil von
+        // tools/test-seitenbaum.php prueft sie direkt per Array-Zugriff
+        // (z. B. $baum['knoten'][12]['tiefe']). Ein Objekt an dieser Stelle
+        // liesse sich so nicht mehr indizieren. Der Cast betrifft nur die
+        // tatsaechlich nach aussen gehende JSON-Antwort dieser Methode.
+        $baum['knoten'] = (object) $baum['knoten'];
+        $baum['kinder'] = (object) $baum['kinder'];
+
+        self::$seitenbaum_cache = new WP_REST_Response($baum, 200);
 
         return self::$seitenbaum_cache;
     }
@@ -389,14 +419,17 @@ class CBD_Blocks_REST_API {
             }
         }
 
-        // `gesperrt` je ueberlebenden Knoten. update_meta_cache() VOR der
-        // Schleife, sonst entsteht eine Abfrage je Seite (N+1). Stufe 2
-        // braucht ihn weiterhin, fuer Stufe 1 kostet er nichts.
-        $alle_ids = array_keys($knoten);
-        if (function_exists('update_meta_cache') && !empty($alle_ids)) {
-            update_meta_cache('post', $alle_ids);
-        }
-
+        // `gesperrt` je ueberlebenden Knoten.
+        //
+        // update_meta_cache() steht NICHT hier, sondern erst im Stufe-2-Zweig
+        // unten (AP-3.fix3, Befund S2). Vorher stand der Aufruf unbedingt an
+        // dieser Stelle mit dem Kommentar "fuer Stufe 1 kostet er nichts" -
+        // das war falsch: Es ist ein SELECT ... WHERE post_id IN (...) ueber
+        // ALLE ueberlebenden Seiten-IDs, das saemtliche Postmeta in den
+        // Objektcache laedt, waehrend Stufe 1
+        // (simple_clean_gesperrte_seiten_mit_unterbaum()) ueberhaupt keine
+        // Meta liest - sie bekommt ihre fertige Karte vom Theme. Nicht O(n)
+        // Abfragen, aber unnoetig O(n) Datenvolumen bei jedem Editor-Aufruf.
         // Dreistufige Kette (AP-3.fix1), jede Stufe hinter function_exists().
         //
         // Stufe 2 allein (simple_clean_seite_nur_lehrpersonen() JE SEITE)
@@ -426,6 +459,16 @@ class CBD_Blocks_REST_API {
             }
             unset($eintrag);
         } elseif (function_exists('simple_clean_seite_nur_lehrpersonen')) {
+            // update_meta_cache() NUR HIER (Stufe 2, AP-3.fix3 Befund S2):
+            // Nur diese Stufe liest ueberhaupt Post-Meta
+            // (simple_clean_seite_nur_lehrpersonen() je Seite). VOR der
+            // Schleife, sonst entsteht eine Abfrage je Seite (N+1). Stufe 1
+            // oben braucht das nicht - sie nutzt die bereits fertige Karte
+            // des Themes.
+            $alle_ids = array_keys($knoten);
+            if (function_exists('update_meta_cache') && !empty($alle_ids)) {
+                update_meta_cache('post', $alle_ids);
+            }
             foreach ($knoten as $id => &$eintrag) {
                 $eintrag['gesperrt'] = (bool) simple_clean_seite_nur_lehrpersonen($id);
             }
