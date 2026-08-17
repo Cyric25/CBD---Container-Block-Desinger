@@ -1,6 +1,6 @@
 # Projektplan: Vier Erweiterungen (Formeln, Block-Referenz, Icon-Position, Screenshot)
 
-_Erstellt am: 2026-08-16 · Letzte Aktualisierung: 2026-08-16_
+_Erstellt am: 2026-08-16 · Letzte Aktualisierung: 2026-08-17 · **Beide Phasen abgeschlossen, Version 3.1.89**_
 
 ## 0. Anweisungen für den ausführenden Agenten
 
@@ -3010,7 +3010,8 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-2.5 | Block-Referenz öffnet ein Modal | opus | ☑ | AP-1.3, AP-2.4 | Commit `0ac41d5`. 75 jsdom-Zusicherungen plus 18 fürs Markup. **Zwei Entscheidungen über die Vorgabe hinaus:** DOM-Pfad an `data-same-page` gebunden (dieselbe `stableId` kann nach `copy_block()` auf zwei Seiten liegen) und IDs im Klon **umbenannt statt gelöscht** samt aller Verweise. **Die Interactivity-API-Frage entschieden:** Aktionsleiste wird entfernt, nicht ausgeblendet — nachgeladenes Markup wird nicht hydriert, die Knöpfe wären tot und ein Screenreader kündigte sie trotzdem als bedienbar an. Das Modal ist eine Leseansicht |
 | AP-2.6 | Screenshot auf Apple → Einzelblock-PDF | sonnet | ☑ | AP-1.4 | Commit `7ddc8c6`. Sieben User-Agent-Fälle geprüft, vom Orchestrator unabhängig nachgemessen (Funktion wortwörtlich aus beiden Dateien geschnitten). Der entscheidende Fall ist **macOS-Safari** — die ältere Erkennung in `pdf-server-side.js` deckt ihn nicht ab. `class-cbd-block-registration.php` nachweislich unberührt |
 | AP-2.7 | Abnahme Phase 2 auf dem Testserver | ~~sonnet~~ **opus** | ☑ (maschinell) | AP-2.1–AP-2.6 | Commit `3c9c935`. Version 3.1.89, ZIP 991 Dateien, Autoloader sauber, `vendor/bin/` und die phpunit.xml fehlen darin. **Modellwahl vom Orchestrator auf opus geändert**, wie schon bei AP-1.5. Elf Harnische, 626 Zusicherungen. **Die Datei-Map war in der ganzen Phase 2 unpflegt** — Folge meiner eigenen Anweisung an die Agenten; vom Orchestrator nachgezogen |
-| AP-2.rev | Unabhängiges Review Phase 2 | opus | ◐ | AP-2.1–AP-2.7 | nur lesend; Schwerpunkt AP-2.4. Fünfzehn Prüfpunkte, darunter drei, bei denen der Orchestrator sein eigenes Urteil überprüft haben will |
+| AP-2.rev | Unabhängiges Review Phase 2 | opus | ☑ | AP-2.1–AP-2.7 | **Urteil: abnahmefähig, Merge und Auslieferung frei nach einer Ein-Zeilen-Korrektur.** Keine kritischen Befunde. Der Endpunkt hält allen neun Prüfungen stand und ist an heiklen Stellen strenger als gefordert. **Das Urteil des Orchestrators zu `simple_clean_seite_nur_lehrpersonen()` unabhängig bestätigt** — über drei Fallunterscheidungen bewiesen, dass die Verwendung nur verschärft. Die Zeichengleichheit des Icon-Markups selbst nachgemessen (27 Kombinationen), das Modal mit 30 eigenen jsdom-Zusicherungen. **Gezielt geprüft und ausgeschlossen:** `displayMode` kann gespeicherte Blöcke nicht ungültig machen, weil `save()` `null` zurückgibt. Ein mittlerer Befund (M1), elf geringe |
+| AP-2.fix1 | M1, G1, G2 aus dem Review | opus | ☑ | AP-2.rev | Commit `e6a8e96`. **M1:** Die Icon-Vorschau zeigte nach einem Wechsel das vorherige Icon — jQuery ruft die Handler synchron auf, das Ereignis stand vor der Aktualisierung der Anzeige, aus der die Vorschau ihr Markup übernimmt. Ereignis an das Ende von `saveIconSelection()` verschoben, mit Warnkommentar. **G1:** Felder und Objekte werden in beiden Sanitizern abgefangen, bevor der `(string)`-Cast warnt. **G2:** `@since` auf 3.1.89 korrigiert |
 | AP-2.doc | Dokumentation Phase 2 und Abschluss | sonnet | ☑ | AP-2.rev | Drei neue Abschnitte in `CDB/CLAUDE.md` (Icon-Position, Block-Referenz als Modul, Screenshot auf Apple), Nähte-Absatz in der Wurzel-`CLAUDE.md`, `DOKUMENTATION.md` fortgeschrieben. **Der Agent hat aufgedeckt, dass Statustabelle und Testprotokoll für die ganze Phase 2 unpflegt waren** — vom Orchestrator nachgeholt. Abschnitt 11 schreibt der Orchestrator |
 
 ## 9. Testprotokoll
@@ -3072,3 +3073,144 @@ wird keine Parallelstruktur aufgebaut.**
 wird bewusst NICHT angelegt.** Diese Rolle erfüllen im Projekt die
 `CLAUDE.md`-Dateien der Komponenten; eine zweite Struktur daneben würde
 sofort auseinanderlaufen.
+
+## 11. Rückblick
+
+Geschrieben nach AP-2.rev, vor dem Merge nach `main`. Endstand: **Version 3.1.89**.
+
+### Wo dieser Plan selbst falsch lag
+
+**Ein Akzeptanzkriterium war mathematisch unerfüllbar.** AP-1.0 verlangte
+`git rev-list --left-right --count main...phase-1-accordion-grundlage` → `0 0`
+und schrieb im selben Arbeitspaket `--no-ff` vor. Ein No-Fast-Forward-Merge
+erzeugt zwangsläufig einen Commit, der nur auf `main` liegt. Der ausführende
+Agent hat das erkannt und stattdessen über einen Baumvergleich nachgewiesen,
+dass die Bäume identisch sind. Das Kriterium ist korrigiert, die alte Fassung
+steht mit Begründung daneben.
+
+**Ein Vorgehensschritt erzeugte eine Regression.** AP-1.1, Schritt 8 verlangte
+die Delimiter `\(…\)` und `\[…\]`, ohne Code-Blöcke auszunehmen. Folge:
+JavaScript-Regexe wie `/\(([^)]+)\)/g` in „Individuelles HTML"-Blöcken wurden
+zu Formel-Markup umgeschrieben — **jede bestehende Seite mit einem solchen
+Block wäre beim Rendern still beschädigt worden.** Gefunden hat das erst
+AP-1.rev, nach neun grünen Prüfharnischen und einer gründlichen Abnahme.
+Behoben in AP-1.fix2 auf zwei Ebenen (Blocknamen-Filter plus Maskierung von
+`script`/`pre`/`code`), gehärtet in AP-1.fix5.
+
+**Eine Vorgabe war technisch nicht tragfähig.** AP-2.3 sollte den
+Icon-Skalierungsfaktor per `wp_add_inline_style()` an das Formular-Handle
+hängen. Das wirkt nicht: `admin-header.php` druckt alle Styles und markiert
+sie als erledigt, **bevor** die Seiten-Callback-Datei geladen wird. Der Agent
+hat das im WordPress-Kernquelltext verifiziert und ein quellenloses Handle mit
+`wp_print_styles()` genutzt.
+
+**Zwei Ungenauigkeiten im Plantext**, beide vom Code richtig behandelt:
+`showClassSelectorDialog()` steht **einmal** in `interactivity-store.js`, nicht
+zweimal (die zweite Fundstelle ist der Aufruf). Und der Bezugsrahmen der
+Eckpositionierung ist `.cbd-container-block`, nicht `.cbd-container` — letzterer
+bestimmt nur die Spezifität.
+
+**AP-1.3 enthielt einen inneren Widerspruch:** Schritt 1 verlangte, den
+`data-stable-id`-Regex „wortgleich zu übernehmen", das Akzeptanzkriterium
+verbot zugleich eine dritte Kopie. Gelöst über `WP_HTML_Tag_Processor`. Preis:
+Auf WordPress unter 6.2 entfällt der Altbestands-Rückfall.
+
+### Was der Prozess falsch gemacht hat
+
+**Die Datei-Map und die Statustabelle blieben liegen.** Ich hatte allen
+Agenten verboten, `reference_file_map.md` und diesen Plan anzufassen, um
+Schreibkonflikte zwischen parallel laufenden Agenten zu vermeiden — und dann
+selbst nicht nachgezogen. In Phase 1 fiel es dem Abnahme-Agenten auf, in
+Phase 2 dem Dokumentations-Agenten. Beides ist rückwirkend nachgetragen.
+**Lehre: Wer den Agenten eine Pflicht abnimmt, muss sie sich selbst
+aufschreiben.**
+
+**Die Abnahme prüfte nicht die Editor-Gültigkeit von Blöcken.** Die Prüfseite
+von AP-2.7 trug einen von Hand geschriebenen Wrapper-`<div>` im
+Accordion-Block; dessen `save()` gibt nur `<InnerBlocks.Content />` zurück.
+Der Block war damit im Editor ungültig, und im Frontend fand `buildRows()` als
+Kind von `.mb-accordion__content` nur diesen `<div>` statt der Überschriften —
+es entstanden keine Klappzeilen. **Gefunden hat es der Nutzer, nicht die
+Maschine.** Die maschinelle Prüfung hatte belegt, dass das Markup *vorhanden*
+ist, nicht dass es *gültig* ist. Phase 1 hatte diesen Prüfschritt, AP-2.7
+nicht.
+
+**Die Ausführungsreihenfolge wurde einmal verletzt:** AP-2.doc lief vor
+AP-2.rev, obwohl es dieses als Abhängigkeit führt.
+
+**Das Sitzungslimit hat den Ablauf mehrfach unterbrochen** — insgesamt neun
+Agentenabbrüche. In zwei Fällen blieb ein ungeprüfter Teilstand im
+Arbeitsverzeichnis zurück (AP-1.4, AP-1.3); beide wurden mit ausdrücklichem
+Hinweis auf den Teilstand fortgesetzt statt neu begonnen. Zwei
+Arbeitspakete hat der Orchestrator am Ende selbst umgesetzt (AP-1.fix1, Teile
+von AP-1.doc), weil mehrere Agentenanläufe scheiterten und die Diagnose
+vollständig vorlag.
+
+### Was überraschend war
+
+**Der größte Fund war Altbestand, nicht neue Arbeit.** Ein
+`prefers-color-scheme: dark`-Block in `blocks.css` schaltete die Textfarbe des
+Plugins auf Weiß, während das Theme weiß blieb. **Jeder Besucher mit dunklem
+Systemdesign sah Formeln in Accordions unsichtbar** — auch auf der
+Produktivseite. Ohne diese Abnahme wäre das nicht aufgefallen. Gefunden mit
+`docs/pruefung-formelfarbe.js`, das die Farbkette im Browser ausliest und je
+Kettenglied die zuständige CSS-Regel nennt.
+
+**Der Screenshot war auf allen Browsern kaputt, nicht nur auf Apple-Geräten.**
+`yield` statt `yield*` auf einen Generator ließ Web Share und Download nie
+laufen; der Nutzer sah einen grünen Haken ohne Datei. Der ursprüngliche
+Auftrag lautete „auf Apple reparieren oder ausblenden" — der eigentliche
+Fehler lag woanders.
+
+**Der Prüfharnisch mit „104 jsdom-Zusicherungen" aus `PLAN-accordion-block.md`
+existiert nicht.** Er wurde nie committet; die dort behauptete Testabdeckung
+ist nicht reproduzierbar.
+
+**jsdom löst `var()` in `getComputedStyle()` grundsätzlich nicht auf.** In
+einem Projekt, dessen Farbsystem vollständig auf CSS-Variablen steht, ist das
+beim Testen zu wissen.
+
+### Ausrollreihenfolge
+
+1. **Zuerst** `accordion.zip` aus „Eigene WP Blocks" (Einstellungen → Modulare
+   Blöcke → Block hochladen).
+2. **Danach** `container-block-designer-3.1.89.zip` (Plugins → Installieren →
+   Hochladen, vorhandenes überschreiben).
+
+Grund: Content-Importer und Block-Serializer erzeugen
+`modular-blocks/accordion` nur, wenn der Blocktyp registriert ist; sonst
+entsteht „Block enthält unerwarteten Inhalt".
+
+**Vor dem Ausrollen prüfen, ob auf der Produktivinstallation ein Verzeichnis
+`wp-content/plugins/modular-blocks-plugin/build/` liegt.** Der Block-Uploader
+kennt es nicht, der Block-Manager bevorzugt es. Liegt dort ein veralteter
+Stand, wirkt das ZIP nicht und die Korrektur aus AP-1.2 läuft ins Leere.
+
+### Bewusst nicht behoben
+
+| Punkt | Grund |
+|---|---|
+| **Aktionsknopfleiste verdeckt ein Icon in `container-top-right`** — beide auf `top:10px; right:10px`, `z-index:9999` gegen `3` | Nur beim Überfahren sichtbar, funktional unkritisch. Abhilfe ist ein Feinversatz |
+| **`displayMode` mit Vorgabe `modal`** ändert das Verhalten bestehender Block-Referenzen (Overlay statt Sprung) | Geplante Vorgabe. Markup bleibt gültig, `href` unverändert, ohne JavaScript verhält sich der Verweis wie zuvor |
+| **`stableId`-Extraktion existiert dreifach** in drei Fassungen | Jede Stelle gehört einem anderen AP; die Zusammenführung wäre ein eigenes Vorhaben. **Es gibt keinen Duplikatswächter** — die Zusicherung in `tools/test-classroom-gate.php` prüft nur die Suffix-Regel `:pN` und nur eine Datei |
+| **Restfälle der Parser-Härtung:** unabgeschlossenes `<script>`, Inline-`on*`-Handler, `<style>`-Blöcke | Standen in keinem der vier Befunde von AP-1.rev2 |
+| **Zwei Bestandsfehler in `latex-formulas.css`** (`[data-pdf-ready]` zwingt Inline-Formeln auf Blockdarstellung; `.wp-block`-Regel überschreibt den Inline-Abstand) | Bewusst liegen gelassen, damit der Vorher/Nachher-Vergleich in AP-1.5 nicht verrauscht |
+| **Slug-Normalisierung beim Markdown-Rundlauf** wandelt `_` in `-` | Altbestand, betrifft alle Designs. Ein Reimport erzeugte ein zweites Design statt einer Aktualisierung |
+| **Z-Ordnung des Modals gegenüber dem Glossar-Tooltip** hängt daran, ob `board-mode.css` geladen ist | Ohne Tafelmodus läge der Theme-Tooltip hinter dem Modal. Befund G4 aus AP-2.rev |
+| **`vendor/composer/installed.php` nennt phpunit** | Metadaten, keine Autoload-Karte. Der Autoloader ist nachweislich sauber |
+
+### Was gut lief
+
+Die Nachweise waren **gemessen, nicht behauptet.** AP-2.2 hat den Icon-Zweig
+aus beiden Codefassungen am echten Quelltext ausgeschnitten und gegeneinander
+laufen lassen, statt ihn nachzubauen — AP-2.rev konnte das mit 27
+Kombinationen bestätigen. AP-1.2 hat seinen jsdom-Harnisch zusätzlich gegen
+den **alten** Stand gefahren und damit belegt, dass die neun Fehlschläge genau
+die behobenen Fälle sind.
+
+Und die Agenten haben Planvorgaben mehrfach **begründet korrigiert** statt sie
+blind zu befolgen: der `wp_add_inline_style()`-Zeitpunkt, die Bindung des
+DOM-Pfads an `data-same-page`, das Umbenennen statt Löschen der IDs im
+Modal-Klon, und die Entscheidung, die Aktionsleiste im Modal zu entfernen
+statt sie auszublenden. Jede dieser Abweichungen ist im Code kommentiert und
+im Nachhinein die bessere Wahl.
