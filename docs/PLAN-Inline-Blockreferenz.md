@@ -2405,7 +2405,60 @@ Wurzel-`CLAUDE.md` (nur falls eine neue Naht entstand)
   die Fundstelle ist dieses Akzeptanzkriterium, das das Suchmuster als Text
   enthält. Kein Befund; nicht „reparieren".
 
-**Übergabenotiz:** _(vom Agenten zu füllen)_
+**Übergabenotiz (erledigt):** Alle vier Dateien wie im Auftrag geändert, nur
+mit dem Edit-Werkzeug (Regel 24) — kein `Get-Content`/`Set-Content`-Zyklus.
+
+- **`Plugins/CDB-Designer/CLAUDE.md`:** Neuer Abschnitt „Blockreferenz als
+  Textformat und hierarchische Zielauswahl" nach „Block-Referenz als Modul"
+  eingefügt, dieser bleibt unverändert. Enthält die fünf Verträge in
+  Kurzfassung, die geforderten Begründungen (`href`/`data-same-page`/
+  `aria-haspopup` serverseitig, `tagName: 'a'`, eigene CSS-Klasse,
+  View-Script aus dem Inhaltsfilter, Link-Wächter als Bereichsprüfung statt
+  `getActiveFormat()`, vier Fundstellen der Klassenzeichenkette, Grenzen des
+  Formats) sowie eine Prüfharnisch-Tabelle mit den aktuellen Fallzahlen und
+  eine Tabelle der fünf öffentlichen `window.cbd*`-Schnittstellen.
+- **`Plugins/CDB-Designer/reference_file_map.md`:** `blocks/block-reference/format.js`
+  als neue Zeile ergänzt (fehlte vollständig). Zusätzlich nachgezogen, weil
+  bei der Vollständigkeitsprüfung veraltet oder unvollständig: die
+  Fallzahlen von `test-inline-reference.php` (155 → 181) und
+  `test-block-auswahl.js` (133 → 140) samt Kurzbeschreibung der seither
+  dazugekommenen Prüfgruppen; die `index.js`-Zeile, die noch das **vor**
+  AP-4.1 abgelöste flache `SelectControl` beschrieb; `view.js` (die eine
+  geänderte Zeile aus AP-4.2), `style.css` (neuer Abschnitt für die
+  Inline-Klasse, fünf Selektoren), `render.php` (Verweis auf die geteilte
+  URL-Regel), `class-cbd-blocks-rest-api.php` (S1/S2/S5 aus AP-3.fix3:
+  `(object)`-Cast, `update_meta_cache()` nur in Stufe 2, `orderby` zurück auf
+  `title`), `class-cbd-inline-reference.php` (die `filter_var`-Härtung aus
+  AP-3.fix2, führende Nullen aus AP-3.fix5) und `assets/js/block-auswahl.js`
+  (der Zielverlust-Schutz aus AP-3.fix4). `test-seitenbaum.php` stand mit 97
+  Prüfungen bereits korrekt und wurde nicht angefasst. Kopfzeile auf
+  Plugin-Version 3.1.93 nachgezogen. Die „Icon-Fundstellenkarte" in
+  `CLAUDE.md` habe ich geprüft und **nicht** geändert — dieses Vorhaben
+  berührt keine Icons, ein Nachtrag wäre themenfremd gewesen.
+- **`docs/PLAN-Inline-Blockreferenz.md`:** Abschnitt 8 (Status: AP-4.doc auf
+  ☑), Abschnitt 9 (die beiden einzigen leeren Testprotokoll-Zeilen zu AP-4.1
+  gefüllt — mehr offene Zeilen gab es nicht), Abschnitt 11 „Rückblick" mit
+  vier Unterabschnitten plus der gesondert verlangten Ausrollreihenfolge
+  (keine zu beachten) neu geschrieben.
+- **Wurzel-`CLAUDE.md`:** neuer Abschnitt „Direkte Theme-Funktionsaufrufe des
+  Plugins" nach „Seiten aus Markdown erzeugen" — benennt die Seitenbaum-Route
+  als dritte Stelle, an der das Plugin aktiv eine Theme-Funktion aufruft
+  (nach Klassen-Freigabe und Sichtbarkeitsprüfung im Modal-Endpunkt), mit dem
+  Hinweis auf `function_exists()` und den Rückfall auf `false`.
+
+**Ein Fund während der eigenen Arbeit, gleich behoben:** Beim Schreiben von
+Abschnitt 11 habe ich den Wortlaut des Mojibake-Suchmusters aus AK5 versehentlich
+ein zweites Mal zitiert (im Absatz über den vierten Planfehler) — das hätte
+den Treffer dieses Plans von 1 auf 2 erhöht und AK5 selbst verletzt. Beim
+eigenen Nachlauf des Grep-Nachweises aufgefallen und auf eine beschreibende
+Formulierung ohne die wörtlichen Zeichen umgestellt, bevor abgeschlossen
+wurde. Genau die Art Fehler, vor der AK5 warnt.
+
+**Übergabe an niemanden:** Dies ist das letzte AP dieses Vorhabens. Es gibt
+keine Ausrollreihenfolge zu beachten (nur ein Paket, `container-block-designer-3.1.93.zip`,
+bereits gebaut, geprüft und laut Statustabelle installiert). Offene Punkte
+außerhalb dieses Vorhabens stehen in Abschnitt 10a, bewusst nicht behobene
+Punkte innerhalb des Vorhabens in Abschnitt 11.
 
 ---
 
@@ -2430,7 +2483,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2, 4.fix1, 4.fix2 | ☑ **vom Nutzer bestätigt** |
 | AP-4.rev | Unabhängiges Review Phase 4 | opus | 4.3 | ☑ — **1 Blocker (B1)**, 2 „sollte", 11 Anmerkungen |
 | AP-4.fix2 | Link-Wächter greift zu spät, zwei Wächter-Härtungen | opus | 4.2, 4.fix1, 4.rev | ☑ |
-| AP-4.doc | Dokumentation und Projektabschluss | sonnet | 4.rev, 4.fix2 | ☐ |
+| AP-4.doc | Dokumentation und Projektabschluss | sonnet | 4.rev, 4.fix2 | ☑ |
 
 ## 9. Testprotokoll
 
@@ -2475,8 +2528,8 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.fix2 | Angriffssonde des Orchestrators erneut gefahren | **40/40** — der Fehlschlag B9 ist behoben | 2026-08-17 |
 | AP-3.fix2 | Die 119 Bestandsprüfungen unverändert | bestätigt: die einzige Löschung im Diff ist die Zusammenfassungszeile, die um den Skip-Zähler erweitert wurde — kein entschärfter Test | 2026-08-17 |
 | AP-3.fix2 | `php tools/check-php74.php` | grün, 568 Dateien | 2026-08-17 |
-| AP-4.1 | `node --check blocks/block-reference/index.js` | – | – |
-| AP-4.1 | Kaskade über vier Ebenen, Bestandsblock | – | – |
+| AP-4.1 | `node --check blocks/block-reference/index.js` | **grün** (vom Orchestrator vor der Sicherung des unversionierten Standes geprüft, zusammen mit AK4/AK9: `grep` auf die handgeschriebene Schlüsselregel liefert nichts, keine verwaisten Zustände `bloecke`/`laedt`/`fehler`) | 2026-08-17 |
+| AP-4.1 | Kaskade über vier Ebenen, Bestandsblock | **bestätigt im Rahmen der Abnahme AP-4.3** (Klickliste, echte Hierarchie Klasse → Fach → Thema → Seite, nicht die flachen Bestandsseiten 43–47) — AP-4.1 selbst sah dafür keinen eigenen Harnisch vor, nur die manuelle Prüfung an der Oberfläche. Vom Nutzer bestätigt: die Kaskade wirkt bei vier Ebenen nicht erschlagend | 2026-08-17 |
 | AP-4.2 | `node --check format.js`, `view.js` | grün / grün | 2026-08-17 |
 | AP-4.2 | `php tools/test-inline-reference.php`, beide Betriebsarten | **160/160** und **156/156** (4 sichtbare Skips). Vom Orchestrator nachgeprüft | 2026-08-17 |
 | AP-4.2 | AK10: genau eine Zeile in `view.js` | **bewiesen**, `git diff --numstat` liefert `1 1` | 2026-08-17 |
@@ -2572,6 +2625,170 @@ richtig, und dass `aria-haspopup` wirklich wegfällt, ist bei der Abnahme
 
 ## 11. Rückblick
 
-_(nach Abschluss von AP-4.rev durch AP-4.doc zu füllen: wo dieser Plan
-selbst falsch lag, was der Prozess falsch gemacht hat, was überraschend war,
-Ausrollreihenfolge, bewusst nicht behoben, was gut lief)_
+Geschrieben nach AP-4.rev und AP-4.fix2, in AP-4.doc. Endstand: **Version
+3.1.93**, ausgeliefertes Paket `container-block-designer-3.1.93.zip`.
+
+### Wo dieser Plan selbst falsch lag
+
+Acht dokumentierte Planfehler, in der Reihenfolge ihres Auftretens:
+
+1. **AK6 bei AP-3.1 war zu schwach formuliert.** Es verlangte eine
+   seitenzahlunabhängige Abfragenzahl für die Baum-Route und wurde im
+   Harnisch grün — weil der Harnisch `simple_clean_seite_nur_lehrpersonen()`
+   stubbte und deshalb nur die Abfragen des Plugins zählte, nicht die der
+   Theme-Funktion. In Wirklichkeit lief die Theme-Funktion je gesperrter
+   Installation für **jede** Seite durch `get_post_ancestors()` und erzeugte
+   auf 258 Seiten bis zu mehrere hundert Einzelabfragen. Gefunden bei der
+   Abnahme von AP-3.1, behoben in AP-3.fix1, das AK6 dort ausdrücklich neu
+   gefasst hat.
+2. **Ein Widerspruch in Vertrag C.** Der Vertrag legt fest, dass
+   `onWaehle` nur „beim Abwählen" `null` melden darf. Er sagt aber nicht,
+   was für einen Auswahlwert gilt, dessen Zielblock gelöscht wurde, aber
+   dessen `wert` noch gesetzt ist — genau diese Lücke ließ eine
+   Implementierung zu, die eine reine Anzeigeoption „(gespeichertes Ziel)"
+   beim Anklicken als Abwählen behandelte und damit das gespeicherte Ziel
+   löschte (AP-3.fix4).
+3. **Ein widersprüchlicher Schritt in AP-3.3.** Schritt 2 verlangte,
+   `register_format_script()` auf `enqueue_block_editor_assets` zu hängen,
+   und verwies im selben Atemzug auf `register_editor_script()` als Vorbild
+   — das aber nur **registriert**, weil `block.json` das Handle unter
+   `editorScript` nennt und WordPress es deshalb selbst einreiht. Ein
+   Textformat hängt an keinem Block; ohne aktives Einreihen wäre das Skript
+   nie geladen worden. Der Agent hat das erkannt und richtig sowohl
+   registriert als auch eingereiht.
+4. **Ein sich selbst auslösendes Mojibake-Kriterium.** AK5 dieses APs
+   verlangt einen Mojibake-Grep gegen null für die geänderten Dateien — und
+   nennt im eigenen Wortlaut das Suchmuster selbst als Beispieltext. Für
+   diesen Plan selbst ist der einzig richtige Befund also eine Trefferzahl
+   von **eins**, nicht null; das Kriterium löst sich beim Lauf gegen den
+   Plan selbst zwangsläufig einmal aus.
+5. **Eine unvollständige Doppelungsliste bei AP-4.1.** Der Plantext
+   nannte vier Fundstellen in `index.js`, die nach AP-3.2 doppelt vorhanden
+   waren. Es waren **fünf**: `aktuellerWert` (`:155-157`) war eine vierte,
+   wortgleiche Fassung derselben Schlüsselregel `<postId>|<stableId>` und
+   fehlte in der ursprünglichen Liste. Ohne die Korrektur (Befund B1a aus
+   AP-3.rev, vor Start von AP-4.1 in den Plantext gezogen) wäre AK4 grün
+   geworden, während die Doppelung stehen geblieben wäre.
+6. **Ein Dateikonflikt zwischen AP-3.fix5 und AP-4.2.** Beide APs ändern
+   `tools/test-inline-reference.php` — AP-3.fix5 für die Fälle zu führenden
+   Nullen, AP-4.2 für den Duplikatswächter aus AK14. Zwei APs gleichzeitig in
+   derselben Testdatei verstößt gegen Regel C dieses Plans. Behoben durch
+   eine ausdrückliche Abhängigkeit (AP-4.2 startet erst nach AP-3.fix5) statt
+   eines echten Parallellaufs, wie ihn Abschnitt 6 für Welle 2 sonst erlaubt.
+7. **Der `(object)`-Cast an der falschen Funktion.** AP-3.fix3 (Befund S1)
+   verlangte im Plantext, `knoten` und `kinder` im `return` von
+   `baue_seitenbaum()` auf `(object)` zu casten. Ein Cast dort hätte rund 60
+   der 82 Bestandsprüfungen zerstört, die mit Array-Syntax auf das Ergebnis
+   zugreifen, und `count()`/Array-Zugriff auf ein `stdClass`-Objekt ist in
+   PHP 8 fatal. Der Agent hat den Cast richtig in `get_seitenbaum()`
+   platziert, an der tatsächlich nach außen gehenden JSON-Antwort — der
+   Plantext war ungenau, die Umsetzung nicht.
+8. **Die Risikozeile, die den Link-Konflikt für abgefangen hielt.**
+   Abschnitt 5 verbuchte „ein bestehender `core/link` auf demselben Text"
+   als durch AP-4.2 abgefangen. Tatsächlich prüfte `format.js` mit
+   `getActiveFormat(wert, 'core/link')`, das nur anschlägt, wenn der Link die
+   **ganze** Markierung überspannt — bei einem Link **innerhalb** der
+   Markierung oder einer Rand-Überlappung blieb der Rückgabewert `undefined`,
+   und `applyFormat()` erzeugte ein verschachteltes `<a>` im gespeicherten
+   `post_content`. Gefunden von AP-4.rev, behoben in AP-4.fix2 (Befund B1) —
+   der einzige Blocker der gesamten Abnahme und der einzige Fehler dieses
+   Vorhabens, der nicht durch ein Update reparierbar gewesen wäre, wenn er
+   unentdeckt in die Auslieferung gelangt wäre.
+
+### Was der Prozess falsch gemacht hat
+
+**Vier Agenten sind gleichzeitig am Monatsbudget der Organisation
+gestorben**, mitten in Welle 2 (AP-4.1, AP-3.fix3, AP-3.fix4, AP-4.2). Der
+Orchestrator musste jeden Zustand einzeln prüfen und sichern: AP-4.1
+(`15f93fe`, fertig), AP-3.fix4 (`7331e97`, fertig und grün), AP-3.fix3
+(`d30becf`, absichtlich als UNVOLLSTAENDIG beschriftet rot committet), AP-4.2
+(nichts auf der Platte, musste neu gemacht werden). Kein Verlust, aber ein
+Nachmittag Zusatzarbeit, den ein früheres Aufteilen in kleinere Etappen
+vermutlich verringert hätte.
+
+**Bei einem der Rettungscommits hat der Orchestrator selbst genau die Falle
+berührt, vor der Abschnitt 0 die Agenten warnt:** nur fertige, getestete
+Arbeit zu committen. Beim Zusammenführen der geretteten Arbeitsstände geriet
+in mindestens einem Fall auch ein noch nicht abgeschlossener Teilstand eines
+Agenten mit in denselben Commit wie ein fertiger — der Fehler wurde bemerkt
+und im nächsten Commit sauber nachgezogen, aber er zeigt, dass die Regel
+„nur Fertiges committen" unter Zeitdruck auch für den Orchestrator selbst
+gilt, nicht nur für die Agenten, denen er sie aufgetragen hat.
+
+**Der erste Anlauf von AP-3.rev ist am Sitzungslimit abgebrochen, bevor der
+Agent den Plan überhaupt gelesen hatte.** Der Orchestrator hat daraufhin
+Prüfschwerpunkt 1 mit einer eigenen Angriffssonde vorgezogen (Abschnitt
+„Vorprüfung des Orchestrators"), um Welle 2 nicht ohne jede Prüfung des
+schwersten Risikopunkts starten zu müssen — das ersetzte den zweiten,
+vollständigen Anlauf des Reviews aber ausdrücklich nicht.
+
+### Was überraschend war
+
+**Zwei Wächter prüften Kommentare statt Verhalten und blieben deshalb still
+grün.** Der Duplikatswächter für die Klassenzeichenkette
+`cbd-block-reference-inline` (Gruppe 11 in `tools/test-inline-reference.php`)
+prüfte ursprünglich für `format.js` und für `view.js` je nur mit `strpos()`,
+ob die Zeichenkette **irgendwo** in der Datei vorkommt. In `format.js` steht
+sie dreifach — zweimal in Docblocks, einmal als wirksamer Wert —, und eine
+Mutation nur des wirksamen Werts ließ den Wächter grün, weil die beiden
+Kommentare weiterhin trafen (AP-4.fix2, Befund B2). Erst die Umstellung auf
+den **wirksamen Ausdruck** je Datei machte den Wächter scharf.
+
+**Ein Test war „eine Aussage über den Kalender".** Prüfgruppe 3c in
+`tools/test-inline-reference.php` sollte belegen, dass
+`register_format_script()` nichts registriert, solange `format.js` fehlt —
+geprüft wurde das aber allein dadurch, dass die Datei zum Zeitpunkt des
+Testlaufs noch nicht existierte, nicht durch echtes Verhalten. Mit dem
+Anlegen der Datei in AP-4.2 wäre die Prüfung ins Leere gelaufen. Der Agent
+hat das selbst benannt und über einen Test-Seam (`format_script_daten()`)
+dauerhaft und unabhängig vom Dateisystemzustand geprüft.
+
+**Die neue Baum-Route ist nicht teurer als die bestehende — gemessen, nicht
+vermutet.** `cbd/v1/blocks` lädt vollständigen `post_content` samt
+`parse_blocks()` je Beitrag und war deshalb die begründete Sorge; die neue,
+schlanke `cbd/v1/seitenbaum`-Route maß bei der Abnahme 0,291–0,362 s gegen
+0,285–0,377 s für die bestehende Route — im Rauschen gleich teuer, obwohl sie
+zusätzliche Daten liefert. Unabhängig davon fand AP-4.rev, dass sie in der
+Wirklichkeit memoisiert nur **einmal** pro Editor-Sitzung Abfragen erzeugt
+(1 beim ersten Aufruf, 0 beim zweiten) — besser als die im Testprotokoll
+vorsichtig notierten „≤ 4".
+
+### Ausrollreihenfolge
+
+**Es gibt keine zu beachten.** Dieses Vorhaben liefert genau **ein** Paket
+(`container-block-designer-3.1.93.zip`) — kein Block-ZIP aus „Eigene WP
+Blocks" und keine Theme-Änderung. Das steht hier ausdrücklich, weil beide
+Vorgängerphasen (`docs/PLAN-Vier-Erweiterungen.md`) eine Reihenfolge
+brauchten (erst `accordion.zip`, dann das CDB-Paket) und ein Leser dieses
+Plans dieselbe Erwartung mitbringen könnte.
+
+### Bewusst nicht behoben
+
+Drei Befunde, die bei der Abnahme auffielen, aber **älter sind als dieses
+Vorhaben** und deshalb nicht hier behoben wurden, stehen ausführlich in
+**Abschnitt 10a**: die fehlende KaTeX-Einbindung im Overlay, wenn die
+aufrufende Seite selbst keine Formel enthält; das zu große Plugin-ZIP für den
+Admin-Upload (`vendor/mpdf`); und eine Kleinigkeit, in der die Risikotabelle
+dieses Plans irrte (`data-targetStableId` wird von `wp_kses_post()` nur
+kleingeschrieben, nicht entfernt).
+
+Innerhalb des Vorhabens selbst bewusst hingenommen:
+
+- **Die zwei bekannten Grenzen von Vertrag C** — `ladeDaten()` verwirft seine
+  Memoisierung nie (ein in einem zweiten Tab angelegter Container-Block
+  erscheint erst nach einem Neuladen; ein gescheiterter erster Abruf bleibt
+  für die ganze Sitzung fehlerhaft). Eine achte Eigenschaft am Vertrag hätte
+  dessen eigenes AK1 verletzt. Der Nutzer hat beide Fälle in AP-4.3
+  ausdrücklich als hinnehmbar beurteilt — es gibt deshalb bewusst **kein**
+  `AP-4.fixN` dafür.
+- **Die dreifache `stableId`-Extraktion** (`class-cbd-block-registration.php`,
+  `class-cbd-classroom-gate.php`, `class-cbd-blocks-rest-api.php`) bleibt
+  unangetastet — ausdrückliches Nicht-Ziel dieses Plans (Abschnitt 2). Dieses
+  Vorhaben fügt ihr **keine vierte** Fassung hinzu, räumt sie aber auch nicht
+  auf.
+- **Die URL-Bildungsregel für die Ziel-URL** (Anker gewinnt gegen `cbd-ref`)
+  steht jetzt an **drei** Stellen (`CBD_Inline_Reference::ziel_href()`,
+  `render.php`, `format.js`) und wird nur durch wechselseitige Kommentare
+  zusammengehalten, ohne automatischen Wächter — ein Wächter müsste rendern
+  bzw. eine Sprachgrenze überbrücken (PHP↔JavaScript) und wurde deshalb als
+  unverhältnismäßig verworfen.

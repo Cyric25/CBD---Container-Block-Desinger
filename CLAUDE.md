@@ -1495,6 +1495,262 @@ Nichtexistenz sind zeichengleich, keine Antwort nennt Seitentitel oder
 Permalink, eine Ausnahme beim Rendern führt zu 404 statt eines Fatal Errors,
 und der globale `$post` wird in jedem Fall wiederhergestellt.
 
+## Blockreferenz als Textformat und hierarchische Zielauswahl (seit 3.1.93)
+
+Ergänzt den Abschnitt „Block-Referenz als Modul" oben um zwei Erweiterungen aus
+dem Vorhaben `docs/PLAN-Inline-Blockreferenz.md`: Ein Verweis auf einen
+Container-Block lässt sich jetzt auch **mitten im Text** setzen (Textformat,
+kein eigener Block), und die Zielauswahl filtert an **beiden** Stellen —
+Seitenleiste des Blocks und im neuen Dialog — nach der Seitenhierarchie statt
+einer flachen, alphabetischen Liste. Beide Erweiterungen benutzen das
+bestehende Modal aus `blocks/block-reference/view.js` unverändert mit.
+
+### Die fünf Verträge (Kurzfassung)
+
+| Vertrag | Gegenstand |
+|---|---|
+| **A** | `GET cbd/v1/blocks` bekommt drei zusätzliche Felder je Eintrag (`postParent`, `menuOrder`, `postType`); die acht bestehenden bleiben, die Antwort bleibt eine nackte Liste |
+| **B** | neue Route `GET cbd/v1/seitenbaum` → `{knoten, kinder, wurzeln}`, alle veröffentlichten Seiten (keine Beiträge), rohes `$wpdb`, Breitensuche ab Wurzel 0 |
+| **C** | `window.cbdBlockAuswahl` — der eine gemeinsame Auswahlbaustein für Seitenleiste und Dialog |
+| **D** | gespeichertes Markup des Inline-Verweises: `<a class="cbd-block-reference-inline">` mit genau fünf Attributen |
+| **E** | `CBD_Inline_Reference::inhalt_auffrischen()` auf `the_content`, Priorität 12 — frischt drei Attribute serverseitig auf |
+
+Vollständiger Wortlaut mit Beispieldaten: `docs/PLAN-Inline-Blockreferenz.md`,
+Abschnitt 7, „Die fünf Verträge".
+
+#### Vertrag B in der Praxis: Baum ohne teure Abfragen
+
+Der Baum wird mit fünf Spalten (`ID`, `post_parent`, `post_title`,
+`menu_order`, `post_type`) geladen, **kein** `post_content`, und per
+Breitensuche ab Wurzel `0` aufgebaut (Vorbild
+`Theme/includes/page-index.php:206-229`) — das liefert `tiefe` ohne erneutes
+Auflösen der Elternkette, lässt verwaiste Knoten samt Unterbaum herausfallen
+und macht Zyklen unerreichbar. Eine Tiefenbegrenzung von 20 ist ein Schutz
+gegen verstümmelte Daten, keine fachliche Aussage (gemessene Tiefe des
+Projekts: 3–4 Ebenen). `knoten` und `kinder` werden **erst in
+`get_seitenbaum()`**, nicht in der reinen Aufbaufunktion `baue_seitenbaum()`,
+per `(object)` gecastet — ein PHP-Array mit den Schlüsseln `0..n-1` würde
+sonst als JSON-**Liste** ausgegeben und vom Client stillschweigend verworfen
+(AP-3.fix3, Befund S1); ein Cast in `baue_seitenbaum()` hätte dagegen rund 60
+Bestandsprüfungen zerstört, die mit Array-Syntax auf das Ergebnis zugreifen.
+
+Das Feld `gesperrt` kommt aus einer **dreistufigen** Kette, jede Stufe hinter
+`function_exists()`: zuerst `simple_clean_gesperrte_seiten_mit_unterbaum()`
+(eine memoisierte Theme-Funktion, die **alle** gesperrten Seiten samt
+Unterbaum in höchstens zwei Abfragen liefert), sonst
+`simple_clean_seite_nur_lehrpersonen()` je Seite (Rückfall für ein älteres
+Theme, in Wirklichkeit O(n) Abfragen über `get_post_ancestors()`), sonst
+durchgehend `false`. Der Rückfall wurde nötig, weil die ursprüngliche Fassung
+(AP-3.1) die zweite Stufe für den Regelfall hielt: Auf einer Installation mit
+258 Seiten und mindestens einer gesperrten Seite entstehen dort bis zu
+mehrere hundert Einzelabfragen, weil die rohe `$wpdb`-Abfrage den
+WordPress-Post-Cache nicht füllt (AP-3.fix1). Gemessen in der Wirklichkeit:
+**≤ 4 Abfragen** bei 260 Seiten über die bevorzugte Stufe, **1** beim ersten
+Editor-Aufruf und **0** beim zweiten (Memoisierung in
+`window.cbdBlockAuswahl`) — die neue Route ist damit **nicht teurer** als das
+bestehende `cbd/v1/blocks` (gemessen: 0,285–0,377 s gegen 0,291–0,362 s).
+
+#### Vertrag C: die eine Auswahl für beide Stellen
+
+`assets/js/block-auswahl.js` lädt Vertrag A und B **parallel und
+memoisiert** — mehrere Aufrufer teilen dasselbe Promise, ein Fehler ergibt
+leere Datensätze statt einer Ablehnung. `wp.element` wird beim Laden der
+Datei nicht berührt, nur innerhalb der Komponente `HierarchieAuswahl` — nur
+so lässt sich die reine Logik ohne WordPress testen. Die Kaskade wächst
+dynamisch (ein Auswahlfeld je Ebene, das nächste erscheint erst nach einer
+Wahl) statt fester vier Felder oder eines Aufklapp-Baums — bei der gemessenen
+Tiefe von 3–4 Ebenen wäre beides unpassend. Suchfeld und Kaskade teilen
+**einen** Zustand: Ein Suchtreffer stellt die Auswahlfelder auf den Pfad des
+Treffers. Gesperrte Zielseiten werden **gekennzeichnet, nicht ausgeblendet**
+— ein Verweis auf eine Lehrpersonen-Seite ist von einer anderen
+Lehrpersonen-Seite aus legitim.
+
+**Bekannte, bewusst akzeptierte Grenze:** `ladeDaten()` hat keine Möglichkeit,
+die Memoisierung zu verwerfen. Legt eine Redakteurin in einem zweiten Tab
+einen Container-Block an, bleibt die Liste in der laufenden Editor-Sitzung
+veraltet, bis die Seite neu geladen wird; scheitert der erste Abruf, bleibt
+die Auswahl die ganze Sitzung leer. Eine achte Eigenschaft am Vertrag hätte
+dessen AK1 verletzt („keine weiteren öffentlichen Namen"), deshalb bewusst
+nicht ergänzt. Der Nutzer hat beide Fälle bei der Abnahme (AP-4.3)
+ausdrücklich als hinnehmbar beurteilt.
+
+**AP-3.fix4:** Ein gelöschter Zielblock zeigte in der Blockstufe eine
+Ersatzoption „(gespeichertes Ziel)" — deren Anklicken das gespeicherte Ziel
+gelöscht hätte (`melde(null)`, obwohl Vertrag C `null` nur „beim Abwählen"
+vorsieht). Seit dem Fix erscheint diese Option nur noch, wenn der Eintrag
+tatsächlich noch in `bloecke` existiert, aber außerhalb des aktuell
+sichtbaren Pfads liegt.
+
+### Warum `href`, `data-same-page` und `aria-haspopup` serverseitig gesetzt werden
+
+Ein Textformat friert seine Attribute beim Bearbeiten ein; `render.php` (der
+Block) rechnet dagegen bei jedem Aufruf neu. `CBD_Inline_Reference::inhalt_auffrischen()`
+macht für das Textformat dasselbe, auf `the_content`, Priorität 12:
+
+- **`href`** wird aus `get_permalink()` neu gebildet. Frisch berechnet
+  übersteht der Verweis eine Slug-Änderung der Zielseite; ein beim Bearbeiten
+  eingefrorener Wert würde verrotten. Liefert `get_permalink()` nichts,
+  bleibt der gespeicherte Wert stehen (fortschreitende Verbesserung ist
+  besser als ein leerer Link).
+- **`data-same-page`** entscheidet, ob das Modal per DOM-Klon (keine Anfrage)
+  oder per Nachladen befüllt wird. `CBD_Block_Organizer::copy_block()`
+  vergibt beim Kopieren eines Blocks die `stableId` **nicht** neu — dieselbe
+  Kennung kann also auf zwei Seiten liegen. Nur zum Renderzeitpunkt lässt
+  sich zuverlässig sagen, auf welcher Seite der Verweis gerade **ausgegeben**
+  wird; ein beim Speichern festgehaltener Wert zeigte nach dem Kopieren eines
+  Absatzes auf den falschen Zwilling.
+- **`aria-haspopup="dialog"`** steht nicht in der ARIA-Whitelist von
+  `wp_kses_post()`. Bei der Abnahme **gemessen** (AP-4.3): Ein
+  Block-Redakteur ohne `unfiltered_html` verliert das Attribut beim
+  Speichern, wenn es dort stünde. Serverseitig gesetzt ist es immer da,
+  unabhängig von der Rolle, die den Verweis zuletzt gespeichert hat.
+
+Zum Vergleich, aus Abschnitt 10a dieses Plans korrigiert: Ein **camelCase**-Name
+wie `data-targetStableId` würde von `wp_kses_post()` nicht entfernt, sondern
+nur **kleingeschrieben** — deshalb sind alle Attributnamen in Vertrag D von
+Anfang an durchgehend klein mit Bindestrichen geschrieben, nicht weil sie
+sonst verloren gingen, sondern damit sie nicht unter einem anderen Namen
+ankommen als dem gespeicherten.
+
+### Warum `tagName: 'a'`, nicht `span`
+
+Die Glossar-Autoverlinkung des Themes (`the_content`, Priorität 10000)
+überspringt bestehende `<a>`-Elemente korrekt. Bei einem `<span>` würde sie
+ein `<a class="glossar-term">` **hinein**setzen — Klick (Modal) und Tooltip
+(Glossar) konkurrierten dann um denselben Text, und ohne JavaScript wäre der
+Verweis gar kein Link. Ein `<a>` schützt den markierten Text also vor der
+eigenen Glossar-Funktion des Projekts.
+
+### Warum eine eigene CSS-Klasse (`cbd-block-reference-inline`)
+
+Die Klasse des Blocks, `cbd-block-reference-link`, trägt `display: block`
+samt Karten-Layout und einen `transform` beim Überfahren (`style.css:9-14`)
+— mitten in einem Absatz zerrisse das den Textfluss. `registerFormatType`
+kann pro Format nur eine Klasse setzen; ein unterscheidendes Attribut
+zusätzlich zur Blockklasse wäre ein Umweg gewesen, kein Ersatz für eine
+eigene Klasse. Der Inline-Verweis sieht deshalb wie ein gewöhnlicher Link aus
+(`display: inline`, Unterstreichung) und trägt nur einen kleinen
+`::after`-Pfeil (`\2197`, als `inline-block`, sonst zieht der Vorfahre seine
+Unterstreichung nicht über das Symbol).
+
+### Warum das View-Script aus dem Inhaltsfilter eingebunden wird
+
+`block.json` deklariert `viewScript`, aber WordPress reiht ein `viewScript`
+nur ein, wenn der **Block** auf der Seite steht. Eine Seite mit
+ausschließlich Inline-Verweisen enthält den Block „Block-Referenz" nirgends
+— ein solches Skript würde also nie geladen. `inhalt_auffrischen()` weiß
+dagegen bereits, dass mindestens ein Verweis bearbeitet wurde, und reiht
+`view.js` von dort aus ein, statt eine zweite Inhalts-Prüfung auf
+`wp_enqueue_scripts` zu betreiben (die eine Fallunterscheidung nach
+`is_singular()` bräuchte und Auszüge, Widgets und Archive verfehlte). Das
+trägt **nur**, weil `view.js` mit `$in_footer = true` registriert ist und
+`the_content` vor `wp_footer` läuft — im Code als Kommentar festgehalten,
+damit eine künftige Umstellung auf `$in_footer = false` den Inline-Verweis
+nicht stillschweigend lähmt. Läuft der Filter in einem Auszug oder Archiv,
+wird `view.js` ebenfalls eingereiht, obwohl der Verweis dort abgeschnitten
+sein kann — gemessen als harmlos (ein Footer-Script kostet dort nichts
+Sichtbares).
+
+### Der Link-Wächter prüft den Bereich, nicht `getActiveFormat()`
+
+**Die wichtigste Warnung dieses Abschnitts.** `format.js` verhindert
+verschachtelte `<a>`, indem es prüft, ob auf der Markierung bereits ein
+`core/link` liegt. Die naheliegende Prüfung, `getActiveFormat(wert,
+'core/link')`, schlägt dafür **nicht** aus: Sie liefert nur dann etwas, wenn
+das Format die **ganze** Markierung überspannt. Liegt ein Link nur
+**innerhalb** der Markierung (z. B. ein ganzer Satz mit einer verlinkten
+Quellenangabe) oder überlappt er nur einen Rand, ist der Rückgabewert
+`undefined`, der Dialog öffnet sich, und `applyFormat()` legt den
+Inline-Verweis außen um den bestehenden Link.
+
+Gemessen mit den echten WordPress-7.0.4-Bündeln (`rich-text.js`,
+`escape-html.js`): Fall „Link innerhalb der Markierung" und „Markierung
+überlappt den Linkrand" erzeugten je **ein** verschachteltes `<a>`, bestätigt
+durch `WP_HTML_Processor::normalize()` als ungültiges HTML (Roundtrip
+scheitert). Wer den Format-Editor öffnet, sieht danach „Block enthält
+unerwarteten oder ungültigen Inhalt" — und weil der Schaden im bereits
+**gespeicherten** `post_content` liegt, ist es der **einzige Fehler dieses
+gesamten Vorhabens, der sich nicht durch ein Plugin-Update reparieren
+lässt.** Betroffene Absätze müssten von Hand korrigiert werden.
+
+Der Fix (`linkImBereich()`) prüft stattdessen **jedes Zeichen** der
+Markierung auf ein `core/link`-Format:
+
+```js
+function linkImBereich(wert) {
+    if (!wert || !wert.formats) { return false; }
+    var von = bereich.start, bis = bereich.end;
+    for (var i = von; i < bis; i++) {
+        var f = wert.formats[i];
+        if (!f) { continue; }
+        for (var j = 0; j < f.length; j++) {
+            if (f[j] && LINK_FORMAT === f[j].type) { return true; }
+        }
+    }
+    return false;
+}
+```
+
+Wer diese Bereichsprüfung zurück auf `getActiveFormat()` umbaut, öffnet die
+Lücke wieder. Zwei gleichartige Inline-Verweise im selben Bereich erzeugen
+weiterhin **keine** Verschachtelung (`applyFormat()` filtert den eigenen Typ
+vorher heraus), und ein Cursor **innerhalb** eines bestehenden
+Inline-Verweises kann ihn weiterhin über die Werkzeugleiste entfernen
+(`removeFormat()` weitet eine zusammengefallene Auswahl auf den ganzen
+zusammenhängenden Lauf aus).
+
+### Die Klassenzeichenkette `cbd-block-reference-inline` steht an vier Stellen
+
+`CBD_Inline_Reference::KLASSE`, `format.js` (als wirksamer Wert **und** in
+zwei Docblocks), `view.js` (Klick-Selektor) und `style.css` (fünf
+Selektoren). `tools/test-inline-reference.php`, Gruppe 11, hält sie zusammen
+— geprüft wird dabei der **wirksame Ausdruck** (`var KLASSE = '<wert>';` in
+`format.js`, der vollständige Klick-Selektor in `view.js`, `.` + `KLASSE` in
+`style.css`), nicht das bloße Vorkommen der Zeichenkette. Das ist keine
+Selbstverständlichkeit: Die erste Fassung des Wächters prüfte nur mit
+`strpos()`, ob die Zeichenkette **irgendwo** in der Datei steht — das blieb
+grün, selbst wenn nur der wirksame Wert mutiert wurde, weil die beiden
+Docblock-Kommentare weiterhin trafen (AP-4.fix2, Befund B2), und `style.css`
+war anfangs von **keinem** Wächter erfasst (Befund B3). Dass Gruppe 11 heute
+wirklich anschlägt, ist selbst per Mutation geprüft (eine Kopie im Speicher
+wird verändert, nie die Datei auf der Platte) — die Prüfung ihres eigenen
+Anschlagens ist Teil des Bestands, keine einmalige Anekdote.
+
+### Die Grenzen des Formats
+
+Die Schaltfläche neben dem Link-Knopf erscheint nicht in jedem Block. Gegen
+den Gutenberg-Quelltext von WordPress 7.0.4 geprüft (AP-4.2): sichtbar in
+`core/paragraph`, `core/heading`, `core/list-item`, in Tabellenzellen und in
+der geteilten `Caption`-Komponente (gilt damit auch für Bild- und
+Medien-Unterschriften). **Nicht** sichtbar in `core/button` und rund
+fünfzehn weiteren Blöcken — Ursache ist `withoutInteractiveFormatting` bzw.
+ein eingeschränktes `allowedFormats`-Array; `withoutInteractiveFormatting`
+filtert jedes Format heraus, dessen `tagName` in `interactiveContentTags`
+steht, und `a` gehört dazu. Das ist eine Eigenschaft von Gutenberg selbst,
+kein Befund dieses Vorhabens.
+
+### Prüfharnische
+
+| Datei | Prüfungen | Schwerpunkt |
+|---|---|---|
+| `tools/test-seitenbaum.php` | **97** | Vertrag A + B: Baumaufbau, Sortierung, Tiefe, Zyklen, verwaiste Knoten, Beiträge außerhalb des Baums, JSON-Objektform, `gesperrt`-Kette, Abfragenzahl |
+| `tools/test-block-auswahl.js` | **140** | Vertrag C: die sieben öffentlichen Namen und kein achter, Memoisierung, Kaskade mit Beschneidung, Zielverlust-Schutz (AP-3.fix4), reine Logik ohne `wp.element` beim Laden |
+| `tools/test-inline-reference.php` | **181** (177 im „Doppel"-Betrieb gegen ein schmales `WP_HTML_Tag_Processor`-Double, 4 sichtbare Skips dort) | Vertrag D + E: Zeichengleichheit ohne Verweis, überlange Ziffernfolgen ohne PHP-Warnung, führende Nullen, Duplikatswächter Gruppe 11 |
+
+### Öffentliche `window.cbd*`-Schnittstellen
+
+`window.cbdBlockAuswahl` ist die **fünfte** öffentliche `window.cbd*`-Schnittstelle
+des Plugins — und die **erste, die für den Editor gilt**. Die anderen vier
+sind Frontend:
+
+| Name | Datei | Geltungsbereich | Kurzbeschreibung |
+|---|---|---|---|
+| `cbdRenderLatex(root)` | `assets/js/latex-renderer.js` | Frontend | rendert `.cbd-latex-formula` in `root` nach, `Promise<number>` |
+| `cbdPDFExportServerSide(elemente, modus)` | `assets/js/interactivity-store.js` | Frontend | serverseitiger Einzelblock-PDF-Export (u. a. Apple-Weiche) |
+| `cbdPrepareFormulasForPDF(element)` | `assets/js/latex-renderer.js` | Frontend | bereitet gerenderte Formeln für den PDF-Export vor |
+| `cbdRefreshDynamicStyles()` | `includes/class-cbd-style-loader.php` (Inline-Skript der Live-Vorschau) | Frontend/Live-Vorschau | erzeugt das dynamische Block-CSS neu, wenn sich die Blockzahl ändert |
+| `cbdBlockAuswahl` | `assets/js/block-auswahl.js` | **Editor** | hierarchische Zielauswahl (Vertrag C), sieben Namen, s. o. |
+
 ## Screenshot auf Apple-Geräten (seit 3.1.89)
 
 Auf iOS, iPadOS und macOS-Safari wird der Screenshot-Knopf eines
