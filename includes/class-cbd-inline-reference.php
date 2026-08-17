@@ -355,6 +355,18 @@ class CBD_Inline_Reference {
      * (`md_read_value()`, Zeile ~911-915); diese Stelle hatte sie nicht
      * übernommen.
      *
+     * FÜHRENDE NULLEN WERDEN EBENFALLS ABGELEHNT (AP-3.fix5, Befund S3) —
+     * eine Nebenwirkung von filter_var(), die bis hierher unerwähnt blieb.
+     * `ctype_digit('045')` ist wahr, `filter_var('045', FILTER_VALIDATE_INT)`
+     * liefert trotzdem `false`: Eine führende Null ist keine kanonische
+     * Ganzzahldarstellung. Vor AP-3.fix2 ergab `(int)'045'` noch 45 — die
+     * Ablehnung ist also seit AP-3.fix2 ein zweiter, damals unbemerkter
+     * Verhaltenswechsel. Sie ist inhaltlich richtig (eine Beitrags-ID hat nie
+     * führende Nullen) und bleibt bestehen; betroffen ist jede Ziffernfolge
+     * mit führender Null, beliebig lang, nicht nur `045` selbst. Zwei
+     * Prüfungen in `tools/test-inline-reference.php` (Gruppe 10) nageln das
+     * fest.
+     *
      * @param mixed $roh Rückgabe von `get_attribute()` (string, true oder null).
      * @return int 0, wenn nicht lesbar.
      */

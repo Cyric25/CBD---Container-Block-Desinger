@@ -1019,6 +1019,35 @@ if ($GLOBALS['skips'] > 0) {
 }
 
 // =========================================================================
+// 10 · AP-3.fix5 (Befund S3): fuehrende Nullen bleiben abgelehnt
+// =========================================================================
+//
+// ziel_post_id() lehnt seit AP-3.fix2 auch Ziffernfolgen mit fuehrender Null
+// ab: ctype_digit('045') ist wahr, filter_var('045', FILTER_VALIDATE_INT)
+// aber false (vor AP-3.fix2 ergab (int)'045' noch 45). Der Doc-Kommentar
+// sagte bislang nur "eine reine Ziffernfolge zaehlt" -- "045" IST eine, und
+// keine der bisherigen 155 Pruefungen deckte den Fall ab. Die Ablehnung ist
+// inhaltlich richtig (eine Beitrags-ID hat keine fuehrenden Nullen) und
+// bleibt unveraendert; diese zwei Pruefungen nageln sie fest, statt sie nur
+// im Kommentar zu behaupten. Beide Faelle laufen unabhaengig vom
+// Tag-Processor-Weg (kein Rohtext-Element, kein Kommentar beteiligt) --
+// kein SKIP noetig.
+
+echo "\n== 10 · AP-3.fix5 (S3): fuehrende Nullen ==\n";
+
+$GLOBALS['test_aktuelle_post'] = 999;
+$GLOBALS['test_permalinks'] = array(45 => 'https://example.test/ir-spektroskopie/');
+
+foreach (array('045', '00000000000000000045') as $wert) {
+    $eingabe = verweis($wert);
+    check(
+        '10.1 · AK1: data-target-post="' . $wert . '" bleibt zeichengleich (fuehrende Null)',
+        $eingabe === CBD_Inline_Reference::inhalt_auffrischen($eingabe),
+        $eingabe
+    );
+}
+
+// =========================================================================
 
 $fails = $GLOBALS['fails'];
 $skips = isset($GLOBALS['skips']) ? $GLOBALS['skips'] : 0;

@@ -58,6 +58,7 @@ if (!$target_url) {
 	return;
 }
 
+// SELBE REGEL WIE CBD_Inline_Reference::ziel_href() (includes/class-cbd-inline-reference.php) -- beide Fassungen zusammen aendern, sonst laufen sie auseinander (AP-3.fix5, Befund S7).
 // Ohne Anker traegt die URL den Bezeichner als Parameter, damit auch der
 // Aufruf einer ANDEREN Seite beim Zielblock landet (view.js wertet ihn beim
 // Laden aus).
