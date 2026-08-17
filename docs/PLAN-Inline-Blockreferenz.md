@@ -1805,6 +1805,141 @@ Verweis setzen → speichern → Datenbankinhalt der Seite ansehen (Vertrag D
 zeichenweise prüfen) → Frontend aufrufen → Quelltext ansehen (Vertrag E
 zeichenweise prüfen) → klicken.
 
+**Übergabenotiz (erledigt, zweiter Anlauf):** Der erste Anlauf starb am
+Monatsbudget **ohne eine Datei anzulegen**. Der zweite hat wie aufgetragen in
+Etappen committet: `ab0b9f2` (`format.js`), `36b93c5` (`style.css` +
+`view.js`), `84a0db1` (Harnisch).
+
+**160/160** grün, im Doppel-Modus **156/156** (weiterhin 4 sichtbare Skips).
+`node --check` grün für beide JS-Dateien. **AK10 bewiesen:** `git diff
+--numstat` auf `view.js` liefert `1 1` — genau eine geänderte Zeile.
+
+**Das gespeicherte Markup ist gemessen, nicht abgeleitet.** Der Agent hat die
+echten WordPress-Bündel `escape-html.js` und `rich-text.js` vom Testserver in
+node geladen und `applyFormat`/`toHTMLString` aufgerufen. Ergebnis: die
+Attributmenge ist identisch mit Vertrag D, `data-display-mode`,
+`data-same-page` und `aria-haspopup` sind **nicht** enthalten (die setzt
+Vertrag E), `data-target-anchor=""` überlebt die Serialisierung, der Linktext
+bleibt unangetastet. Einzige Abweichung ist die **Reihenfolge** — `rich-text`
+hängt `class` hinten an; AP-3.rev hatte bereits festgehalten, dass keine feste
+Attributreihenfolge erwartet werden darf.
+
+**Entscheidungen des Agenten:**
+
+1. **Knopfsymbol** Dashicon `external`, Titel wechselt zwischen „Block-Verweis
+   einfügen" und „entfernen" — deutlich vom Ketten-Symbol des Link-Knopfs
+   unterscheidbar und dasselbe Symbol, das `index.js` für den Modalmodus
+   schon benutzt.
+2. **`::after` ist `\2197` (↗), nicht `\29C9` (⧉)** — der Pfeil existiert in
+   den Standardschriften aller hier benutzten Geräte; ein fehlendes Zeichen
+   ergäbe ein Ersatzkästchen mitten im Satz. `display: inline-block` ist kein
+   Schmuck: Über ein atomares Inline-Element zieht der Vorfahre seine
+   Unterstreichung nicht, der Pfeil bleibt dadurch ohne Linie. Hover ändert
+   nur `text-decoration-thickness`, also keinen Layoutwert — kein Ruckeln im
+   Textfluss.
+3. **Verschachtelte Links:** Der Knopf bleibt bedienbar, der Dialog öffnet
+   nicht, die Begründung kommt als Snackbar über `core/notices` mit
+   `console.warn` als Rückfall.
+4. **Die Markierung wird beim Öffnen gemerkt**, `applyFormat` läuft darauf —
+   das Öffnen kostet dem Editor den Fokus und damit womöglich `start`/`end`.
+5. **Dialog-Layout inline statt über CSS-Klassen**, weil `style.css` das
+   Frontend-Stylesheet ist und `editor.css` nicht zum Auftrag gehörte.
+
+**Grenzüberschreitung, geprüft und angenommen:** Der Auftrag nannte für den
+Harnisch „nur den Duplikatswächter". Der Agent musste **Gruppe 3c
+umformulieren**, und das war richtig: Sie prüfte „solange `format.js` fehlt,
+registriert `register_format_script()` nichts" dadurch, dass die Datei nicht
+existierte — nach seinen eigenen Worten „eine Aussage über den Kalender". Mit
+dem Anlegen der Datei wären `3c.0`–`3c.3` plus `4.2` und `5.9` rot geblieben.
+
+Vom Orchestrator nachgeprüft: **Die Abdeckung ist nicht gesunken, sondern
+gestiegen.** `3c.1` prüft den Fehlt-Fall jetzt **dauerhaft** über den
+Test-Seam `format_script_daten($relativ)` mit einem Pfad, den es nie geben
+wird — genau dafür hatte AP-3.3 den Parameter eingeführt. `3c.2`/`3c.3`
+halten stattdessen fest, was vorher niemand prüfen konnte: dass genau
+`cbd-block-reference-format` registriert **und eingereiht** wird. `3c.4`,
+`3c.5`, `4.2` und `5.9` bestehen wortgleich weiter, `3c.6` ist neu. Genau
+drei gelöschte Prüfzeilen im Diff.
+
+**AK12, aus dem Gutenberg-Quelltext belegt (WordPress 7.0.4):** Sichtbar in
+`core/paragraph`, `core/heading`, `core/list-item`, Tabellenzelle und der
+geteilten `Caption`-Komponente (gilt damit auch für Bildunterschriften).
+**Nicht** sichtbar in `core/button` und rund fünfzehn weiteren Blöcken —
+Ursache ist `withoutInteractiveFormatting` bzw. `allowedFormats`, und
+`tagName: 'a'` steht in `interactiveContentTags`. Eigenschaft von Gutenberg,
+kein Befund.
+
+**Kleinigkeit für AP-4.doc:** Die zwei Prüfungen der neuen Gruppe 11 tragen
+**beide** die Nummer `11.1`. Rein kosmetisch, aber beim nächsten Anfassen der
+Datei zu berichtigen.
+
+---
+
+### AP-4.fix1: Fehlende Abhängigkeit, dritte URL-Fassung, Verweis ohne Markierung entfernen
+
+**Modell:** sonnet
+**Abhängigkeiten:** AP-4.2
+**Dateien:** `includes/class-cbd-inline-reference.php`,
+`blocks/block-reference/render.php`, `blocks/block-reference/format.js`,
+`tools/test-inline-reference.php`
+**Anlass:** drei Punkte, die AP-4.2 selbst gemeldet und bewusst nicht
+umgesetzt hat, weil sie außerhalb seiner Dateigrenze lagen oder dem Wortlaut
+eines Akzeptanzkriteriums widersprachen.
+
+**F1 — `wp-data` ist keine deklarierte Abhängigkeit.** `format.js` benutzt
+`wp.data.dispatch('core/notices')` für die Warnung bei verschachtelten Links
+(AK3 von AP-4.2), aber `format_script_daten()` in
+`includes/class-cbd-inline-reference.php` führt `wp-data` nicht auf. In der
+Praxis ist es geladen — `wp-block-editor` und `wp-components` hängen zwingend
+daran —, und der Zugriff steht hinter Existenzprüfungen. **Es ist dieselbe
+Fehlerfamilie, an der das Plugin schon einmal gelitten hat:**
+`class-cbd-block-reference.php:155-158` beschreibt, wie ein Script ohne
+deklarierte Abhängigkeit ausgeliefert wurde und `wp.blocks` beim Ausführen
+womöglich noch nicht geladen war. Auf eine zufällig vorhandene Abhängigkeit
+zu bauen ist genau das, was dieser Kommentar verbietet.
+
+*Umsetzung:* `wp-data` als achten Eintrag ergänzen. **Die Prüfungen `3b.5`
+und `3b.6` zählen die Abhängigkeiten und verlangen „keine weiteren" — sie
+müssen mitgezogen werden**, umformuliert, nicht abgeschwächt.
+
+**F2 — die URL-Bildungsregel steht jetzt an drei Stellen.** `ziel_href()`,
+`render.php` und neu `format.js`. AP-3.fix5 hat für die ersten beiden
+wechselseitige Kommentare gesetzt; `format.js` verweist auf beide, **aber
+keine der beiden PHP-Fassungen verweist auf `format.js` zurück**. Dieselbe
+Lücke wie damals, nur eine Ebene weiter. Ein automatischer Wächter ist nicht
+möglich (andere Sprache).
+
+*Umsetzung:* je eine Kommentarzeile in `ziel_href()` und in `render.php`, die
+`format.js` als dritte Fassung nennt. Kein Verhalten ändern.
+
+**F3 — ein Verweis lässt sich nicht entfernen, wenn der Cursor darin steht.**
+AK2 von AP-4.2 verlangte wörtlich „Knopf deaktiviert, wenn
+`value.start === value.end`". Folge: Steht der Cursor **innerhalb** eines
+bestehenden Inline-Verweises, ohne dass Text markiert ist, ist der Knopf
+deaktiviert — obwohl sein Titel in diesem Moment „Block-Verweis entfernen"
+lautet und die Umschaltlogik dahinter genau das könnte. Der Knopf sagt also,
+was er kann, und lässt es nicht zu.
+
+*Umsetzung:* `disabled: markierungLeer(wert) && !istAktiv`. `removeFormat`
+löscht bei zusammengefallener Auswahl den ganzen Lauf — der Agent hat das in
+der WordPress-Quelle nachgesehen. **AK2 von AP-4.2 wird damit bewusst
+präzisiert**, nicht verletzt: Der Knopf bleibt deaktiviert, wenn es nichts zu
+tun gibt, und wird bedienbar, wenn es etwas zu entfernen gibt.
+
+**Akzeptanzkriterien:**
+
+- AK1: `format_script_daten()` führt `wp-data` auf; `3b.5`/`3b.6` sind
+  umformuliert und grün, die Fallzahl sinkt nicht.
+- AK2: `ziel_href()` und `render.php` nennen `format.js` als dritte Fassung.
+  Der Diff von `render.php` enthält **nur** Kommentarzeilen.
+- AK3: Bei leerer Markierung **ohne** aktives Format ist der Knopf
+  deaktiviert; bei leerer Markierung **mit** aktivem Format ist er bedienbar.
+- AK4: Die 160 Prüfungen bleiben grün, beide Betriebsarten; nichts
+  abgeschwächt.
+- AK5: `node --check blocks/block-reference/format.js` und
+  `php tools/check-php74.php` grün.
+- AK6: Die Doppelnummerierung `11.1`/`11.1` ist berichtigt.
+
 **Übergabenotiz:** _(vom Agenten zu füllen)_
 
 ---
@@ -2018,8 +2153,9 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.fix4 | „(gespeichertes Ziel)" darf das Ziel nicht löschen | sonnet | 3.2 | ☑ |
 | AP-3.fix5 | Führende Nullen dokumentieren, URL-Regel beidseitig kommentieren | sonnet | 3.fix2 | ☑ |
 | AP-4.1 | Hierarchische Zielauswahl in der Seitenleiste | sonnet | 3.1, 3.2, 3.rev | ☑ |
-| AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev, 3.fix5 | ◐ (2. Anlauf) |
-| AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2 | ☐ |
+| AP-4.2 | Blockreferenz als Textformat | opus | 3.2, 3.3, 3.rev, 3.fix5 | ☑ (2. Anlauf) |
+| AP-4.fix1 | Fehlende Abhängigkeit, dritte URL-Fassung, Verweis ohne Markierung | sonnet | 4.2 | ◐ |
+| AP-4.3 | Abnahme auf dem Testserver | opus | 4.1, 4.2, 4.fix1 | ☐ |
 | AP-4.rev | Unabhängiges Review Phase 4 | opus | 4.3 | ☐ |
 | AP-4.doc | Dokumentation und Projektabschluss | sonnet | 4.rev | ☐ |
 
@@ -2068,8 +2204,13 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ fertig · ✗ blockiert
 | AP-3.fix2 | `php tools/check-php74.php` | grün, 568 Dateien | 2026-08-17 |
 | AP-4.1 | `node --check blocks/block-reference/index.js` | – | – |
 | AP-4.1 | Kaskade über vier Ebenen, Bestandsblock | – | – |
-| AP-4.2 | `node --check format.js`, `view.js` | – | – |
-| AP-4.2 | Rundlauf Vertrag D und E zeichenweise | – | – |
+| AP-4.2 | `node --check format.js`, `view.js` | grün / grün | 2026-08-17 |
+| AP-4.2 | `php tools/test-inline-reference.php`, beide Betriebsarten | **160/160** und **156/156** (4 sichtbare Skips). Vom Orchestrator nachgeprüft | 2026-08-17 |
+| AP-4.2 | AK10: genau eine Zeile in `view.js` | **bewiesen**, `git diff --numstat` liefert `1 1` | 2026-08-17 |
+| AP-4.2 | Rundlauf Vertrag D und E zeichenweise | **gemessen**, nicht abgeleitet: die echten Bündel `escape-html.js`/`rich-text.js` vom Testserver in node geladen, `applyFormat`/`toHTMLString` gerufen. Attributmenge = Vertrag D; die drei serverseitigen Attribute fehlen korrekt; Filter zweimal angewandt byte-identisch | 2026-08-17 |
+| AP-4.2 | AK14: Duplikatswächter | zwei Prüfungen, beide grün — `format.js` **und** `view.js` nennen die Konstante wortgleich | 2026-08-17 |
+| AP-4.2 | Gruppe 3c umformuliert (Grenzüberschreitung) | **geprüft und angenommen:** genau drei gelöschte Prüfzeilen; `3c.1` prüft den Fehlt-Fall jetzt **dauerhaft** über den Test-Seam statt über die Nichtexistenz der Datei, `3c.2`/`3c.3` prüfen den vorher unbeweisbaren positiven Fall, `3c.4`/`3c.5`/`4.2`/`5.9` wortgleich erhalten. Abdeckung gestiegen | 2026-08-17 |
+| AP-4.fix1 | `wp-data`, dritte URL-Fassung, Knopf bei Cursor im Verweis | – | – |
 | AP-4.3 | Alle sieben Prüfharnische (Regression) | – | – |
 | AP-4.3 | ZIP-Inhalt und Autoloader | – | – |
 | AP-4.3 | Klickliste Seite A und B | – | – |
