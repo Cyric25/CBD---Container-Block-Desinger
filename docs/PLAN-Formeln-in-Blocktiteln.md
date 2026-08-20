@@ -111,11 +111,12 @@ anders als im Inhalt:
 
 | Eingabe im Blocktitel | Nach `wp_kses_post()` |
 |---|---|
-| `rac{a}{b}` | `rac{a}{b}` |
-| `eta` | `eta` |
-| `\cdot`, `\sum_{i=1}^{n}`, `lpha` | Titel unlesbar zerstört |
-| `
-abla`, `	au`, `ho` | unverändert |
+| `\frac{a}{b}` | `rac{a}{b}` |
+| `\beta` | `eta` |
+| `\cdot`, `\sum_{i=1}^{n}`, `\alpha` | Titel unlesbar zerstört |
+| `\nabla`, `\tau`, `\rho` | unverändert |
+abla`, `	au`, `
+ho` | unverändert |
 
 **Dieselben Ausdrücke im Block-INHALT überleben unverändert.**
 
