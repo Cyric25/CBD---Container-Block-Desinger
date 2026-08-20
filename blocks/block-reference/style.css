@@ -17,20 +17,63 @@
 	transform: translateX(5px);
 }
 
+/* Die Karte folgt dem Knopf-Farbschema der Website: plastischer Look der
+   Icon-Kacheln - Verlauf 135 Grad Basisfarbe -> 20 % dunkler, radialer Glanz
+   oben links, Innenkante oben dunkel / unten hell, Schlagschatten.
+
+   Die Farbstufen werden aus --color-ui-surface abgeleitet und NICHT aus den
+   --plastic-*-Variablen des Themes geholt: die stehen in dessen style.css,
+   das Plugin muss aber auch unter einem anderen Theme funktionieren. Fallback
+   #e24614 ist die Projektfarbe. Gleiches Muster wie
+   assets/css/classroom-frontend.css (.cbd-classroom-header).
+
+   background-image statt der Kurzschreibweise background: waere der Verlauf
+   ungueltig (Browser ohne color-mix()), setzte die Kurzschreibweise auch
+   background-color zurueck und die Karte waere durchsichtig statt einfarbig. */
 .cbd-block-reference-content {
 	display: flex;
 	align-items: center;
 	gap: 1em;
 	padding: 1em 1.5em;
-	background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-	color: white;
+	background-color: var(--color-ui-surface, #e24614);
+	background-image:
+		radial-gradient(75% 75% at 30% 22%,
+			rgba(255, 255, 255, 0.35) 0%,
+			rgba(255, 255, 255, 0.08) 45%,
+			rgba(255, 255, 255, 0) 100%),
+		linear-gradient(135deg,
+			var(--color-ui-surface, #e24614) 0%,
+			color-mix(in srgb, var(--color-ui-surface, #e24614) 80%, #000) 100%);
+	color: #fff;
 	border-radius: 12px;
-	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+	box-shadow:
+		inset 0 2px 2px -1px color-mix(in srgb, var(--color-ui-surface, #e24614) 34%, transparent),
+		inset 0 -2px 2px -1px rgba(255, 255, 255, 0.5),
+		inset -1px 0 1px color-mix(in srgb, var(--color-ui-surface, #e24614) 34%, transparent),
+		0 4px 10px color-mix(in srgb, var(--color-ui-surface, #e24614) 25%, transparent);
 	transition: all 0.3s ease;
 }
 
+/* FALLE BEIM HOVER: Hier NIE nur background-color setzen. Bei einem
+   Verlaufshintergrund blieben die Verlaufsschichten aus background-image
+   stehen und ueberdeckten die neue Farbe - die Karte saehe beim Ueberfahren
+   unveraendert aus. Der Hover tauscht deshalb den GANZEN Verlauf aus.
+   Dieselbe Falle ist in assets/js/floating-pdf-button.js dokumentiert. */
 .cbd-block-reference-link:hover .cbd-block-reference-content {
-	box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+	background-color: var(--color-ui-surface-dark, #c93d12);
+	background-image:
+		radial-gradient(75% 75% at 30% 22%,
+			rgba(255, 255, 255, 0.35) 0%,
+			rgba(255, 255, 255, 0.08) 45%,
+			rgba(255, 255, 255, 0) 100%),
+		linear-gradient(135deg,
+			var(--color-ui-surface-dark, #c93d12) 0%,
+			color-mix(in srgb, var(--color-ui-surface, #e24614) 80%, #000) 100%);
+	box-shadow:
+		inset 0 2px 2px -1px color-mix(in srgb, var(--color-ui-surface, #e24614) 34%, transparent),
+		inset 0 -2px 2px -1px rgba(255, 255, 255, 0.5),
+		inset -1px 0 1px color-mix(in srgb, var(--color-ui-surface, #e24614) 34%, transparent),
+		0 6px 14px color-mix(in srgb, var(--color-ui-surface, #e24614) 35%, transparent);
 	transform: translateY(-2px);
 }
 
@@ -98,10 +141,10 @@
 /* Highlight animation for referenced blocks */
 @keyframes cbdBlockHighlight {
 	0%, 100% {
-		box-shadow: 0 0 0 0 rgba(102, 126, 234, 0);
+		box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-ui-surface, #e24614) 0%, transparent);
 	}
 	50% {
-		box-shadow: 0 0 0 8px rgba(102, 126, 234, 0.4);
+		box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-ui-surface, #e24614) 40%, transparent);
 	}
 }
 
