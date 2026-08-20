@@ -155,12 +155,33 @@ Sicherheitsentscheidung des Nutzers, keine technische Vorliebe:
    Datenmigration über alle Bestandsseiten; die weitreichendste Lösung mit
    der größten Regressionsfläche.
 
-**Vor der Entscheidung fehlt eine Messung:** Ob der Speicherweg des
-Blockeditors die Filterung wirklich anwendet, ist bisher **nur begründet, nicht
-gemessen** (`wp_filter_post_kses` hängt an `content_save_pre`). Ein
-Ende-zu-Ende-Nachweis mit einem echten Block-Redakteur-Konto steht aus — er
-ist die erste Aufgabe des künftigen Vorhabens, denn wenn die Annahme nicht
-zutrifft, entfällt das ganze Problem.
+**Die fehlende Messung ist am 2026-08-21 nachgeholt worden — die Annahme
+trifft zu.** Auf dem Testserver wurde ein echtes Konto mit der Rolle
+`block_redakteur` angelegt (`blockredakteur`, ID 3) und **als dieser Nutzer**
+eine Seite mit einem Container-Block gespeichert, dessen Titel
+`Formel $\frac{a}{b}$ und $\cdot$` lautete:
+
+| Prüfung | Ergebnis |
+|---|---|
+| Rolle hat `unfiltered_html` | **nein** |
+| kses-Filter beim Speichern aktiv (`content_save_pre`) | **ja** |
+| Blocktitel nach dem Speichern | **im Markup nicht mehr auffindbar — Attribut zerstört** |
+| Dieselben Formeln im Block-**Inhalt** | **unverändert erhalten** (`\frac` und `\cdot` je einmal) |
+| Block-Trenner | erhalten |
+
+**Damit ist der Fall belegt, nicht mehr vermutet.** Ein Block-Redakteur
+verliert den Formeltitel beim Speichern vollständig; der Blockinhalt bleibt
+heil. Der Zwischenfall bestätigt zugleich die Reihenfolge: Dieser Plan darf
+erst nach der Behebung des Speicherproblems umgesetzt werden, sonst rendert
+er einen Titel, den es nicht mehr gibt.
+
+*Nebenbefund der Messung, ohne Bezug zum Vorhaben:* Der Glossar-Scanner des
+Themes (`functions.php`, `simple_clean_scan_glossar_candidates()`) ruft
+`mb_strtolower()` auf `save_post` auf. Fehlt die `mbstring`-Erweiterung,
+endet **jedes** Speichern in einem Fatal Error. Auf dem Testserver und
+vermutlich auch produktiv ist sie vorhanden — die Abhängigkeit ist aber
+nirgends dokumentiert und wurde nur sichtbar, weil der Messaufruf aus der
+Kommandozeile ohne sie lief.
 
 **Noch nicht gemessen:** ob der Speicherweg des Blockeditors die Filterung
 tatsächlich anwendet. Das ist aus der WordPress-Mechanik gut begründet
