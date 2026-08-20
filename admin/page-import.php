@@ -27,7 +27,7 @@ if (defined('CBD_TABLE_BLOCKS')) {
     <h1><?php esc_html_e('Seiten aus Markdown importieren', 'container-block-designer'); ?></h1>
 
     <p class="description">
-        <?php esc_html_e('Aus jeder Markdown-Datei entsteht eine Seite. Der Seitentitel ist die erste „# “-Zeile der Datei; fehlt sie, wird der Dateiname verwendet. Alle Seiten werden als Entwurf auf der obersten Ebene angelegt und überschreiben nichts.', 'container-block-designer'); ?>
+        <?php esc_html_e('Aus jeder Markdown-Datei entsteht eine Seite. Der Seitentitel ist die erste „# “-Zeile der Datei; fehlt sie, wird der Dateiname verwendet. Alle Seiten werden als Entwurf angelegt und überschreiben nichts – auf oberster Ebene, sofern unten keine Elternseite gewählt wird.', 'container-block-designer'); ?>
     </p>
 
     <?php if ($anzahl_designs === 0) : ?>
@@ -39,6 +39,23 @@ if (defined('CBD_TABLE_BLOCKS')) {
     <?php endif; ?>
 
     <div id="cbd-page-import-app">
+
+        <div class="cbd-pi-elternseite" id="cbd-pi-elternseite">
+            <label for="cbd-import-parent"><?php esc_html_e('Elternseite', 'container-block-designer'); ?></label>
+            <?php
+            wp_dropdown_pages(array(
+                'show_option_none'  => esc_html__('— oberste Ebene —', 'container-block-designer'),
+                'option_none_value' => 0,
+                'name'              => 'cbd-import-parent',
+                'id'                => 'cbd-import-parent',
+                'sort_column'       => 'menu_order,post_title',
+                'post_status'       => array('publish', 'draft'),
+            ));
+            ?>
+            <p class="description">
+                <?php esc_html_e('Gilt für den gesamten Lauf: Alle Seiten, die aus den unten gewählten Dateien entstehen, bekommen dieselbe Elternseite.', 'container-block-designer'); ?>
+            </p>
+        </div>
 
         <div class="cbd-pi-dropzone" id="cbd-pi-dropzone">
             <p class="cbd-pi-dropzone-icon" aria-hidden="true">📄</p>

@@ -520,6 +520,13 @@
             return;
         }
 
+        // Einmal vor Beginn lesen und für den GANZEN Lauf festhalten – nicht
+        // je Datei neu, sonst könnte eine Bedienung mitten im Lauf die
+        // Elternseite für die zweite Hälfte der Dateien ändern.
+        var elternfeld = $('cbd-import-parent');
+        var elternId = elternfeld ? elternfeld.value : '0';
+        if (elternfeld) { elternfeld.disabled = true; }
+
         laeuft = true;
         zeichneAktionen();
 
@@ -536,6 +543,7 @@
             if (i >= auswahl.length) {
                 fortschrittVerbergen();
                 laeuft = false;
+                if (elternfeld) { elternfeld.disabled = false; }
                 zeichneAktionen();
 
                 var summe = el('p', 'cbd-pi-summe',
@@ -558,7 +566,8 @@
                 title: d.titel,
                 content: d.rohtext,
                 mappings: JSON.stringify(zuweisungen),
-                accordion_opt_out: JSON.stringify(accordionOptOut())
+                accordion_opt_out: JSON.stringify(accordionOptOut()),
+                parent_id: elternId
             }).then(function (antwort) {
                 if (antwort && antwort.success) {
                     angelegt++;
