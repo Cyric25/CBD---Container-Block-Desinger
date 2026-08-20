@@ -50,6 +50,101 @@ function istAppleGeraet() {
 const cbdIstAppleGeraet = istAppleGeraet();
 
 /**
+ * Verzögerung bis die Aktionsleiste sich von selbst ausblendet (AP-2,
+ * PLAN-Aktionsleiste-Autoausblenden.md). Eine benannte Konstante statt einer
+ * nackten Zahl, damit der Wert nicht gegenüber der gleichlautenden Konstante
+ * in interactivity-fallback.js auseinanderläuft.
+ */
+const CBD_AKTIONSLEISTE_VERZOEGERUNG = 1000;
+
+// Zeitgeber je Container, nicht in einer einzelnen Modulvariable - sonst
+// löschte ein zweiter Container auf derselben Seite den Zeitgeber des ersten.
+const cbdAktionsleisteTimer = new WeakMap();
+
+/**
+ * Blendet die Aktionsleiste eines Containers CBD_AKTIONSLEISTE_VERZOEGERUNG
+ * nach dem Erscheinen von selbst aus, indem die Klasse "cbd-actions-verborgen"
+ * am Container (.cbd-container) gesetzt wird - das eigentliche Ausblenden
+ * übernimmt CSS (cbd-frontend-clean.css, AP-1). Läuft nicht, solange der
+ * Zeiger über der Leiste selbst steht oder der Container den Fokus enthält
+ * (:focus-within): Sonst wäre die Leiste beim Zielen auf einen Knopf oder
+ * beim Tab-Springen unbedienbar. Deckungsgleiche Funktion in
+ * interactivity-fallback.js.
+ *
+ * @param {Element} container Wurzelelement mit der Klasse .cbd-container
+ *   (identisch mit element.ref in callbacks.onInit).
+ */
+function initAktionsleisteAutoAusblenden(container) {
+	if (!container) {
+		return;
+	}
+
+	// container.querySelector() sucht in allen Nachfahren; bei verschachtelten
+	// Containern liefert das trotzdem die eigene Leiste, weil sie im Markup
+	// vor jedem inneren Container steht (erstes Fundstück gewinnt).
+	const actionButtons = container.querySelector('.cbd-action-buttons');
+	if (!actionButtons) {
+		return;
+	}
+
+	function zeitgeberAbbrechen() {
+		const timerId = cbdAktionsleisteTimer.get(container);
+		if (timerId) {
+			clearTimeout(timerId);
+			cbdAktionsleisteTimer.delete(container);
+		}
+	}
+
+	function zeitgeberStarten() {
+		zeitgeberAbbrechen();
+		const timerId = setTimeout(function() {
+			cbdAktionsleisteTimer.delete(container);
+
+			// Doppelte Absicherung: Auch falls der Zeitgeber durch ein
+			// verpasstes Event nicht abgebrochen wurde, bleibt die Leiste
+			// sichtbar, solange der Zeiger über ihr steht oder der Container
+			// den Fokus enthält.
+			if (container.matches(':focus-within') || actionButtons.matches(':hover')) {
+				return;
+			}
+
+			container.classList.add('cbd-actions-verborgen');
+		}, CBD_AKTIONSLEISTE_VERZOEGERUNG);
+		cbdAktionsleisteTimer.set(container, timerId);
+	}
+
+	container.addEventListener('mouseenter', function() {
+		container.classList.remove('cbd-actions-verborgen');
+		zeitgeberStarten();
+	});
+
+	container.addEventListener('mouseleave', function() {
+		// Container verlassen: Zustand zurücksetzen, sonst bliebe die Leiste
+		// beim nächsten Überfahren dauerhaft unsichtbar.
+		zeitgeberAbbrechen();
+		container.classList.remove('cbd-actions-verborgen');
+	});
+
+	actionButtons.addEventListener('mouseenter', function() {
+		zeitgeberAbbrechen();
+		container.classList.remove('cbd-actions-verborgen');
+	});
+
+	actionButtons.addEventListener('mouseleave', function() {
+		zeitgeberStarten();
+	});
+
+	container.addEventListener('focusin', function() {
+		zeitgeberAbbrechen();
+		container.classList.remove('cbd-actions-verborgen');
+	});
+
+	container.addEventListener('focusout', function() {
+		zeitgeberStarten();
+	});
+}
+
+/**
  * Helper: Show class selector dialog for "Behandelt" feature
  * (Defined outside store to avoid 'this' context issues)
  */
@@ -831,6 +926,12 @@ store('container-block-designer', {
 				contentElement.setAttribute('aria-hidden', context.isCollapsed ? 'true' : 'false');
 				contentElement.setAttribute('role', 'region');
 			}
+
+			// Aktionsleiste blendet sich nach CBD_AKTIONSLEISTE_VERZOEGERUNG
+			// von selbst aus (AP-2, PLAN-Aktionsleiste-Autoausblenden.md).
+			// element.ref ist hier bereits der Container (.cbd-container),
+			// weil data-wp-init am Wrapper selbst steht.
+			initAktionsleisteAutoAusblenden(element.ref);
 
 			// Apple-Geraete (iOS/iPadOS/macOS-Safari): Screenshot-Knopf(-e)
 			// optisch zum Einzelblock-PDF-Knopf umschalten (AP-2.6). Die

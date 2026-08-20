@@ -46,6 +46,102 @@
     // Einmal berechnen statt bei jedem Aufruf neu - siehe interactivity-store.js.
     var cbdIstAppleGeraet = istAppleGeraet();
 
+    /**
+     * Verzögerung bis die Aktionsleiste sich von selbst ausblendet (AP-2,
+     * PLAN-Aktionsleiste-Autoausblenden.md). Deckungsgleich mit der
+     * gleichnamigen Konstante in interactivity-store.js, damit der Wert
+     * nicht auseinanderläuft.
+     */
+    var CBD_AKTIONSLEISTE_VERZOEGERUNG = 1000;
+
+    // Zeitgeber je Container, nicht in einer einzelnen Modulvariable - sonst
+    // löschte ein zweiter Container auf derselben Seite den Zeitgeber des
+    // ersten.
+    var cbdAktionsleisteTimer = new WeakMap();
+
+    /**
+     * Blendet die Aktionsleiste eines Containers CBD_AKTIONSLEISTE_VERZOEGERUNG
+     * nach dem Erscheinen von selbst aus, indem die Klasse
+     * "cbd-actions-verborgen" am Container (.cbd-container) gesetzt wird -
+     * das eigentliche Ausblenden übernimmt CSS (cbd-frontend-clean.css,
+     * AP-1). Läuft nicht, solange der Zeiger über der Leiste selbst steht
+     * oder der Container den Fokus enthält (:focus-within): Sonst wäre die
+     * Leiste beim Zielen auf einen Knopf oder beim Tab-Springen unbedienbar.
+     * Deckungsgleiche Funktion in interactivity-store.js.
+     *
+     * @param {jQuery} $container .cbd-container-Element als jQuery-Objekt.
+     */
+    function initAktionsleisteAutoAusblenden($container) {
+        var container = $container[0];
+        if (!container) {
+            return;
+        }
+
+        // .find() sucht in allen Nachfahren; bei verschachtelten Containern
+        // liefert .first() trotzdem die eigene Leiste, weil sie im Markup vor
+        // jedem inneren Container steht (erstes Fundstück gewinnt).
+        var $actionButtons = $container.find('.cbd-action-buttons').first();
+        if ($actionButtons.length === 0) {
+            return;
+        }
+
+        function zeitgeberAbbrechen() {
+            var timerId = cbdAktionsleisteTimer.get(container);
+            if (timerId) {
+                clearTimeout(timerId);
+                cbdAktionsleisteTimer.delete(container);
+            }
+        }
+
+        function zeitgeberStarten() {
+            zeitgeberAbbrechen();
+            var timerId = setTimeout(function() {
+                cbdAktionsleisteTimer.delete(container);
+
+                // Doppelte Absicherung: Auch falls der Zeitgeber durch ein
+                // verpasstes Event nicht abgebrochen wurde, bleibt die Leiste
+                // sichtbar, solange der Zeiger über ihr steht oder der
+                // Container den Fokus enthält.
+                if ($container.is(':focus-within') || $actionButtons.is(':hover')) {
+                    return;
+                }
+
+                $container.addClass('cbd-actions-verborgen');
+            }, CBD_AKTIONSLEISTE_VERZOEGERUNG);
+            cbdAktionsleisteTimer.set(container, timerId);
+        }
+
+        $container.on('mouseenter', function() {
+            $container.removeClass('cbd-actions-verborgen');
+            zeitgeberStarten();
+        });
+
+        $container.on('mouseleave', function() {
+            // Container verlassen: Zustand zurücksetzen, sonst bliebe die
+            // Leiste beim nächsten Überfahren dauerhaft unsichtbar.
+            zeitgeberAbbrechen();
+            $container.removeClass('cbd-actions-verborgen');
+        });
+
+        $actionButtons.on('mouseenter', function() {
+            zeitgeberAbbrechen();
+            $container.removeClass('cbd-actions-verborgen');
+        });
+
+        $actionButtons.on('mouseleave', function() {
+            zeitgeberStarten();
+        });
+
+        $container.on('focusin', function() {
+            zeitgeberAbbrechen();
+            $container.removeClass('cbd-actions-verborgen');
+        });
+
+        $container.on('focusout', function() {
+            zeitgeberStarten();
+        });
+    }
+
     // Check immediately and after a delay
     function checkInteractivityAPI() {
         if (typeof window.wp !== 'undefined' && typeof window.wp.interactivity !== 'undefined') {
@@ -134,6 +230,10 @@
                         $btn.attr('data-cbd-apple-pdf', '1');
                     });
                 }
+
+                // Aktionsleiste blendet sich nach CBD_AKTIONSLEISTE_VERZOEGERUNG
+                // von selbst aus (AP-2, PLAN-Aktionsleiste-Autoausblenden.md).
+                initAktionsleisteAutoAusblenden($container);
             });
         }
 
