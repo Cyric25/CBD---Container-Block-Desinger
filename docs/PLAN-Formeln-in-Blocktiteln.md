@@ -115,8 +115,6 @@ anders als im Inhalt:
 | `\beta` | `eta` |
 | `\cdot`, `\sum_{i=1}^{n}`, `\alpha` | Titel unlesbar zerstört |
 | `\nabla`, `\tau`, `\rho` | unverändert |
-abla`, `	au`, `
-ho` | unverändert |
 
 **Dieselben Ausdrücke im Block-INHALT überleben unverändert.**
 

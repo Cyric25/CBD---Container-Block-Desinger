@@ -296,8 +296,6 @@ Aufruf von `wp_kses_post()` auf Blockmarkup:
 | `\beta` | `eta` |
 | `\cdot`, `\sum_{i=1}^{n}`, `\alpha` | Titel unlesbar zerstört |
 | `\nabla`, `\tau`, `\rho` | unverändert |
-abla`, `	au`, `
-ho` | unverändert |
 
 **Dieselben Ausdrücke im Block-INHALT überleben unverändert.** Betroffen ist
 nur, was im HTML-Kommentar des Block-Trenners steht — also die
