@@ -231,6 +231,29 @@ dem Kopieren der Dateien auf den Testserver:
    Antippen zeigt die Leiste, nach 1 s ist sie weg — das ist der Anlass des
    Vorhabens.
 10. `debug.log` und Browserkonsole ohne neue Meldungen.
+11. **Verschachtelte Container — der Punkt, an dem dieses AP am ehesten
+    scheitert.** AP-2 greift die eigene Leiste über
+    `container.querySelector('.cbd-action-buttons')` bzw.
+    `$container.find('.cbd-action-buttons').first()` — beides sind
+    **Nachfahren**-Selektoren. Liegt in einem Container ein weiterer
+    Container, kann das die Leiste des **inneren** treffen statt der eigenen;
+    dann blendete das Überfahren des äußeren die falsche Leiste aus.
+
+    Der Bestand kennt dafür bereits die schärfere Form: In
+    `assets/js/interactivity-fallback.js` (etwa Zeile 211 und 224) steht
+    `$container.children('.cbd-action-buttons')`, also **direktes Kind**.
+    Der Orchestrator hat am gerenderten Markup gesehen, dass die erste
+    Aktionsleiste einer Seite **nicht** zwingend vor dem zweiten
+    `cbd-container-block` steht — die Annahme „die eigene Leiste kommt
+    zuerst" ist also nicht belegt.
+
+    **Zu prüfen auf einer Seite mit tatsächlich verschachtelten Containern**
+    (Seite 62 trägt fünf Aktionsleisten und ist der beste Kandidat; falls
+    dort keine echte Verschachtelung vorliegt, eine anlegen): Blendet das
+    Überfahren des äußeren Containers dessen **eigene** Leiste aus, oder die
+    des inneren? Trifft Letzteres zu, ist die Abhilfe eine Zeile — den
+    Selektor auf `:scope > .cbd-action-buttons` bzw. `.children(…)`
+    umstellen, passend zum bestehenden Idiom.
 
 ---
 
