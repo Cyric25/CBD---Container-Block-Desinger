@@ -128,14 +128,39 @@ hat, enthält gar keine Formel mehr, die man rendern könnte. Dieser Plan
 verbessert dann nichts — er würde einen zerstörten Titel korrekt als
 zerstörten Titel anzeigen.
 
-**Was daraus folgt, ist eine Entscheidung des Nutzers, nicht dieses Plans:**
+**Vom Nutzer am 2026-08-21 beantwortet: Der Fall ist NICHT theoretisch.**
+Auch Block-Redakteure legen Blöcke mit Formeln im Titel an.
 
-1. Betrifft es ihn überhaupt? Wenn ausschließlich Administratoren Blöcke mit
-   Formeltiteln anlegen, ist der Fall theoretisch.
-2. Falls doch: Das ist ein **eigenes** Vorhaben. Der Weg wäre, dem
-   gespeicherten Blockmarkup die Filterung zu ersparen — was
-   sicherheitstechnisch nicht trivial ist und ausdrücklich **nicht** in
-   diesem Plan entschieden wird.
+**Folge: Dieser Plan allein genügt nicht.** Er lässt sich weiterhin
+umsetzen — für Administratoren wirkt er sofort —, aber für Block-Redakteure
+bliebe er wirkungslos, solange der Titel beim Speichern zerstört wird. Die
+Reihenfolge ist damit vorgegeben: **erst die Ursache beim Speichern, dann das
+Rendern.** Umgekehrt baut man eine Anzeige für einen Inhalt, den es nicht
+mehr gibt.
+
+Das Speicherproblem ist ein **eigenes Vorhaben** und wird hier ausdrücklich
+**nicht** entschieden. Es gibt mindestens drei Wege, und die Wahl ist eine
+Sicherheitsentscheidung des Nutzers, keine technische Vorliebe:
+
+1. **Der Rolle `unfiltered_html` geben** (eine Zeile in
+   `cbd_block_redakteur_capabilities()`). Einfach und in
+   WordPress-Installationen üblich. Preis: Die Rolle darf dann beliebiges
+   HTML speichern, einschließlich `<script>`. Sie darf heute schon Seiten
+   anlegen, ändern und veröffentlichen — der Zugewinn an Möglichkeiten ist
+   also kleiner, als er klingt, aber er ist real.
+2. **Die Filterung gezielt für Block-Trenner aussetzen.** Wirkt genauer, ist
+   aber deutlich aufwendiger und muss selbst sicher sein — man baut damit
+   eine Ausnahme in eine Sicherheitsfunktion.
+3. **Den Titel nicht mehr im Blockattribut speichern.** Umbau mit
+   Datenmigration über alle Bestandsseiten; die weitreichendste Lösung mit
+   der größten Regressionsfläche.
+
+**Vor der Entscheidung fehlt eine Messung:** Ob der Speicherweg des
+Blockeditors die Filterung wirklich anwendet, ist bisher **nur begründet, nicht
+gemessen** (`wp_filter_post_kses` hängt an `content_save_pre`). Ein
+Ende-zu-Ende-Nachweis mit einem echten Block-Redakteur-Konto steht aus — er
+ist die erste Aufgabe des künftigen Vorhabens, denn wenn die Annahme nicht
+zutrifft, entfällt das ganze Problem.
 
 **Noch nicht gemessen:** ob der Speicherweg des Blockeditors die Filterung
 tatsächlich anwendet. Das ist aus der WordPress-Mechanik gut begründet
