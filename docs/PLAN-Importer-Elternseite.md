@@ -266,10 +266,57 @@ WordPress** nach dem Muster von `tools/test-block-content-api.php`
 
 | AP | Test | Ergebnis | Datum |
 |---|---|---|---|
-| AP-1 | `php tools/test-page-importer.php` | – | – |
-| AP-1 | `php tools/check-php74.php` | – | – |
-| AP-2 | `node --check assets/js/page-importer.js` | – | – |
-| AP-3 | Import mit und ohne Elternseite, Prüfung in der Datenbank | – | – |
-| AP-3 | Regression: LaTeX-Backslashes einfach | – | – |
-| AP-3 | Derselbe Ablauf als Block-Redakteur | – | – |
+| AP-1 | `php tools/test-page-importer.php` | **34 Prüfungen, alle bestanden.** Rot-vor-Grün nachweisbar (`f51e424` nur Harnisch → `e4207bf` nur Klasse) | 2026-08-21 |
+| AP-1 | `php tools/check-php74.php` | grün, 569 Dateien | 2026-08-21 |
+| AP-2 | `node --check assets/js/page-importer.js` | grün | 2026-08-21 |
+| AP-2 | Wert genau **einmal** vor dem Lauf gelesen | bestätigt, `page-importer.js:527`; verwendet je Datei in `:570` | 2026-08-21 |
+| AP-3 | Import mit und ohne Elternseite, Prüfung in der Datenbank | **bestanden**, vom Orchestrator unabhängig nachgeprüft: Seiten 85–87 mit `post_parent` 0, Seiten 88–90 mit `post_parent` 29 | 2026-08-21 |
+| AP-3 | Regression: LaTeX-Backslashes einfach | **bestanden**, unabhängig aus der Datenbank gelesen: `\cdot`, `rac`, `\sum` je zweimal mit **einfachem** Backslash. `wp_slash()` hält | 2026-08-21 |
+| AP-3 | Entwurfsseiten in der Auswahl, Papierkorb nicht | bestanden — der von AP-2 ergänzte `post_status`-Filter wirkt | 2026-08-21 |
+| AP-3 | `debug.log` | keine neue Warnung, Notice, Deprecated oder Fatal | 2026-08-21 |
+| AP-3 | Derselbe Ablauf als Block-Redakteur | **NICHT live geprüft.** Auf dem Testserver existiert kein Konto mit dieser Rolle (`admin` = Administrator, `redakteur` = Editor), und das Anlegen wurde vom Sicherheitswächter des Werkzeugs unterbunden. Ersatzweise Code-Review: beide Endpunkte prüfen ausschließlich `edit_pages`, das beide Rollen haben — **aber siehe den Befund unten, der genau an dieser Rolle hängt** | 2026-08-21 |
+| AP-3 | Bedienbarkeit bei rund 260 Seiten | **nicht gemessen** — der Testserver führt nur 25 Seiten. Die Mechanik (Einrückung, Sortierung, Statusfilter) ist bestätigt, die Bedienbarkeit bei der Produktivgröße ist daraus nur abgeleitet | 2026-08-21 |
+| AP-3 | Optik des Felds, Fortschrittsanzeige im Browser | **nicht visuell geprüft** — dem Agenten stand kein Browser zur Verfügung. Aus HTML und CSS abgeleitet: `.cbd-pi-elternseite` hat als einziger Bereich des Dialogs keine eigene CSS-Regel und wird als natives Formularelement zwischen sonst durchgestalteten Flächen auffallen. **Beurteilung durch den Nutzer auf Sicht** | 2026-08-21 |
 | AP-4 | Mojibake-Kontrolle | – | – |
+
+## 10. Befund außerhalb dieses Vorhabens: kses zerstört LaTeX in Blocktiteln
+
+Bei der Abnahme entstand die Frage, ob die Rolle **Block-Redakteur** den
+Importer überhaupt gefahrlos nutzen kann — sie hat **kein**
+`unfiltered_html` (`includes/functions.php`, `cbd_block_redakteur_capabilities()`;
+die Fähigkeit steht dort nicht in der Liste). Für solche Rollen schickt
+WordPress `post_content` beim Speichern durch `wp_filter_post_kses()`.
+
+**Gemessen** mit der WordPress-Installation des Testservers (7.0.4), direkter
+Aufruf von `wp_kses_post()` auf Blockmarkup:
+
+| Eingabe im **Blocktitel** | Nach kses |
+|---|---|
+| `rac{a}{b}` | `rac{a}{b}` |
+| `eta` | `eta` |
+| `\cdot`, `\sum_{i=1}^{n}`, `lpha` | Titel unlesbar zerstört |
+| `
+abla`, `	au`, `ho` | unverändert |
+
+**Dieselben Ausdrücke im Block-INHALT überleben unverändert.** Betroffen ist
+nur, was im HTML-Kommentar des Block-Trenners steht — also die
+Blockattribute, darunter `blockTitle`.
+
+**Nicht durch dieses Vorhaben verursacht.** Der Effekt hängt allein an der
+Rolle und existiert, seit es Container-Blöcke mit Titeln gibt. Der
+Seitenimporter umgeht kses nicht (er tut es bewusst nicht — siehe Kommentar
+bei `class-cbd-page-importer.php:248`), aber er ist auch nicht die Ursache:
+Derselbe Weg gilt für jedes Speichern im Blockeditor durch eine Rolle ohne
+`unfiltered_html`.
+
+**Noch nicht gemessen:** ob der Speicherweg die Filterung wirklich anwendet.
+Das ist aus der WordPress-Mechanik gut begründet (`wp_filter_post_kses` hängt
+an `content_save_pre`), aber ein Ende-zu-Ende-Nachweis mit einem echten
+Block-Redakteur-Konto steht aus — genau der Schritt, der oben nicht
+durchführbar war.
+
+**Folge für ein anderes Vorhaben:** `docs/PLAN-Formeln-in-Blocktiteln.md`
+will erreichen, dass Formeln in Blocktiteln **gerendert** werden. Für
+Block-Redakteure liefe das ins Leere, solange der Titel beim Speichern
+zerstört wird — dort steht dann gar keine Formel mehr, die man rendern
+könnte. Dieser Zusammenhang ist in jenem Plan vermerkt.

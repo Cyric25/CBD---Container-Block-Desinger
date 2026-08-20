@@ -102,6 +102,49 @@ Zwei weitere Kandidaten, die AP-1 mit ausschließen soll:
 | `tools/test-blocktitel-latex.php` | – | **neu** |
 | `tools/test-latex-parser.php` | 134 Prüfungen | nur ausführen (Regression) |
 
+## 4a. Nachtrag vom 2026-08-21: Für Block-Redakteure liefe dieser Plan ins Leere
+
+Bei der Abnahme von `PLAN-Importer-Elternseite.md` (AP-3) wurde **gemessen**,
+dass `wp_kses_post()` LaTeX-Ausdrücke im **Blocktitel** zerstört — der Titel
+steht im HTML-Kommentar des Block-Trenners, und dort greift die Filterung
+anders als im Inhalt:
+
+| Eingabe im Blocktitel | Nach `wp_kses_post()` |
+|---|---|
+| `rac{a}{b}` | `rac{a}{b}` |
+| `eta` | `eta` |
+| `\cdot`, `\sum_{i=1}^{n}`, `lpha` | Titel unlesbar zerstört |
+| `
+abla`, `	au`, `ho` | unverändert |
+
+**Dieselben Ausdrücke im Block-INHALT überleben unverändert.**
+
+Diese Filterung läuft für jede Rolle **ohne** `unfiltered_html` — und die
+Rolle **Block-Redakteur** hat sie nicht
+(`includes/functions.php`, `cbd_block_redakteur_capabilities()`: die
+Fähigkeit steht dort nicht in der Liste).
+
+**Folge für dieses Vorhaben:** Ein Titel, den ein Block-Redakteur gespeichert
+hat, enthält gar keine Formel mehr, die man rendern könnte. Dieser Plan
+verbessert dann nichts — er würde einen zerstörten Titel korrekt als
+zerstörten Titel anzeigen.
+
+**Was daraus folgt, ist eine Entscheidung des Nutzers, nicht dieses Plans:**
+
+1. Betrifft es ihn überhaupt? Wenn ausschließlich Administratoren Blöcke mit
+   Formeltiteln anlegen, ist der Fall theoretisch.
+2. Falls doch: Das ist ein **eigenes** Vorhaben. Der Weg wäre, dem
+   gespeicherten Blockmarkup die Filterung zu ersparen — was
+   sicherheitstechnisch nicht trivial ist und ausdrücklich **nicht** in
+   diesem Plan entschieden wird.
+
+**Noch nicht gemessen:** ob der Speicherweg des Blockeditors die Filterung
+tatsächlich anwendet. Das ist aus der WordPress-Mechanik gut begründet
+(`wp_filter_post_kses` hängt an `content_save_pre`), aber ein
+Ende-zu-Ende-Nachweis mit einem echten Block-Redakteur-Konto steht aus.
+**AP-1 dieses Plans soll ihn mit erbringen** — er hat ohnehin den Auftrag,
+die Ursache zu belegen statt sie anzunehmen.
+
 ## 5. Architekturentscheidungen
 
 | Entscheidung | Begründung | Verworfene Alternative |
