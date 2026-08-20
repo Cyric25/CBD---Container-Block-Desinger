@@ -271,7 +271,7 @@ WordPress** nach dem Muster von `tools/test-block-content-api.php`
 | AP-2 | `node --check assets/js/page-importer.js` | grün | 2026-08-21 |
 | AP-2 | Wert genau **einmal** vor dem Lauf gelesen | bestätigt, `page-importer.js:527`; verwendet je Datei in `:570` | 2026-08-21 |
 | AP-3 | Import mit und ohne Elternseite, Prüfung in der Datenbank | **bestanden**, vom Orchestrator unabhängig nachgeprüft: Seiten 85–87 mit `post_parent` 0, Seiten 88–90 mit `post_parent` 29 | 2026-08-21 |
-| AP-3 | Regression: LaTeX-Backslashes einfach | **bestanden**, unabhängig aus der Datenbank gelesen: `\cdot`, `rac`, `\sum` je zweimal mit **einfachem** Backslash. `wp_slash()` hält | 2026-08-21 |
+| AP-3 | Regression: LaTeX-Backslashes einfach | **bestanden**, unabhängig aus der Datenbank gelesen: `\cdot`, `\frac`, `\sum` je zweimal mit **einfachem** Backslash. `wp_slash()` hält | 2026-08-21 |
 | AP-3 | Entwurfsseiten in der Auswahl, Papierkorb nicht | bestanden — der von AP-2 ergänzte `post_status`-Filter wirkt | 2026-08-21 |
 | AP-3 | `debug.log` | keine neue Warnung, Notice, Deprecated oder Fatal | 2026-08-21 |
 | AP-3 | Derselbe Ablauf als Block-Redakteur | **NICHT live geprüft.** Auf dem Testserver existiert kein Konto mit dieser Rolle (`admin` = Administrator, `redakteur` = Editor), und das Anlegen wurde vom Sicherheitswächter des Werkzeugs unterbunden. Ersatzweise Code-Review: beide Endpunkte prüfen ausschließlich `edit_pages`, das beide Rollen haben — **aber siehe den Befund unten, der genau an dieser Rolle hängt** | 2026-08-21 |
