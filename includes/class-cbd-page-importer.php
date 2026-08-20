@@ -237,6 +237,14 @@ class CBD_Page_Importer {
             return;
         }
 
+        // Ungültige Werte fallen still auf 0 (oberste Ebene) zurück - kein
+        // Abbruch. Der Import läuft Datei für Datei; ein Fehler an dieser
+        // Stelle ließe die Hälfte der Seiten angelegt und die andere nicht
+        // (siehe Plan, Abschnitt 5).
+        $eltern_id = $this->bereinige_elternseite(
+            isset($_POST['parent_id']) ? $_POST['parent_id'] : null
+        );
+
         // Markdown-Rohtext: NUR wp_unslash, kein wp_kses_post und kein
         // sanitize_textarea_field – beide würden Backslashes anfassen und
         // damit LaTeX-Formeln zerstören. Dieselbe Begründung wie in
@@ -321,7 +329,7 @@ class CBD_Page_Importer {
             'post_content' => wp_slash($post_content),
             'post_type'    => 'page',
             'post_status'  => 'draft',
-            'post_parent'  => 0,
+            'post_parent'  => $eltern_id,
             'menu_order'   => 0,
         ), true);
 
@@ -336,6 +344,46 @@ class CBD_Page_Importer {
             'editLink' => get_edit_post_link($page_id, 'raw'),
             'blocks'   => substr_count($post_content, '<!-- wp:'),
         ));
+    }
+
+    /**
+     * Bereinigt die gewünschte Elternseite aus $_POST['parent_id'].
+     *
+     * Ein ungültiger Wert ergibt still `0` (oberste Ebene) - kein Fehler,
+     * kein Abbruch. Der Import läuft Datei für Datei; ein Abbruch mitten im
+     * Lauf ließe die Hälfte der Seiten angelegt und die andere nicht. Eine
+     * Seite auf oberster Ebene lässt sich dagegen im Seitenmanager
+     * verschieben (siehe Plan, Abschnitt 5, Architekturentscheidungen).
+     *
+     * `filter_var(..., FILTER_VALIDATE_INT)` statt `(int)`-Cast: Eine
+     * überlange Ziffernfolge besteht zwar eine reine Ziffernprüfung, ein
+     * `(int)`-Cast bildet sie ab PHP 8.1 aber mit einer Warnung auf
+     * PHP_INT_MAX ab, statt sie abzulehnen. Dieselbe Regel mit derselben
+     * Begründung steht bereits in class-cbd-design-transfer.php,
+     * `md_read_value()` (~Zeile 911-915).
+     *
+     * @param mixed $roh Rohwert aus $_POST, ggf. noch mit Slashes.
+     * @return int Gültige Seiten-ID oder 0.
+     */
+    private function bereinige_elternseite($roh) {
+        $roh = wp_unslash($roh);
+        $id  = filter_var($roh, FILTER_VALIDATE_INT);
+
+        if (false === $id || $id <= 0) {
+            return 0;
+        }
+
+        $post = get_post($id);
+
+        if (!$post || !isset($post->post_type) || 'page' !== $post->post_type) {
+            return 0;
+        }
+
+        if (isset($post->post_status) && 'trash' === $post->post_status) {
+            return 0;
+        }
+
+        return $id;
     }
 
     /**
