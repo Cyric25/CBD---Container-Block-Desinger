@@ -1,6 +1,6 @@
 # Datei-Map: Plugin „Container Block Designer"
 
-_Stand: 2026-08-17 · Plugin-Version 3.1.93_
+_Stand: 2026-08-21 · Plugin-Version 3.1.94_
 
 Navigationshilfe auf Dateiebene. Die fachlichen Details stehen in `CLAUDE.md`
 — dort insbesondere die Abschnitte zum Content-Importer, Block-Serializer,
