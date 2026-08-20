@@ -1091,6 +1091,32 @@
     pointer-events: auto !important;
 }
 
+/* Automatisches Ausblenden der Aktionsleiste (AP-1, PLAN-Aktionsleiste-Autoausblenden.md)
+   Die Klasse .cbd-actions-verborgen wird per JavaScript am .cbd-container
+   gesetzt, rund eine Sekunde nachdem die Leiste erschienen ist
+   (assets/js/interactivity-store.js und assets/js/interactivity-fallback.js
+   setzen sie gleichermassen - je nach Installation laedt nur eines der
+   beiden Skripte). Zweck: Auf Tablets haftet :hover nach dem Antippen: ohne
+   dieses Ausblenden bliebe die Leiste dauerhaft ueber dem Inhalt stehen.
+   WICHTIG: :focus-within taucht in dieser Regel absichtlich NICHT auf.
+   Der Einblend-Block oben nennt :hover, :focus-within und .cbd-selected.
+   Wuerde diese Regel :focus-within ebenfalls nennen, gaebe es zwei Regeln
+   mit identischer Spezifitaet fuer denselben Fall - welche gewinnt, entschiede
+   dann die Reihenfolge im Stylesheet, hier also diese (spaetere) Regel, und
+   die Leiste verschwaende trotz Tastaturfokus. Weil dieser Selektor
+   :focus-within nicht erwaehnt, kann er ihn nie schlagen: Solange ein Knopf
+   der Leiste den Fokus haelt, bleibt ausschliesslich die :focus-within-Regel
+   oben zustaendig und die Leiste sichtbar. Ohne diesen Kniff waere die Leiste
+   per Tastatur unerreichbar - Tab in einen Knopf liesse sie verschwinden und
+   der Fokus stuende im Nichts. */
+.cbd-container.cbd-actions-verborgen:hover .cbd-action-buttons,
+.cbd-container.cbd-actions-verborgen.cbd-selected .cbd-action-buttons {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    transform: translateY(-5px) !important;
+    pointer-events: none !important;
+}
+
 /* Individual action buttons - White background */
 .cbd-action-buttons button {
     background: rgba(255, 255, 255, 0.95) !important;
