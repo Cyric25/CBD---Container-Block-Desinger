@@ -102,6 +102,34 @@ Admin menu registered via `CBD_Admin::add_admin_menu()`
 - `cbd_edit_styles`: Edit block styles (admins only)
 - `cbd_admin_blocks`: Access admin interface (admins only)
 
+**Bekannter Befund: `wp_kses_post()` zerstört LaTeX im Blocktitel (gefunden
+2026-08-21, bei der Abnahme eines anderen Vorhabens).** Die Rolle hat kein
+`unfiltered_html` — die Fähigkeit steht nicht in
+`cbd_block_redakteur_capabilities()` (`includes/functions.php:318-349`).
+WordPress schickt `post_content` beim Speichern für jede Rolle ohne diese
+Fähigkeit durch `wp_filter_post_kses()`. **Gemessen** (Testserver, WordPress
+7.0.4, direkter Aufruf von `wp_kses_post()` auf Blockmarkup):
+
+| Eingabe im **Blocktitel** | Nach kses |
+|---|---|
+| `\frac{a}{b}` | `rac{a}{b}` |
+| `\beta` | `eta` |
+| `\cdot`, `\sum_{i=1}^{n}`, `\alpha` | Titel unlesbar zerstört |
+| `\nabla`, `\tau`, `\rho` | unverändert |
+
+**Dieselben Ausdrücke im Block-INHALT überleben unverändert** — betroffen
+ist nur, was im HTML-Kommentar des Block-Trenners steht (Blockattribute,
+darunter `blockTitle`). Der Effekt trifft jede Rolle ohne `unfiltered_html`,
+nicht nur Block-Redakteur, und existiert unabhängig vom Seitenimporter, seit
+es Container-Blöcke mit Titeln gibt — der Seitenimporter umgeht kses bewusst
+nicht (siehe Kommentar bei `class-cbd-page-importer.php:248`), ist aber auch
+nicht die Ursache. **Noch nicht gemessen:** ein Ende-zu-Ende-Nachweis mit
+einem echten Block-Redakteur-Konto steht aus (auf dem Testserver existiert
+keines). Folge für `docs/PLAN-Formeln-in-Blocktiteln.md`: Ein dort geplantes
+Rendern von Formeln in Blocktiteln liefe für Block-Redakteure ins Leere,
+solange der Titel beim Speichern bereits zerstört wird. Details:
+`docs/PLAN-Importer-Elternseite.md`, Abschnitt 10.
+
 ## Development Commands
 
 ### PHP/WordPress
@@ -413,7 +441,8 @@ Oberfläche in `assets/js/page-importer.js`.
 
 Ablauf: Mehrere `.md`-Dateien wählen oder ablegen → alle werden geparst und
 ihre H2-Gruppen zu **einer** Liste zusammengeführt → **ein** Stil-Dialog für
-alle Dateien → je Datei ein Seitenentwurf auf oberster Ebene.
+alle Dateien → je Datei ein Seitenentwurf, alle mit derselben wählbaren
+Elternseite (siehe unten; Vorgabe weiterhin oberste Ebene).
 
 **Seitentitel** ist die erste `# `-Zeile; fehlt sie, der Dateiname ohne
 Endung. Entspricht die erste Überschrift dem Seitentitel, entfällt sie im
@@ -422,6 +451,45 @@ Inhalt (sonst stünde der Titel doppelt).
 **Dubletten** werden vor dem Import aufgelistet und sind abwählbar, aber
 **nie überschrieben** — es entsteht ein weiterer Entwurf. Die Prüfung nutzt
 `get_posts()`, nicht das seit WordPress 6.2 veraltete `get_page_by_title()`.
+
+### Elternseite gilt für den ganzen Lauf (seit dem Vorhaben „Importer-Elternseite", 2026-08-21)
+
+Im Dialog wählt ein Feld (`admin/page-import.php`, `wp_dropdown_pages()`,
+Name/ID `cbd-import-parent`) die Elternseite für **alle** Seiten eines
+Laufs — nicht je Datei; eine Elternseite je Datei ist ausdrücklich ein
+Nicht-Ziel des zugehörigen Plans, keine offene Frage. `assets/js/page-importer.js`
+liest den Wert **einmal vor Beginn** des Laufs (`importStarten()`) und
+schickt ihn bei **jedem** der `cbd_import_pages`-Aufrufe je Datei als
+`parent_id` mit; während des Laufs ist das Feld `disabled`, danach wieder
+frei. Würde der Wert je Datei neu gelesen, könnte eine Bedienung mitten im
+Lauf die Zuordnung für die zweite Hälfte der Dateien ändern.
+
+`wp_dropdown_pages()` bekommt `post_status => array('publish', 'draft')` —
+**diese Ergänzung ist notwendig, nicht kosmetisch:** Ohne sie zeigt die
+Funktion nur veröffentlichte Seiten. Der Importer legt aber ausschließlich
+**Entwürfe** an; ohne den Statusfilter wäre ein gerade importiertes Kapitel
+bei einem Folgeimport nie als Elternseite wählbar gewesen.
+
+Serverseitig bereinigt die private Methode
+`CBD_Page_Importer::bereinige_elternseite($roh): int`
+(`includes/class-cbd-page-importer.php`) den Wert aus `$_POST['parent_id']`:
+`wp_unslash()`, dann `filter_var($roh, FILTER_VALIDATE_INT)` — bewusst kein
+`(int)`-Cast, der eine überlange Ziffernfolge ab PHP 8.1 mit einer Warnung
+auf `PHP_INT_MAX` abbilden würde statt sie abzulehnen (dieselbe Regel mit
+derselben Begründung wie in `class-cbd-design-transfer.php`,
+`md_read_value()`). Das Ergebnis geht unverändert als `post_parent` an
+`wp_insert_post()`.
+
+**Jeder ungültige Wert fällt still auf `0` zurück** (oberste Ebene) — ohne
+Fehlermeldung und ohne den Lauf abzubrechen: ein fehlender, leerer,
+nicht-numerischer, negativer oder `0`-Wert ebenso wie die ID eines
+Beitrags, einer gelöschten Seite oder einer nicht existierenden Seite.
+**Begründung:** Der Import feuert einen AJAX-Aufruf je Datei; ein Abbruch
+mitten im Lauf ließe die Hälfte der Seiten angelegt und die andere nicht —
+ein schlechterer Zustand als eine Seite auf oberster Ebene, die sich im
+Seitenmanager jederzeit nachträglich verschieben lässt.
+
+Tests: `tools/test-page-importer.php`, 34 Prüfungen ohne WordPress.
 
 ### Das Menü hängt am Theme
 

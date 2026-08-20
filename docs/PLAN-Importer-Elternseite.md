@@ -257,10 +257,10 @@ WordPress** nach dem Muster von `tools/test-block-content-api.php`
 
 | AP | Titel | Modell | Abhängig von | Status |
 |---|---|---|---|---|
-| AP-1 | Elternseite serverseitig annehmen und prüfen | sonnet | – | ☐ |
-| AP-2 | Auswahlfeld im Dialog und Übergabe je Datei | sonnet | 1 | ☐ |
-| AP-3 | Abnahme auf dem Testserver | sonnet | 1, 2 | ☐ |
-| AP-4 | Dokumentation | sonnet | 3 | ☐ |
+| AP-1 | Elternseite serverseitig annehmen und prüfen | sonnet | – | ☑ |
+| AP-2 | Auswahlfeld im Dialog und Übergabe je Datei | sonnet | 1 | ☑ |
+| AP-3 | Abnahme auf dem Testserver | sonnet | 1, 2 | ☑ |
+| AP-4 | Dokumentation | sonnet | 3 | ☑ |
 
 ## 9. Testprotokoll
 
@@ -277,7 +277,7 @@ WordPress** nach dem Muster von `tools/test-block-content-api.php`
 | AP-3 | Derselbe Ablauf als Block-Redakteur | **NICHT live geprüft.** Auf dem Testserver existiert kein Konto mit dieser Rolle (`admin` = Administrator, `redakteur` = Editor), und das Anlegen wurde vom Sicherheitswächter des Werkzeugs unterbunden. Ersatzweise Code-Review: beide Endpunkte prüfen ausschließlich `edit_pages`, das beide Rollen haben — **aber siehe den Befund unten, der genau an dieser Rolle hängt** | 2026-08-21 |
 | AP-3 | Bedienbarkeit bei rund 260 Seiten | **nicht gemessen** — der Testserver führt nur 25 Seiten. Die Mechanik (Einrückung, Sortierung, Statusfilter) ist bestätigt, die Bedienbarkeit bei der Produktivgröße ist daraus nur abgeleitet | 2026-08-21 |
 | AP-3 | Optik des Felds, Fortschrittsanzeige im Browser | **nicht visuell geprüft** — dem Agenten stand kein Browser zur Verfügung. Aus HTML und CSS abgeleitet: `.cbd-pi-elternseite` hat als einziger Bereich des Dialogs keine eigene CSS-Regel und wird als natives Formularelement zwischen sonst durchgestalteten Flächen auffallen. **Beurteilung durch den Nutzer auf Sicht** | 2026-08-21 |
-| AP-4 | Mojibake-Kontrolle | – | – |
+| AP-4 | Mojibake-Kontrolle (`grep -c 'Ã\|â€'` auf `CLAUDE.md` und `reference_file_map.md`) | **bestanden**, beide 0. Ausschließlich mit dem Edit-Werkzeug geändert, kein PowerShell-Lese-Schreib-Zyklus, kein Python-Skript | 2026-08-21 |
 
 ## 10. Befund außerhalb dieses Vorhabens: kses zerstört LaTeX in Blocktiteln
 
