@@ -105,6 +105,12 @@ function initAktionsleisteAutoAusblenden(container) {
 			// sichtbar, solange der Zeiger über ihr steht oder der Container
 			// den Fokus enthält.
 			if (container.matches(':focus-within') || actionButtons.matches(':hover')) {
+				// Nicht abbrechen, sondern erneut anlaufen lassen: Ein blosses
+				// return loeschte den Zeitgeber, und die Leiste bliebe dauerhaft
+				// stehen, falls das zugehoerige mouseleave bzw. focusout einmal
+				// ausbleibt. So blendet sie spaetestens eine Sekunde nach dem
+				// Ende von Fokus oder Zeigerkontakt aus.
+				zeitgeberStarten();
 				return;
 			}
 

@@ -1098,23 +1098,69 @@
    setzen sie gleichermassen - je nach Installation laedt nur eines der
    beiden Skripte). Zweck: Auf Tablets haftet :hover nach dem Antippen: ohne
    dieses Ausblenden bliebe die Leiste dauerhaft ueber dem Inhalt stehen.
-   WICHTIG: :focus-within taucht in dieser Regel absichtlich NICHT auf.
-   Der Einblend-Block oben nennt :hover, :focus-within und .cbd-selected.
-   Wuerde diese Regel :focus-within ebenfalls nennen, gaebe es zwei Regeln
-   mit identischer Spezifitaet fuer denselben Fall - welche gewinnt, entschiede
-   dann die Reihenfolge im Stylesheet, hier also diese (spaetere) Regel, und
-   die Leiste verschwaende trotz Tastaturfokus. Weil dieser Selektor
-   :focus-within nicht erwaehnt, kann er ihn nie schlagen: Solange ein Knopf
-   der Leiste den Fokus haelt, bleibt ausschliesslich die :focus-within-Regel
-   oben zustaendig und die Leiste sichtbar. Ohne diesen Kniff waere die Leiste
-   per Tastatur unerreichbar - Tab in einen Knopf liesse sie verschwinden und
-   der Fokus stuende im Nichts. */
-.cbd-container.cbd-actions-verborgen:hover .cbd-action-buttons,
-.cbd-container.cbd-actions-verborgen.cbd-selected .cbd-action-buttons {
+   TASTATURFOKUS: Solange irgendein Knopf der Leiste den Fokus haelt, darf
+   sie nicht verschwinden - sonst stuende der Fokus im Nichts. Das erledigt
+   das ausdrueckliche :not(:focus-within) unten, NICHT die Spezifitaet.
+   Frueher stand hier die Behauptung, ein Selektor ohne :focus-within koenne
+   die Einblend-Regel "nie schlagen". Das ist falsch herum gerechnet:
+   .cbd-container.cbd-actions-verborgen:hover .cbd-action-buttons hat drei
+   Klassen plus eine Pseudoklasse (0-4-0), die Einblend-Regel
+   .cbd-container:focus-within .cbd-action-buttons nur zwei plus eine (0-3-0).
+   Diese Regel gewaenne also - der Fokusschutz haette allein am JavaScript
+   gehangen (focusin entfernt die Klasse). Mit :not(:focus-within) traegt das
+   CSS jetzt selbst, auch wenn das Skript einmal nicht laeuft. */
+.cbd-container.cbd-actions-verborgen:hover:not(:focus-within) .cbd-action-buttons,
+.cbd-container.cbd-actions-verborgen.cbd-selected:not(:focus-within) .cbd-action-buttons {
     opacity: 0 !important;
     visibility: hidden !important;
     transform: translateY(-5px) !important;
     pointer-events: none !important;
+}
+
+/* Verschachtelte Container: Leiste nur beim eigenen Block (2026-08-21)
+   ------------------------------------------------------------------
+   Das gerenderte Markup traegt die Klasse .cbd-container ZWEIMAL je Block:
+   einmal am interaktiven Wurzelelement (#cbd-container-N, darin liegt die
+   Leiste als .cbd-container-block > .cbd-action-buttons) und einmal am
+   Blockinhalt selbst (.cbd-container-content > .wp-block-...cbd-container).
+   Steht ein Container in einem anderen, ist der aeussere per :hover IMMER
+   mitbetroffen, sobald der Zeiger den inneren beruehrt - :hover gilt fuer
+   alle Vorfahren. Der Einblend-Block oben greift ausserdem per
+   Nachfahren-Selektor und erwischt damit auch fremde Leisten. Sichtbar wurde
+   das erst durch das Autoausblenden (PLAN-Aktionsleiste-Autoausblenden.md,
+   AP-3 Schritt 6): Es erschienen zwei Leisten statt einer.
+
+   Beide Regeln haengen an der Eigentuemer-Kette
+   .cbd-container > .cbd-container-block > .cbd-action-buttons. Trifft ein
+   anderer Renderpfad diese Kette nicht, greifen sie schlicht nicht - dann
+   gilt wieder das alte Verhalten, nie ein dauerhaft verstecktes Bedienelement.
+
+   @media (hover: hover): Der Touch-Block weiter oben haelt die Leiste auf
+   Tablets bewusst dauerhaft sichtbar (dort gibt es kein :hover und keine
+   .cbd-selected-Klasse). Diese Regeln sind spezifischer und wuerden ihn
+   sonst schlagen. */
+@media (hover: hover) and (pointer: fine) {
+
+    /* 1. Der Zeiger steht auf einem VERSCHACHTELTEN Block: Die Leiste des
+          umgebenden Blocks tritt zurueck. :has() matcht sich selbst nicht,
+          getroffen wird also nur echte Verschachtelung. Browser ohne :has()
+          verwerfen genau diese eine Regel; Regel 2 bleibt gueltig. */
+    .cbd-container > .cbd-container-block:has(.cbd-container-block:hover) > .cbd-action-buttons:not(:focus-within) {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        transform: translateY(-5px) !important;
+        pointer-events: none !important;
+    }
+
+    /* 2. Umgekehrter Fall: Der Zeiger steht auf dem UMGEBENDEN Block. Ohne
+          diese Regel zeigte der Nachfahren-Selektor der Einblend-Regel auch
+          die Leisten aller verschachtelten Bloecke. */
+    .cbd-container .cbd-container-block:not(:hover) > .cbd-action-buttons:not(:focus-within) {
+        opacity: 0 !important;
+        visibility: hidden !important;
+        transform: translateY(-5px) !important;
+        pointer-events: none !important;
+    }
 }
 
 /* Individual action buttons - White background */
