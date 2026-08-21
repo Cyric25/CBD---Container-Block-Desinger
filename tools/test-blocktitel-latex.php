@@ -152,10 +152,29 @@ $aus = titel("Ableitung f'(x)");
 pruefe('AK4a', 'Apostroph bleibt gerader Apostroph (als Entity)', strpos($aus, '&#039;') !== false, $aus);
 pruefe('AK4b', 'Kein typografisches Anführungszeichen', strpos($aus, "\xe2\x80\x99") === false, $aus);
 
-// Doppelparse-Schutz — zweimal durch die Methode ändert nichts mehr
-$einmal = titel('Energie $E = mc^2$');
-$zweimal = titel($einmal);
-pruefe('DP1', 'Ein bereits gerenderter Titel bleibt unverändert', $einmal === $zweimal, $zweimal);
+// Doppelparse
+//
+// BERICHTIGT am 2026-08-21. Hier stand zuerst die Prüfung, ein bereits
+// gerenderter Titel müsse unverändert durchlaufen ($zweimal === $einmal).
+// Diese Erwartung war falsch: titel_mit_formeln() escapt ZUERST, der
+// Doppelparse-Schutz in parse_latex() sieht die Marke `cbd-latex-formula`
+// danach nie mehr — sie steht dann als `&lt;span class=&quot;…` da.
+//
+// Vor allem aber beschreibt sie einen Fall, den es nicht gibt: Die Methode
+// bekommt IMMER den rohen Wert aus dem Blockattribut, nie ihre eigene
+// Ausgabe. Geprüft wird deshalb das, was tatsächlich gilt — und das ist
+// sogar die schärfere Zusicherung.
+$einmal  = titel('Energie $E = mc^2$');
+$zweimal = titel('Energie $E = mc^2$');
+$ohne_id = function ($html) { return preg_replace('/cbd-latex-inline-[0-9a-f]+-\d+/', 'ID', $html); };
+pruefe('DP1', 'Zweimal derselbe Rohtitel ergibt dieselbe Struktur',
+    $ohne_id($einmal) === $ohne_id($zweimal), $zweimal);
+
+// Sicherheitsseite desselben Verhaltens: Wer den Klassennamen selbst in den
+// Titel schreibt, erzeugt damit KEIN Markup.
+$aus = titel('<span class="cbd-latex-formula" data-latex="\\evil">x</span>');
+pruefe('DP2', 'Selbst geschriebenes Formel-Markup bleibt Text',
+    stripos($aus, '<span') === false && strpos($aus, '&lt;span') !== false, $aus);
 
 // Aufrufe stören sich nicht gegenseitig
 $a = titel('Erster $\alpha$');
