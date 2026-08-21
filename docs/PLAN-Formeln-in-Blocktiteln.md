@@ -306,18 +306,18 @@ zuerst committen.
 | AP | Titel | Modell | Abhängig von | Status |
 |---|---|---|---|---|
 | AP-1 | Ursache belegen (Diagnose) | opus | – | ☑ (2026-08-21, siehe Abschnitt 4a: Zeile 1285, `esc_html($block_title)` ohne Parser) |
-| AP-2 | Titel durch den Parser führen | sonnet | 1 | ☐ |
-| AP-3 | Abnahme auf dem Testserver | sonnet | 2 | ☐ |
-| AP-4 | Dokumentation | sonnet | 3 | ☐ |
+| AP-2 | Titel durch den Parser führen | sonnet | 1 | ☑ (2026-08-21, TDD, 20 Prüfungen grün) |
+| AP-3 | Abnahme auf dem Testserver | sonnet | 2 | ☑ am Markup (Seite 378); der Augenschein, ob KaTeX wirklich zeichnet, steht beim Nutzer |
+| AP-4 | Dokumentation | sonnet | 3 | ☑ (CLAUDE.md, Abschnitte „Der Blocktitel geht einen eigenen Weg" und „kses zerstört Blocktitel nicht") |
 
 ## 9. Testprotokoll
 
 | AP | Test | Ergebnis | Datum |
 |---|---|---|---|
 | AP-1 | Vorhersage bestätigt oder widerlegt | **bestätigt** für die Renderseite; die zusätzlich vermutete Zerstörung beim Speichern **widerlegt** (Abschnitt 4a) | 2026-08-21 |
-| AP-2 | `php tools/test-blocktitel-latex.php` | – | – |
-| AP-2 | `php tools/test-latex-parser.php` (134, Regression) | – | – |
-| AP-2 | `php tools/check-php74.php` | – | – |
-| AP-3 | Titelformel mit und ohne Inhaltsformel | – | – |
-| AP-3 | Regression Seiten 43, 55, 62 und Accordion | – | – |
-| AP-4 | Mojibake-Kontrolle | – | – |
+| AP-2 | `php tools/test-blocktitel-latex.php` | **20 Prüfungen grün.** Eine Prüfung des roten Laufs war inhaltlich falsch und wurde berichtigt statt entfernt — siehe Kommentar im Harnisch bei DP1 | 2026-08-21 |
+| AP-2 | `php tools/test-latex-parser.php` (134, Regression) | **grün**, ebenso die übrigen 13 Harnische des Plugins | 2026-08-21 |
+| AP-2 | `php tools/check-php74.php` | **grün**, 570 Dateien | 2026-08-21 |
+| AP-3 | Titelformel mit und ohne Inhaltsformel | **bestanden.** Seite 378, als `blockredakteur` gespeichert: vier Blöcke (Titelformel allein, Titel- und Inhaltsformel, ohne Formel, Apostroph plus `&`). Drei Formel-Spans mit richtigem `data-latex`, der Block ohne Formel unverändert, KaTeX geladen | 2026-08-21 |
+| AP-3 | Regression Seiten 43, 55, 62 und Accordion | **offen, nicht geprüft** — vom Nutzer nach Sicht abzunehmen | – |
+| AP-4 | Mojibake-Kontrolle | **bestanden** — 13 Steuerzeichen in CLAUDE.md, allesamt Tabulatoren und schon vorher vorhanden | 2026-08-21 |

@@ -1153,6 +1153,70 @@ bekäme also `f’(x)` mit dem typografischen Zeichen statt der Ableitung
 ausgeführtes `html_entity_decode()` zu einem echten `<br />`, das dann fälschlich
 von Schritt 1 entfernt würde.
 
+### Der Blocktitel geht einen eigenen Weg (seit 2026-08-21)
+
+Beide Filter oben sehen **Inhalt**. Der **Blocktitel** kommt nicht daher: Er
+steht im Blockattribut `blockTitle` und wird in
+`class-cbd-block-registration.php` direkt zu `<h3 class="cbd-block-title">`
+zusammengesetzt. Bis 3.1.97 stand dort schlicht `esc_html($block_title)` —
+der Wert lief also **nie** durch `CBD_LaTeX_Parser`, es entstand kein
+`<span class="cbd-latex-formula">`, und `assets/js/latex-renderer.js` fand
+nichts zu rendern. `$\frac{a}{b}$` blieb als Text stehen.
+
+Zuständig ist jetzt `CBD_Block_Registration::titel_mit_formeln()`.
+**Die Reihenfolge darin ist zwingend:**
+
+1. `esc_html()` **zuerst**, ohne Ausnahme — der Titel ist freie Eingabe.
+2. Erst danach `parse_latex()`. Der Parser erzeugt selbst Markup; ein zweites
+   Escapen danach machte die Formel wieder zu sichtbarem Text. **Die
+   aufrufende Stelle escapt deshalb nicht nach.**
+
+Dass die Formel escapt beim Parser ankommt, ist unschädlich:
+`normalize_formula_text()` ruft `html_entity_decode()` auf den Formelinhalt,
+bevor KaTeX ihn sieht — aus `$f'(x)$` wird wieder `f'(x)`.
+
+**KaTeX lädt trotzdem**, auch wenn die einzige Formel der Seite im Titel
+steht: `content_has_latex_markers()` sucht `$` im `post_content`, und der
+Titel steht dort im Block-Trenner.
+
+Fehlt die Parser-Klasse, bleibt es beim escapten Titel — dem Verhalten von
+vorher, kein Fatal Error. Prüfharnisch: `tools/test-blocktitel-latex.php`
+(20 Prüfungen; der Fall „Parser-Klasse fehlt" läuft in einem eigenen Prozess).
+
+**Denselben Titel lesen drei weitere Stellen**, alle unverändert und für
+Beschriftungen, nicht für die Anzeige im Block:
+`class-cbd-block-content-api.php`, `class-cbd-blocks-rest-api.php`,
+`class-cbd-block-organizer.php`. Wer dort Formeln rendern will, braucht ein
+eigenes Vorhaben — `class-cbd-block-content-api.php` ist zudem die Datei, die
+**nicht** angefasst werden darf.
+
+### kses zerstört Blocktitel nicht — die Falle liegt woanders
+
+Es hielt sich in diesem Projekt zeitweise die Annahme, `wp_kses_post()`
+zerstöre LaTeX in Blocktiteln, sobald eine Rolle ohne `unfiltered_html`
+speichert. **Das ist widerlegt** (Messung am 2026-08-21 mit dem Konto
+`blockredakteur`, Belege in `docs/PLAN-Blocktrenner-vor-kses-schuetzen.md`,
+Abschnitt 10). Zwei Kernmechanismen schützen den Trenner:
+
+| Mechanismus | Was er tut |
+|---|---|
+| `serialize_block_attributes()` | ersetzt beim Serialisieren `\` durch `\u005c`, dazu `--`, `<`, `>`, `&` und `\"`. Im Trenner steht damit kein Zeichen, an dem kses sich stören könnte. Der Editor tut im Browser dasselbe |
+| `pre_kses` → `wp_pre_kses_block_attributes()` → `filter_block_content()` | filtert Blockattribute blockweise und serialisiert danach neu, statt den Trenner als HTML-Kommentar zu behandeln |
+
+Sichtbare Nebenwirkung des zweiten Mechanismus: Ein `&` im Titel steht danach
+als `&amp;` im Attribut. **Das ist kein Schaden** — `esc_html()` kodiert nicht
+doppelt (`_wp_specialchars(…, $double_encode = false)`), der Leser sieht ein
+`&`, und wiederholtes Speichern verschlimmert nichts (über drei Durchläufe
+gemessen).
+
+**Woran die alte Fehlmessung lag:** Sie baute den Block-Trenner im Prüfskript
+selbst zusammen und schrieb den Backslash roh ins JSON — solches Markup
+entsteht nie im Editor. Das Schadensmuster verriet es: `\frac` → `rac` und
+`\beta` → `eta` ist das Verschwinden von `\f` und `\b`, also von
+**Escape-Folgen einer Zeichenkette im Prüfskript**. kses entfernt keine
+Zeichenpaare dieser Art. **Wer Blockmarkup misst, erzeugt es über
+`serialize_blocks()`** — sonst misst er sein eigenes Skript.
+
 ### `window.cbdRenderLatex(root)` — die Zusage an andere Skripte
 
 `assets/js/latex-renderer.js` stellt eine öffentliche Funktion bereit, gegen
