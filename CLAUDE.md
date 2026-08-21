@@ -1026,6 +1026,55 @@ Container **anderer** Seiten fehlen naturgemäß.
 **Beim Prüfen mit `curl` daran denken:** Die REST-Schnittstelle verlangt zur
 Cookie-Anmeldung zusätzlich `X-WP-Nonce`; ohne den gilt die Anfrage als anonym.
 
+## Aktionsleiste: Sichtbarkeit, Verschachtelung, Behandelt-Dialog
+
+Die Leiste oben rechts im Container (`.cbd-action-buttons`) erscheint per
+`:hover`, `:focus-within` oder `.cbd-selected` und blendet sich seit 3.1.94
+nach einer Sekunde von selbst wieder aus (`cbd-actions-verborgen`, gesetzt in
+`assets/js/interactivity-store.js` **und** `interactivity-fallback.js` — je
+Installation läuft nur eines der beiden). Anlass war das haftende `:hover` auf
+Tablets. Plan: `docs/PLAN-Aktionsleiste-Autoausblenden.md`.
+
+**Das gerenderte Markup trägt `.cbd-container` zweimal je Block** — einmal am
+interaktiven Wurzelelement (`#cbd-container-N`, darin
+`.cbd-container-block > .cbd-action-buttons`) und einmal am Blockinhalt
+(`.cbd-container-content > .wp-block-…cbd-container`). Wer nur den Editor-Code
+liest, vermutet das nicht. Zusammen mit dem Nachfahren-Selektor der
+Einblend-Regel führte das bei **verschachtelten** Containern dazu, dass zwei
+Leisten gleichzeitig erschienen: `:hover` gilt für alle Vorfahren, der äußere
+Container war also immer mitbetroffen. Seit 3.1.95 hängen zwei zusätzliche
+Regeln in `cbd-frontend-clean.css` an der Eigentümer-Kette
+`.cbd-container > .cbd-container-block > .cbd-action-buttons` und stehen in
+`@media (hover: hover)` — **der Touch-Block weiter oben hält die Leiste auf
+Tablets bewusst dauerhaft sichtbar und wäre sonst geschlagen worden.**
+
+**Der Tastaturfokus hängt an `:not(:focus-within)`, nicht an der
+Spezifität.** Im Code stand lange die Behauptung, eine Ausblend-Regel ohne
+`:focus-within` könne die Einblend-Regel „nie schlagen". Das ist falsch herum
+gerechnet: 0-4-0 gegen 0-3-0, die Ausblend-Regel gewinnt. Getragen hat den
+Schutz allein das JavaScript (`focusin` entfernt die Klasse). Wer die Regel
+umbaut, muss `:not(:focus-within)` mitnehmen.
+
+### Behandelt-Dialog: Knopf und Gestaltung liefen auseinander
+
+Der Knopf „Als behandelt markieren" (Button 6 in
+`class-cbd-block-registration.php`) wird gerendert, sobald das Klassensystem
+eingeschaltet ist und eine angemeldete Lehrperson mit `cbd_edit_blocks` die
+Seite sieht — **unabhängig vom Tafelmodus.** Der Dialog dazu entsteht in
+`showClassSelectorDialog()` (`interactivity-store.js`) und hängt sich an
+`document.body`.
+
+Seine Gestaltung stand aber ausschließlich in `assets/css/board-mode.css`, und
+die lädt `CBD_Style_Loader::enqueue_feature_styles()` nur, wenn das Block-Design
+auf **dieser** Seite das Feature `boardMode` trägt. Überall sonst erschien der
+Dialog ohne `position: fixed`, ohne Überdeckung und ohne `z-index` — als
+Textblock am Seitenende. Seit 3.1.96 stehen die `.cbd-behandelt-*`-Regeln in
+`cbd-frontend-clean.css`, die immer geladen wird.
+
+**Muster, das sich wiederholt:** Ein Bedienelement wird unbedingt gerendert,
+seine CSS-Datei aber bedingt geladen. Wer einen Knopf in die Aktionsleiste
+hängt, prüft, in welcher Datei seine Regeln stehen und wann die geladen wird.
+
 ## LaTeX-Formeln: Renderpfad und Wiederholrendern (seit 3.1.88)
 
 Formeln laufen durch zwei Filter, aber registriert wird beides an **einer**
