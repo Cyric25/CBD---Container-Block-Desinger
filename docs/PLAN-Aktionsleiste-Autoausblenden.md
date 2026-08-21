@@ -274,10 +274,10 @@ dem Kopieren der Dateien auf den Testserver:
 
 | AP | Titel | Modell | Abhängig von | Status |
 |---|---|---|---|---|
-| AP-1 | CSS-Regel für den ausgeblendeten Zustand | sonnet | – | ☐ |
-| AP-2 | Zeitgeber in beiden Frontend-Skripten | sonnet | 1 | ☐ |
-| AP-3 | Abnahme auf dem Testserver | sonnet | 1, 2 | ☐ |
-| AP-4 | Dokumentation | sonnet | 3 | ☐ |
+| AP-1 | CSS-Regel für den ausgeblendeten Zustand | sonnet | – | ☑ |
+| AP-2 | Zeitgeber in beiden Frontend-Skripten | sonnet | 1 | ☑ |
+| AP-3 | Abnahme auf dem Testserver | sonnet | 1, 2 | ☑ (Nutzer, 2026-08-21; drei Nachbesserungen, siehe Abschnitt 10) |
+| AP-4 | Dokumentation | sonnet | 3 | ☑ (CLAUDE.md, Abschnitt Aktionsleiste: Sichtbarkeit, Verschachtelung, Behandelt-Dialog) |
 
 ## 9. Testprotokoll
 
@@ -286,7 +286,65 @@ dem Kopieren der Dateien auf den Testserver:
 | AP-1 | Tote CSS-Dateien unverändert | – | – |
 | AP-2 | `node --check` auf beide Skripte | – | – |
 | AP-2 | Logik in beiden Dateien vorhanden | – | – |
-| AP-3 | Ausblenden, Zeiger über der Leiste, Fokus | – | – |
-| AP-3 | Regression Tafelmodus, PDF, Klappen/Kopieren | – | – |
-| AP-3 | Touch-Verhalten | – | – |
-| AP-4 | Mojibake-Kontrolle | – | – |
+| AP-3 | Ausblenden, Zeiger über der Leiste, Fokus | **bestanden** (Nutzer). Die Erstmeldung, sie verschwinde nicht, wurde vom Nutzer zurückgenommen | 2026-08-21 |
+| AP-3 | Regression Tafelmodus, PDF, Klappen/Kopieren | **offen, nicht geprüft** — der Nutzer nimmt nach Sicht ab. Der Tafelmodus ist durch `@media (hover: hover)` von den neuen Regeln ausgenommen | – |
+| AP-3 | Touch-Verhalten | **offen, nicht geprüft** — der eigentliche Anlass des Vorhabens, vom Nutzer nach Sicht abzunehmen | – |
+| AP-4 | Mojibake-Kontrolle | **bestanden** — Änderungen durchweg mit Roh-Zeichenketten geschrieben, null Steuerzeichen | 2026-08-21 |
+
+---
+
+## 10. Funde bei der Abnahme (2026-08-21)
+
+Drei Dinge kamen erst durch das Autoausblenden ans Licht. **Nur der dritte
+gehört zum Vorhaben**, die anderen waren vorbestehend und wurden mitgenommen,
+weil sie im selben Code sitzen.
+
+### 10.1 Verschachtelte Container zeigten zwei Leisten (AP-3 Schritt 6)
+
+AP-3 Schritt 11 hatte den Fall vorhergesehen, aber **die falsche Ursache**
+vermutet: Es ging nicht um `querySelector()` gegen `children()`. Der
+JavaScript-Zugriff trifft die richtige Leiste, weil sie im Markup vor jedem
+inneren Container steht. Die Ursache lag im CSS und ist älter als das Vorhaben.
+
+Das gerenderte Markup trägt `.cbd-container` **zweimal je Block** — am
+interaktiven Wurzelelement `#cbd-container-N` und noch einmal am Blockinhalt
+unter `.cbd-container-content`. Die Einblend-Regel greift per
+Nachfahren-Selektor, und `:hover` gilt für alle Vorfahren. Der Zeiger auf einem
+inneren Container blendete deshalb zwangsläufig auch die Leiste des äußeren ein;
+umgekehrt zeigte der Zeiger auf dem äußeren die Leisten aller inneren.
+
+Behoben mit zwei Regeln an der Eigentümer-Kette
+`.cbd-container > .cbd-container-block > .cbd-action-buttons`, gefasst in
+`@media (hover: hover)` — der Touch-Block hält die Leiste auf Tablets bewusst
+dauerhaft sichtbar und wäre sonst geschlagen worden. Die `:has()`-Regel
+verwerfen alte Browser einzeln, die zweite Regel bleibt gültig.
+
+### 10.2 Der Fokusschutz hing allein am JavaScript
+
+AP-1 Schritt 2 verlangte, `:focus-within` aus der Ausblend-Regel
+herauszuhalten, mit der Begründung, der Selektor könne die Einblend-Regel dann
+nie schlagen. **Falsch herum gerechnet:**
+`.cbd-container.cbd-actions-verborgen:hover .cbd-action-buttons` hat 0-4-0,
+`.cbd-container:focus-within .cbd-action-buttons` nur 0-3-0. Die Ausblend-Regel
+gewann. Dass die Leiste bei Tastaturfokus trotzdem stehen blieb, lag einzig am
+`focusin`-Handler. Jetzt trägt ein ausdrückliches `:not(:focus-within)` den
+Schutz im CSS selbst.
+
+**Lehre für künftige Pläne:** Eine Spezifitätsbehauptung gehört nachgerechnet,
+bevor sie als Akzeptanzkriterium formuliert wird. Hier stand sie als Kniff im
+Plan, wanderte als Kommentar in die Datei und hätte die nächste Änderung in die
+Irre geführt.
+
+### 10.3 Der Zeitgeber brach ab, statt erneut anzulaufen
+
+Traf er auf `:focus-within` oder den Zeiger über der Leiste, kehrte er zurück
+und löschte seinen Eintrag. Blieb das zugehörige `mouseleave` oder `focusout`
+aus, stand die Leiste dauerhaft. Beide Skripte lassen ihn jetzt erneut anlaufen.
+
+### 10.4 Außerhalb dieses Vorhabens: der Behandelt-Dialog
+
+Bei der Prüfung fiel auf, dass der Dialog aus `showClassSelectorDialog()` auf
+Seiten ohne Tafelmodus völlig ungestylt erschien — seine Regeln standen nur in
+`board-mode.css`, die bedingt geladen wird. Behoben in 3.1.96, dokumentiert in
+`CLAUDE.md`. **Muster zum Merken:** Bedienelement unbedingt gerendert,
+CSS-Datei bedingt geladen.
