@@ -102,93 +102,69 @@ Zwei weitere Kandidaten, die AP-1 mit ausschließen soll:
 | `tools/test-blocktitel-latex.php` | – | **neu** |
 | `tools/test-latex-parser.php` | 134 Prüfungen | nur ausführen (Regression) |
 
-## 4a. Nachtrag vom 2026-08-21: Für Block-Redakteure liefe dieser Plan ins Leere
+## 4a. Berichtigt am 2026-08-21: Das Speicherproblem gibt es nicht
 
-Bei der Abnahme von `PLAN-Importer-Elternseite.md` (AP-3) wurde **gemessen**,
-dass `wp_kses_post()` LaTeX-Ausdrücke im **Blocktitel** zerstört — der Titel
-steht im HTML-Kommentar des Block-Trenners, und dort greift die Filterung
-anders als im Inhalt:
+**Dieser Abschnitt behauptete bis zum 2026-08-21 das Gegenteil.** Er hielt
+fest, `wp_kses_post()` zerstöre LaTeX-Ausdrücke im Blocktitel, und leitete
+daraus ab, dieser Plan sei für die Rolle `block_redakteur` wirkungslos und
+dürfe erst nach einem eigenen Sicherheitsvorhaben umgesetzt werden. **Beides
+war falsch.** Die zugrundeliegende Messung prüfte Markup, das so nie aus dem
+Editor kommt.
 
-| Eingabe im Blocktitel | Nach `wp_kses_post()` |
-|---|---|
-| `\frac{a}{b}` | `rac{a}{b}` |
-| `\beta` | `eta` |
-| `\cdot`, `\sum_{i=1}^{n}`, `\alpha` | Titel unlesbar zerstört |
-| `\nabla`, `\tau`, `\rho` | unverändert |
+### Was tatsächlich gilt
 
-**Dieselben Ausdrücke im Block-INHALT überleben unverändert.**
+`serialize_block_attributes()` (`wp-includes/blocks.php`) führt das
+Attribut-JSON durch ein `strtr()`, das `\` zu `\u005c`, `--` zu
+`\u002d\u002d` sowie `<`, `>`, `&` und `\"` in ihre `\uXXXX`-Formen überführt.
+**Im Block-Trenner steht damit kein einziger Backslash** — und keines der
+Zeichen, an denen kses oder der HTML-Parser sich stören könnten. Der Editor
+tut im Browser dasselbe (`wp-includes/js/dist/blocks.min.js`).
 
-Diese Filterung läuft für jede Rolle **ohne** `unfiltered_html` — und die
-Rolle **Block-Redakteur** hat sie nicht
-(`includes/functions.php`, `cbd_block_redakteur_capabilities()`: die
-Fähigkeit steht dort nicht in der Liste).
+Nachgemessen mit dem Konto `blockredakteur` (Rolle `block_redakteur`,
+`unfiltered_html` = nein, `wp_filter_post_kses` aktiv), Titel
+`Formel $\frac{a}{b}$, $\cdot$, $\sum_{i=1}^{n}$, $\alpha$, $\beta$`:
 
-**Folge für dieses Vorhaben:** Ein Titel, den ein Block-Redakteur gespeichert
-hat, enthält gar keine Formel mehr, die man rendern könnte. Dieser Plan
-verbessert dann nichts — er würde einen zerstörten Titel korrekt als
-zerstörten Titel anzeigen.
+| Fall | Markup unverändert | Titel unversehrt |
+|---|---|---|
+| Markup aus `serialize_blocks()` — der echte Weg | **ja** | **ja** |
+| Markup von Hand gebaut, Backslash roh im JSON | nein | nein |
 
-**Vom Nutzer am 2026-08-21 beantwortet: Der Fall ist NICHT theoretisch.**
-Auch Block-Redakteure legen Blöcke mit Formeln im Titel an.
+Die alte Messung hatte den zweiten Fall erwischt. Das Schadensmuster verriet
+es im Nachhinein: `\frac` → `rac` und `\beta` → `eta` ist das Verschwinden von
+`\f` und `\b`, also von **Escape-Folgen**, die eine Zeichenkette im Prüfskript
+gedeutet hat. kses entfernt keine Zeichenpaare dieser Art —
+`wp_kses_stripslashes()` ersetzt ausschließlich `\"` durch `"`.
 
-**Folge: Dieser Plan allein genügt nicht.** Er lässt sich weiterhin
-umsetzen — für Administratoren wirkt er sofort —, aber für Block-Redakteure
-bliebe er wirkungslos, solange der Titel beim Speichern zerstört wird. Die
-Reihenfolge ist damit vorgegeben: **erst die Ursache beim Speichern, dann das
-Rendern.** Umgekehrt baut man eine Anzeige für einen Inhalt, den es nicht
-mehr gibt.
+### Folgen für diesen Plan
 
-Das Speicherproblem ist ein **eigenes Vorhaben** und wird hier ausdrücklich
-**nicht** entschieden. Es gibt mindestens drei Wege, und die Wahl ist eine
-Sicherheitsentscheidung des Nutzers, keine technische Vorliebe:
+- **Er ist nicht blockiert.** Er wirkt für alle Rollen gleichermaßen, auch für
+  Block-Redakteure.
+- **`PLAN-Blocktrenner-vor-kses-schuetzen.md` ist hinfällig** und dort als
+  solcher gekennzeichnet. Es wird keine Ausnahme in eine Sicherheitsfunktion
+  gebaut, und die Rolle bekommt `unfiltered_html` nicht — beides erübrigt sich.
+- Die drei „Wege", die dieser Abschnitt früher zur Wahl stellte, sind
+  gegenstandslos.
 
-1. **Der Rolle `unfiltered_html` geben** (eine Zeile in
-   `cbd_block_redakteur_capabilities()`). Einfach und in
-   WordPress-Installationen üblich. Preis: Die Rolle darf dann beliebiges
-   HTML speichern, einschließlich `<script>`. Sie darf heute schon Seiten
-   anlegen, ändern und veröffentlichen — der Zugewinn an Möglichkeiten ist
-   also kleiner, als er klingt, aber er ist real.
-2. **Die Filterung gezielt für Block-Trenner aussetzen.** Wirkt genauer, ist
-   aber deutlich aufwendiger und muss selbst sicher sein — man baut damit
-   eine Ausnahme in eine Sicherheitsfunktion.
-3. **Den Titel nicht mehr im Blockattribut speichern.** Umbau mit
-   Datenmigration über alle Bestandsseiten; die weitreichendste Lösung mit
-   der größten Regressionsfläche.
+### Was bleibt: die eigentliche Ursache
 
-**Die fehlende Messung ist am 2026-08-21 nachgeholt worden — die Annahme
-trifft zu.** Auf dem Testserver wurde ein echtes Konto mit der Rolle
-`block_redakteur` angelegt (`blockredakteur`, ID 3) und **als dieser Nutzer**
-eine Seite mit einem Container-Block gespeichert, dessen Titel
-`Formel $\frac{a}{b}$ und $\cdot$` lautete:
+Sie liegt genau dort, wo die Aufgabenstellung sie vermutet hat — beim
+**Rendern**, nicht beim Speichern. `includes/class-cbd-block-registration.php`
+gibt den Titel in Zeile 1285 als
 
-| Prüfung | Ergebnis |
-|---|---|
-| Rolle hat `unfiltered_html` | **nein** |
-| kses-Filter beim Speichern aktiv (`content_save_pre`) | **ja** |
-| Blocktitel nach dem Speichern | **im Markup nicht mehr auffindbar — Attribut zerstört** |
-| Dieselben Formeln im Block-**Inhalt** | **unverändert erhalten** (`\frac` und `\cdot` je einmal) |
-| Block-Trenner | erhalten |
+```php
+$html .= '<h3 class="cbd-block-title">' . esc_html($block_title) . '</h3>';
+```
 
-**Damit ist der Fall belegt, nicht mehr vermutet.** Ein Block-Redakteur
-verliert den Formeltitel beim Speichern vollständig; der Blockinhalt bleibt
-heil. Der Zwischenfall bestätigt zugleich die Reihenfolge: Dieser Plan darf
-erst nach der Behebung des Speicherproblems umgesetzt werden, sonst rendert
-er einen Titel, den es nicht mehr gibt.
+aus. Der Wert geht **nie** durch `CBD_LaTeX_Parser`, also entsteht auch kein
+`<span class="cbd-latex-formula">` — und genau danach sucht
+`assets/js/latex-renderer.js` (`FORMULA_SELECTOR = '.cbd-latex-formula'`).
+KaTeX bekommt den Titel nie zu sehen; `$\frac{a}{b}$` bleibt als Text stehen.
 
-*Nebenbefund der Messung, ohne Bezug zum Vorhaben:* Der Glossar-Scanner des
-Themes (`functions.php`, `simple_clean_scan_glossar_candidates()`) ruft
-`mb_strtolower()` auf `save_post` auf. Fehlt die `mbstring`-Erweiterung,
-endet **jedes** Speichern in einem Fatal Error. Auf dem Testserver und
-vermutlich auch produktiv ist sie vorhanden — die Abhängigkeit ist aber
-nirgends dokumentiert und wurde nur sichtbar, weil der Messaufruf aus der
-Kommandozeile ohne sie lief.
-
-**Noch nicht gemessen:** ob der Speicherweg des Blockeditors die Filterung
-tatsächlich anwendet. Das ist aus der WordPress-Mechanik gut begründet
-(`wp_filter_post_kses` hängt an `content_save_pre`), aber ein
-Ende-zu-Ende-Nachweis mit einem echten Block-Redakteur-Konto steht aus.
-**AP-1 dieses Plans soll ihn mit erbringen** — er hat ohnehin den Auftrag,
-die Ursache zu belegen statt sie anzunehmen.
+*Nebenbefund der alten Messung, weiterhin gültig:* Der Glossar-Scanner des
+Themes ruft `mb_strtolower()` auf `save_post`. Fehlt die
+`mbstring`-Erweiterung, endet **jedes** Speichern in einem Fatal Error. Auf
+dem Testserver ist sie vorhanden; sichtbar wurde es nur bei Aufrufen aus der
+Kommandozeile.
 
 ## 5. Architekturentscheidungen
 
@@ -329,7 +305,7 @@ zuerst committen.
 
 | AP | Titel | Modell | Abhängig von | Status |
 |---|---|---|---|---|
-| AP-1 | Ursache belegen (Diagnose) | opus | – | ☐ |
+| AP-1 | Ursache belegen (Diagnose) | opus | – | ☑ (2026-08-21, siehe Abschnitt 4a: Zeile 1285, `esc_html($block_title)` ohne Parser) |
 | AP-2 | Titel durch den Parser führen | sonnet | 1 | ☐ |
 | AP-3 | Abnahme auf dem Testserver | sonnet | 2 | ☐ |
 | AP-4 | Dokumentation | sonnet | 3 | ☐ |
@@ -338,7 +314,7 @@ zuerst committen.
 
 | AP | Test | Ergebnis | Datum |
 |---|---|---|---|
-| AP-1 | Vorhersage bestätigt oder widerlegt | – | – |
+| AP-1 | Vorhersage bestätigt oder widerlegt | **bestätigt** für die Renderseite; die zusätzlich vermutete Zerstörung beim Speichern **widerlegt** (Abschnitt 4a) | 2026-08-21 |
 | AP-2 | `php tools/test-blocktitel-latex.php` | – | – |
 | AP-2 | `php tools/test-latex-parser.php` (134, Regression) | – | – |
 | AP-2 | `php tools/check-php74.php` | – | – |

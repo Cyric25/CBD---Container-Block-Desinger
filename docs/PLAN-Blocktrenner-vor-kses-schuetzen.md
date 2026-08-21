@@ -1,5 +1,16 @@
 # Plan: Block-Trenner vor der kses-Filterung schützen
 
+> # ⛔ HINFÄLLIG — nicht umsetzen
+>
+> **AP-1 hat die Voraussetzung dieses Plans widerlegt (2026-08-21).** kses
+> zerstört Blocktitel **nicht**. Die Messung, auf der dieser Plan beruht, war
+> fehlerhaft — sie prüfte Markup, das so nie aus dem Editor kommt. Einzelheiten
+> im neuen Abschnitt 10 am Ende.
+>
+> Der Plan bleibt als Beleg stehen: Er dokumentiert eine Sicherheitsausnahme,
+> die **nicht** gebaut wurde, und warum. Wer erwägt, sie doch zu bauen, findet
+> hier die Messung, die das erübrigt.
+
 _Erstellt am: 2026-08-21 · Eigenständiges Kleinvorhaben · Komponente: CDB-Designer (v3.1.94)_
 
 **Vorbedingung für `PLAN-Formeln-in-Blocktiteln.md`.** Jener Plan will
@@ -361,3 +372,91 @@ ja oder nein?**
 | AP-3 | Regression Seitenimport | – | – |
 | AP-4 | Sicherheitsurteil | – | – |
 | AP-5 | Mojibake- und Steuerzeichenkontrolle | – | – |
+
+---
+
+## 10. AP-1: Ergebnis der Untersuchung (2026-08-21)
+
+**AP-1 lautete: „Bietet WordPress selbst einen Weg?" Die Antwort ist ja — und
+zwar so vollständig, dass es nichts zu bauen gibt.**
+
+### 10.1 Der Kern maskiert Blockattribute bereits selbst
+
+`serialize_block_attributes()` in `wp-includes/blocks.php` schickt das
+JSON durch ein `strtr()` mit genau diesen Ersetzungen:
+
+| Zeichen | wird zu |
+|---|---|
+| `\` (Backslash) | `\u005c` |
+| `--` | `\u002d\u002d` |
+| `<` | `\u003c` |
+| `>` | `\u003e` |
+| `&` | `\u0026` |
+| `\"` | `\u0022` |
+
+**Im Block-Trenner steht deshalb überhaupt kein Backslash** — und kein `--`,
+kein `<`, kein `>`, kein `&`. Genau die Zeichen, an denen sich kses und der
+HTML-Parser stören könnten, sind vorher weg. Der Editor tut im Browser
+dasselbe: `wp-includes/js/dist/blocks.min.js` enthält
+`replaceAll("\\\\","\u005c").replaceAll("--","\u002d\u002d")…`. Beide
+Speicherwege sind abgedeckt.
+
+Das ist keine glückliche Nebenwirkung, sondern der Zweck der Funktion.
+
+### 10.2 Gemessen, mit dem echten Konto und dem echten Speicherweg
+
+Titel: `Formel $\frac{a}{b}$, $\cdot$, $\sum_{i=1}^{n}$, $\alpha$, $\beta$`
+Konto: `blockredakteur`, Rolle `block_redakteur`, `unfiltered_html` = **nein**,
+`wp_filter_post_kses` auf `content_save_pre` = **aktiv**.
+
+| Fall | Markup unverändert | Titel unversehrt |
+|---|---|---|
+| **A** — Markup aus `serialize_blocks()`, also so wie der Editor es liefert | **ja** | **ja** |
+| **B** — Markup von Hand gebaut, Backslash roh im JSON | nein | nein, Attribut zerstört |
+
+`wp_kses_post()` allein auf Fall A: **zeichengleich**.
+
+### 10.3 Warum die ursprüngliche Messung das Gegenteil zeigte
+
+Sie hat Fall **B** gemessen. Solches Markup entsteht nie im Editor, weder
+serverseitig noch im Browser — es entsteht nur, wenn ein Prüfskript den
+Block-Trenner selbst zusammensetzt und dabei den Backslash roh ins JSON
+schreibt.
+
+Das Muster der gemeldeten Schäden verrät zusätzlich, dass schon vor kses etwas
+schiefging: `\frac` → `rac` und `\beta` → `eta` sind das Verschwinden von
+`\f` und `\b`, also **Escape-Folgen**, die eine Zeichenkette im Prüfskript
+gedeutet hat — `\f` ist Seitenvorschub, `\b` Rückschritt. kses entfernt keine
+Zeichenpaare dieser Art; `wp_kses_stripslashes()` ersetzt ausschließlich `\"`
+durch `"`. Es ist dieselbe Fehlerfamilie, vor der Abschnitt 0 Punkt 8 dieses
+Plans warnt.
+
+**Lehre:** Eine Messung, die eine Sicherheitsausnahme begründen soll, muss den
+Eingabewert auf demselben Weg erzeugen wie das Produktivsystem — hier also
+über `serialize_blocks()` statt über eine selbst gebaute Zeichenkette.
+
+### 10.4 Antworten auf die vier Fragen aus AP-1
+
+1. **Wo zerstört kses den Kommentarinhalt?** Bei Markup aus dem Editor:
+   nirgends. Die Kommentarbehandlung in `wp_kses_split2()`
+   (`wp-includes/kses.php`, ab „Normative HTML comments should be handled
+   separately") entfernt `<!--`/`-->`, schickt den Rest durch `wp_kses()` bis
+   zur Stabilität und zieht danach `--+` auf einen Bindestrich zusammen. Weil
+   `serialize_block_attributes()` `--`, `<`, `>`, `&` und `\` vorher in
+   `\uXXXX`-Folgen überführt, findet dieser Code nichts vor, woran er sich
+   stören könnte.
+2. **Gibt es einen vorgesehenen Filter?** `pre_kses` (kses.php, Zeile 1245)
+   gäbe es, wird aber nicht gebraucht.
+3. **Behandelt WordPress Block-Trenner in kses gesondert?** Nein — in
+   `kses.php` kommt weder `wp:` noch ein Blockbegriff vor. Der Schutz sitzt
+   eine Ebene früher, beim Serialisieren.
+4. **REST gegenüber `wp_insert_post()`?** Beide laufen über
+   `content_save_pre`; der Unterschied ist ohne Belang, weil beide Wege
+   dasselbe bereits maskierte Markup erhalten.
+
+### 10.5 Folge
+
+**Dieser Plan wird nicht umgesetzt.** Die Rolle `block_redakteur` braucht
+`unfiltered_html` weiterhin nicht — nicht als Zugeständnis, sondern weil es
+kein Problem gibt, das sie lösen müsste. `PLAN-Formeln-in-Blocktiteln.md` ist
+damit **nicht blockiert**; dessen Abschnitt 4a ist entsprechend berichtigt.
