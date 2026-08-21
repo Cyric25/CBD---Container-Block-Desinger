@@ -301,10 +301,18 @@ class CBD_LaTeX_Parser {
             return $content;
         }
 
-        // Check if content was already parsed (prevent double parsing)
-        if (strpos($content, 'cbd-latex-formula') !== false) {
-            return $content;
-        }
+        // KEIN Rundum-Abbruch bei bereits gerenderten Formeln (2026-08-21).
+        //
+        // Hier stand: `if (strpos($content, 'cbd-latex-formula') !== false)
+        // { return $content; }`. Gedacht als Doppelparse-Schutz, wirkte es als
+        // Abbruch für alles Übrige — mit dem Ergebnis, dass bei
+        // verschachtelten Blöcken der Titel des äußeren Containers
+        // unformatiert blieb (Begründung ausführlich in
+        // mask_protected_regions()).
+        //
+        // Den Schutz leistet jetzt die Maskierung dort: Fertige Formeln
+        // werden wie <script>/<pre>/<code> beiseitegelegt und unverändert
+        // zurückgetauscht, während der Rest des Inhalts normal geparst wird.
 
         // Set PCRE limits to prevent catastrophic backtracking
         @ini_set('pcre.backtrack_limit', '1000000');
@@ -530,23 +538,64 @@ class CBD_LaTeX_Parser {
      * @return string
      */
     private function mask_protected_regions($content, &$store, &$counter, $marke) {
-        // Billige Vorprüfung: ohne eines dieser Tags gibt es nichts zu tun.
+        // Billige Vorprüfung: ohne eines dieser Tags und ohne bereits
+        // gerenderte Formel gibt es nichts zu tun.
         if (stripos($content, '<script') === false
             && stripos($content, '<pre') === false
-            && stripos($content, '<code') === false) {
+            && stripos($content, '<code') === false
+            && strpos($content, 'cbd-latex-formula') === false) {
             return $content;
         }
 
-        $masked = preg_replace_callback(
-            '#<(script|pre|code)\b[^>]*>.*?</\1\s*>#is',
-            function ($matches) use (&$store, &$counter, $marke) {
-                $placeholder = '___CBD_PROTECTED_' . $marke . '_' . $counter . '___';
-                $store[$placeholder] = $matches[0];
-                $counter++;
-                return $placeholder;
-            },
-            $content
-        );
+        $ersetzen = function ($muster, $text) use (&$store, &$counter, $marke) {
+            return preg_replace_callback(
+                $muster,
+                function ($matches) use (&$store, &$counter, $marke) {
+                    $placeholder = '___CBD_PROTECTED_' . $marke . '_' . $counter . '___';
+                    $store[$placeholder] = $matches[0];
+                    $counter++;
+                    return $placeholder;
+                },
+                $text
+            );
+        };
+
+        $masked = $ersetzen('#<(script|pre|code)\b[^>]*>.*?</\1\s*>#is', $content);
+
+        // BEREITS GERENDERTE FORMELN (2026-08-21)
+        //
+        // Vorher stand am Anfang von parse_latex() ein Doppelparse-Schutz, der
+        // beim ersten Fund von `cbd-latex-formula` den GANZEN Inhalt
+        // unverändert zurückgab. Das ging schief, sobald Blöcke
+        // verschachtelt sind: `render_block` feuert für den inneren Block
+        // ZUERST. Enthielt dessen Inhalt eine Formel, bekam der äußere
+        // Container beim eigenen Durchlauf schon fertige Spans zu sehen — und
+        // gab auf, bevor er seinen EIGENEN Blocktitel ansehen konnte. Formeln
+        // im Titel blieben dann als Text stehen, aber nur bei Blöcken, deren
+        // Inhalt ebenfalls eine Formel enthielt. Ein Container mit
+        // formelfreiem Inhalt war unauffällig — deshalb war der Fehler so
+        // schwer zu greifen.
+        //
+        // Jetzt werden fertige Formeln maskiert wie script/pre/code: Sie
+        // laufen unverändert durch, und alles daneben wird trotzdem geparst.
+        //
+        // Das Muster ist zeichengenau auf die Ausgabe von
+        // build_inline_formula() und build_display_formula() zugeschnitten -
+        // beide erzeugen dieselbe zweistufige Form mit LEEREM inneren <span>
+        // (KaTeX füllt es erst im Browser). Weil der innere Teil leer ist,
+        // gibt es keine Verschachtelungsmehrdeutigkeit. Wer das Markup dort
+        // ändert, muss dieses Muster mitziehen.
+        if (null !== $masked && strpos($masked, 'cbd-latex-formula') !== false) {
+            $mit_formeln = $ersetzen(
+                '#<span class="cbd-latex-formula[^"]*"[^>]*><span class="cbd-latex-content"></span></span>#i',
+                $masked
+            );
+            if (null === $mit_formeln) {
+                $this->log_preg_error('mask_protected_regions(), gerenderte Formeln');
+            } else {
+                $masked = $mit_formeln;
+            }
+        }
 
         // preg_replace_callback() liefert bei einem PCRE-Fehler null. Dann
         // lieber ungeschützt weiterarbeiten als den Inhalt zu verlieren.

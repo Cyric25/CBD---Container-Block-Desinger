@@ -1175,14 +1175,31 @@ Prüfung entfallen.
 
 1. **Den Titel hier selbst vorrendern** (kurzlebig in 3.1.97/98, am selben Tag
    wieder entfernt). Die vorgerenderten `<span class="cbd-latex-formula">`
-   lassen den **Doppelparse-Schutz** in `parse_latex()` anschlagen — die
-   Methode kehrt beim ersten Fund dieser Klasse sofort zurück. Der Parser gab
-   den ganzen Block danach unverändert heraus, und der **Inhalt** desselben
-   Blocks blieb unformatiert. Gemessen auf einer Seite mit fünf Blöcken:
-   **8 Formeln ohne, 4 mit** dem Vorrendern. Wer den Titel doch einmal
-   vorrendern will, muss zuerst den Doppelparse-Schutz umbauen — etwa so, dass
-   er fertige Formel-Spans wie `<script>`/`<pre>`/`<code>` **maskiert**, statt
-   den ganzen Inhalt aufzugeben.
+   ließen den damaligen Doppelparse-Schutz anschlagen; der Parser gab den
+   ganzen Block unverändert heraus, und der **Inhalt** desselben Blocks blieb
+   unformatiert. Gemessen: **8 Formeln ohne, 4 mit** dem Vorrendern.
+   Der Doppelparse-Schutz ist inzwischen umgebaut (siehe nächster Absatz),
+   aber überflüssig bleibt das Vorrendern: Der Parser sieht den Titel ohnehin.
+
+### Doppelparse-Schutz: maskieren statt abbrechen (seit 2026-08-21)
+
+`parse_latex()` begann früher mit einem Rundum-Abbruch: Fand sich irgendwo
+`cbd-latex-formula`, kam der ganze Inhalt unverändert zurück. **Das ging bei
+verschachtelten Blöcken schief.** `render_block` feuert für den **inneren**
+Block zuerst. Enthält dessen Inhalt eine Formel, sieht der äußere Container
+beim eigenen Durchlauf schon fertige Spans — und gibt auf, bevor er seinen
+**eigenen Blocktitel** ansieht. Formeln im Titel blieben dann Text, aber
+**nur** bei Containern, deren Inhalt ebenfalls eine Formel enthielt; ein
+Container mit formelfreiem Inhalt war unauffällig. Genau das machte den Fehler
+so schwer zu greifen.
+
+Jetzt maskiert `mask_protected_regions()` fertige Formeln wie
+`<script>`/`<pre>`/`<code>`: Sie laufen unverändert durch, alles daneben wird
+trotzdem geparst. Das Muster ist zeichengenau auf die Ausgabe von
+`build_inline_formula()` und `build_display_formula()` zugeschnitten — beide
+erzeugen dieselbe zweistufige Form mit **leerem** inneren `<span>` (KaTeX füllt
+es erst im Browser), weshalb es keine Verschachtelungsmehrdeutigkeit gibt.
+**Wer dieses Markup ändert, muss das Muster mitziehen.**
 2. **Auf eine gerade Zahl von `$` prüfen.** Ein Dollarzeichen im Fließtext ist
    normal, und die Anzahl sagt nichts über einen Fehler. Siehe die ausführliche
    Notiz an der Stelle, an der die Prüfung stand.

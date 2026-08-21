@@ -755,6 +755,39 @@ check('Text mit einzelnem $ bleibt zeichengleich', $roh === $parser->parse_latex
 $roh = '<p>Ein $Testformel $ Rest.</p>';
 check('Text mit Leerzeichen-Formel bleibt zeichengleich', $roh === $parser->parse_latex($roh), $parser->parse_latex($roh));
 
+// =========================================================================
+echo "\n== Bereits gerenderte Formeln werden maskiert, nicht abgebrochen ==\n";
+//
+// Frueher gab parse_latex() beim ersten Fund von cbd-latex-formula den GANZEN
+// Inhalt unveraendert zurueck. Bei verschachtelten Bloecken feuert
+// render_block fuer den inneren Block zuerst; der aeussere Container sah
+// dann schon fertige Spans und gab auf, bevor er seinen eigenen Blocktitel
+// ansehen konnte. Formeln im Titel blieben Text - aber nur bei Bloecken,
+// deren Inhalt ebenfalls eine Formel enthielt.
+
+$fertig = $parser->parse_latex('<p>$H_2O$</p>');
+check('Vorbereitung: eine Formel gerendert', 1 === formula_count($fertig), $fertig);
+
+$gemischt = '<h3>Titel $E^3$ dazu</h3>' . $fertig;
+$erg = $parser->parse_latex($gemischt);
+check('gerenderte Formel plus unbearbeitete: beide vorhanden',
+    2 === formula_count($erg), $erg);
+check('die fertige Formel bleibt zeichengleich enthalten',
+    strpos($erg, $fertig) !== false, $erg);
+check('kein Platzhalter bleibt uebrig',
+    strpos($erg, '___CBD_PROTECTED_') === false, $erg);
+
+$nur_fertig = $parser->parse_latex($fertig);
+check('rein gerenderter Inhalt kommt zeichengleich heraus',
+    $nur_fertig === $fertig, $nur_fertig);
+
+// Eine Formel innerhalb eines <script> bleibt trotzdem unberuehrt - die
+// Maskierung der Tags laeuft vor der der Formeln.
+$mit_skript = '<script>var s = "$x$";</script><p>$y$</p>';
+$erg = $parser->parse_latex($mit_skript);
+check('Formel im Skript bleibt Text, die daneben wird gesetzt',
+    1 === formula_count($erg) && strpos($erg, 'var s = "$x$";') !== false, $erg);
+
 check('preg_last_error() ist sauber', PREG_NO_ERROR === preg_last_error(), preg_last_error());
 
 // =========================================================================
