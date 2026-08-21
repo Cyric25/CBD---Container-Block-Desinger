@@ -512,20 +512,26 @@ check('N1: Skript daneben bleibt unversehrt', strpos($out, $jquery) !== false, $
 check('N1: keine Warnbox trotz fuenf $ im Rohtext',
     strpos($out, 'cbd-latex-warning') === false, $out);
 
-// Die Warnfunktion darf NICHT verloren gehen.
+// GEAENDERT am 2026-08-21: Hier stand die Forderung, eine ungerade Zahl von $
+// muesse eine Warnbox erzeugen. Diese Regel ist auf Wunsch des Nutzers
+// entfallen - ein einzelnes $ im Fliesstext ("Das kostet 65$") ist normal und
+// darf keine Fehlermeldung ausloesen. Geprueft wird jetzt das Gegenteil.
 $in  = '<p>Preis $5 und $ noch $ ein Zeichen.</p>';
 $out = $parser->parse_latex_in_blocks($in, $container_block);
-check('N1: ungerade $ ausserhalb von Skripten -> Warnbox erscheint weiterhin',
-    strpos($out, 'cbd-latex-warning') !== false, $out);
+check('ungerade $ ausserhalb von Skripten -> KEINE Warnbox mehr',
+    strpos($out, 'cbd-latex-warning') === false, $out);
+check('ungerade $ ausserhalb von Skripten -> keine roten <span>',
+    strpos($out, 'background: #dc3545') === false, $out);
+check('ungerade $ ausserhalb von Skripten -> Text bleibt zeichengleich',
+    $in === $out, $out);
 
-// Gemischt: das Skript verschiebt die Bilanz nicht mehr — und wird bei einer
-// echten Warnung auch nicht mit roten <span> zugekleistert.
+// Ein Skript mit $ daneben aendert daran nichts.
 $dollar_skript = '<script>var s = "$";</script>';
 $in  = '<p>Preis $5 und $ noch $ ein.</p>' . $dollar_skript;
 $out = $parser->parse_latex_in_blocks($in, $container_block);
-check('N1: Bilanz wird ohne die $ im Skript gebildet (3 statt 4 -> Warnung)',
-    strpos($out, 'cbd-latex-warning') !== false, $out);
-check('N1: Skript bleibt auch im Warnfall zeichengleich',
+check('Skript mit $ daneben: keine Warnbox',
+    strpos($out, 'cbd-latex-warning') === false, $out);
+check('Skript bleibt zeichengleich',
     strpos($out, $dollar_skript) !== false, $out);
 
 // --- N2: zurueckgetauscht wird in umgekehrter Reihenfolge -----------------
@@ -712,8 +718,42 @@ check('langer Text mit Formel wird verarbeitet', 1 === formula_count($parser->pa
 
 $unbalanced = '<p>Preis $5 und $ noch $ ein Zeichen</p>'; // drei $ = ungerade
 $out = $parser->parse_latex_in_blocks($unbalanced, $block);
-check('ungerade Anzahl $ -> Warnhinweis statt Parsen',
-    strpos($out, 'cbd-latex-warning') !== false, $out);
+check('ungerade Anzahl $ -> keine Warnung, keine Formel',
+    strpos($out, 'cbd-latex-warning') === false && 0 === formula_count($out), $out);
+
+// =========================================================================
+echo "\n== Leerzeichenregel fuer \$...\$ (2026-08-21) ==\n";
+//
+// Der Parser unterscheidet eine Formel von Text mit Dollarzeichen allein
+// daran, ob direkt hinter dem oeffnenden und direkt vor dem schliessenden $
+// Leerraum steht. Kein Zaehlen, keine Heuristik.
+
+$faelle = array(
+    // Text                          Formeln  Beschreibung
+    array('$E=mc^2$',                     1, 'ohne Leerzeichen -> Formel'),
+    array('$x$',                          1, 'einzelnes Zeichen -> Formel'),
+    array('$H_2O$ und $CO_2$',            2, 'zwei Formeln nebeneinander'),
+    array('$Testformel $',                0, 'Leerzeichen VOR dem Schluss-$ -> keine Formel'),
+    array('$ Testformel$',                0, 'Leerzeichen HINTER dem Start-$ -> keine Formel'),
+    array('$ Testformel $',               0, 'Leerzeichen auf beiden Seiten -> keine Formel'),
+    array('Das kostet 65$',               0, 'einzelnes $ am Wortende -> keine Formel'),
+    array('65$ und dann 30$',             0, 'zwei Preise -> keine Formel dazwischen'),
+    array('Zwischen 5$ und 10$ liegen',   0, 'Preisspanne bleibt Text'),
+    array("Zeilen\n\$a+b\$ Ende",         1, 'Formel nach Zeilenumbruch'),
+    array('$a$b$c$',                      2, 'Kette ohne Leerzeichen'),
+);
+foreach ($faelle as $fall) {
+    list($text, $erwartet, $was) = $fall;
+    $erg = $parser->parse_latex($text);
+    check('Leerzeichenregel: ' . $was, $erwartet === formula_count($erg), $erg);
+}
+
+// Der Text um eine nicht erkannte Formel darf sich nicht veraendern.
+$roh = '<p>Das kostet 65$ und mehr.</p>';
+check('Text mit einzelnem $ bleibt zeichengleich', $roh === $parser->parse_latex($roh), $parser->parse_latex($roh));
+
+$roh = '<p>Ein $Testformel $ Rest.</p>';
+check('Text mit Leerzeichen-Formel bleibt zeichengleich', $roh === $parser->parse_latex($roh), $parser->parse_latex($roh));
 
 check('preg_last_error() ist sauber', PREG_NO_ERROR === preg_last_error(), preg_last_error());
 

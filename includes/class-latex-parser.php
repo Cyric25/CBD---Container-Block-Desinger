@@ -257,61 +257,29 @@ class CBD_LaTeX_Parser {
             return $block_content;
         }
 
-        // Validation: Check for balanced $ signs
+        // KEINE $-Bilanzpruefung mehr (entfernt am 2026-08-21).
         //
-        // N1 (AP-1.fix5): Gezählt wird auf dem MASKIERTEN Text, nicht auf dem
-        // Rohtext. Ein gewöhnliches jQuery-Skript
-        // (`jQuery(function($){ … $(".x") … $(".y") … })`) bringt sonst eine
-        // ungerade $-Bilanz zustande und bekommt eine rote Warnbox plus rot
-        // hinterlegte <span> mitten hineingeschrieben — das Skript ist danach
-        // kaputt. Der Blocknamen-Filter oben hilft hier nicht: Container-Blöcke
-        // stehen bewusst nicht in KEIN_LATEX_BLOCK, und `isolate_inline_scripts()`
-        // zeigt, dass Skripte in Blockinhalten gelebtes Muster sind.
+        // Hier stand eine Pruefung auf eine ungerade Zahl von $: Sie liess
+        // das Parsen ganz aus, setzte eine rote Warnbox ueber den Block und
+        // hinterlegte jedes einzelne $ rot. Gedacht war sie als Hilfe bei
+        // vergessenen Abschluss-Dollarzeichen.
         //
-        // Die Warnung selbst bleibt erhalten — sie bezieht sich jetzt nur noch
-        // auf $ ausserhalb von script/pre/code.
-        $zaehl_speicher = array();
-        $zaehl_counter  = 0;
-        $ohne_geschuetztes = $this->mask_protected_regions(
-            $block_content,
-            $zaehl_speicher,
-            $zaehl_counter,
-            uniqid()
-        );
-
-        $dollar_count = substr_count($ohne_geschuetztes, '$');
-        if ($dollar_count > 0 && $dollar_count % 2 !== 0) {
-            if (defined('WP_DEBUG') && WP_DEBUG) {
-                error_log('[CBD LaTeX Parser] Unbalanced $ signs detected in block (' . $dollar_count . ' total, ohne script/pre/code). Skipping LaTeX parsing to prevent regex issues.');
-            }
-            // Add visual warning for incomplete formulas (red box)
-            $warning = '<div class="cbd-latex-warning" style="background: #fee; border-left: 4px solid #dc3545; padding: 12px; margin: 10px 0; color: #721c24;">'
-                     . '<strong>⚠️ Unvollständige LaTeX-Formel erkannt</strong><br>'
-                     . 'Dieser Block enthält ' . $dollar_count . ' $ Zeichen (muss gerade Anzahl sein). '
-                     . 'Bitte prüfen Sie, ob alle Formeln korrekt mit $ oder $$ umschlossen sind.'
-                     . '</div>';
-
-            // Highlight incomplete $ signs in red
-            // Find $ that are not part of $$
-            // Läuft ebenfalls auf dem maskierten Text: Ein $ im Skript darf
-            // keine rote Markierung bekommen.
-            $highlighted_content = preg_replace(
-                '/(?<!\$)\$(?!\$)/',
-                '<span style="background: #dc3545; color: white; padding: 2px 4px; font-weight: bold; border-radius: 2px;">$</span>',
-                $ohne_geschuetztes
-            );
-
-            if (null === $highlighted_content) {
-                // PCRE-Fehler sofort auswerten (N4) und ungehighlightet
-                // weiterarbeiten, statt den Blockinhalt zu verlieren.
-                $this->log_preg_error('parse_latex_in_blocks(), $-Hervorhebung');
-                $highlighted_content = $ohne_geschuetztes;
-            }
-
-            // Return block content with warning at the top and highlighted $ signs.
-            // Die maskierten Bereiche kommen dabei unverändert zurück.
-            return $warning . $this->restore_placeholders($highlighted_content, $zaehl_speicher);
-        }
+        // Sie ist an ihrer eigenen Annahme gescheitert: Ein $ im Fliesstext
+        // ist voellig normal. "Das kostet 65$" ergab eine Fehlermeldung und
+        // ein rot hinterlegtes Dollarzeichen mitten im Satz - fuer einen Text,
+        // an dem nichts falsch war. Eine ungerade Zahl von $ ist schlicht kein
+        // Hinweis auf einen Fehler.
+        //
+        // Was stattdessen traegt: Das Inline-Muster in parse_latex() erkennt
+        // eine Formel nur, wenn direkt hinter dem oeffnenden und direkt vor
+        // dem schliessenden $ KEIN Leerzeichen steht. Damit ist "65$" kein
+        // Formelanfang, "$Testformel $" keine Formel und "$Testformel$" eine.
+        // Ob eine erkannte Formel dann richtig aussieht, entscheidet die
+        // Sichtpruefung - dafuer braucht es keine Heuristik im Parser.
+        //
+        // Nicht wieder einbauen. Wer kuenftig auf vergessene Dollarzeichen
+        // hinweisen will, braucht ein Kriterium, das den Fliesstext nicht
+        // trifft; die blosse Anzahl ist keines.
 
         // Parse LaTeX in this block's content
         return $this->parse_latex($block_content);
@@ -483,8 +451,32 @@ class CBD_LaTeX_Parser {
         // OPTIMIZED: Limit to reasonable formula length (500 chars for inline) and prevent backtracking
         // ROBUST: Inline formulas should be SHORT - most are < 100 chars. 500 is very generous.
         // This prevents matching across large text sections when $ is unbalanced
+        //
+        // LEERZEICHENREGEL (2026-08-21) — die beiden Umschauen sind der Kern:
+        //
+        //   (?!\s)  direkt hinter dem oeffnenden $ darf kein Leerraum stehen
+        //   (?<!\s) direkt vor dem schliessenden $ ebenso wenig
+        //
+        // Damit unterscheidet der Parser eine Formel von gewoehnlichem Text,
+        // in dem ein Dollarzeichen vorkommt:
+        //
+        //   $E=mc^2$          -> Formel
+        //   $Testformel $     -> KEINE Formel (Leerzeichen vor dem Schluss-$)
+        //   Das kostet 65$    -> KEINE Formel (kein Schluss-$)
+        //   65$ und dann 30$  -> KEINE Formel (Leerzeichen hinter dem ersten $)
+        //
+        // Vorher griff das Muster zwischen zwei beliebigen $ und zog damit
+        // "65$ und dann 30$" zu einer Formel " und dann 30" zusammen. Der
+        // frueher hier vorgeschaltete Zaehltest sollte das abfangen und
+        // richtete mehr Schaden an, als er verhinderte (siehe die
+        // ausfuehrliche Notiz in parse_latex_in_blocks()).
+        //
+        // Die Regel ist dieselbe, die TeX selbst anwendet, und sie ist fuer
+        // Schreibende leicht zu merken: Formel ohne Luft an den Raendern.
+        // $$…$$ bleibt bewusst unberuehrt - dort sind Leerzeichen innen
+        // ueblich und stoeren nicht, weil $$ im Fliesstext nicht vorkommt.
         $content = preg_replace_callback(
-            '/\$([^\$]{1,500}?)\$/s',
+            '/\$(?!\s)([^\$]{1,500}?)(?<!\s)\$/s',
             array($this, 'render_inline_formula'),
             $content,
             -1,

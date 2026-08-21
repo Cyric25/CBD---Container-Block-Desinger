@@ -1216,8 +1216,6 @@ class CBD_Block_Registration {
         // Add block header with icon and title (always top-left, visible when collapsed)
         $block_title = '';
         
-        // Siehe titel_mit_formeln() weiter unten in dieser Klasse.
-        //
         // Only use editor-entered titles, not database block titles
         if (!empty($attributes['blockTitle'])) {
             $block_title = $attributes['blockTitle'];
@@ -1284,11 +1282,20 @@ class CBD_Block_Registration {
             
             // Block title (inline next to icon) - ALWAYS if not empty
             //
-            // titel_mit_formeln() liefert fertiges HTML und escapt intern.
-            // Hier NICHT noch einmal esc_html() darumlegen - das machte die
-            // Formel-Spans wieder zu sichtbarem Text.
+            // Hier steht bewusst nur esc_html() und KEIN LaTeX-Aufruf.
+            // Formeln im Titel rendert CBD_LaTeX_Parser ohnehin: Er haengt auf
+            // `render_block` (Prioritaet 5) und sieht dort die fertige Ausgabe
+            // dieser Methode, das <h3> eingeschlossen.
+            //
+            // Ein kurzlebiger Versuch, den Titel hier selbst vorzurendern
+            // (v3.1.97/98, wieder entfernt am 2026-08-21), hat genau das
+            // kaputtgemacht: Die vorgerenderten <span class="cbd-latex-formula">
+            // liessen den Doppelparse-Schutz in parse_latex() anschlagen, und
+            // der Parser gab den ganzen Block unveraendert zurueck - der
+            // INHALT desselben Blocks blieb dadurch unformatiert. Gemessen:
+            // 7 Formeln ohne, 4 mit dem Vorrendern.
             if (!empty($block_title)) {
-                $html .= '<h3 class="cbd-block-title">' . self::titel_mit_formeln($block_title) . '</h3>';
+                $html .= '<h3 class="cbd-block-title">' . esc_html($block_title) . '</h3>';
             }
             
             $html .= '</div>'; // Close block header
@@ -2147,47 +2154,5 @@ class CBD_Block_Registration {
         // Delegiert an die kanonische Implementierung — inklusive Reparatur
         // von Werten, die vor v3.1.77 mit Slashes gespeichert wurden.
         return CBD_Icon_Library::parse_stored_value($icon_value);
-    }
-
-    /**
-     * Bereitet einen Blocktitel für die Ausgabe auf: escapen, dann LaTeX rendern.
-     *
-     * Vorher ging der Titel als reines `esc_html()` hinaus und damit NIE durch
-     * CBD_LaTeX_Parser. Es entstand deshalb kein
-     * `<span class="cbd-latex-formula">` — und genau danach sucht
-     * assets/js/latex-renderer.js. KaTeX bekam den Titel nie zu sehen,
-     * `$\frac{a}{b}$` blieb als Text stehen.
-     *
-     * **Die Reihenfolge ist zwingend und nicht umkehrbar:**
-     *
-     * 1. `esc_html()` ZUERST, ohne Ausnahme. Der Titel ist freie Eingabe aus
-     *    dem Editor; alles Markup darin muss sichtbarer Text werden.
-     * 2. Erst danach der Parser. Er erzeugt selbst Markup, das erhalten
-     *    bleiben muss — ein zweites Escapen danach machte die Formel wieder
-     *    zu Text. Die aufrufende Stelle escapt deshalb NICHT nach.
-     *
-     * Dass die Formel escapt beim Parser ankommt, schadet nicht:
-     * `normalize_formula_text()` in class-latex-parser.php ruft
-     * `html_entity_decode()` auf den Formelinhalt, bevor KaTeX ihn sieht. Aus
-     * `$f'(x)$` wird also wieder `f'(x)` und nicht `f&#039;(x)`.
-     *
-     * Fehlt die Parser-Klasse, bleibt es beim escapten Titel — dem Verhalten
-     * von vor dieser Änderung. Kein Fatal Error.
-     *
-     * Statisch, weil die Methode keinen Zustand braucht und sich so ohne eine
-     * Instanz der ganzen Registrierungsklasse prüfen lässt
-     * (tools/test-blocktitel-latex.php).
-     *
-     * @param string $roh Titel, wie er im Blockattribut steht.
-     * @return string Fertiges HTML — NICHT erneut escapen.
-     */
-    private static function titel_mit_formeln($roh) {
-        $escapt = esc_html((string) $roh);
-
-        if ($escapt === '' || !class_exists('CBD_LaTeX_Parser')) {
-            return $escapt;
-        }
-
-        return CBD_LaTeX_Parser::get_instance()->parse_latex($escapt);
     }
 }

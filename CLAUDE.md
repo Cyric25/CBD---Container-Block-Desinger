@@ -1153,42 +1153,73 @@ bekäme also `f’(x)` mit dem typografischen Zeichen statt der Ableitung
 ausgeführtes `html_entity_decode()` zu einem echten `<br />`, das dann fälschlich
 von Schritt 1 entfernt würde.
 
-### Der Blocktitel geht einen eigenen Weg (seit 2026-08-21)
+### Formeln im Blocktitel: die Falle war das $-Zählen
 
-Beide Filter oben sehen **Inhalt**. Der **Blocktitel** kommt nicht daher: Er
-steht im Blockattribut `blockTitle` und wird in
-`class-cbd-block-registration.php` direkt zu `<h3 class="cbd-block-title">`
-zusammengesetzt. Bis 3.1.97 stand dort schlicht `esc_html($block_title)` —
-der Wert lief also **nie** durch `CBD_LaTeX_Parser`, es entstand kein
-`<span class="cbd-latex-formula">`, und `assets/js/latex-renderer.js` fand
-nichts zu rendern. `$\frac{a}{b}$` blieb als Text stehen.
+Der Blocktitel steht im Attribut `blockTitle` und wird in
+`class-cbd-block-registration.php` als `esc_html($block_title)` in ein
+`<h3 class="cbd-block-title">` geschrieben. **Dort gehört kein LaTeX-Aufruf
+hinein** — `CBD_LaTeX_Parser` hängt auf `render_block` (Priorität 5) und sieht
+die fertige Ausgabe der Methode, das `<h3>` eingeschlossen. Titelformeln
+rendert er also von selbst.
 
-Zuständig ist jetzt `CBD_Block_Registration::titel_mit_formeln()`.
-**Die Reihenfolge darin ist zwingend:**
+**Warum sie es zeitweise trotzdem nicht taten:** Bis 2026-08-21 stand in
+`parse_latex_in_blocks()` eine Prüfung auf eine **ungerade Zahl von `$`** im
+Block. Traf sie zu, gab die Methode den Block unverändert zurück, setzte eine
+rote Warnbox darüber und hinterlegte jedes `$` rot. Eine Formel im Titel plus
+ein einzelnes `$` im Text — „Das kostet 65$" — ergibt eine ungerade Bilanz.
+Ergebnis: **weder Titel noch Inhalt gerendert**, dazu eine Fehlermeldung für
+einen Text, an dem nichts falsch war. Das war die Ursache; sie ist mit der
+Prüfung entfallen.
 
-1. `esc_html()` **zuerst**, ohne Ausnahme — der Titel ist freie Eingabe.
-2. Erst danach `parse_latex()`. Der Parser erzeugt selbst Markup; ein zweites
-   Escapen danach machte die Formel wieder zu sichtbarem Text. **Die
-   aufrufende Stelle escapt deshalb nicht nach.**
+**Zwei Sackgassen, damit sie niemand erneut betritt:**
 
-Dass die Formel escapt beim Parser ankommt, ist unschädlich:
-`normalize_formula_text()` ruft `html_entity_decode()` auf den Formelinhalt,
-bevor KaTeX ihn sieht — aus `$f'(x)$` wird wieder `f'(x)`.
+1. **Den Titel hier selbst vorrendern** (kurzlebig in 3.1.97/98, am selben Tag
+   wieder entfernt). Die vorgerenderten `<span class="cbd-latex-formula">`
+   lassen den **Doppelparse-Schutz** in `parse_latex()` anschlagen — die
+   Methode kehrt beim ersten Fund dieser Klasse sofort zurück. Der Parser gab
+   den ganzen Block danach unverändert heraus, und der **Inhalt** desselben
+   Blocks blieb unformatiert. Gemessen auf einer Seite mit fünf Blöcken:
+   **8 Formeln ohne, 4 mit** dem Vorrendern. Wer den Titel doch einmal
+   vorrendern will, muss zuerst den Doppelparse-Schutz umbauen — etwa so, dass
+   er fertige Formel-Spans wie `<script>`/`<pre>`/`<code>` **maskiert**, statt
+   den ganzen Inhalt aufzugeben.
+2. **Auf eine gerade Zahl von `$` prüfen.** Ein Dollarzeichen im Fließtext ist
+   normal, und die Anzahl sagt nichts über einen Fehler. Siehe die ausführliche
+   Notiz an der Stelle, an der die Prüfung stand.
 
-**KaTeX lädt trotzdem**, auch wenn die einzige Formel der Seite im Titel
-steht: `content_has_latex_markers()` sucht `$` im `post_content`, und der
-Titel steht dort im Block-Trenner.
+### Die Leerzeichenregel für `$…$` (seit 2026-08-21)
 
-Fehlt die Parser-Klasse, bleibt es beim escapten Titel — dem Verhalten von
-vorher, kein Fatal Error. Prüfharnisch: `tools/test-blocktitel-latex.php`
-(20 Prüfungen; der Fall „Parser-Klasse fehlt" läuft in einem eigenen Prozess).
+Was eine Formel ist, entscheidet allein das Inline-Muster in `parse_latex()`:
 
-**Denselben Titel lesen drei weitere Stellen**, alle unverändert und für
-Beschriftungen, nicht für die Anzeige im Block:
-`class-cbd-block-content-api.php`, `class-cbd-blocks-rest-api.php`,
-`class-cbd-block-organizer.php`. Wer dort Formeln rendern will, braucht ein
-eigenes Vorhaben — `class-cbd-block-content-api.php` ist zudem die Datei, die
-**nicht** angefasst werden darf.
+```
+/\$(?!\s)([^\$]{1,500}?)(?<!\s)\$/s
+```
+
+Die beiden Umschauen sind der ganze Trick: **direkt hinter dem öffnenden und
+direkt vor dem schließenden `$` darf kein Leerraum stehen.**
+
+| Eingabe | Ergebnis |
+|---|---|
+| `$E=mc^2$` | Formel |
+| `$Testformel $` | keine Formel — Leerzeichen vor dem Schluss-`$` |
+| `$ Testformel$` | keine Formel |
+| `Das kostet 65$` | keine Formel |
+| `Zwischen 5$ und 10$ liegen` | keine Formel — das erste `$` hat Luft dahinter |
+
+Vorher griff das Muster zwischen zwei **beliebigen** `$` und zog
+„65$ und dann 30$" zu einer Formel „ und dann 30" zusammen. Genau dagegen war
+die $-Zählung als Notbremse gedacht — sie richtete mehr Schaden an, als sie
+verhinderte. Die Leerzeichenregel löst das Problem an der Wurzel, ist dieselbe,
+die TeX anwendet, und für Schreibende leicht zu merken: **Formel ohne Luft an
+den Rändern.**
+
+`$$…$$` bleibt bewusst unberührt — dort sind Leerzeichen innen üblich, und
+`$$` kommt im Fließtext nicht vor.
+
+**Ob eine erkannte Formel dann richtig aussieht, entscheidet die
+Sichtprüfung.** Der Parser urteilt darüber nicht; jede Heuristik in dieser
+Richtung hat bisher Fließtext getroffen. Prüfungen dazu:
+`tools/test-latex-parser.php`, Abschnitt „Leerzeichenregel".
 
 ### kses zerstört Blocktitel nicht — die Falle liegt woanders
 

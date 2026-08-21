@@ -145,26 +145,51 @@ gedeutet hat. kses entfernt keine Zeichenpaare dieser Art —
 - Die drei „Wege", die dieser Abschnitt früher zur Wahl stellte, sind
   gegenstandslos.
 
-### Was bleibt: die eigentliche Ursache
+### Was bleibt: die eigentliche Ursache — zweimal berichtigt
 
-Sie liegt genau dort, wo die Aufgabenstellung sie vermutet hat — beim
-**Rendern**, nicht beim Speichern. `includes/class-cbd-block-registration.php`
-gibt den Titel in Zeile 1285 als
+**Erster Anlauf (falsch):** Die Ursache liege darin, dass
+`class-cbd-block-registration.php` den Titel als `esc_html($block_title)`
+ausgibt und ihn nie durch `CBD_LaTeX_Parser` schickt. Daraus wurde AP-2:
+den Titel selbst vorrendern. Umgesetzt in 3.1.97/98.
 
-```php
-$html .= '<h3 class="cbd-block-title">' . esc_html($block_title) . '</h3>';
-```
+**Widerlegt am selben Tag durch eine Messung**, die vorher gefehlt hatte:
+Wird die Vorrender-Methode wieder entfernt, rendert der Titel **trotzdem**.
+`CBD_LaTeX_Parser` hängt auf `render_block` (Priorität 5) und bekommt dort die
+fertige Ausgabe des Renderers — das `<h3>` eingeschlossen. Der Titel lief also
+die ganze Zeit durch den Parser.
 
-aus. Der Wert geht **nie** durch `CBD_LaTeX_Parser`, also entsteht auch kein
-`<span class="cbd-latex-formula">` — und genau danach sucht
-`assets/js/latex-renderer.js` (`FORMULA_SELECTOR = '.cbd-latex-formula'`).
-KaTeX bekommt den Titel nie zu sehen; `$\frac{a}{b}$` bleibt als Text stehen.
+Schlimmer noch: Das Vorrendern war **schädlich**. Die vorgerenderten
+`<span class="cbd-latex-formula">` lassen den Doppelparse-Schutz in
+`parse_latex()` anschlagen, der beim ersten Fund dieser Klasse sofort
+zurückkehrt. Der **Inhalt** desselben Blocks blieb dadurch unformatiert.
+Gemessen auf einer Seite mit fünf Blöcken: **8 Formeln ohne, 4 mit** dem
+Vorrendern. AP-2 ist zurückgenommen, die Methode und ihr Prüfharnisch sind
+entfernt.
 
-*Nebenbefund der alten Messung, weiterhin gültig:* Der Glossar-Scanner des
-Themes ruft `mb_strtolower()` auf `save_post`. Fehlt die
-`mbstring`-Erweiterung, endet **jedes** Speichern in einem Fatal Error. Auf
-dem Testserver ist sie vorhanden; sichtbar wurde es nur bei Aufrufen aus der
-Kommandozeile.
+**Die tatsächliche Ursache** war die `$`-Bilanzprüfung in
+`parse_latex_in_blocks()`: Bei einer ungeraden Zahl von `$` gab sie den Block
+unverändert zurück, setzte eine rote Warnbox darüber und hinterlegte jedes
+`$` rot. Eine Formel im Titel plus ein einzelnes `$` im Text — „Das kostet
+65$" — ergibt eine ungerade Bilanz. Ergebnis: weder Titel noch Inhalt
+gerendert, dazu eine Fehlermeldung für einen einwandfreien Text.
+
+Behoben durch zwei Änderungen am Parser:
+
+1. **Die `$`-Bilanzprüfung ist entfernt.** Ein Dollarzeichen im Fließtext ist
+   normal; die Anzahl sagt nichts über einen Fehler.
+2. **Leerzeichenregel für das Inline-Muster:** Direkt hinter dem öffnenden und
+   direkt vor dem schließenden `$` darf kein Leerraum stehen. Damit ist `65$`
+   kein Formelanfang, `$Testformel $` keine Formel und `$Testformel$` eine.
+   Das erübrigt die Notbremse, die die Bilanzprüfung sein sollte.
+
+Beides auf ausdrücklichen Wunsch des Nutzers; die Beurteilung, ob eine
+erkannte Formel richtig aussieht, obliegt der Sichtprüfung.
+
+**Lehre:** AP-1 hatte den Auftrag, die Ursache zu **belegen**. Der Beleg
+bestand darin, die Fundstelle zu lesen — nicht darin, sie abzuschalten und zu
+messen, was dann passiert. Eine Ursachenbehauptung ist erst belegt, wenn die
+Gegenprobe gelaufen ist: Verhält sich das System ohne den vermuteten Übeltäter
+wirklich anders?
 
 ## 5. Architekturentscheidungen
 
@@ -305,9 +330,9 @@ zuerst committen.
 
 | AP | Titel | Modell | Abhängig von | Status |
 |---|---|---|---|---|
-| AP-1 | Ursache belegen (Diagnose) | opus | – | ☑ (2026-08-21, siehe Abschnitt 4a: Zeile 1285, `esc_html($block_title)` ohne Parser) |
-| AP-2 | Titel durch den Parser führen | sonnet | 1 | ☑ (2026-08-21, TDD, 20 Prüfungen grün) |
-| AP-3 | Abnahme auf dem Testserver | sonnet | 2 | ☑ am Markup (Seite 378); der Augenschein, ob KaTeX wirklich zeichnet, steht beim Nutzer |
+| AP-1 | Ursache belegen (Diagnose) | opus | – | ☑ **mit falschem Ergebnis**, am selben Tag berichtigt — echte Ursache war die `$`-Bilanzprüfung (Abschnitt 4a) |
+| AP-2 | Titel durch den Parser führen | sonnet | 1 | **zurückgenommen** — überflüssig und schädlich (Abschnitt 4a). Methode und Prüfharnisch entfernt |
+| AP-3 | Abnahme auf dem Testserver | sonnet | 2 | ☑ nach der Berichtigung: Seite `dollar-probe`, fünf Blöcke, 8 Formel-Spans, keine Warnbox. Der Augenschein steht beim Nutzer |
 | AP-4 | Dokumentation | sonnet | 3 | ☑ (CLAUDE.md, Abschnitte „Der Blocktitel geht einen eigenen Weg" und „kses zerstört Blocktitel nicht") |
 
 ## 9. Testprotokoll
@@ -315,7 +340,7 @@ zuerst committen.
 | AP | Test | Ergebnis | Datum |
 |---|---|---|---|
 | AP-1 | Vorhersage bestätigt oder widerlegt | **bestätigt** für die Renderseite; die zusätzlich vermutete Zerstörung beim Speichern **widerlegt** (Abschnitt 4a) | 2026-08-21 |
-| AP-2 | `php tools/test-blocktitel-latex.php` | **20 Prüfungen grün.** Eine Prüfung des roten Laufs war inhaltlich falsch und wurde berichtigt statt entfernt — siehe Kommentar im Harnisch bei DP1 | 2026-08-21 |
+| AP-2 | ~~`php tools/test-blocktitel-latex.php`~~ | **entfallen** — der Harnisch prüfte `titel_mit_formeln()`, und die Methode ist zurückgenommen. Die neuen Prüfungen stehen in `tools/test-latex-parser.php`, Abschnitt „Leerzeichenregel" (13 Fälle) | 2026-08-21 |
 | AP-2 | `php tools/test-latex-parser.php` (134, Regression) | **grün**, ebenso die übrigen 13 Harnische des Plugins | 2026-08-21 |
 | AP-2 | `php tools/check-php74.php` | **grün**, 570 Dateien | 2026-08-21 |
 | AP-3 | Titelformel mit und ohne Inhaltsformel | **bestanden.** Seite 378, als `blockredakteur` gespeichert: vier Blöcke (Titelformel allein, Titel- und Inhaltsformel, ohne Formel, Apostroph plus `&`). Drei Formel-Spans mit richtigem `data-latex`, der Block ohne Formel unverändert, KaTeX geladen | 2026-08-21 |
