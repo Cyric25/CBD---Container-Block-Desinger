@@ -22,6 +22,19 @@
         return;
     }
 
+    // AP-2.9: Theme-Farben fuer die UI-Chrome dieses Skripts (Fortschritts-
+    // Overlay in createProgressOverlay() weiter unten). Gleiches Muster wie
+    // in floating-pdf-button.js: getComputedStyle einmalig beim Laden lesen,
+    // Fallback ist der bisherige Literalwert. Betrifft NICHT die separate
+    // collectCSSVariables()-Funktion weiter unten (bestehender, von diesem
+    // AP nicht behobener Code mit abweichenden Variablennamen, siehe
+    // Uebergabenotiz AP-2.9).
+    var rootStyles = getComputedStyle(document.documentElement);
+    var colorUiSurface = rootStyles.getPropertyValue('--color-ui-surface').trim() || '#e24614';
+    var colorBackground = rootStyles.getPropertyValue('--color-background').trim() || '#ffffff';
+    var colorBorderLight = rootStyles.getPropertyValue('--color-border-light').trim() || '#eeeeee';
+    var colorTextMuted = rootStyles.getPropertyValue('--color-text-muted').trim() || '#666666';
+
     // iOS detection
     var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -1126,14 +1139,14 @@
             'position:fixed; top:0; left:0; width:100%; height:100%; ' +
             'background:rgba(0,0,0,0.7); z-index:9999999; display:flex; ' +
             'align-items:center; justify-content:center;">' +
-            '<div style="background:#fff; padding:30px 40px; border-radius:12px; ' +
+            '<div style="background:' + colorBackground + '; padding:30px 40px; border-radius:12px; ' +
             'text-align:center; min-width:300px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">' +
             '<h3 style="margin:0 0 15px 0; font-size:18px;">PDF wird erstellt</h3>' +
-            '<div class="cbd-pdf-progress-bar" style="background:#eee; border-radius:8px; ' +
+            '<div class="cbd-pdf-progress-bar" style="background:' + colorBorderLight + '; border-radius:8px; ' +
             'height:8px; margin:0 0 12px 0; overflow:hidden;">' +
-            '<div class="cbd-pdf-progress-fill" style="background:#e24614; height:100%; ' +
+            '<div class="cbd-pdf-progress-fill" style="background:' + colorUiSurface + '; height:100%; ' +
             'width:0%; border-radius:8px; transition:width 0.3s ease;"></div></div>' +
-            '<p class="cbd-pdf-progress-text" style="margin:0; color:#666; font-size:14px;">' +
+            '<p class="cbd-pdf-progress-text" style="margin:0; color:' + colorTextMuted + '; font-size:14px;">' +
             'Block 1 von ' + totalBlocks + ' wird verarbeitet...</p>' +
             '</div></div>');
         return $overlay;
