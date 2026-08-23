@@ -195,7 +195,9 @@
     justify-content: space-between;
     align-items: flex-start;
     padding: 15px 20px;
-    background: linear-gradient(135deg, var(--color-light-background, #f8f9fa) 0%, #e9ecef 100%);
+    /* #e9ecef (Bootstrap-Grauton) entspricht keinem AP-1.1-Wert exakt
+       (--color-border-light ist #eeeeee) - bewusst literal belassen. */
+    background: linear-gradient(135deg, var(--color-background-light, #f8f9fa) 0%, #e9ecef 100%);
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
     border-radius: 8px 8px 0 0;
     margin-bottom: 0;
@@ -208,7 +210,7 @@
     flex: 1;
     font-size: 1.2em;
     font-weight: 600;
-    color: var(--color-primary-text, #333);
+    color: var(--color-text-primary, #333);
     margin: 0;
     line-height: 1.4;
     word-wrap: break-word;
@@ -237,14 +239,14 @@
     border-radius: 6px;
     padding: 8px 12px;
     font-size: 14px;
-    color: var(--color-primary-text, #333);
+    color: var(--color-text-primary, #333);
     cursor: pointer;
     transition: all 0.2s ease;
     white-space: nowrap;
 }
 
 .cbd-menu-toggle:hover {
-    background: var(--color-light-background, #f8f9fa);
+    background: var(--color-background-light, #f8f9fa);
     border-color: var(--color-ui-surface, #e24614);
     color: var(--color-ui-surface, #e24614);
 }
@@ -301,13 +303,13 @@
     width: 100%;
     text-align: left;
     font-size: 14px;
-    color: var(--color-primary-text, #333);
+    color: var(--color-text-primary, #333);
     cursor: pointer;
     transition: background-color 0.15s ease;
 }
 
 .cbd-dropdown-item:hover {
-    background: var(--color-light-background, #f8f9fa);
+    background: var(--color-background-light, #f8f9fa);
 }
 
 .cbd-dropdown-item:first-child {
@@ -322,12 +324,15 @@
     font-size: 16px;
     width: 16px;
     height: 16px;
+    /* #6c757d (Bootstrap-Grauton) entspricht keinem AP-1.1-Wert exakt
+       (--color-text-muted ist #666666) - bewusst literal belassen. */
     color: #6c757d;
 }
 
 /* Separator */
 .cbd-dropdown-separator {
     height: 1px;
+    /* #e9ecef siehe Begruendung oben bei .cbd-header - selber Bootstrap-Grauton. */
     background: #e9ecef;
     margin: 4px 0;
 }
@@ -350,7 +355,7 @@
     padding: 8px 12px;
     border-radius: 4px;
     transition: all 0.3s ease;
-    color: var(--color-primary-text, #333);
+    color: var(--color-text-primary, #333);
 }
 
 .cbd-collapse-toggle:hover {
@@ -454,10 +459,15 @@
 }
 
 .cbd-copy-text.cbd-copied {
+    /* #28a745 (Bootstrap-Gruen) entspricht keinem AP-1.1-Wert exakt
+       (--color-success ist #2ecc40) - bewusst literal belassen. */
     background: #28a745;
 }
 
 .cbd-screenshot.cbd-loading {
+    /* #007cba (WP-Admin-Blau) hat keine Entsprechung im AP-1.1-Vokabular
+       (kein Blauton definiert) - bewusst literal belassen, siehe AP-2.1
+       Uebergabenotiz. */
     background: #007cba;
     cursor: not-allowed;
 }
@@ -571,10 +581,14 @@
 }
 
 .cbd-toast.cbd-toast-success {
+    /* #28a745 (Bootstrap-Gruen) entspricht keinem AP-1.1-Wert exakt
+       (--color-success ist #2ecc40) - bewusst literal belassen. */
     background-color: #28a745;
 }
 
 .cbd-toast.cbd-toast-error {
+    /* #dc3545 (Bootstrap-Rot) entspricht keinem AP-1.1-Wert exakt
+       (--color-danger ist #cc3333) - bewusst literal belassen. */
     background-color: #dc3545;
 }
 
@@ -717,6 +731,8 @@
         break-inside: avoid;
         page-break-inside: avoid;
         box-shadow: none;
+        /* #ccc entspricht keinem AP-1.1-Wert exakt (--color-border ist
+           #dddddd) - bewusst literal belassen. */
         border: 1px solid #ccc;
     }
     
@@ -754,6 +770,32 @@
    DARK MODE SUPPORT
    ============================================ */
 
+/**
+ * AP-2.1-Pruefung (historischer Bug in "Eigene WP Blocks": weisse Schrift
+ * auf weissem Grund, siehe Plan-Risiko Z.749-799): Dieser Block setzt fuer
+ * .cbd-container-block SOWOHL Hintergrund ALS AUCH Textfarbe zusammen -
+ * bleibt also in sich kontrastsicher, unabhaengig davon, ob die Seite dem
+ * Systemdesign folgt.
+ *
+ * .cbd-collapse-toggle liegt in der aktuellen Render-Kette IMMER innerhalb
+ * von .cbd-container-block > .cbd-action-buttons (siehe
+ * class-cbd-block-registration.php ~1108-1134) und erbt damit dessen
+ * dunklen Hintergrund; zusaetzlich ueberschreibt die spezifischere, immer
+ * geltende Regel ".cbd-action-buttons button" (Zeile ~1170, !important)
+ * Hintergrund UND Textfarbe ohnehin fest auf hell/dunkelgrau - die hier
+ * gesetzte helle Schriftfarbe kommt für den echten Aktionsleisten-Button
+ * also gar nicht zum Tragen.
+ *
+ * .cbd-icon .dashicons ist toter Code: Der Erzeuger dieses Markups
+ * (render_features()) ist laut Kommentar bei .cbd-header-icon (Zeile
+ * ~1275) seit Langem auskommentiert, der Selektor matcht aktuell nichts.
+ * Deshalb keine Aenderung an der Selektor-/Farblogik hier, nur die Hex-
+ * Werte, die tatsaechlich variabel sein sollten (Grauton, Marke), auf
+ * var() umgestellt. #1e1e1e/#404040/#555 sind reine Dark-Mode-Literale
+ * ohne Entsprechung im Hell-Modus-Vokabular aus AP-1.1 und bleiben daher
+ * bewusst Literal (neue Variablen zu definieren ist AP-1.1 vorbehalten).
+ * Live-Test siehe AP-2.1 Uebergabenotiz.
+ */
 @media (prefers-color-scheme: dark) {
     .cbd-container-block {
         background: #1e1e1e;
@@ -781,18 +823,25 @@
    HIGH CONTRAST MODE
    ============================================ */
 
+/**
+ * Bewusst NICHT auf var(--color-text-primary/-border, ...) umgestellt:
+ * prefers-contrast:high verlangt maximalen Kontrast (reines Schwarz/Weiss).
+ * Eine Kopplung an die austauschbaren Marken-/Textfarben wuerde bei einer
+ * spaeteren Customizer-Aenderung genau den Kontrast wieder verringern, den
+ * dieser Modus herstellen soll - die Literale sind hier fachlich richtig.
+ */
 @media (prefers-contrast: high) {
     .cbd-container-block {
         border: 2px solid #000;
     }
-    
+
     .cbd-copy-text,
     .cbd-screenshot {
         background: #000;
         color: #fff;
         border: 1px solid #fff;
     }
-    
+
     .cbd-collapse-toggle {
         border: 2px solid #000;
         background: #fff;
@@ -914,7 +963,7 @@
     padding: 12px 16px;
     border: none;
     background: none;
-    color: var(--color-primary-text, #333);
+    color: var(--color-text-primary, #333);
     cursor: pointer;
     font-size: 14px;
     text-align: left;
@@ -927,10 +976,12 @@
 }
 
 .cbd-selection-menu .cbd-dropdown-item:hover {
-    background: var(--color-light-background, #f8f9fa);
+    background: var(--color-background-light, #f8f9fa);
 }
 
 .cbd-selection-menu .cbd-dropdown-item:active {
+    /* #e9ecef siehe Begruendung bei .cbd-header - Bootstrap-Grauton, kein
+       exakter AP-1.1-Wert. */
     background: #e9ecef;
 }
 
@@ -938,7 +989,7 @@
     font-size: 16px;
     width: 16px;
     height: 16px;
-    color: #666;
+    color: var(--color-text-muted, #666);
     flex-shrink: 0;
 }
 
@@ -1166,7 +1217,7 @@
 /* Individual action buttons - White background */
 .cbd-action-buttons button {
     background: rgba(255, 255, 255, 0.95) !important;
-    color: #333333 !important;
+    color: var(--color-text-primary, #333333) !important;
     border: 1px solid rgba(0, 0, 0, 0.1) !important;
     padding: 8px !important;
     border-radius: 6px !important;
@@ -1189,6 +1240,12 @@
 /* Button hover effects - White background */
 .cbd-action-buttons button:hover {
     background: rgba(255, 255, 255, 1) !important;
+    /* Bewusst reines Schwarz statt var(--color-text-primary, ...): Der
+       Hover-Effekt soll den Text gegenueber dem Normalzustand sichtbar
+       nachdunkeln. Wuerde hier dieselbe Variable wie oben verwendet, faellt
+       dieser Effekt weg, sobald --color-text-primary per Customizer auf
+       einen anderen Wert als #333333 gesetzt wird (Hover waere dann
+       identisch zum Normalzustand statt dunkler). */
     color: #000000 !important;
     transform: translateY(-1px) !important;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
@@ -1429,7 +1486,7 @@
 
 .cbd-behandelt-selector-content {
     position: relative;
-    background: #fff;
+    background: var(--color-background, #fff);
     padding: 32px;
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
@@ -1453,13 +1510,15 @@
     margin: 0 0 12px;
     font-size: 20px;
     font-weight: 600;
+    /* #1a1a1a entspricht keinem AP-1.1-Wert exakt (--color-text-primary ist
+       #333333, spuerbar heller) - bewusst literal belassen. */
     color: #1a1a1a;
 }
 
 .cbd-behandelt-selector-content p {
     margin: 0 0 24px;
     font-size: 14px;
-    color: #666;
+    color: var(--color-text-muted, #666);
 }
 
 .cbd-behandelt-class-options {
@@ -1474,17 +1533,20 @@
     justify-content: space-between;
     align-items: center;
     padding: 14px 18px;
-    border: 2px solid #e0e0e0;
+    border: 2px solid var(--color-sidebar-border, #e0e0e0);
     border-radius: 8px;
-    background: #fff;
+    background: var(--color-background, #fff);
     cursor: pointer;
     font-size: 15px;
     font-weight: 500;
-    color: #333;
+    color: var(--color-text-primary, #333);
     transition: all 0.2s ease;
     text-align: left;
 }
 
+/* #4caf50 (Material-Gruen) entspricht an dieser und den drei folgenden
+   Fundstellen keinem AP-1.1-Wert exakt (--color-success ist #2ecc40) -
+   bewusst literal belassen, wie schon bei #f1f8f4 direkt darunter. */
 .cbd-behandelt-class-option.is-behandelt {
     border-color: #4caf50;
     background: #f1f8f4;
@@ -1519,10 +1581,13 @@
 }
 
 .cbd-behandelt-class-option.is-behandelt .cbd-class-status {
+    /* #4caf50 siehe Begruendung oben bei .is-behandelt. */
     color: #4caf50;
 }
 
 .cbd-behandelt-class-option:not(.is-behandelt) .cbd-class-status {
+    /* #999 entspricht keinem AP-1.1-Wert exakt (--color-text-muted ist
+       #666666, deutlich dunkler) - bewusst literal belassen. */
     color: #999;
 }
 
@@ -1535,27 +1600,32 @@
 .cbd-behandelt-cancel {
     width: 100%;
     padding: 12px;
-    border: 2px solid #e0e0e0;
+    border: 2px solid var(--color-sidebar-border, #e0e0e0);
     border-radius: 8px;
-    background: #fff;
+    background: var(--color-background, #fff);
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
-    color: #666;
+    color: var(--color-text-muted, #666);
     transition: all 0.2s ease;
 }
 
 .cbd-behandelt-cancel:hover {
+    /* #999 und #f5f5f5 entsprechen keinem AP-1.1-Wert exakt
+       (--color-border ist #dddddd, --color-background-light ist #f8f9fa) -
+       bewusst literal belassen, wie die anderen #999-Fundstellen oben. */
     border-color: #999;
     background: #f5f5f5;
-    color: #333;
+    color: var(--color-text-primary, #333);
 }
 
 /* Behandelt Button Status */
 .cbd-behandelt-toggle .dashicons-yes-alt {
+    /* #4caf50 siehe Begruendung bei .is-behandelt weiter oben. */
     color: #4caf50;
 }
 
 .cbd-behandelt-toggle .dashicons-marker {
+    /* #999 siehe Begruendung bei :not(.is-behandelt) weiter oben. */
     color: #999;
 }
