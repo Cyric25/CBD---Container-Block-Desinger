@@ -26,6 +26,13 @@
         var themeColor = rootStyles.getPropertyValue('--color-ui-surface').trim() || '#e24614';
         var themeColorDark = rootStyles.getPropertyValue('--color-ui-surface-dark').trim() || '#c93d12';
         var themeColorLight = rootStyles.getPropertyValue('--color-ui-surface-light').trim() || '#f5ede9';
+        // AP-2.9: Erfolgs-/Fehler- sowie Grundfarben ebenfalls ueber
+        // getComputedStyle lesen (gleiches Muster wie oben), Fallback ist
+        // der bisherige Literalwert.
+        var colorSuccess = rootStyles.getPropertyValue('--color-success').trim() || '#2ecc40';
+        var colorDanger = rootStyles.getPropertyValue('--color-danger').trim() || '#cc3333';
+        var colorBackground = rootStyles.getPropertyValue('--color-background').trim() || '#ffffff';
+        var colorTextPrimary = rootStyles.getPropertyValue('--color-text-primary').trim() || '#333333';
 
         // State
         var $containerBlocks = null;
@@ -71,7 +78,7 @@
             // statt einfarbig. So ueberlebt die Farbe als Rueckfall.
             backgroundColor: themeColor,
             backgroundImage: plasticBackground(themeColor, plasticDark),
-            color: 'white',
+            color: colorBackground,
             textShadow: '0 1px 2px rgba(0,0,0,.35)',
             borderRadius: '12px',
             padding: '15px',
@@ -144,7 +151,7 @@
                   'position:fixed;top:0;left:0;right:0;z-index:999999;' +
                   'background-color:' + themeColor + ';' +
                   'background-image:' + plasticBackground(themeColor, plasticDark) + ';' +
-                  'color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35);' +
+                  'color:' + colorBackground + ';text-shadow:0 1px 2px rgba(0,0,0,.35);' +
                   'padding:10px 20px;display:flex;align-items:center;' +
                   'gap:10px;flex-wrap:wrap;font-size:14px;' +
                   'box-shadow:' +
@@ -166,24 +173,24 @@
                 '.cbd-pdf-toolbar button{' +
                   'padding:6px 14px;border:2px solid rgba(255,255,255,.6);' +
                   'border-radius:6px;cursor:pointer;font-size:13px;' +
-                  'background:transparent;color:#fff;transition:all .15s;white-space:nowrap' +
+                  'background:transparent;color:' + colorBackground + ';transition:all .15s;white-space:nowrap' +
                 '}' +
-                '.cbd-pdf-toolbar button:hover{background:rgba(255,255,255,.2);border-color:#fff}' +
+                '.cbd-pdf-toolbar button:hover{background:rgba(255,255,255,.2);border-color:' + colorBackground + '}' +
                 '.cbd-pdf-toolbar button.cbd-pdf-go{' +
-                  'background:#fff;color:' + themeColor + ';font-weight:700;border-color:#fff' +
+                  'background:' + colorBackground + ';color:' + themeColor + ';font-weight:700;border-color:' + colorBackground + '' +
                 '}' +
                 '.cbd-pdf-toolbar button.cbd-pdf-go:hover{background:' + themeColorLight + '}' +
 
                 '.cbd-pdf-toolbar select{' +
                   'padding:6px 10px;border:2px solid rgba(255,255,255,.6);' +
-                  'border-radius:6px;background:transparent;color:#fff;' +
+                  'border-radius:6px;background:transparent;color:' + colorBackground + ';' +
                   'font-size:13px;cursor:pointer' +
                 '}' +
-                '.cbd-pdf-toolbar select option{background:#fff;color:#333}' +
+                '.cbd-pdf-toolbar select option{background:' + colorBackground + ';color:' + colorTextPrimary + '}' +
 
                 /* Selected block: green outline */
                 '.cbd-container.cbd-pdf-on{' +
-                  'outline:4px solid #2ecc40!important;' +
+                  'outline:4px solid ' + colorSuccess + '!important;' +
                   'outline-offset:-2px;' +
                   'cursor:pointer!important;' +
                   'transition:outline .2s,opacity .2s' +
@@ -191,7 +198,7 @@
 
                 /* Deselected block: red dashed outline + faded */
                 '.cbd-container.cbd-pdf-off{' +
-                  'outline:4px dashed #cc3333!important;' +
+                  'outline:4px dashed ' + colorDanger + '!important;' +
                   'outline-offset:-2px;' +
                   'opacity:.4!important;' +
                   'cursor:pointer!important;' +
@@ -203,11 +210,11 @@
                   'position:absolute;top:-12px;right:-12px;z-index:100000;' +
                   'width:32px;height:32px;border-radius:50%;' +
                   'display:flex;align-items:center;justify-content:center;' +
-                  'font-size:18px;font-weight:700;color:#fff;' +
+                  'font-size:18px;font-weight:700;color:' + colorBackground + ';' +
                   'box-shadow:0 2px 8px rgba(0,0,0,.4);pointer-events:none' +
                 '}' +
-                '.cbd-pdf-badge-on{background:#2ecc40}' +
-                '.cbd-pdf-badge-off{background:#cc3333}' +
+                '.cbd-pdf-badge-on{background:' + colorSuccess + '}' +
+                '.cbd-pdf-badge-off{background:' + colorDanger + '}' +
 
                 /* Kill pointer-events on everything INSIDE selectable blocks */
                 'body.cbd-pdf-mode .cbd-container.cbd-pdf-on > *,' +
@@ -288,8 +295,8 @@
                     justifyContent: 'center',
                     fontSize: '18px',
                     fontWeight: '700',
-                    color: '#fff',
-                    background: '#2ecc40',
+                    color: colorBackground,
+                    background: colorSuccess,
                     boxShadow: '0 2px 8px rgba(0,0,0,.4)',
                     pointerEvents: 'none'
                 });
@@ -342,12 +349,12 @@
                 $block.removeClass('cbd-pdf-on').addClass('cbd-pdf-off');
                 $badge.text('\u2717')
                     .removeClass('cbd-pdf-badge-on').addClass('cbd-pdf-badge-off')
-                    .css('background', '#cc3333');
+                    .css('background', colorDanger);
             } else {
                 $block.removeClass('cbd-pdf-off').addClass('cbd-pdf-on');
                 $badge.text('\u2713')
                     .removeClass('cbd-pdf-badge-off').addClass('cbd-pdf-badge-on')
-                    .css('background', '#2ecc40');
+                    .css('background', colorSuccess);
             }
 
             updateCount();
@@ -377,7 +384,7 @@
                         $b.removeClass('cbd-pdf-off').addClass('cbd-pdf-on');
                         $b.find('> .cbd-pdf-badge').text('\u2713')
                             .removeClass('cbd-pdf-badge-off').addClass('cbd-pdf-badge-on')
-                            .css('background', '#2ecc40');
+                            .css('background', colorSuccess);
                     }
                 });
                 updateCount();
@@ -392,7 +399,7 @@
                         $b.removeClass('cbd-pdf-on').addClass('cbd-pdf-off');
                         $b.find('> .cbd-pdf-badge').text('\u2717')
                             .removeClass('cbd-pdf-badge-on').addClass('cbd-pdf-badge-off')
-                            .css('background', '#cc3333');
+                            .css('background', colorDanger);
                     }
                 });
                 updateCount();

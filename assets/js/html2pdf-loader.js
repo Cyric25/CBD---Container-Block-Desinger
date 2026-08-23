@@ -11,6 +11,15 @@
 (function() {
     'use strict';
 
+    // AP-2.9: Theme-Farben fuer die UI-Chrome dieses Skripts (sichtbarer
+    // Wrapper-Hintergrund + Lade-Hinweis waehrend der (Fallback-)PDF-
+    // Erzeugung, siehe cbdCreatePDF() weiter unten). Gleiches Muster wie in
+    // floating-pdf-button.js/pdf-server-side.js: getComputedStyle einmalig
+    // beim Laden lesen, Fallback ist der bisherige Literalwert.
+    var rootStylesForColors = getComputedStyle(document.documentElement);
+    var colorBackground = rootStylesForColors.getPropertyValue('--color-background').trim() || '#ffffff';
+    var colorTextMuted = rootStylesForColors.getPropertyValue('--color-text-muted').trim() || '#666666';
+
     // Check if html2pdf is already loaded
     if (typeof window.html2pdf !== 'undefined') {
         window.cbdPDFStatus = {
@@ -284,7 +293,7 @@
                 left: '0',
                 width: '794px', // A4 width in pixels (210mm)
                 maxHeight: '100vh',
-                backgroundColor: '#fff',
+                backgroundColor: colorBackground,
                 opacity: '1',
                 overflow: 'auto', // Allow scrolling for html2canvas
                 zIndex: '999999', // On top during generation
@@ -296,7 +305,7 @@
             window.cbdDebug && console.log('CBD PDF: Wrapper dimensions:', $wrapper[0].offsetWidth, 'x', $wrapper[0].offsetHeight);
 
             // Add loading message
-            var $loadingMsg = $('<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;padding:30px;border-radius:8px;z-index:9999999;box-shadow:0 4px 20px rgba(0,0,0,0.3);text-align:center;"><h3 style="margin:0 0 10px 0;">PDF wird erstellt...</h3><p style="margin:0;color:#666;">Bitte warten Sie einen Moment.</p></div>');
+            var $loadingMsg = $('<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:' + colorBackground + ';padding:30px;border-radius:8px;z-index:9999999;box-shadow:0 4px 20px rgba(0,0,0,0.3);text-align:center;"><h3 style="margin:0 0 10px 0;">PDF wird erstellt...</h3><p style="margin:0;color:' + colorTextMuted + ';">Bitte warten Sie einen Moment.</p></div>');
             $('body').append($loadingMsg);
 
             // THIRD PASS: Expand after wrapper is in DOM (critical for proper rendering)
