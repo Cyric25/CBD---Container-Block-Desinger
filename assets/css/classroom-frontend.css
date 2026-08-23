@@ -12,7 +12,7 @@
     max-width: 900px;
     margin: 40px auto;
     padding: 32px;
-    background: #fff;
+    background: var(--color-background, #fff);
     border-radius: 12px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
@@ -43,14 +43,14 @@
     margin-bottom: 8px;
     font-size: 14px;
     font-weight: 500;
-    color: #333;
+    color: var(--color-text-primary, #333);
 }
 
 .cbd-classroom-form-group select,
 .cbd-classroom-form-group input[type="password"] {
     width: 100%;
     padding: 12px 16px;
-    border: 2px solid #e0e0e0;
+    border: 2px solid var(--color-sidebar-border, #e0e0e0);
     border-radius: 8px;
     font-size: 15px;
     transition: border-color 0.2s ease;
@@ -68,7 +68,7 @@
     border: none;
     border-radius: 8px;
     background: #4caf50;
-    color: #fff;
+    color: var(--color-background, #fff);
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
@@ -148,7 +148,7 @@
 .cbd-classroom-class-name {
     font-size: 24px;
     font-weight: 700;
-    color: #fff;
+    color: var(--color-background, #fff);
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
@@ -189,7 +189,7 @@
     border: 2px solid rgba(255, 255, 255, 0.6);
     border-radius: 6px;
     background: transparent;
-    color: #fff;
+    color: var(--color-background, #fff);
     font-size: 0;
     line-height: 1;
     cursor: pointer;
@@ -210,7 +210,7 @@
     left: 50%;
     width: 17px;
     height: 2px;
-    background-color: #fff;
+    background-color: var(--color-background, #fff);
     border-radius: 1px;
 }
 
@@ -229,9 +229,9 @@
 .cbd-classroom-header #cbd-class-logout:hover,
 .cbd-classroom-header .button:hover,
 .cbd-classroom-logout:hover {
-    border-color: #fff;
+    border-color: var(--color-background, #fff);
     background: rgba(255, 255, 255, 0.2);
-    color: #fff;
+    color: var(--color-background, #fff);
 }
 
 /* =============================================
@@ -255,7 +255,7 @@
 /* Grayed out parent (not treated, but has treated children) */
 .cbd-classroom-parent-title.cbd-parent-grayed {
     color: #9e9e9e;
-    border-bottom-color: #e0e0e0;
+    border-bottom-color: var(--color-sidebar-border, #e0e0e0);
     font-style: italic;
 }
 
@@ -304,7 +304,7 @@
     font-size: 22px;
     font-weight: 600;
     padding-bottom: 4px;
-    border-bottom: 2px solid #e0e0e0;
+    border-bottom: 2px solid var(--color-sidebar-border, #e0e0e0);
     margin-bottom: 8px;
 }
 
@@ -339,8 +339,8 @@
     justify-content: space-between;
     padding: 16px 20px;
     margin-bottom: 12px;
-    background: #fff;
-    border: 2px solid #e0e0e0;
+    background: var(--color-background, #fff);
+    border: 2px solid var(--color-sidebar-border, #e0e0e0);
     border-radius: 8px;
     transition: all 0.2s ease;
 }
@@ -439,7 +439,7 @@
 .cbd-classroom-nav-name {
     font-size: 15px;
     font-weight: 600;
-    color: #fff;
+    color: var(--color-background, #fff);
     white-space: nowrap;
     max-width: 220px;
     overflow: hidden;
@@ -476,7 +476,7 @@
 .cbd-classroom-main-nav a:hover,
 .cbd-classroom-main-nav .current-menu-item > a,
 .cbd-classroom-main-nav .current-page-ancestor > a {
-    color: #fff;
+    color: var(--color-background, #fff);
     border-bottom-color: rgba(255, 255, 255, 0.7);
 }
 
@@ -569,7 +569,7 @@
     box-shadow:
         inset 0 1px 1px rgba(255, 255, 255, 0.3),
         inset 0 -1px 1px rgba(0, 0, 0, 0.25);
-    color: #fff;
+    color: var(--color-background, #fff);
     text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
     font-size: 13px;
     font-weight: 600;
@@ -589,7 +589,7 @@
     background: none;
     border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: 5px;
-    color: #fff;
+    color: var(--color-background, #fff);
     font-size: 1.2rem;
     padding: 4px 10px;
     cursor: pointer;
@@ -647,7 +647,7 @@
 .cbd-classroom-page-section {
     margin-bottom: 48px;
     padding-bottom: 32px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--color-sidebar-border, #e0e0e0);
 }
 
 .cbd-classroom-page-section:last-child {
@@ -682,7 +682,7 @@
     position: relative;
     margin: 16px 0;
     padding: 12px;
-    background: #f8f9fa;
+    background: var(--color-background-light, #f8f9fa);
     border: 2px solid #4caf50;
     border-radius: 8px;
 }
@@ -704,7 +704,7 @@
     gap: 6px;
     padding: 6px 12px;
     background: #4caf50;
-    color: #fff;
+    color: var(--color-background, #fff);
     font-size: 13px;
     font-weight: 600;
     border-radius: 6px;
@@ -804,7 +804,7 @@
 .cbd-drawing-section {
     margin-top: 24px;
     padding-top: 20px;
-    border-top: 2px solid #e0e0e0;
+    border-top: 2px solid var(--color-sidebar-border, #e0e0e0);
 }
 
 .cbd-drawing-toggle {
@@ -813,7 +813,7 @@
     gap: 8px;
     padding: 12px 24px;
     background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
-    color: #fff;
+    color: var(--color-background, #fff);
     border: none;
     border-radius: 8px;
     font-size: 16px;
@@ -847,7 +847,7 @@
 .cbd-drawing-overlay {
     margin-top: 16px;
     padding: 20px;
-    background: #f8f9fa;
+    background: var(--color-background-light, #f8f9fa);
     border: 2px solid #4caf50;
     border-radius: 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
