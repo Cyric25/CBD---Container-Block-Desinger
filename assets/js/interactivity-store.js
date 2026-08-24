@@ -443,6 +443,10 @@ store('container-block-designer', {
 				}
 
 				// Screenshot erstellen
+				// AP-2.5: backgroundColor bleibt bewusst literal '#ffffff' - feste
+				// Canvas-Exporthintergrundfarbe fuer den Bildexport, keine
+				// UI-Chrome-Farbe, muss unabhaengig vom Theme/Darkmode weiss
+				// bleiben (siehe Plan AP-2.5, Vorgehen Punkt 2).
 				const canvas = yield html2canvas(containerBlock, {
 					useCORS: true,
 					allowTaint: false,
@@ -740,6 +744,11 @@ store('container-block-designer', {
 			if (!containerBlock) return;
 
 			// Board-Farbe aus Button-Attribut lesen
+			// AP-2.5: '#ffffff'-Fallback bewusst literal belassen - landet als
+			// this.boardColor in board-mode.js und wird dort direkt als Canvas-
+			// 2D-fillStyle verwendet (board-mode.js:519), ist also Tafel-Inhalt
+			// (Zeichenflaechenfarbe, analog zur Zeichenfarbpalette aus AP-2.6),
+			// keine UI-Chrome-Farbe. Datei/Thema gehoert zu AP-2.6, nicht AP-2.5.
 			const boardButton = mainContainer.querySelector('.cbd-board-mode-toggle');
 			const boardColor = boardButton?.getAttribute('data-board-color') || '#ffffff';
 
@@ -840,6 +849,10 @@ store('container-block-designer', {
 				icon.classList.remove('dashicons-yes-alt', 'dashicons-marker');
 				if (anyBehandelt) {
 					icon.classList.add('dashicons-yes-alt');
+					// #4caf50 (Material Design Gruen) entspricht wertlich keiner
+					// AP-1.1-Variable (--color-success ist #2ecc40) - literal
+					// belassen statt falschem Fallback (AP-2.5, gleiches Prinzip
+					// wie die Bootstrap-/Material-Design-Ausnahmen in AP-2.1/2.2)
 					icon.style.color = '#4caf50';
 					setTimeout(() => { icon.style.color = ''; }, 1000);
 				} else {

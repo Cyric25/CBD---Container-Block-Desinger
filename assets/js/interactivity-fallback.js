@@ -471,6 +471,10 @@
                         console.log('[CBD Fallback Screenshot] scale =', screenshotScale, 'für', containerEl.offsetWidth, 'x', containerEl.offsetHeight, 'px');
                     }
 
+                    // AP-2.5: backgroundColor bleibt bewusst literal '#ffffff' -
+                    // feste Canvas-Exporthintergrundfarbe fuer den Bildexport,
+                    // keine UI-Chrome-Farbe, muss unabhaengig vom Theme/Darkmode
+                    // weiss bleiben (siehe Plan AP-2.5, Vorgehen Punkt 2).
                     html2canvas($containerBlock[0], {
                         useCORS: true,
                         allowTaint: false,
@@ -712,6 +716,11 @@
             var context = $container.data('cbd-context') || {};
             var $containerBlock = $container.children('.cbd-container-block');
 
+            // AP-2.5: '#ffffff'-Fallback bewusst literal belassen - landet als
+            // this.boardColor in board-mode.js und wird dort direkt als Canvas-
+            // 2D-fillStyle verwendet (board-mode.js:519), ist also Tafel-Inhalt
+            // (Zeichenflaechenfarbe, analog zur Zeichenfarbpalette aus AP-2.6),
+            // keine UI-Chrome-Farbe. Datei/Thema gehoert zu AP-2.6, nicht AP-2.5.
             var boardColor = $button.attr('data-board-color') || '#ffffff';
 
             if (window.CBDBoardMode) {
@@ -853,6 +862,11 @@
                         var $icon = $button.find('.dashicons');
                         $icon.removeClass('dashicons-yes-alt dashicons-marker');
                         if (anyBehandelt) {
+                            // #4caf50 (Material Design Gruen) entspricht wertlich
+                            // keiner AP-1.1-Variable (--color-success ist #2ecc40) -
+                            // literal belassen statt falschem Fallback (AP-2.5,
+                            // gleiches Prinzip wie die Bootstrap-/Material-Design-
+                            // Ausnahmen in AP-2.1/2.2)
                             $icon.addClass('dashicons-yes-alt').css('color', '#4caf50');
                             setTimeout(function() { $icon.css('color', ''); }, 1000);
                         } else {

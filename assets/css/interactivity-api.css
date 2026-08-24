@@ -62,6 +62,9 @@ button[disabled].cbd-pdf-export {
 
 /* Error state (optional - can be added to context) */
 .cbd-action-buttons button.error .dashicons {
+    /* #dc3232 entspricht wertlich keiner AP-1.1-Variable (--color-danger ist
+       #cc3333) - literal belassen statt falschem Fallback (AP-2.5,
+       Praezedenzfall AP-2.1/2.2/2.3/2.9) */
     color: #dc3232;
 }
 
@@ -152,5 +155,9 @@ body.cbd-debug-mode .cbd-container[data-wp-interactive]::before {
     padding: 2px 6px;
     border-radius: 3px;
     z-index: 999999;
+    /* "monospace" allein entspricht wertlich nicht --font-family-mono
+       ('Courier New', monospace) - Umstellung wuerde die gerenderte Schrift
+       sichtbar aendern, deshalb literal belassen (AP-2.5, gleiches Prinzip
+       wie der font-family-Fund in AP-2.3) */
     font-family: monospace;
 }
