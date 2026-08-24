@@ -144,6 +144,14 @@
             katex.render(latex, contentSpan, {
                 displayMode: !!isDisplay, // Use displayMode only for display formulas
                 throwOnError: false,
+                // AP-2.4: errorColor ist eine KaTeX-API-Option (String-Wert
+                // an eine Fremdbibliothek), kein DOM-Inline-Style - "falls
+                // Inline-Styles" aus dem AP-Text trifft hier nicht zu.
+                // Ausserdem entspricht #cc0000 wertlich nicht --color-danger
+                // (#cc3333, anderer Rotton) - eine Kopplung waere ohnehin
+                // kein pixelgleicher Fallback. Passend zu den literal
+                // belassenen #cc0000-Stellen in latex-formulas.css
+                // (.cbd-latex-error), bewusst literal belassen.
                 errorColor: '#cc0000',
                 strict: false,
                 trust: false,
