@@ -1275,7 +1275,14 @@ class CBD_Classroom {
             'cbdPDFData',
             array(
                 'ajaxurl' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('cbd-pdf-nonce')
+                'nonce' => wp_create_nonce('cbd-pdf-nonce'),
+                // AP-2.3: pdf-server-side.js braucht die aktuelle Seiten-ID und
+                // einen fuer 'cbd_classroom_nonce' gueltigen Nonce, um den
+                // Bulk-Endpoint cbd_get_page_drawings (AP-2.1) fuer
+                // serverseitige Tafelbilder aufzurufen - anderer Nonce-Name als
+                // 'nonce' oben (der gilt fuer 'cbd-pdf-nonce'/cbd_generate_pdf).
+                'pageId' => get_the_ID(),
+                'classroomNonce' => wp_create_nonce('cbd_classroom_nonce')
             )
         );
 
