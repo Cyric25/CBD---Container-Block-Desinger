@@ -771,10 +771,47 @@ CDB-Container und eine Formel in der Zeilenüberschrift selbst wurden nicht
 gemessen; beide mit begründet vernachlässigbarem Risiko, kein Code-Fix
 nahegelegt.
 
+**Nachtrag (derselbe Review-Lauf, nach dem obigen Bericht eingetroffen) —
+B1 verschärft:** Auch die entpackte Staging-Kopie
+`plugin-zips/modular-blocks-plugin/assets/css/blocks.css` ist der alte
+Stand (5574 B, 25.09.2025, null `:not`-Ausnahmen) — es existiert im Repo
+**kein einziges** Basis-Artefakt mit korrigiertem CSS, weder gepackt noch
+entpackt. Erschwerend: `Eigene WP Blocks/CLAUDE.md`, Abschnitt „Plugin
+Distribution Strategy" Punkt 1, nennt genau `modular-blocks-plugin-
+empty-1.0.6.zip` NAMENTLICH als die Basis mit dem Zusatz „Never needs to be
+updated unless core functionality changes" — ein Redeploy „nach Vorschrift"
+installiert den Fehler damit nicht versehentlich, sondern zwangsläufig.
+**AP-1.doc muss diesen `CLAUDE.md`-Verweis auf die in AP-1.fix1 neu gebaute
+Version nachziehen**, sonst greift beim nächsten Redeploy derselbe
+Irrläufer erneut.
+
+**Nachtrag — B2 belegt statt nur plausibel:** `blocks/accordion/
+view.js:153-159` dokumentiert die Regelfamilie bereits im Code —
+Kommentar: „Das globale Stylesheet des Plugins (assets/css/blocks.css)
+faerbt alle Elemente mit ‚title' im Klassennamen im Dunkelmodus weiss. Ohne
+Inline-Wichtigkeit waeren geschlossene Titel auf hellem Kopf unlesbar." Das
+Accordion verteidigt sich also schon heute mit Inline-`!important` gegen
+genau die `[class*="title"]`-Regel, die erst `a2737ff` entschärft hat — das
+zweite Symptom auf Altbestands-Installationen ist damit belegt, nicht nur
+hergeleitet.
+
+**Neuer Befund B8 (gering, dokumentarisch):** `Eigene WP Blocks/
+CLAUDE.md`, Abschnitt „Farben kommen aus data-color-*": Die Anweisung
+„Wer dort ein Element ergänzt, das Text zeigt, muss es in diese Aufzählung
+aufnehmen" ist auf dem heutigen Stand messbar überholt — die Aufzählung in
+`accordion/style.css` wurde zur Laufzeit abgeschaltet, alle 12 Formeln
+blieben unverändert, weil `blocks.css:106-110` die Grundfarbe bereits eine
+Ebene weiter außen stellt. Kein Fehler, aber eine Konvention, die künftige
+Agenten zu unnötigen Enumerationserweiterungen anleiten würde. **Gehört in
+AP-1.doc**, kein eigener Fix nötig.
+
 **Fazit:** Phase 1 ist erst abgeschlossen, wenn AP-1.fix1 erledigt ist —
 sonst bliebe der empfohlene nächste Schritt in seiner ursprünglichen Form
 schädlich und Projektziel 1a auf der Produktivinstallation unerfüllt.
-Keine Datei wurde während dieses Reviews verändert.
+AP-1.doc trägt zusätzlich zwei Dokumentationskorrekturen: den
+`CLAUDE.md`-Versionsverweis (B1-Nachtrag) und den überholten
+Enumerations-Hinweis (B8). Keine Datei wurde während dieses Reviews
+verändert.
 
 ---
 
@@ -889,26 +926,52 @@ Phase 1 bringen.
 - [ ] `DOKUMENTATION.md`
 
 **Vorgehen:**
-1. Übergabenotizen von AP-1.1 bis AP-1.4 sowie AP-1.rev durchgehen.
+1. Übergabenotizen von AP-1.1 bis AP-1.4, AP-1.rev (inkl. Nachtrag) und
+   AP-1.fix1 durchgehen.
 2. In `Plugins/Eigene WP Blocks/reference_file_map.md`, Abschnitt
    „Accordion-Block im Detail", die Zeile zu `blocks/accordion/style.css`
-   um den neuen Fix ergänzen (welche Regel geändert wurde, seit wann).
-3. In `Plugins/Eigene WP Blocks/CLAUDE.md`, Abschnitt „Farben kommen aus
-   data-color-*, nicht aus dem Stylesheet", einen Satz ergänzen: der
-   Listen-Fund wurde behoben, mit Verweis auf diesen Plan.
-4. Falls AP-1.3 ausgeführt wurde: entsprechende Zeile in
+   NICHT als „Fix", sondern als Ergebnis der Diagnose dokumentieren: kein
+   Fehler in dieser Datei; die tatsächliche Ursache und ihr historischer
+   Fix lagen in `assets/css/blocks.css` (Commits `b854060`, `a2737ff`,
+   2026-08-16), Details siehe `docs/diagnose-latex-listen-2026-08-24.md`.
+3. **In `Plugins/Eigene WP Blocks/CLAUDE.md`, Abschnitt „Plugin
+   Distribution Strategy" Punkt 1: den namentlichen Verweis auf
+   `modular-blocks-plugin-empty-1.0.6.zip` auf die in AP-1.fix1 neu gebaute
+   Version (`…-1.1.8.zip`) aktualisieren.** Das ist kein optionaler
+   Hinweis, sondern der AP-1.rev-Befund B1 (Nachtrag): Der alte Verweis
+   führt bei jedem künftigen Redeploy „nach Vorschrift" wieder zum
+   fehlerhaften CSS-Stand, weil er das einzige je vorhandene Basis-Artefakt
+   mit dem alten `blocks.css` benennt.
+4. **Im selben `CLAUDE.md`, Abschnitt „Farben kommen aus data-color-*,
+   nicht aus dem Stylesheet": den Satz „Wer dort ein Element ergänzt, das
+   Text zeigt, muss es in diese Aufzählung aufnehmen" korrigieren/
+   relativieren** (AP-1.rev-Befund B8): Die Aufzählung in
+   `accordion/style.css` ist auf dem heutigen Stand nachweislich
+   redundant, weil `assets/css/blocks.css:106-110` die Grundfarbe bereits
+   eine Ebene weiter außen für den gesamten Panel-Inhalt setzt (per
+   Laufzeittest bestätigt: Aufzählung abgeschaltet → alle 12 Formeln
+   unverändert). Ein künftiger Agent soll nicht mehr angeleitet werden,
+   dort unnötig zu enumerieren.
+5. Falls AP-1.3 ausgeführt wurde: entsprechende Zeile in
    `Plugins/CDB-Designer/reference_file_map.md` bei `latex-formulas.css`
-   ergänzen.
-5. In `DOKUMENTATION.md` (Root) einen neuen Eintrag nach dem Muster der
+   ergänzen (im aktuellen Stand: entfällt, da AP-1.3 „entfällt" war).
+6. In `DOKUMENTATION.md` (Root) einen neuen Eintrag nach dem Muster der
    bestehenden Einträge ergänzen: Kurzbeschreibung, Verweis auf diesen
    Plan (`Plugins/CDB-Designer/docs/PLAN-PDF-Notizen-und-Listenformeln.md`),
-   Status.
-6. „Stand"-Datum in den geänderten Dateien aktualisieren, wo ein solches
+   Status — inklusive der Kernaussage, dass der gemeldete Fehler ein
+   bereits behobener Bug war, dessen Symptom durch einen fehlenden
+   Basis-Redeploy weiterlebte.
+7. „Stand"-Datum in den geänderten Dateien aktualisieren, wo ein solches
    Feld existiert.
 
 **Akzeptanzkriterien:**
 - [ ] Jede in Phase 1 geänderte Datei hat eine aktuelle Zeile in der
       jeweiligen Datei-Map.
+- [ ] `Eigene WP Blocks/CLAUDE.md` nennt in „Plugin Distribution Strategy"
+      die neu gebaute ZIP-Version (1.1.8), nicht mehr die fehlerhafte 1.0.6.
+- [ ] `Eigene WP Blocks/CLAUDE.md`, Abschnitt „Farben kommen aus
+      data-color-*", enthält keine Anweisung mehr, die zu unnötiger
+      Enumerationserweiterung anleitet.
 - [ ] `DOKUMENTATION.md` enthält einen Eintrag für dieses Vorhaben.
 - [ ] Kein Verweis in der Dokumentation zeigt auf nicht mehr existierende
       Dateien/Funktionen.
