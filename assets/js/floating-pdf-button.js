@@ -198,6 +198,19 @@
                 '}' +
                 '.cbd-pdf-toolbar select option{background:' + colorBackground + ';color:' + colorTextPrimary + '}' +
 
+                /* AP-2.4: Schalter "Tafelbilder/Notizen einschließen" — Ausrichtung
+                   wie das bestehende <select>, Farben ueber die bereits vorhandenen
+                   Variablen der Datei (colorOnAccent/colorTextPrimary), keine neuen
+                   Hex-Werte. */
+                '.cbd-pdf-toolbar .cbd-pdf-drawings-toggle{' +
+                  'display:flex;align-items:center;gap:6px;' +
+                  'color:' + colorOnAccent + ';font-size:13px;white-space:nowrap;' +
+                  'cursor:pointer' +
+                '}' +
+                '.cbd-pdf-toolbar .cbd-pdf-drawings-toggle input.cbd-pdf-drawings-check{' +
+                  'width:16px;height:16px;margin:0;cursor:pointer;accent-color:' + colorOnAccent +
+                '}' +
+
                 /* Selected block: green outline */
                 '.cbd-container.cbd-pdf-on{' +
                   'outline:4px solid ' + colorSuccess + '!important;' +
@@ -271,6 +284,10 @@
                 '    <option value="print">Druck-optimiert</option>' +
                 '    <option value="text">Nur Text</option>' +
                 '  </select>' +
+                '  <label class="cbd-pdf-drawings-toggle">' +
+                '    <input type="checkbox" class="cbd-pdf-drawings-check" checked>' +
+                '    Tafelbilder/Notizen einschließen' +
+                '  </label>' +
                 '  <button type="button" class="cbd-pdf-go">PDF erstellen</button>' +
                 '  <button type="button" class="cbd-pdf-exit">Abbrechen</button>' +
                 '</div>';
@@ -428,6 +445,7 @@
 
                 var selectedBlocks = [];
                 var mode = $('.cbd-pdf-mode-sel').val();
+                var includeDrawings = $('.cbd-pdf-drawings-check').is(':checked');
 
                 $containerBlocks.filter('.cbd-pdf-on').each(function () {
                     selectedBlocks.push($(this));
@@ -439,7 +457,7 @@
                 }
 
                 exitSelectionMode();
-                startPDFExport(selectedBlocks, mode);
+                startPDFExport(selectedBlocks, mode, includeDrawings);
             });
 
             // ESC key
@@ -454,10 +472,10 @@
         // PDF Export
         // =====================================================================
 
-        function startPDFExport(selectedBlocks, mode) {
-            window.cbdDebug && console.log('[CBD PDF] Starting export:', selectedBlocks.length, 'blocks, mode:', mode);
+        function startPDFExport(selectedBlocks, mode, includeDrawings) {
+            window.cbdDebug && console.log('[CBD PDF] Starting export:', selectedBlocks.length, 'blocks, mode:', mode, 'includeDrawings:', includeDrawings);
             if (typeof window.cbdPDFExportServerSide === 'function') {
-                window.cbdPDFExportServerSide(selectedBlocks, mode);
+                window.cbdPDFExportServerSide(selectedBlocks, mode, undefined, includeDrawings);
             } else {
                 console.warn('[CBD PDF] No export function, using window.print()');
                 window.print();

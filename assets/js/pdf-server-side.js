@@ -39,6 +39,23 @@
     var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
+    // AP-2.3: Cache class_id -> Zeichnungen-Array, gueltig fuer EINEN
+    // Export-Lauf (zurueckgesetzt am Anfang jedes cbdPDFExportServerSide()-
+    // Aufrufs, siehe dort). Container werden sequentiell blockweise verarbeitet
+    // (processBlocksSequentially/processOneBlock) - injectServerDrawings()
+    // wird also PRO AUSGEWAEHLTEM TOP-LEVEL-CONTAINER erneut aufgerufen, nicht
+    // nur einmal fuer den ganzen Export. Ohne diesen ueber alle Bloecke
+    // geteilten Cache waeren zwei ausgewaehlte Container mit identischer
+    // class_id zwei getrennte AJAX-Aufrufe (einer je processOneBlock-
+    // Durchlauf) - das verletzt das Akzeptanzkriterium "GENAU EIN Aufruf je
+    // class_id, nicht einer je Container". Die sequentielle Verarbeitung
+    // macht ein einfaches synchrones Cache-Objekt ausreichend: Bis Block 2
+    // dran ist, ist die Anfrage von Block 1 fuer dieselbe class_id laengst
+    // abgeschlossen (Erfolg oder Fehler wird ebenfalls gecacht, damit eine
+    // nicht zugreifbare/fehlerhafte class_id nicht bei jedem weiteren
+    // Container erneut angefragt wird).
+    var serverDrawingsCache = {};
+
     /**
      * Main export function - called by floating-pdf-button.js
      *
@@ -46,9 +63,21 @@
      * @param {string} mode 'visual'|'print'|'text'
      * @param {number} quality Scale factor (only for screenshots of interactive elements)
      */
-    window.cbdPDFExportServerSide = function (containerBlocks, mode, quality) {
+    window.cbdPDFExportServerSide = function (containerBlocks, mode, quality, includeDrawings) {
         mode = mode || 'visual';
         quality = quality || (isIOS ? 1 : 1.5);
+        // AP-2.3: Vierter Parameter steuert, ob lokale ("Eigene Notizen") UND
+        // serverseitige Zeichnungen (Tafelbilder) ins PDF eingefuegt werden.
+        // Default true bei fehlendem/undefined Parameter erhaelt das bisherige
+        // Verhalten bestehender Aufrufer (Apple-PDF-Weiche in
+        // interactivity-store.js/interactivity-fallback.js, die den Parameter
+        // nicht kennen).
+        includeDrawings = (includeDrawings === undefined) ? true : !!includeDrawings;
+        // Frischer Cache je Export-Lauf - siehe Kommentar bei der Deklaration
+        // von serverDrawingsCache oben. Verhindert sowohl fehlende Aufrufe
+        // (neue Zeichnung seit dem letzten Export uebersehen) als auch
+        // unbegrenztes Wachstum ueber mehrere Exportlaeufe einer Sitzung.
+        serverDrawingsCache = {};
 
         // Normalize to jQuery collection
         if (Array.isArray(containerBlocks)) {
@@ -77,7 +106,7 @@
 
         // Step 2: Wait for expansion animation, then process
         setTimeout(function () {
-            processBlocksSequentially(containerBlocks, mode, quality, $overlay, collapsedStates);
+            processBlocksSequentially(containerBlocks, mode, quality, includeDrawings, $overlay, collapsedStates);
         }, 400);
 
         return true;
@@ -183,7 +212,7 @@
     /**
      * Process blocks one by one (sequential to avoid memory issues on iOS)
      */
-    function processBlocksSequentially(containerBlocks, mode, quality, $overlay, collapsedStates) {
+    function processBlocksSequentially(containerBlocks, mode, quality, includeDrawings, $overlay, collapsedStates) {
         var blocksData = [];
         var totalBlocks = containerBlocks.length;
         var currentIndex = 0;
@@ -200,7 +229,7 @@
             var $block = $(containerBlocks[currentIndex]);
             updateProgress($overlay, currentIndex + 1, totalBlocks, 'Block ' + (currentIndex + 1) + ' wird verarbeitet...');
 
-            processOneBlock($block, mode, quality, function (blockData) {
+            processOneBlock($block, mode, quality, includeDrawings, function (blockData) {
                 blocksData.push(blockData);
                 currentIndex++;
                 // Use setTimeout to prevent UI freeze
@@ -214,7 +243,7 @@
     /**
      * Process a single block: extract HTML, formulas, and screenshots
      */
-    function processOneBlock($block, mode, quality, callback) {
+    function processOneBlock($block, mode, quality, includeDrawings, callback) {
         // Step 1: Find interactive elements FIRST and ensure they have IDs
         // (must happen before cloning so the IDs are included in the clone)
         var interactiveElements = findInteractiveElements($block);
@@ -233,13 +262,20 @@
         $clone.find('script').remove();        // Remove isolated scripts (not needed in PDF)
         $clone.find('svg').remove();           // Remove SVG icons (controls)
 
-        // Remove existing drawing sections (we'll rebuild from localStorage data)
+        // Remove existing drawing sections (we'll rebuild from localStorage/server data)
         $clone.find('.cbd-drawing-section').remove();
         $clone.find('.cbd-local-drawing-section').remove();
         $clone.find('.cbd-class-drawing-section').remove();
 
-        // Inject drawings directly from localStorage
-        injectDrawingsFromStorage($block, $clone);
+        // AP-2.3: injectServerDrawings() braucht einen asynchronen AJAX-Aufruf
+        // (Bulk-Endpoint cbd_get_page_drawings aus AP-2.1). Der Rest der bisher
+        // synchronen Verarbeitung (inkl. der html-Extraktion aus $clone) darf
+        // erst NACH dessen Abschluss laufen, sonst fehlten serverseitige
+        // Tafelbilder im bereits ausgelesenen $clone-HTML. continueProcessing()
+        // buendelt deshalb den kompletten bisherigen Rest dieser Funktion und
+        // wird entweder sofort (kein includeDrawings) oder als Callback nach
+        // den Drawing-Injections aufgerufen (siehe Funktionsende).
+        function continueProcessing() {
 
         // KaTeX-Formeln: Im Klon durch Platzhalter mit Fallback-Text ersetzen.
         // Die Originale werden unten per html2canvas als PNG erfasst und
@@ -347,6 +383,19 @@
                 });
             }
         });
+
+        } // Ende continueProcessing()
+
+        if (includeDrawings) {
+            // Lokale "Eigene Notizen" (localStorage) bleiben synchron wie bisher.
+            injectDrawingsFromStorage($block, $clone);
+            // Serverseitige Tafelbilder (AP-2.1/AP-2.2) NACH den lokalen
+            // Notizen einfuegen (asynchron), dann erst mit der Formel-/
+            // Screenshot-Verarbeitung fortfahren.
+            injectServerDrawings($block, $clone, continueProcessing);
+        } else {
+            continueProcessing();
+        }
     }
 
     /**
@@ -631,6 +680,224 @@
 
         if (totalInjected > 0) {
             window.cbdDebug && console.log('[CBD PDF] Injected', totalInjected, 'drawing page(s) from localStorage');
+        }
+    }
+
+    // =========================================================================
+    // AP-2.3: Server-Tafelbilder (serverseitig gespeicherte Klassenzeichnungen)
+    // =========================================================================
+
+    /**
+     * Liest fuer jeden Container mit `data-stable-id` den von board-mode.js
+     * (AP-2.2) gepflegten Begleitschluessel `cbd-board-<stableId>-classid` aus
+     * localStorage und laedt fuer JEDE dort gefundene class_id GENAU EINMAL
+     * (nicht je Container) alle Tafelbilder der aktuellen Seite ueber den
+     * Bulk-Endpoint `cbd_get_page_drawings` (AP-2.1) nach. Das Ergebnis wird
+     * anschliessend auf alle betroffenen Container verteilt (der Server
+     * liefert `container_id` je Zeichnung mit, siehe applyServerDrawings()).
+     *
+     * @param {jQuery}   $original Original-Block (zum Lesen von data-stable-id)
+     * @param {jQuery}   $clone    Geklonter Block (zum Einfuegen der Bilder)
+     * @param {Function} callback  Aufgerufen, sobald ALLE Anfragen fertig sind
+     *                             (Erfolg oder Fehler) - immer ohne Argument.
+     */
+    function injectServerDrawings($original, $clone, callback) {
+        // Fehlt cbdPDFData oder dessen ajaxurl (z. B. weil eine aeltere
+        // Fassung von class-cbd-classroom.php ohne pageId/classroomNonce
+        // ausliefert), gibt es nichts zu laden - unschaedlicher Rueckfall auf
+        // "keine Server-Tafelbilder", der Rest des Exports laeuft normal weiter.
+        if (typeof cbdPDFData === 'undefined' || !cbdPDFData.ajaxurl) {
+            callback();
+            return;
+        }
+
+        // Dieselbe Sammel-Logik wie injectDrawingsFromStorage(): Block selbst
+        // plus alle verschachtelten Container mit data-stable-id.
+        var containers = [];
+        var blockStableId = $original.attr('data-stable-id');
+        if (blockStableId) {
+            containers.push({ stableId: blockStableId, $cloneTarget: $clone });
+        }
+        $original.find('[data-stable-id]').each(function () {
+            var stableId = $(this).attr('data-stable-id');
+            if (stableId && stableId !== blockStableId) {
+                var $cloneEl = $clone.find('[data-stable-id="' + stableId + '"]');
+                if ($cloneEl.length > 0) {
+                    containers.push({ stableId: stableId, $cloneTarget: $cloneEl });
+                }
+            }
+        });
+
+        // Begleitschluessel aus AP-2.2 lesen, nach class_id gruppieren - so
+        // entsteht GENAU EIN AJAX-Aufruf je class_id, nicht einer je Container
+        // (Akzeptanzkriterium AP-2.3).
+        var classGroups = {};
+        for (var c = 0; c < containers.length; c++) {
+            var stableId = containers[c].stableId;
+            var classId = null;
+            try {
+                classId = localStorage.getItem('cbd-board-' + stableId + '-classid');
+            } catch (e) { /* localStorage nicht verfuegbar - Container ueberspringen */ }
+
+            if (!classId) {
+                continue; // Kein Server-Tafelbild fuer diesen Container bekannt
+            }
+            if (!classGroups[classId]) {
+                classGroups[classId] = [];
+            }
+            classGroups[classId].push(containers[c]);
+        }
+
+        var classIds = Object.keys(classGroups);
+        if (classIds.length === 0) {
+            callback();
+            return;
+        }
+
+        // pageId/classroomNonce kommen bevorzugt aus cbdPDFData (ergaenzt in
+        // class-cbd-classroom.php fuer Seiten mit dem [cbd_classroom]-
+        // Shortcode). Auf GEWOEHNLICHEN Seiten (der weit ueberwiegende Fall
+        // fuer den PDF-Export) lokalisiert stattdessen
+        // class-cbd-block-registration.php dieselben Werte unter dem eigenen
+        // Namen window.cbdClassroomData (dort bereits vorhanden, unveraendert
+        // von diesem AP) - als Rueckfall gelesen, damit Server-Tafelbilder
+        // nicht nur auf Klassenraum-Shortcode-Seiten funktionieren, ohne eine
+        // dritte Datei aendern zu muessen.
+        var classroomData = window.cbdClassroomData || {};
+        var pageId = cbdPDFData.pageId || classroomData.pageId || 0;
+        var nonce = cbdPDFData.classroomNonce || classroomData.nonce || '';
+        var pending = classIds.length;
+
+        function requestDone() {
+            pending--;
+            if (pending <= 0) {
+                callback();
+            }
+        }
+
+        classIds.forEach(function (classId) {
+            // Bereits in einem FRUEHEREN processOneBlock()-Durchlauf desselben
+            // Export-Laufs abgefragt (anderer Top-Level-Container, gleiche
+            // class_id)? Dann Cache-Treffer verwenden statt eines weiteren
+            // AJAX-Aufrufs - siehe Kommentar bei serverDrawingsCache oben.
+            if (serverDrawingsCache.hasOwnProperty(classId)) {
+                if (serverDrawingsCache[classId].length > 0) {
+                    applyServerDrawings(classGroups[classId], serverDrawingsCache[classId]);
+                }
+                requestDone();
+                return;
+            }
+
+            $.ajax({
+                url: cbdPDFData.ajaxurl,
+                type: 'POST',
+                timeout: 30000,
+                data: {
+                    action: 'cbd_get_page_drawings',
+                    nonce: nonce,
+                    class_id: classId,
+                    page_id: pageId
+                },
+                success: function (response) {
+                    // AP-2.1-Vertrag: {success:true, data:{drawings:[...]}} bei
+                    // Erfolg, {success:false, data:{message:"..."}} bei
+                    // Capability-/Zugriffsfehlern (z. B. fremde class_id) - in
+                    // BEIDEN Faellen liefert der Server gueltiges JSON.
+                    var drawings = (response && response.success && response.data && response.data.drawings)
+                        ? response.data.drawings
+                        : [];
+                    // Auch ein leeres Ergebnis (Fehler, keine Zeichnungen) wird
+                    // gecacht - sonst wuerde eine class_id ohne Zugriff/Daten
+                    // bei JEDEM weiteren Container mit derselben class_id im
+                    // selben Export-Lauf erneut angefragt.
+                    serverDrawingsCache[classId] = drawings;
+                    if (drawings.length > 0) {
+                        applyServerDrawings(classGroups[classId], drawings);
+                    }
+                    requestDone();
+                },
+                error: function () {
+                    // WICHTIG (Uebergabenotiz AP-2.1): Bei ungueltigem Nonce
+                    // antwortet check_ajax_referer() mit HTTP 403 und LEEREM
+                    // Rumpf (kein JSON) - das landet hier im error-Zweig, NICHT
+                    // im success-Zweig mit response.success === false. Deshalb
+                    // ein eigener, separater Zweig statt nur response.success
+                    // zu pruefen. Beide Faelle (error und success:false) enden
+                    // unschaedlich: keine Server-Tafelbilder fuer diese
+                    // class_id, der PDF-Export laeuft mit dem Rest normal
+                    // weiter (kein Abbruch des gesamten Exports).
+                    serverDrawingsCache[classId] = [];
+                    requestDone();
+                }
+            });
+        });
+    }
+
+    /**
+     * Fuegt die vom Bulk-Endpoint gelieferten Zeichnungen in die passenden
+     * Klon-Container ein. `container_id` traegt bei mehrseitigen Tafelbildern
+     * das Suffix `:pN` (siehe class-cbd-classroom.php, zerlege_container_id())
+     * - der Teil vor dem Doppelpunkt ist die stableId, ueber die hier auf den
+     * richtigen Container gematcht wird. Mehrere Seiten desselben Containers
+     * werden nach Seitenzahl sortiert und alle eingefuegt (analog zum
+     * bestehenden Mehrseiten-Verhalten der lokalen Notizen).
+     *
+     * @param {Array} containerGroup [{stableId, $cloneTarget}, ...] - alle
+     *                Container dieser class_id (aus injectServerDrawings()).
+     * @param {Array} drawings [{container_id, drawing_data}, ...] - Antwort
+     *                des Bulk-Endpoints cbd_get_page_drawings.
+     */
+    function applyServerDrawings(containerGroup, drawings) {
+        for (var i = 0; i < containerGroup.length; i++) {
+            var stableId = containerGroup[i].stableId;
+            var $target = containerGroup[i].$cloneTarget;
+
+            var matched = [];
+            for (var d = 0; d < drawings.length; d++) {
+                var containerId = drawings[d].container_id || '';
+                var baseId = containerId.split(':')[0];
+                if (baseId === stableId && drawings[d].drawing_data &&
+                    drawings[d].drawing_data.indexOf('data:image/') === 0) {
+                    var pageMatch = /^:p(\d+)$/.exec(containerId.slice(baseId.length));
+                    matched.push({
+                        dataUrl: drawings[d].drawing_data,
+                        pageIndex: pageMatch ? parseInt(pageMatch[1], 10) : 0
+                    });
+                }
+            }
+            if (matched.length === 0) continue;
+
+            matched.sort(function (a, b) { return a.pageIndex - b.pageIndex; });
+
+            // Label "Tafelbild" statt "Eigene Notiz" - Unterscheidung im PDF
+            // zwischen lokalen und serverseitigen Zeichnungen (Plan-Vorgabe).
+            var drawingHtml = '<div class="cbd-pdf-drawing-section" style="' +
+                'margin: 12px 0; padding: 8px; page-break-inside: avoid;">';
+            drawingHtml += '<div style="font-size: 11px; color: #666; margin-bottom: 6px; ' +
+                'font-style: italic;">Tafelbild' +
+                (matched.length > 1 ? ' (' + matched.length + ' Seiten)' : '') +
+                '</div>';
+
+            for (var m = 0; m < matched.length; m++) {
+                var compressed = recompressBase64(matched[m].dataUrl, 0.75, 1200);
+                drawingHtml += '<div style="margin: 4px 0; text-align: center; ' +
+                    'page-break-inside: avoid;">';
+                drawingHtml += '<img src="' + (compressed || matched[m].dataUrl) + '" style="' +
+                    'max-width: 100%; height: auto; display: block; margin: 0 auto;" ' +
+                    'alt="Tafelbild Seite ' + (matched[m].pageIndex + 1) + '" />';
+                drawingHtml += '</div>';
+            }
+
+            drawingHtml += '</div>';
+
+            var $content = $target.find('.cbd-container-content').first();
+            if ($content.length > 0) {
+                $content.append(drawingHtml);
+            } else {
+                $target.append(drawingHtml);
+            }
+
+            window.cbdDebug && console.log('[CBD PDF] Injected', matched.length, 'server drawing page(s) for', stableId);
         }
     }
 

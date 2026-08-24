@@ -2100,6 +2100,127 @@ Darkmode ≈1,2:1. `board-mode.css` war nie Teil des in Phase 2 gelisteten
 Dateiumfangs (keine `[data-theme]`-Regeln dort) und wurde deshalb bewusst
 nicht mitkorrigiert — vorgemerkt für ein künftiges Korrektur-AP.
 
+## PDF-Export: Tafelbilder und eigene Notizen (Phase 2 von
+`docs/PLAN-PDF-Notizen-und-Listenformeln.md`, abgeschlossen 2026-08-24)
+
+Der serverseitige PDF-Export (`assets/js/pdf-server-side.js`) schließt neben
+den bereits bestehenden lokalen „Eigenen Notizen" (`localStorage`) seit
+diesem Vorhaben auch klassenweit **serverseitig** gespeicherte Tafelbilder
+ein — steuerbar über einen einzigen Schalter im Export-Dialog.
+
+### Mechanismus: Begleitschlüssel statt aktiver Sitzung
+
+Für den PDF-Export muss bekannt sein, welcher Klasse ein Container zuletzt
+zugeordnet war — eine exportierende Lehrperson ist dabei aber normalerweise
+regulär angemeldet (`cbd_edit_blocks`), nicht in einer Schüler-Token-Sitzung,
+aus der sich die Klasse ableiten ließe. Deshalb schreibt `board-mode.js`
+(AP-2.2) bei jedem erfolgreichen `saveToServer()`/`loadFromServer()`
+zusätzlich einen lokalen Begleitschlüssel
+
+```
+localStorage['cbd-board-' + containerId + '-classid'] = classId
+```
+
+— exakt nach demselben, bereits im Projekt etablierten Muster wie der
+bestehende Begleitschlüssel `cbd-board-{id}-bgcolor`. **Wichtig beim
+Schreiben:** Der Schlüsselname und der Wert müssen **synchron vor dem
+`fetch()`-Aufruf** erfasst werden, nicht erst im `.then()`-Erfolgszweig —
+`close()` setzt `this.classId` synchron auf `null`, sobald `saveDrawing()`/
+`loadDrawing()` aufgerufen wurde, während die Anfrage noch läuft. Ein Lesen
+im `.then()` hätte reproduzierbar die Zeichenkette `"null"` statt der
+tatsächlichen Klassen-ID geschrieben (im Live-Test gefunden und korrigiert,
+bevor AP-2.2 abgeschlossen wurde) — derselbe Grund, aus dem der bestehende
+`bgcolor`-Schlüssel bereits synchron erfasst wird.
+
+### Datenweg beim Export
+
+1. `assets/js/floating-pdf-button.js` (AP-2.4): Checkbox
+   `.cbd-pdf-drawings-check` im Export-Dialog, Default angehakt. Ihr Wert
+   geht als 4. Parameter `includeDrawings` an
+   `window.cbdPDFExportServerSide(containerBlocks, mode, quality,
+   includeDrawings)`.
+2. `assets/js/pdf-server-side.js` (AP-2.3): `includeDrawings` (Default
+   `true` bei `undefined` — bestehende Aufrufer ohne den Parameter, z. B.
+   die Apple-PDF-Weiche in `interactivity-store.js`, siehe Abschnitt
+   „Screenshot auf Apple-Geräten", verhalten sich dadurch unverändert wie
+   vor dieser Erweiterung) wird bis `processOneBlock()` durchgereicht und
+   umschließt dort sowohl den bestehenden Aufruf von
+   `injectDrawingsFromStorage()` (lokale Notizen) als auch den neuen
+   `injectServerDrawings()`/`applyServerDrawings()`. Letztere liest je
+   Container den Begleitschlüssel `cbd-board-<stableId>-classid` und lädt
+   darüber – **gebündelt, ein AJAX-Aufruf je eindeutiger `class_id`, nicht
+   je Container** (exportlaufweiter Cache `serverDrawingsCache`, da
+   `processOneBlock()` pro ausgewähltem Container einzeln läuft) – die
+   passenden Tafelbilder nach. Eingefügte Server-Bilder tragen im PDF das
+   Label „Tafelbild", lokale weiterhin „Eigene Notiz".
+3. `includes/class-cbd-classroom.php` (AP-2.1): neuer AJAX-Handler
+   `ajax_get_page_drawings()` (Action `cbd_get_page_drawings`) liefert für
+   eine `page_id` + `class_id` **alle** serverseitig gespeicherten
+   Tafelbilder der Seite in einem einzigen Aufruf (Bulk statt eines
+   Requests je Container — vermeidet N+1 bei Seiten mit vielen
+   Containern). **Sicherheitskritisch:** `can_access_class($class_id)` wird
+   nachweislich **vor** jeder Datenabfrage geprüft, zusätzlich zu Nonce
+   (`cbd_classroom_nonce`) und Capability `cbd_edit_blocks` — dasselbe
+   Muster wie die bestehende `ajax_load_drawing()`, bewusst **nicht** das
+   Token-Modell von `ajax_get_page_classroom_data()` (Schüler-Sitzungen),
+   da eine exportierende Lehrperson regulär angemeldet ist. Container ohne
+   Zeichnung (`drawing_data IS NULL`) werden serverseitig gefiltert.
+
+### Der Zusatzfund: zwei `cbdPDFData`-Localize-Stellen
+
+`cbdPDFData` wird an **zwei unabhängigen** Stellen lokalisiert:
+`class-cbd-classroom.php` (nur auf Seiten mit `[cbd_classroom]`-Shortcode,
+enthält `pageId`/`classroomNonce`) und `class-cbd-block-registration.php`
+(der Normalfall — jede gewöhnliche Seite mit Container-Block, ohne
+Klassen-Shortcode; liefert dort nur `ajaxurl`/`resturl`/`nonce`/`restnonce`,
+**kein** `pageId`/`classroomNonce`). Ohne Gegenmaßnahme lief
+`injectServerDrawings()` auf einer gewöhnlichen Seite mit `page_id: 0` und
+leerem Nonce gegen HTTP 403. Da `class-cbd-block-registration.php` außerhalb
+des AP-Scopes lag, liest `pdf-server-side.js` stattdessen mit Rückfall:
+`cbdPDFData.pageId || window.cbdClassroomData.pageId` (analog für den
+Nonce) — `window.cbdClassroomData` wird bereits unverändert von
+`class-cbd-block-registration.php` im `wp_footer` gesetzt, sobald
+`cbd_edit_blocks` + eingeloggt.
+
+### Bekannte, bewusst akzeptierte Einschränkungen
+
+1. **Ein Container mit Tafelbildern für MEHRERE Klassen exportiert nur die
+   zuletzt genutzte Klassen-Zuordnung.** Der `-classid`-Begleitschlüssel
+   hält je Container nur einen einzigen, zuletzt geschriebenen Wert — nicht
+   eine Historie aller je genutzten Klassen. Wurde ein Container also
+   nacheinander mit Tafelbildern für Klasse A und Klasse B bespielt, zeigt
+   der Schlüssel nur noch auf B; ein PDF-Export liefert dann ausschließlich
+   das Tafelbild der zuletzt aktiven Klasse, auch wenn für A weiterhin eins
+   in der Datenbank liegt. Dieses Risiko steht bewusst akzeptiert im
+   Risiko-Register des Plans (Abschnitt 5): kein Datenverlust, nur ein im
+   Einzelfall fehlendes/falsches Bild im PDF, kein Absturz. Eine Historie
+   je Klasse wäre eine deutlich größere Änderung (mehrere Begleitschlüssel
+   oder ein Objekt-Wert) und war nicht Ziel dieses Vorhabens.
+2. **Der `-classid`-Begleitschlüssel deckt nur die Hauptseite (Seite 0)
+   eines Containers ab, nicht `:pN`-Zusatzseiten mehrseitiger Tafelbilder**
+   (Format `<stableId>:pN`, siehe `zerlege_container_id()` in
+   `class-cbd-classroom.php`). `board-mode.js` schreibt den Schlüssel unter
+   `pageContainerId` (`getPageContainerId()`), `pdf-server-side.js` liest
+   ihn aber nur unter dem reinen `stableId`. In der Praxis unkritisch, da
+   Seite 0 eines mehrseitigen Tafelbilds immer zuerst bespielt wird; ist bei
+   einem Container ausschließlich eine Zusatzseite bespielt, fehlt der
+   Begleitschlüssel und es wird kein Server-Tafelbild eingefügt (bereits in
+   der AP-2.2-Übergabenotiz dokumentierte Grenze). Ein künftiges AP, das
+   alle Seiten abdecken will, müsste zusätzlich nach `:pN`-Suffix-Schlüsseln
+   suchen.
+3. **Fehlender visueller Ende-zu-Ende-Test einer echten PDF-Datei.** Kein
+   Arbeitspaket dieser Phase (weder AP-2.3 noch AP-2.4 noch das
+   abschließende Review AP-2.rev) hat eine tatsächlich vom mPDF-Server
+   erzeugte PDF-Datei geöffnet und darin beide Bildtypen (lokale Notiz UND
+   serverseitiges Tafelbild) visuell bestätigt — geprüft wurde ausschließlich
+   auf Payload- bzw. Mock-Ebene (u. a. Zahl und Ziel der AJAX-Aufrufe,
+   `includeDrawings`-Verzweigung, Aufrufsignaturen). Das gilt als bekannte,
+   **niedrig-riskante** Lücke, **kein Code-Fehler**: Der Injektionsmechanismus
+   ist identisch zum bereits produktiven lokalen Notizen-Pfad, und die
+   mPDF-Erzeugungsstufe selbst wurde durch dieses Vorhaben nicht angefasst.
+   Empfehlung für ein künftiges AP: einen echten Export mit beiden
+   Bildquellen auslösen und die erzeugte PDF-Datei öffnen.
+
 ## Debugging-Konventionen
 
 - **PHP:** Informations-Logs laufen über klasseneigene `debug_log()`-Helper

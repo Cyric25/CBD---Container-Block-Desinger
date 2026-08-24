@@ -1574,6 +1574,14 @@
             var self = this;
             this._setSaveStatus('Lade...');
 
+            // Begleitschlüssel für den PDF-Export: Schlüsselname UND Wert JETZT festhalten,
+            // nicht erst im .then()-Zweig. close() setzt this.classId/this.stableContainerId
+            // synchron auf null zurück, während die Anfrage noch läuft – ein späteres
+            // Auslesen ergäbe die Zeichenkette "null". Dieselbe Vorsichtsmaßnahme wie beim
+            // bestehenden bgcolor-Begleitschlüssel, der ebenfalls vor dem fetch gebildet wird.
+            var classIdKey = 'cbd-board-' + (pageContainerId || this.stableContainerId) + '-classid';
+            var classIdWert = String(this.classId);
+
             var formData = new FormData();
             formData.append('action', 'cbd_load_drawing');
             formData.append('nonce', this.nonce);
@@ -1596,6 +1604,11 @@
                             self.setBoardColor(savedBgColor);
                         }
                     } catch (e) { /* Ignorieren */ }
+
+                    // Klassen-Zuordnung als Begleitschlüssel merken (für den PDF-Export)
+                    try {
+                        localStorage.setItem(classIdKey, classIdWert);
+                    } catch (e) { /* Ignorieren, wie beim bestehenden bgcolor-Begleitschlüssel */ }
 
                     var img = new Image();
                     img.onload = function() {
@@ -1653,6 +1666,14 @@
                 }
             } catch (e) { /* Ignorieren */ }
 
+            // Begleitschlüssel für den PDF-Export: Schlüsselname UND Wert JETZT festhalten,
+            // nicht erst im .then()-Zweig. close() ruft saveDrawing() auf und setzt
+            // this.classId/this.stableContainerId unmittelbar danach synchron auf null –
+            // die Antwort trifft erst später ein, ein Auslesen dort ergäbe die Zeichenkette
+            // "null" statt der Klassen-ID. Gemessen beim Live-Test zu AP-2.2.
+            var classIdKey = 'cbd-board-' + (pageContainerId || this.stableContainerId) + '-classid';
+            var classIdWert = String(this.classId);
+
             var formData = new FormData();
             formData.append('action', 'cbd_save_drawing');
             formData.append('nonce', this.nonce);
@@ -1670,6 +1691,15 @@
                 self.isSaving = false;
                 if (data.success) {
                     self._setSaveStatus('Gespeichert');
+
+                    // Klassen-Zuordnung als Begleitschlüssel merken (für den PDF-Export).
+                    // Bewusst AUCH bei leerem Canvas (isBlank) gesetzt: Der Export soll
+                    // wissen, welcher Klasse dieser Container zuletzt zugeordnet war;
+                    // die Bulk-Abfrage liefert für einen gelöschten Eintrag ohnehin nichts.
+                    try {
+                        localStorage.setItem(classIdKey, classIdWert);
+                    } catch (e) { /* Ignorieren, wie beim bestehenden bgcolor-Begleitschlüssel */ }
+
                     // Einmalig als "behandelt" markieren wenn noch nicht geschehen
                     if (!self.isBehandeltSet) {
                         self.isBehandeltSet = true;
