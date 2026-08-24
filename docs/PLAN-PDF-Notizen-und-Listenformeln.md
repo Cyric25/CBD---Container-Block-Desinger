@@ -1741,12 +1741,12 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.4 | Weitere Blocktypen prüfen | sonnet | ☑ | AP-1.2, AP-1.3 | inhaltlich bereits durch AP-1.1 erledigt (12 Formeln über 8 Blocktypen + Negativkontrolle gemessen, alle bestanden) — kein eigener Agentenlauf nötig |
 | AP-1.rev | Review Phase 1 | opus | ☑ | AP-1.1–1.4 | Umplanung bestätigt (unabhängig nachgemessen), ABER kritischer Fund B1: einziges Basis-ZIP enthält noch den alten, kaputten CSS-Stand → AP-1.fix1 |
 | AP-1.fix1 | Basis-ZIP mit korrigiertem blocks.css neu bauen | sonnet | ☑ | AP-1.rev | CSS-Inhalt verifiziert korrekt; Subagent baute im isolierten Worktree ohne vendor/-Verzeichnis (ChemViz-Libs fehlten, 49 KB statt 1,25 MB) — Orchestrator hat das ZIP danach im Hauptverzeichnis (vendor/ dort lokal vorhanden) korrekt neu gebaut, 1,25 MB, vendor/ + korrektes CSS bestätigt |
-| AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.fix1 | |
+| AP-1.doc | Doku Phase 1 | sonnet | ◐ | AP-1.fix1 | gestartet als Subagent |
 | AP-2.1 | Bulk-Endpoint Tafelbilder | opus | ☑ | – | 37/37 Live-Prüfungen bestanden inkl. Negativtest; Testklasse 17 („Test neu") existiert bereits für Folge-APs |
 | AP-2.2 | Klassen-Zuordnung in board-mode.js | opus | ☑ | – | Race-Condition im Plan-Codebeispiel live gefunden+korrigiert (Werte synchron vor fetch erfassen, wie beim bestehenden bgcolor-Schlüssel); Hinweis für AP-2.3: Begleitschlüssel deckt nur Seite 0 ab, nicht `:pN`-Zusatzseiten |
 | AP-2.3 | Server-Tafelbilder in pdf-server-side.js | sonnet | ☑ | – | Wichtiger Zusatzfund: zweite, unbehandelte cbdPDFData-Localize-Stelle in class-cbd-block-registration.php (Normalfall ohne Klassen-Shortcode) — per Client-Fallback auf window.cbdClassroomData gelöst, siehe Übergabenotiz |
 | AP-2.4 | Checkbox im PDF-Dialog | sonnet | ☑ | – | Vertrag (Parametername/Reihenfolge) exakt eingehalten; E2E-Bildtest steht noch aus (braucht AP-2.3) |
-| AP-2.rev | Review Phase 2 | opus | ☐ | AP-2.1–2.4 | |
+| AP-2.rev | Review Phase 2 | opus | ◐ | AP-2.1–2.4 | gestartet als Subagent |
 | AP-2.doc | Doku Phase 2 | sonnet | ☐ | AP-2.rev | |
 
 ## 9. Testprotokoll
