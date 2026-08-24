@@ -719,15 +719,6 @@ Stufe).
 | Positionierte Icons (alt, **wirkungslos**) | `cbd-frontend-clean.css` | `.cbd-icon`, `.cbd-icon-inside` | 24px, Dashicons 18px — Erzeuger `render_features()` ist seit Langem auskommentiert, matcht nichts |
 | Icon-Position, Container-Ecke (seit 3.1.89) | `cbd-frontend-clean.css` | `.cbd-header-icon.cbd-icon-positioned`, `.cbd-icon-at-top-left` u. a. | Grundabstand 10px je Ecke; Feinversatz über `--cbd-icon-dx`/`--cbd-icon-dy` — Details im Abschnitt „Icon-Position: Kopfzeile oder Container-Ecke" |
 
-### Tote Dateien — nicht anfassen
-
-`assets/css/frontend-positioning.css`, `assets/css/unified-frontend.css` und
-`assets/css/frontend.css` sind in **keinem** `wp_enqueue_style()` referenziert
-(geprüft über alle `*.php`). Sie enthalten trotzdem `.cbd-header-icon
-.dashicons { font-size: 18px }` (unified-frontend.css:157) und
-`.cbd-container-icon.cbd-positioned { width: 32px }`
-(frontend-positioning.css:28) — reine Attrappen.
-
 ### Jede Bibliothek wird anders groß
 
 `CBD_Block_Registration::render_icon()` (Zeile ~2005) erzeugt je nach Typ
