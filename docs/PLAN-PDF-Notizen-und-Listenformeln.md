@@ -689,7 +689,7 @@ Phase 1 bringen.
 
 #### AP-2.1: Bulk-Endpoint für serverseitige Seiten-Tafelbilder
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** opus (sicherheitsrelevanter Code – Zugriffsprüfung auf fremde
 Klassendaten)
@@ -800,7 +800,54 @@ Datei): Nonce `cbd_classroom_nonce`, Capability `cbd_edit_blocks`, plus
   löschen (Test-Klasse selbst kann für AP-2.rev/AP-2.4 stehen bleiben,
   falls in der Übergabenotiz vermerkt).
 
+  **Ergebnis:** 37/37 Prüfungen bestanden, darunter alle fünf
+  Akzeptanzkriterien, drei Nonce-Varianten (fehlend/falsch/fremde Aktion),
+  Parameter-Abwehr und der Capability-Zweig. Der Negativtest lief
+  gezielt gegen eine eigens angelegte, echte Fremdklasse (id 18) mit
+  echten Zeichnungen auf derselben Seite (nicht nur eine nicht-existente
+  ID) — Ergebnis „Klasse nicht gefunden.", kein `drawings`-Schlüssel in
+  der Antwort; Gegenprobe mit der eigenen Klasse auf derselben Seite
+  lieferte weiterhin Daten. Testklasse 18 und alle Testzeilen danach
+  vollständig entfernt (Tabellenstände identisch zum Ausgangszustand).
+
 **Übergabenotiz:**
+
+Neuer AJAX-Handler `cbd_get_page_drawings` in
+`includes/class-cbd-classroom.php`: Hook-Registrierung hinter
+`wp_ajax_cbd_load_drawing` (Zeile 76), Methode `ajax_get_page_drawings()`
+direkt hinter `ajax_load_drawing()` (ab Zeile 502) — zeichengleich zum
+Codebeispiel oben, nur Docblock + 2 Kommentare ergänzt. Keine andere Datei
+berührt (64 neue Zeilen, 0 entfernt).
+
+**Vertrag für AP-2.3 (live bestätigt):** Action `cbd_get_page_drawings`,
+POST-Felder `nonce` (Aktion `cbd_classroom_nonce`), `class_id`, `page_id`.
+Erfolg: `{"success":true,"data":{"drawings":[{"container_id":"…",
+"drawing_data":"…"}, …]}}` — flaches Array, leer bei keinen Treffern.
+Fehler: `{"success":false,"data":{"message":"…"}}`. **Wichtig für AP-2.3:**
+Bei ungültigem Nonce bricht `check_ajax_referer` mit HTTP 403 und LEEREM
+Rumpf ab (kein JSON) — das muss der Client separat behandeln (kann nicht
+blind `response.data.message` lesen).
+
+Container ohne Zeichnung (`drawing_data IS NULL`, entsteht beim Leeren des
+Canvas — Zeile bleibt bestehen) werden per `AND drawing_data IS NOT NULL`
+gefiltert.
+
+**Für Folge-APs:** Testklasse **`class_id = 17` („Test neu", `teacher_id =
+1` = Nutzer `huber`)** existiert bereits auf dem Testserver und kann direkt
+verwendet werden — keine neue Klasse nötig. Achtung bei künftigen
+Negativtests: Nutzer 1 ist auf die Klassen 15, 16, 12, 13, 14 abonniert,
+`can_access_class()` liefert dort `true` — eine wirklich „fremde" Klasse
+muss eigens angelegt und danach wieder entfernt werden. Die geänderte
+Datei liegt bereits auf dem Testserver, hashgleich mit dem Commit.
+
+Außerhalb des Scope aufgefallen, nicht umgesetzt: `ajax_get_page_
+classroom_data()` (Schüler-Pfad) liefert weiterhin auch Zeilen mit
+`drawing_data = NULL` und filtert erst clientseitig — bestehendes,
+funktionierendes Verhalten, bewusst nicht angefasst.
+
+Git: Branch `ap-2.1-bulk-endpoint` (Commit `eeb0112`), gemerged nach
+`phase-2-pdf-tafelbilder` (Merge-Commit `10af425`) und zu `origin`
+gepusht.
 
 ---
 
@@ -1015,7 +1062,7 @@ einfügt.
 
 #### AP-2.4: Checkbox im PDF-Export-Dialog
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** S
 **Modell:** sonnet (mechanische UI-Ergänzung nach bestehendem Muster)
 **Abhängigkeiten:** keine (Vertrag – Parametername `includeDrawings`,
@@ -1072,14 +1119,40 @@ von `window.cbdPDFExportServerSide()` durchgereicht.
 - [ ] Kein hartcodierter Hex-Wert im neuen CSS.
 
 **Tests:**
-- Smoke-Test: `node --check assets/js/floating-pdf-button.js`.
-- Prüfschritt: Auf der Testseite aus AP-2.3 den PDF-Export-Dialog öffnen
-  (Auswahlmodus starten), Checkbox sichtbar und standardmäßig angehakt
-  prüfen, Export einmal mit und einmal ohne Häkchen auslösen, beide
-  erzeugten PDFs auf An-/Abwesenheit der Bilder prüfen (End-to-End-Test der
-  gesamten Phase-2-Kette).
+- Smoke-Test: `node --check assets/js/floating-pdf-button.js` → bestanden,
+  keine Syntaxfehler.
+- Prüfschritt (live, `fos.localhost:8080`, Seite „Reinstoffe und Gemische",
+  30 Container, Auswahlmodus über den regulären FAB, kein `wp-admin`-Login
+  nötig): Checkbox erscheint korrekt zwischen `<select class="cbd-pdf-mode-
+  sel">` und `.cbd-pdf-go`, standardmäßig angehakt. Da AP-2.3 zu diesem
+  Zeitpunkt noch nicht existierte, wurde `window.cbdPDFExportServerSide`
+  testweise durch eine Log-Funktion ersetzt: Klick auf „PDF erstellen" bei
+  angehaktem Kästchen ruft mit `includeDrawings === true` auf, bei
+  abgehaktem mit `includeDrawings === false`; `quality` bleibt `undefined`.
+  Der vollständige End-to-End-Test mit echten Bildern im PDF steht noch aus
+  und wird nach AP-2.3 nachgeholt (Teil von AP-2.rev).
 
 **Übergabenotiz:**
+
+Umgesetzt exakt nach dem in Abschnitt 4 festgelegten Vertrag
+(`window.cbdPDFExportServerSide(containerBlocks, mode, quality,
+includeDrawings)`). Änderung ausschließlich in
+`assets/js/floating-pdf-button.js`: Checkbox `.cbd-pdf-drawings-check` in
+einem `.cbd-pdf-drawings-toggle`-Label, Default `checked`. Klick-Handler von
+`.cbd-pdf-go` liest `is(':checked')` und reicht den Wert über
+`startPDFExport(selectedBlocks, mode, includeDrawings)` an
+`window.cbdPDFExportServerSide(selectedBlocks, mode, undefined,
+includeDrawings)` weiter. CSS ausschließlich über die vorhandene Variable
+`colorOnAccent`, kein neuer Hex-Wert.
+
+**Für AP-2.rev relevant:** Parametername (`includeDrawings`), Reihenfolge
+und Checkbox-Klasse (`cbd-pdf-drawings-check`) sind exakt wie in Abschnitt 4
+vorgegeben – bei der Prüfung von AP-2.3 gegen genau diese Signatur
+abgleichen. Ein echter Bild-Vergleich im erzeugten PDF steht noch aus.
+
+Git: Branch `ap-2.4-checkbox-pdf-dialog` (Commit `4d9a253`), gemerged nach
+`phase-2-pdf-tafelbilder` (Merge-Commit `483ae20`) und zu `origin`
+gepusht.
 
 ---
 
@@ -1211,10 +1284,10 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.4 | Weitere Blocktypen prüfen | sonnet | ☐ | AP-1.2, AP-1.3 | |
 | AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1–1.4 | |
 | AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev | |
-| AP-2.1 | Bulk-Endpoint Tafelbilder | opus | ◐ | – | gestartet als Subagent |
+| AP-2.1 | Bulk-Endpoint Tafelbilder | opus | ☑ | – | 37/37 Live-Prüfungen bestanden inkl. Negativtest; Testklasse 17 („Test neu") existiert bereits für Folge-APs |
 | AP-2.2 | Klassen-Zuordnung in board-mode.js | opus | ◐ | – | gestartet als Subagent |
-| AP-2.3 | Server-Tafelbilder in pdf-server-side.js | sonnet | ☐ | – | wartet auf AP-2.1 (gleiche Datei class-cbd-classroom.php, Orchestrator serialisiert) |
-| AP-2.4 | Checkbox im PDF-Dialog | sonnet | ◐ | – | gestartet als Subagent |
+| AP-2.3 | Server-Tafelbilder in pdf-server-side.js | sonnet | ◐ | – | AP-2.1 fertig, gestartet als Subagent |
+| AP-2.4 | Checkbox im PDF-Dialog | sonnet | ☑ | – | Vertrag (Parametername/Reihenfolge) exakt eingehalten; E2E-Bildtest steht noch aus (braucht AP-2.3) |
 | AP-2.rev | Review Phase 2 | opus | ☐ | AP-2.1–2.4 | |
 | AP-2.doc | Doku Phase 2 | sonnet | ☐ | AP-2.rev | |
 
@@ -1225,7 +1298,8 @@ und pro Phasenabschluss.
 
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
-| | | | | |
+| 2026-08-24 | AP-2.4 | `node --check`; Live auf `fos.localhost:8080` (Seite „Reinstoffe und Gemische"): Checkbox-Position/Default, Aufrufargumente von `window.cbdPDFExportServerSide` per Mock geprüft (an/aus) | bestanden – Vertrag exakt eingehalten; echter Bild-Vergleich im PDF steht bis AP-2.3 noch aus | Subagent (sonnet) |
+| 2026-08-24 | AP-2.1 | `php -l` + `tools/check-php74.php` (569 Dateien PHP-7.4-kompatibel); Live über temporäres Webroot-Testskript: 37 Einzelprüfungen (Erfolgsfall mit 2 Containern, 3 Nonce-Varianten, Parameter-Abwehr, Capability-Zweig, NULL-Filterung, sicherheitskritischer Negativtest gegen echte Fremdklasse 18 samt Gegenprobe) | bestanden – alle 37 Prüfungen grün, Testdaten rückstandsfrei entfernt | Subagent (opus) |
 
 ## 10. Dokumentation
 
