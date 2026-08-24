@@ -33,6 +33,16 @@
         var colorDanger = rootStyles.getPropertyValue('--color-danger').trim() || '#cc3333';
         var colorBackground = rootStyles.getPropertyValue('--color-background').trim() || '#ffffff';
         var colorTextPrimary = rootStyles.getPropertyValue('--color-text-primary').trim() || '#333333';
+        // AP-2.4: Text/Icon-Farbe AUF der orangen Verlaufsflaeche (FAB, Werkzeugleiste,
+        // Badges, der bewusst flache ".cbd-pdf-go"-Knopf) darf NICHT an --color-background
+        // haengen - die wird im Darkmode dunkel (#121212, siehe Theme/style.css
+        // :root[data-theme="dark"]), waehrend die orange Flaeche selbst unveraendert bleibt
+        // (AP-1.1). Vorher fiel dieser Text dadurch im Darkmode fast schwarz auf orange
+        // (Kontrast bricht in den dunkleren Verlaufsbereichen auf ~3:1, unter WCAG AA).
+        // --color-text-on-accent ist genau fuer diesen Fall gedacht: bleibt in beiden Modi
+        // #ffffff, weil die Akzentflaeche selbst in beiden Modi derselbe Orangeton bleibt
+        // (Theme/style.css, dieselbe Variable, siehe PLAN-Darkmode-Umschaltung.md AP-1.1).
+        var colorOnAccent = rootStyles.getPropertyValue('--color-text-on-accent').trim() || '#ffffff';
 
         // State
         var $containerBlocks = null;
@@ -78,7 +88,7 @@
             // statt einfarbig. So ueberlebt die Farbe als Rueckfall.
             backgroundColor: themeColor,
             backgroundImage: plasticBackground(themeColor, plasticDark),
-            color: colorBackground,
+            color: colorOnAccent,
             textShadow: '0 1px 2px rgba(0,0,0,.35)',
             borderRadius: '12px',
             padding: '15px',
@@ -151,7 +161,7 @@
                   'position:fixed;top:0;left:0;right:0;z-index:999999;' +
                   'background-color:' + themeColor + ';' +
                   'background-image:' + plasticBackground(themeColor, plasticDark) + ';' +
-                  'color:' + colorBackground + ';text-shadow:0 1px 2px rgba(0,0,0,.35);' +
+                  'color:' + colorOnAccent + ';text-shadow:0 1px 2px rgba(0,0,0,.35);' +
                   'padding:10px 20px;display:flex;align-items:center;' +
                   'gap:10px;flex-wrap:wrap;font-size:14px;' +
                   'box-shadow:' +
@@ -173,17 +183,17 @@
                 '.cbd-pdf-toolbar button{' +
                   'padding:6px 14px;border:2px solid rgba(255,255,255,.6);' +
                   'border-radius:6px;cursor:pointer;font-size:13px;' +
-                  'background:transparent;color:' + colorBackground + ';transition:all .15s;white-space:nowrap' +
+                  'background:transparent;color:' + colorOnAccent + ';transition:all .15s;white-space:nowrap' +
                 '}' +
-                '.cbd-pdf-toolbar button:hover{background:rgba(255,255,255,.2);border-color:' + colorBackground + '}' +
+                '.cbd-pdf-toolbar button:hover{background:rgba(255,255,255,.2);border-color:' + colorOnAccent + '}' +
                 '.cbd-pdf-toolbar button.cbd-pdf-go{' +
-                  'background:' + colorBackground + ';color:' + themeColor + ';font-weight:700;border-color:' + colorBackground + '' +
+                  'background:' + colorOnAccent + ';color:' + themeColor + ';font-weight:700;border-color:' + colorOnAccent + '' +
                 '}' +
                 '.cbd-pdf-toolbar button.cbd-pdf-go:hover{background:' + themeColorLight + '}' +
 
                 '.cbd-pdf-toolbar select{' +
                   'padding:6px 10px;border:2px solid rgba(255,255,255,.6);' +
-                  'border-radius:6px;background:transparent;color:' + colorBackground + ';' +
+                  'border-radius:6px;background:transparent;color:' + colorOnAccent + ';' +
                   'font-size:13px;cursor:pointer' +
                 '}' +
                 '.cbd-pdf-toolbar select option{background:' + colorBackground + ';color:' + colorTextPrimary + '}' +
@@ -210,7 +220,7 @@
                   'position:absolute;top:-12px;right:-12px;z-index:100000;' +
                   'width:32px;height:32px;border-radius:50%;' +
                   'display:flex;align-items:center;justify-content:center;' +
-                  'font-size:18px;font-weight:700;color:' + colorBackground + ';' +
+                  'font-size:18px;font-weight:700;color:' + colorOnAccent + ';' +
                   'box-shadow:0 2px 8px rgba(0,0,0,.4);pointer-events:none' +
                 '}' +
                 '.cbd-pdf-badge-on{background:' + colorSuccess + '}' +
@@ -295,7 +305,7 @@
                     justifyContent: 'center',
                     fontSize: '18px',
                     fontWeight: '700',
-                    color: colorBackground,
+                    color: colorOnAccent,
                     background: colorSuccess,
                     boxShadow: '0 2px 8px rgba(0,0,0,.4)',
                     pointerEvents: 'none'
