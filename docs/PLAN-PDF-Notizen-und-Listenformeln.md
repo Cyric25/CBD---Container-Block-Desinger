@@ -278,7 +278,7 @@ Jede Phase endet mit `AP-<N>.rev` (unabhängiges Review) und `AP-<N>.doc`
 
 #### AP-1.1: Live-Diagnose der Farbkette (Formel in Liste vs. Absatz)
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** opus (Ursachenanalyse, kein vorgezeichneter Lösungsweg)
 **Abhängigkeiten:** keine
@@ -365,11 +365,66 @@ zwingend verändert werden.
 
 **Übergabenotiz:**
 
+**ÜBERRASCHENDES ERGEBNIS — Umplanung nötig (Regel 20):** Der gemeldete
+Fehler ist auf dem aktuellen Stand beider Repositories **nicht
+reproduzierbar** — weder in Listen noch in Absätzen, in keinem von 12
+gemessenen Formelvorkommen über 8 Blocktypen (zusätzlich auf einer echten
+Produktivseite mit 22 Formeln bestätigt). Der Fehler ist identisch mit
+einem bereits behobenen Befund: `AP-1.fix1` aus
+`docs/PLAN-Vier-Erweiterungen.md`, behoben am 2026-08-16 mit Commit
+`b854060` im Repo „Eigene WP Blocks". Ursache lag in
+`assets/css/blocks.css` (weit gefasster Selektor `[class*="content"]`
+überschrieb `.cbd-latex-content`s `color: inherit`), **nicht** in
+`blocks/accordion/style.css` — die dortige Tag-Aufzählung (Zeilen 235-244)
+war nie die Ursache und deckt `li` bereits korrekt ab.
+
+**Der im AP-1.1-Text vermutete Unterschied „Liste kaputt, Absatz in
+Ordnung" besteht nicht:** Im rekonstruierten Fehlerzustand sind Absatz UND
+Listenpunkt gleichermaßen betroffen — nur die Formel selbst wird weiß,
+nicht ihr umgebender Text. Die Wahrnehmung „nur in Listen" erklärt sich
+vermutlich daraus, dass eine fehlende Formel in einem kurzen Listenpunkt
+auffälliger wirkt als in einem Fließtext-Absatz.
+
+**Warum der Fehler beim Nutzer trotzdem noch auftreten kann:**
+`assets/css/blocks.css` liegt in der Plugin-BASIS von „Eigene WP Blocks",
+nicht in einem einzelnen Block-ZIP. Die Projekt-Ausrollkonvention sieht vor,
+im Regelbetrieb nur Block-ZIPs zu aktualisieren; eine Installation, die seit
+dem 2026-08-16 `accordion.zip` aber keine neue Plugin-Basis erhalten hat,
+liefert weiterhin den alten, fehlerhaften `blocks.css`-Stand aus — sichtbar
+bei jedem Besucher mit dunklem Systemdesign, unabhängig vom Theme-Umschalter
+der Seite. **Das ist mit hoher Wahrscheinlichkeit die eigentliche Ursache
+der Nutzermeldung — ein Deployment-Rückstand, kein Code-Fehler.**
+
+Vollständiger Bericht mit allen Messwerten, Farbketten und der
+Fehler-Rekonstruktion:
+`Plugins/CDB-Designer/docs/diagnose-latex-listen-2026-08-24.md`.
+
+**Empfehlung, umgesetzt in AP-1.2/AP-1.3/AP-1.4 (siehe dort):** Beide
+geplanten Code-Fixes entfallen, da kein Fehler im Quellstand vorliegt.
+AP-1.4s Prüfprotokoll ist durch die 12 hier gemessenen Fälle bereits
+erfüllt. Empfohlene tatsächliche Handlung liegt außerhalb des
+Code-Scopes dieses Plans: Redeploy der Plugin-Basis „Eigene WP Blocks" auf
+der Produktivinstallation (siehe Bericht, Abschnitt 6.2, inkl.
+Verifikations-Snippet für die Browser-Konsole). Der Orchestrator hat dies
+dem Nutzer gemeldet, statt eigenmächtig auf der Produktivseite zu deployen.
+
+Der in Abschnitt 4 vorgeschlagene Wrapper-Grundfarbe-Ansatz passt laut
+Bericht (Abschnitt 6.3) **nicht** zur gemessenen Ursache: Die Vererbung
+wäre im Fehlerfall ohnehin unterbrochen, weil `.cbd-latex-content` eine
+eigene, direkte Farbzuweisung von `blocks.css` bekommt — eine geerbte
+Wrapper-Farbe verliert grundsätzlich gegen jede direkte Zuweisung am
+Element selbst.
+
+Git: Branch `ap-1.1-diagnose-formelfarbe` (Commit `7121767`), gemerged nach
+`phase-1-latex-listen` (neuer Branch, Basis `main`, Merge-Commit `4a188e8`)
+und zu `origin` gepusht. Testseite 5595 auf dem Testserver bleibt bestehen
+(Grundlage für etwaige Nachprüfungen).
+
 ---
 
 #### AP-1.2: CSS-Fix in `blocks/accordion/style.css`
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (entfällt)
 **Umfang:** S
 **Modell:** opus (Architekturentscheidung: Wrapper-Grundfarbe bestätigen
 oder begründet verwerfen, siehe Abschnitt 4)
@@ -445,11 +500,25 @@ begründen.
 
 **Übergabenotiz:**
 
+**Entfällt** — Diagnosebericht AP-1.1
+(`docs/diagnose-latex-listen-2026-08-24.md`, Abschnitt 6.1) weist
+nach: `blocks/accordion/style.css` enthält keinen Fehler. Die
+Tag-Aufzählung `style.css:235-244` deckt `li` bereits ab, gewinnt in
+beiden Fällen (Liste und Absatz), ihr gemessener Wert ist korrekt
+(`rgb(51,51,51)`). Ein Fix hier würde ein Symptom behandeln, das an dieser
+Stelle nicht entsteht — die tatsächliche Ursache lag in
+`assets/css/blocks.css` (Repo „Eigene WP Blocks") und ist dort bereits seit
+2026-08-16 behoben (Commit `b854060`). Kein Commit in diesem AP. Der
+Wrapper-Grundfarbe-Ansatz aus Abschnitt 4 wurde geprüft und als zur
+Ursache nicht passend verworfen (AP-1.1-Bericht, Abschnitt 6.3) — er würde
+nichts beheben, weil die Vererbung im Fehlerfall bereits eine Ebene tiefer
+(direkte Zuweisung auf `.cbd-latex-content`) unterbrochen wäre.
+
 ---
 
 #### AP-1.3: Bedingter Fix in CDB-Designer (nur falls AP-1.1 das zeigt)
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (entfällt)
 **Umfang:** S
 **Modell:** opus (abhängig von Diagnosebefund, kein vorgezeichneter Weg)
 **Abhängigkeiten:** AP-1.1, AP-1.2
@@ -499,11 +568,21 @@ blocks/accordion/style.css (siehe AP-1.1/AP-1.2)".
 
 **Übergabenotiz:**
 
+**Entfällt** — Diagnosebericht AP-1.1, Abschnitt 6.4: In
+`assets/css/latex-formulas.css` und `includes/class-latex-parser.php`
+wurde kein Fehler gemessen. `.cbd-latex-content`s `color: inherit`
+(`latex-formulas.css:56,61`) ist genau richtig — es war das **Opfer** der
+fremden Regel aus `blocks.css`, nicht deren Ursache. Eine Härtung
+(`color: inherit !important`) wäre denkbar, aber laut Bericht bewusst
+nicht empfohlen (Wettrüsten mit `!important` widerspricht der bestehenden
+Projektkonvention, siehe Kommentar in `accordion/style.css:211-220`) — bei
+Bedarf ein eigenes AP mit eigener Abwägung. Kein Commit in diesem AP.
+
 ---
 
 #### AP-1.4: Weitere Gutenberg-Blocktypen im Accordion systematisch prüfen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (durch AP-1.1 miterledigt)
 **Umfang:** M
 **Modell:** sonnet (Prüfprotokoll ist unten vollständig vorgegeben, keine
 offene Designentscheidung)
@@ -525,20 +604,22 @@ der Nutzer/Orchestrator ein `AP-1.fix1` einplant.
   Testserver ergänzen.
 
 **Dateicheckliste (Blocktypen, je einzeln zu prüfen und abzuhaken):**
-- [ ] `core/quote` (Zitat) mit einer Formel im Zitattext
-- [ ] `core/table` (Tabelle) mit einer Formel in einer Tabellenzelle
-- [ ] `core/heading` (Überschrift, NICHT die Accordion-eigene Zeilenüberschrift)
-      mit einer Formel im Überschriftentext, innerhalb eines Panels
-- [ ] `core/columns`/`core/column` mit einer Formel in einer Spalte
-- [ ] verschachtelte Liste (`core/list` mit einer inneren `core/list`
-      als Unterpunkt) mit einer Formel im verschachtelten Listenpunkt
-- [ ] Bild-Unterschrift (`core/image` mit `Caption`) mit einer Formel im
-      Bildunterschrift-Text
-- [ ] Negativkontrolle `core/code`/`core/preformatted` mit dem Text
+- [x] `core/quote` (Zitat) mit einer Formel im Zitattext — erledigt via AP-1.1 (Fall 6)
+- [x] `core/table` (Tabelle) mit einer Formel in einer Tabellenzelle — erledigt via AP-1.1 (Fall 7)
+- [x] `core/heading` (Überschrift, NICHT die Accordion-eigene Zeilenüberschrift)
+      mit einer Formel im Überschriftentext, innerhalb eines Panels — erledigt via AP-1.1 (Fall 9, H4)
+- [x] `core/columns`/`core/column` mit einer Formel in einer Spalte — erledigt via AP-1.1 (Fall 10)
+- [x] verschachtelte Liste (`core/list` mit einer inneren `core/list`
+      als Unterpunkt) mit einer Formel im verschachtelten Listenpunkt — erledigt via AP-1.1 (Fall 2/3)
+- [x] Bild-Unterschrift (`core/image` mit `Caption`) mit einer Formel im
+      Bildunterschrift-Text — erledigt via AP-1.1 (Fall 8, `figcaption`)
+- [x] Negativkontrolle `core/code`/`core/preformatted` mit dem Text
       `\(x\)` – hier MUSS laut `class-latex-parser.php`
       (`KEIN_LATEX_BLOCK`) unverändert `\(x\)` als Text erscheinen, KEIN
       gerendertes LaTeX. Dieser Fall prüft, dass der Fix aus AP-1.2/AP-1.3
       die bewusste Ausnahme für Code-Blöcke nicht versehentlich aufhebt.
+      — erledigt via AP-1.1 (Negativkontrolle bestanden: kein
+      `.cbd-latex-formula`-Element entstanden, Text unverändert)
 
 **Vorgehen:**
 1. Für jeden Blocktyp der Dateicheckliste: im Accordion-Panel der
@@ -574,6 +655,22 @@ der Nutzer/Orchestrator ein `AP-1.fix1` einplant.
 - Die sieben Einzelprüfschritte aus dem Vorgehen SIND die Tests dieses APs.
 
 **Übergabenotiz:**
+
+**Umplanung (Regel 20):** Kein eigener Agentenlauf nötig. AP-1.1 hat auf der
+eigens angelegten Testseite (ID 5595) bereits 12 Formelvorkommen über 8
+Blocktypen gemessen — eine Obermenge dieser Dateicheckliste, inklusive
+verschachtelter und nummerierter Listen sowie Display-Formeln
+(`$$…$$`) in Absatz und Listenpunkt zusätzlich zu den hier geforderten
+sieben Fällen. Alle bestanden: `getComputedStyle` lieferte durchgehend
+`rgb(51, 51, 51)` (hell) bzw. `rgb(232, 232, 232)` (dunkel, korrekt
+gemeinsam mit der Fläche umgeschaltet), keine weiße/unsichtbare Formel.
+Die Negativkontrolle (`core/code`/`core/preformatted` mit `\(x\)`) bestand
+ebenfalls: kein `.cbd-latex-formula`-Element entstanden, Text unverändert.
+Zusätzlich auf einer echten Produktivseite (5422, 22 Formeln) bestätigt.
+Da kein Fix aus AP-1.2/AP-1.3 existiert, gibt es auch nichts, dessen
+Generalität AP-1.4 gesondert hätte nachweisen müssen — die Messung war
+ohnehin bereits eine Ist-Zustands-Prüfung. Vollständige Tabelle:
+`docs/diagnose-latex-listen-2026-08-24.md`, Abschnitt 2.
 
 ---
 
@@ -1330,11 +1427,11 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 
 | AP | Titel | Modell | Status | Abhängig von | Notiz |
 |---|---|---|---|---|---|
-| AP-1.1 | Live-Diagnose der Farbkette | opus | ◐ | – | gestartet als Subagent |
-| AP-1.2 | CSS-Fix in accordion/style.css | opus | ☐ | AP-1.1 | |
-| AP-1.3 | Bedingter Fix in CDB-Designer | opus | ☐ | AP-1.1, AP-1.2 | |
-| AP-1.4 | Weitere Blocktypen prüfen | sonnet | ☐ | AP-1.2, AP-1.3 | |
-| AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1–1.4 | |
+| AP-1.1 | Live-Diagnose der Farbkette | opus | ☑ | – | ÜBERRASCHENDER BEFUND: Fehler im Ist-Zustand nicht reproduzierbar, bereits am 2026-08-16 anderswo behoben (Commit b854060, blocks.css) — Ursache lag nicht in accordion/style.css |
+| AP-1.2 | CSS-Fix in accordion/style.css | opus | ☑ | AP-1.1 | entfällt lt. AP-1.1-Diagnose: kein Fehler in dieser Datei, nichts zu ändern |
+| AP-1.3 | Bedingter Fix in CDB-Designer | opus | ☑ | AP-1.1, AP-1.2 | entfällt lt. AP-1.1-Diagnose: kein Fehler in latex-formulas.css/class-latex-parser.php |
+| AP-1.4 | Weitere Blocktypen prüfen | sonnet | ☑ | AP-1.2, AP-1.3 | inhaltlich bereits durch AP-1.1 erledigt (12 Formeln über 8 Blocktypen + Negativkontrolle gemessen, alle bestanden) — kein eigener Agentenlauf nötig |
+| AP-1.rev | Review Phase 1 | opus | ◐ | AP-1.1–1.4 | gestartet als Subagent — prüft insbesondere, ob die Umplanung (AP-1.2/1.3 entfällt) tragfähig ist |
 | AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev | |
 | AP-2.1 | Bulk-Endpoint Tafelbilder | opus | ☑ | – | 37/37 Live-Prüfungen bestanden inkl. Negativtest; Testklasse 17 („Test neu") existiert bereits für Folge-APs |
 | AP-2.2 | Klassen-Zuordnung in board-mode.js | opus | ☑ | – | Race-Condition im Plan-Codebeispiel live gefunden+korrigiert (Werte synchron vor fetch erfassen, wie beim bestehenden bgcolor-Schlüssel); Hinweis für AP-2.3: Begleitschlüssel deckt nur Seite 0 ab, nicht `:pN`-Zusatzseiten |
@@ -1350,6 +1447,8 @@ und pro Phasenabschluss.
 
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
+| 2026-08-24 | AP-1.1 | Diagnoseskript `pruefung-formelfarbe.js` auf Testseite 5595 (12 Formeln, 8 Blocktypen) und Produktivseite 5422 (22 Formeln); Fehlerzustand vor Commit `b854060` zur Laufzeit rekonstruiert und erneut gemessen | Ist-Zustand fehlerfrei in allen 12+22 Fällen; Fehler im rekonstruierten Alt-Zustand reproduziert (11/12 Formeln weiß) und eindeutig auf `assets/css/blocks.css` zurückgeführt, nicht auf `blocks/accordion/style.css` | Subagent (opus) |
+| 2026-08-24 | AP-1.2/AP-1.3/AP-1.4 | Kein eigener Test nötig – Disposition „entfällt"/„durch AP-1.1 miterledigt" beruht vollständig auf den AP-1.1-Messungen | entfällt bzw. bereits erfüllt, siehe jeweilige Übergabenotiz | Orchestrator (auf Basis AP-1.1) |
 | 2026-08-24 | AP-2.4 | `node --check`; Live auf `fos.localhost:8080` (Seite „Reinstoffe und Gemische"): Checkbox-Position/Default, Aufrufargumente von `window.cbdPDFExportServerSide` per Mock geprüft (an/aus) | bestanden – Vertrag exakt eingehalten; echter Bild-Vergleich im PDF steht bis AP-2.3 noch aus | Subagent (sonnet) |
 | 2026-08-24 | AP-2.1 | `php -l` + `tools/check-php74.php` (569 Dateien PHP-7.4-kompatibel); Live über temporäres Webroot-Testskript: 37 Einzelprüfungen (Erfolgsfall mit 2 Containern, 3 Nonce-Varianten, Parameter-Abwehr, Capability-Zweig, NULL-Filterung, sicherheitskritischer Negativtest gegen echte Fremdklasse 18 samt Gegenprobe) | bestanden – alle 37 Prüfungen grün, Testdaten rückstandsfrei entfernt | Subagent (opus) |
 | 2026-08-24 | AP-2.2 | `node --check`; Live auf `fos.localhost:8080` (Seite 368, Klasse 15 „5BT1", 2 echte Container): saveToServer/loadFromServer schreiben korrekten `-classid`-Schlüssel, lokaler Modus schreibt keinen, `localStorage.setItem` global auf Exception gepatcht → kein Konsolenfehler | bestanden NACH Korrektur einer im Plan-Codebeispiel enthaltenen Race Condition (Werte synchron vor `fetch` erfasst, wie beim bestehenden bgcolor-Muster) – vorher hätte das Beispiel `"null"` statt der Klassen-ID geschrieben | Subagent (opus) |
