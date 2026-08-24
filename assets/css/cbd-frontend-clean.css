@@ -846,6 +846,31 @@
     color: var(--color-text-primary, #e0e0e0);
 }
 
+/* AP-2.fix1 (PLAN-Darkmode-Umschaltung.md, AP-4.rev-Fund, 2026-08-24):
+   Genau die im Kommentar oben (Zeile ~780-787) bereits vorhergesagte Falle
+   traf auch die Umstellung von .cbd-collapse-toggle auf [data-theme="dark"]:
+   Die spezifischere, immer geltende Regel ".cbd-action-buttons button"
+   (unten, !important) ueberschreibt Hintergrund UND Textfarbe jedes echten
+   Aktionsleisten-Buttons (Klappen/Kopieren/Screenshot/PDF/Tafelmodus/
+   Behandelt) fest auf hell (rgba(255,255,255,0.95)) mit dunkler Schrift.
+   Die Textfarbe folgt zwar bereits var(--color-text-primary, ...) und wird
+   im Darkmode hell (#e8e8e8) - auf dem weiterhin hellen Hintergrund ergab
+   das ˜1,05:1 Kontrast, die Icons waren praktisch unsichtbar. Live
+   nachgewiesen (AP-4.rev) auf echten Containern, nicht nur im Board-Modus. */
+[data-theme="dark"] .cbd-action-buttons button {
+    background: var(--color-code-bg, #2a2a2a) !important;
+    color: var(--color-text-primary, #e8e8e8) !important;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4) !important;
+}
+
+[data-theme="dark"] .cbd-action-buttons button:hover {
+    background: #3a3a3a !important;
+    color: #ffffff !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5) !important;
+}
+
 /* ============================================
    HIGH CONTRAST MODE
    ============================================ */
