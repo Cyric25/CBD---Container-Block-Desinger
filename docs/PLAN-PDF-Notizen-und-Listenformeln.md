@@ -937,7 +937,7 @@ finalen, vollständigen ZIP erneut bestätigt ist.
 
 #### AP-1.doc: Dokumentation Phase 1 aktualisieren
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.fix1
@@ -962,11 +962,10 @@ Phase 1 bringen.
   „Vorhaben Darkmode-Umschaltung")
 
 **Dateicheckliste:**
-- [ ] `Plugins/Eigene WP Blocks/reference_file_map.md`
-- [ ] `Plugins/Eigene WP Blocks/CLAUDE.md`
-- [ ] `Plugins/CDB-Designer/reference_file_map.md` (nur falls AP-1.3 nicht
-      entfällt – sonst hier direkt abhaken mit Vermerk „entfällt")
-- [ ] `DOKUMENTATION.md`
+- [x] `Plugins/Eigene WP Blocks/reference_file_map.md`
+- [x] `Plugins/Eigene WP Blocks/CLAUDE.md`
+- [x] `Plugins/CDB-Designer/reference_file_map.md` — entfällt (AP-1.3 war „entfällt")
+- [x] `DOKUMENTATION.md`
 
 **Vorgehen:**
 1. Übergabenotizen von AP-1.1 bis AP-1.4, AP-1.rev (inkl. Nachtrag) und
@@ -1034,7 +1033,37 @@ Phase 1 bringen.
   gegen den echten Dateiinhalt von `blocks/accordion/style.css` prüfen
   (Zeilennummern/Selektor stimmen).
 
+  **Ergebnis:** `blocks/accordion/style.css:235-245` (Tag-Aufzählung) und
+  `assets/css/blocks.css:5-14,106-110` (`:not([class*="cbd-"])`) per `sed`
+  gegengelesen — Zeilennummern und Selektoren stimmen mit den neuen
+  Doku-Texten überein.
+
 **Übergabenotiz:**
+
+`Plugins/Eigene WP Blocks/reference_file_map.md` (Zeile
+`blocks/accordion/style.css`) und `CLAUDE.md` (Abschnitte „Plugin
+Distribution Strategy" und „Farben kommen aus data-color-*") auf den nach
+AP-1.1/AP-1.rev/AP-1.fix1 bekannten Stand gebracht: Kein Fehler in
+`blocks/accordion/style.css`, Ursache und Fix lagen in `assets/css/
+blocks.css` (Commits `b854060`, `a2737ff`, 2026-08-16); der Basis-ZIP-
+Hinweis nennt jetzt den 2026-08-24-Neubau (Dateiname bleibt `-1.0.6.zip`);
+die überholte Enumerations-Anweisung (Befund B8) korrigiert, inklusive
+Richtigstellung des ungenauen historischen Schlusssatzes (die tatsächliche
+Ursache war eine direkte Überschreibung von `.cbd-latex-content`, bevor
+die Vererbung von der Aufzählung überhaupt greifen konnte — nicht eine
+fehlende Enumeration). `Plugins/CDB-Designer/reference_file_map.md`
+unverändert (AP-1.3 entfällt). `DOKUMENTATION.md` (Root) hat einen neuen
+Eintrag mit Kernaussage (bereits behobener Bug, Symptom durch fehlenden
+Basis-Redeploy), Phase-1-Abschluss und dem Nebenbefund zur hart codierten
+Versionsnummer als offenem Punkt.
+
+Git: Commit `c234603` direkt auf `main` im Repo „Eigene WP Blocks" (kein
+eigener Branch nötig für reine Doku-Änderungen an bereits abgeschlossenen
+APs), nicht gepusht. `DOKUMENTATION.md` liegt außerhalb jedes Git-Repos,
+Speichern genügt.
+
+**Damit ist Phase 1 dieses Plans vollständig abgeschlossen** (AP-1.1 bis
+AP-1.fix1, jetzt inkl. AP-1.doc).
 
 ---
 
@@ -1741,7 +1770,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.4 | Weitere Blocktypen prüfen | sonnet | ☑ | AP-1.2, AP-1.3 | inhaltlich bereits durch AP-1.1 erledigt (12 Formeln über 8 Blocktypen + Negativkontrolle gemessen, alle bestanden) — kein eigener Agentenlauf nötig |
 | AP-1.rev | Review Phase 1 | opus | ☑ | AP-1.1–1.4 | Umplanung bestätigt (unabhängig nachgemessen), ABER kritischer Fund B1: einziges Basis-ZIP enthält noch den alten, kaputten CSS-Stand → AP-1.fix1 |
 | AP-1.fix1 | Basis-ZIP mit korrigiertem blocks.css neu bauen | sonnet | ☑ | AP-1.rev | CSS-Inhalt verifiziert korrekt; Subagent baute im isolierten Worktree ohne vendor/-Verzeichnis (ChemViz-Libs fehlten, 49 KB statt 1,25 MB) — Orchestrator hat das ZIP danach im Hauptverzeichnis (vendor/ dort lokal vorhanden) korrekt neu gebaut, 1,25 MB, vendor/ + korrektes CSS bestätigt |
-| AP-1.doc | Doku Phase 1 | sonnet | ◐ | AP-1.fix1 | gestartet als Subagent |
+| AP-1.doc | Doku Phase 1 | sonnet | ☑ | AP-1.fix1 | Phase 1 damit vollständig abgeschlossen |
 | AP-2.1 | Bulk-Endpoint Tafelbilder | opus | ☑ | – | 37/37 Live-Prüfungen bestanden inkl. Negativtest; Testklasse 17 („Test neu") existiert bereits für Folge-APs |
 | AP-2.2 | Klassen-Zuordnung in board-mode.js | opus | ☑ | – | Race-Condition im Plan-Codebeispiel live gefunden+korrigiert (Werte synchron vor fetch erfassen, wie beim bestehenden bgcolor-Schlüssel); Hinweis für AP-2.3: Begleitschlüssel deckt nur Seite 0 ab, nicht `:pN`-Zusatzseiten |
 | AP-2.3 | Server-Tafelbilder in pdf-server-side.js | sonnet | ☑ | – | Wichtiger Zusatzfund: zweite, unbehandelte cbdPDFData-Localize-Stelle in class-cbd-block-registration.php (Normalfall ohne Klassen-Shortcode) — per Client-Fallback auf window.cbdClassroomData gelöst, siehe Übergabenotiz |
@@ -1756,6 +1785,7 @@ und pro Phasenabschluss.
 
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
+| 2026-08-24 | Phase 1 abgeschlossen | AP-1.doc: neue Doku-Zeilen gegen echten Dateiinhalt (`accordion/style.css:235-245`, `blocks.css:5-14,106-110`) per `sed` gegengelesen | bestanden – Phase 1 vollständig abgeschlossen (AP-1.1–AP-1.fix1, AP-1.doc) | Subagent (sonnet) |
 | 2026-08-24 | AP-1.fix1 | `npm run plugin-zip-empty` (zunächst im Worktree, dann vom Orchestrator im Hauptverzeichnis wiederholt); `diff` gegen Quellstand; `unzip -l` auf vendor/-Vollständigkeit; `php -l` auf Basisdateien im ZIP | Subagent: CSS-Inhalt korrekt, aber ZIP unvollständig (49 KB, vendor/ fehlte im isolierten Worktree) → vom Orchestrator im Hauptverzeichnis korrekt neu gebaut, 1,25 MB, CSS + vendor/ vollständig verifiziert; nichts deployt | Subagent (sonnet) + Orchestrator |
 | 2026-08-24 | AP-2.3 | `node --check`, `php -l` + `tools/check-php74.php`; Live auf `fos.localhost:8080` (Seite 5595, Testklasse 17): includeDrawings true/false, Dedup-Test 1 vs. 2 AJAX-Aufrufe je class_id, Regressionstest Apple-PDF-Aufruf ohne 4. Parameter | bestanden – alle vier Akzeptanzkriterien live bestätigt; wichtiger Zusatzfund (zweite cbdPDFData-Localize-Stelle ohne pageId/Nonce) live entdeckt und per Client-Fallback gelöst | Subagent (sonnet) |
 | 2026-08-24 | AP-1.rev | Unabhängige Nachmessung auf Testseite 5595 + Produktivseite 5422; unabhängige Verifikation der Commits `b854060`/`a2737ff`; eigene Rekonstruktion des Fehlerzustands; Prüfung der vorhandenen Plugin-ZIPs auf ihren tatsächlichen `blocks.css`-Inhalt | Umplanung bestätigt, ABER kritischer Fund: einziges Basis-ZIP (`modular-blocks-plugin-empty-1.0.6.zip`) enthält noch den alten, kaputten CSS-Stand → AP-1.fix1 nötig, bevor Phase 1 als abgeschlossen gilt | Subagent (opus) |
