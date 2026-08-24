@@ -796,27 +796,54 @@
  * bewusst Literal (neue Variablen zu definieren ist AP-1.1 vorbehalten).
  * Live-Test siehe AP-2.1 Uebergabenotiz.
  */
-@media (prefers-color-scheme: dark) {
-    .cbd-container-block {
-        background: #1e1e1e;
-        border-color: #404040;
-        color: var(--color-sidebar-border, #e0e0e0);
-    }
+/* AP-2.2-Nachtrag (PLAN-Darkmode-Umschaltung.md, 2026-08-24): CBD_Block_Registration::render_block()
+   gibt Hintergrund/Rahmen/Textfarbe jedes Containers als Inline-style aus den in der
+   Datenbank gespeicherten Design-Einstellungen aus. Ein Inline-Style ohne !important
+   gewinnt gegen jede externe Regel gleicher oder hoeherer Spezifitaet - ohne !important
+   waere diese Regel bei jedem echten, konfigurierten Container wirkungslos gewesen
+   (live nachgewiesen). !important ist hier deshalb notwendig, nicht optional.
+   ZWEITER, tieferliegender Fund: .cbd-container-block traegt inline
+   "transition: all 300ms ease" und hat im Live-Test dauerhaft mehrere aktive,
+   sich staendig neu triggernde Transitions (vermutlich durch ein Interactivity-
+   Script, das wiederholt Inline-Styles aktualisiert). Eine LAUFENDE CSS-
+   Transition hat in der Kaskade Vorrang vor JEDER Author-!important-Regel
+   (CSS Cascade Level 4, "transition declarations" ist die oberste
+   Prioritaetsstufe) - ohne "transition: none !important" blieb der
+   Hintergrund dauerhaft am vorherigen Wert haengen, live nachgewiesen.
+   DRITTER Fund, direkt daraus folgend: Das reine [data-theme="dark"]-Scoping
+   von "transition: none" reichte nicht - beim Umschalten ZURUECK auf hell
+   (Attribut entfernt) griff wieder die Basisregel "transition: all 0.3s ease"
+   (Zeile ~103, keine dieser drei Farbeigenschaften aendert sich sonst jemals
+   nach dem Rendern), und der Hintergrund blieb dann RUECKWAERTS am dunklen
+   Wert haengen - ebenfalls live nachgewiesen. Deshalb hier zusaetzlich eine
+   UNBEDINGTE (nicht auf data-theme beschraenkte) Regel: Diese drei
+   Eigenschaften werden nie animiert, in keinem Modus. Sichtbarer Effekt im
+   Lightmode: keiner, da sich Hintergrund/Rahmen/Textfarbe eines gerenderten
+   Containers auf dem Frontend ohnehin nie nach dem ersten Rendern aendern -
+   die Transition war dort bereits wirkungslos. */
+.cbd-container-block {
+    transition-property: box-shadow, transform !important;
+}
 
-    .cbd-collapse-toggle {
-        background: transparent;
-        border-color: #555;
-        color: var(--color-sidebar-border, #e0e0e0);
-    }
+[data-theme="dark"] .cbd-container-block {
+    background: #1e1e1e !important;
+    border-color: #404040 !important;
+    color: var(--color-text-primary, #e0e0e0) !important;
+}
 
-    .cbd-collapse-toggle:hover {
-        background: rgba(255, 255, 255, 0.1);
-        border-color: var(--color-ui-surface, #e24614);
-    }
+[data-theme="dark"] .cbd-collapse-toggle {
+    background: transparent;
+    border-color: #555;
+    color: var(--color-text-primary, #e0e0e0);
+}
 
-    .cbd-icon .dashicons {
-        color: var(--color-sidebar-border, #e0e0e0);
-    }
+[data-theme="dark"] .cbd-collapse-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--color-ui-surface, #e24614);
+}
+
+[data-theme="dark"] .cbd-icon .dashicons {
+    color: var(--color-text-primary, #e0e0e0);
 }
 
 /* ============================================
