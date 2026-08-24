@@ -72,18 +72,25 @@
     display: inline-block;
     padding: 0.25em 0.5em;
     margin-right: 0.5em;
+    /* #ccc entspricht keinem AP-1.1-Wert exakt (--color-border ist #dddddd,
+       --color-border-light ist #eeeeee) - bewusst literal belassen. */
     border: 1px solid #ccc;
     border-radius: 3px;
+    /* #f9f9f9 entspricht keinem AP-1.1-Wert exakt (--color-background-light
+       ist #f8f9fa, --color-code-bg ist #f1f1f1) - bewusst literal belassen. */
     background: #f9f9f9;
     cursor: pointer;
     font-size: 0.85em;
     text-decoration: none;
-    color: #333;
+    color: var(--color-text-primary, #333);
     transition: all 0.2s ease;
 }
 
 .cbd-container-block .cbd-feature-button:hover {
+    /* #e9e9e9 entspricht keinem AP-1.1-Wert exakt - bewusst literal belassen. */
     background: #e9e9e9;
+    /* #999 entspricht keinem AP-1.1-Wert exakt (--color-text-muted ist
+       #666666) - bewusst literal belassen. */
     border-color: #999;
 }
 
