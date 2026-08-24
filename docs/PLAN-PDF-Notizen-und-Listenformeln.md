@@ -853,7 +853,7 @@ gepusht.
 
 #### AP-2.2: Klassen-Zuordnung pro Container in `board-mode.js`
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** S
 **Modell:** opus (Architekturentscheidung aus Abschnitt 4 umsetzen, an
 zwei Erfolgspfaden konsistent)
@@ -924,7 +924,59 @@ abgelegt wird).
   öffnen, zeichnen, speichern – `localStorage` darf danach für diesen
   Container KEINEN `-classid`-Schlüssel enthalten.
 
+  **Ergebnis:** Alle vier Akzeptanzkriterien live auf `fos.localhost:8080`
+  bestanden (Seite 368, Klasse 15 „5BT1", zwei echte Container). AK4 wurde
+  scharf geprüft (`Storage.prototype.setItem` global auf `throw
+  DOMException` gepatcht, kompletter Lade- und Speicherdurchlauf im
+  Klassen-Modus, `window.onerror`/`unhandledrejection`/`console.error`
+  jeweils 0 Treffer).
+
 **Übergabenotiz:**
+
+Geändert: `assets/js/board-mode.js` (einzige Datei, +30 Zeilen). Sowohl
+`saveToServer()` als auch `loadFromServer()` schreiben im Erfolgszweig
+zusätzlich den Begleitschlüssel `localStorage['cbd-board-' + containerId +
+'-classid']`, analog zum bestehenden `-bgcolor`-Schlüssel. Beim Löschen
+einer Zeichnung (`isBlank`) bleibt der Schlüssel wie geplant stehen.
+
+**Abweichung vom Codebeispiel des Plans — im Live-Test gefunden, wichtig
+für Folge-APs:** Das Beispiel im Plan-Vorgehen liest `self.classId`
+**innerhalb** des `.then()`-Zweigs. Das ist eine Race Condition:
+`close()` (Zeile ~193-197) ruft `saveDrawing()` auf und setzt
+`this.classId`/`this.stableContainerId` unmittelbar danach **synchron**
+auf `null` (Zeile ~267-269), während die Anfrage noch läuft – die
+wörtliche Fassung hätte reproduzierbar die Zeichenkette `"null"` statt der
+Klassen-ID geschrieben (AK1 verletzt). Umgesetzt stattdessen: Schlüsselname
+und Wert werden **synchron vor dem `fetch`** in lokale Variablen
+(`classIdKey`, `classIdWert`) festgehalten, im `.then()` nur noch benutzt –
+exakt das Muster, dem der bestehende `bgcolor`-Begleitschlüssel aus
+demselben Grund folgt. Der Vertrag aus Abschnitt 4 (Schlüsselname, Wert,
+beide Erfolgspfade) bleibt unverändert.
+
+**Hinweis für AP-2.3, bewusst nicht behoben (Scope):** Der Schlüsselname
+folgt dem `-bgcolor`-Muster und nutzt `pageContainerId` — also `<stableId>`
+für Seite 0, `<stableId>:pN` für Zusatzseiten (`getPageContainerId()`,
+Zeile ~1810). AP-2.3 liest laut Plan nur `'cbd-board-' + stableId +
+'-classid'`, deckt also nur Seite 0 ab. Ist bei einem Container
+ausschließlich eine Zusatzseite bespielt, fehlt der Begleitschlüssel. In
+der Praxis unkritisch (Seite 0 wird immer zuerst bespielt), aber falls ein
+künftiges AP alle Seiten abdecken soll, müsste zusätzlich nach
+`:pN`-Suffix-Schlüsseln gesucht werden.
+
+**Testklasse:** Keine neu angelegt – Klasse 15 „5BT1" (Seite 368,
+`teacher_id=2`) verwendet, bereits vorhandene Zeichnung testweise
+überschrieben und danach zeichengleich zurückgespielt (md5 verifiziert).
+Testklasse 17 aus AP-2.1 blieb unberührt.
+
+**Testserver-Hinweis:** Der Plugin-Handle wird mit `?ver=3.1.100`
+ausgeliefert, ändert sich bei einer Dateiänderung NICHT – ein normaler
+Reload zeigt die alte `board-mode.js` aus dem Browser-Cache. Beim
+Nachtesten gezielt Cache umgehen (z. B. `fetch(url, {cache:'reload'})`,
+dann Seite neu laden).
+
+Git: Branch `ap-2.2-klassen-zuordnung` (Commit `b7dcbdd`), gemerged nach
+`phase-2-pdf-tafelbilder` (Merge-Commit `a1ded78`) und zu `origin`
+gepusht.
 
 ---
 
@@ -1285,7 +1337,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1–1.4 | |
 | AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev | |
 | AP-2.1 | Bulk-Endpoint Tafelbilder | opus | ☑ | – | 37/37 Live-Prüfungen bestanden inkl. Negativtest; Testklasse 17 („Test neu") existiert bereits für Folge-APs |
-| AP-2.2 | Klassen-Zuordnung in board-mode.js | opus | ◐ | – | gestartet als Subagent |
+| AP-2.2 | Klassen-Zuordnung in board-mode.js | opus | ☑ | – | Race-Condition im Plan-Codebeispiel live gefunden+korrigiert (Werte synchron vor fetch erfassen, wie beim bestehenden bgcolor-Schlüssel); Hinweis für AP-2.3: Begleitschlüssel deckt nur Seite 0 ab, nicht `:pN`-Zusatzseiten |
 | AP-2.3 | Server-Tafelbilder in pdf-server-side.js | sonnet | ◐ | – | AP-2.1 fertig, gestartet als Subagent |
 | AP-2.4 | Checkbox im PDF-Dialog | sonnet | ☑ | – | Vertrag (Parametername/Reihenfolge) exakt eingehalten; E2E-Bildtest steht noch aus (braucht AP-2.3) |
 | AP-2.rev | Review Phase 2 | opus | ☐ | AP-2.1–2.4 | |
@@ -1300,6 +1352,7 @@ und pro Phasenabschluss.
 |---|---|---|---|---|
 | 2026-08-24 | AP-2.4 | `node --check`; Live auf `fos.localhost:8080` (Seite „Reinstoffe und Gemische"): Checkbox-Position/Default, Aufrufargumente von `window.cbdPDFExportServerSide` per Mock geprüft (an/aus) | bestanden – Vertrag exakt eingehalten; echter Bild-Vergleich im PDF steht bis AP-2.3 noch aus | Subagent (sonnet) |
 | 2026-08-24 | AP-2.1 | `php -l` + `tools/check-php74.php` (569 Dateien PHP-7.4-kompatibel); Live über temporäres Webroot-Testskript: 37 Einzelprüfungen (Erfolgsfall mit 2 Containern, 3 Nonce-Varianten, Parameter-Abwehr, Capability-Zweig, NULL-Filterung, sicherheitskritischer Negativtest gegen echte Fremdklasse 18 samt Gegenprobe) | bestanden – alle 37 Prüfungen grün, Testdaten rückstandsfrei entfernt | Subagent (opus) |
+| 2026-08-24 | AP-2.2 | `node --check`; Live auf `fos.localhost:8080` (Seite 368, Klasse 15 „5BT1", 2 echte Container): saveToServer/loadFromServer schreiben korrekten `-classid`-Schlüssel, lokaler Modus schreibt keinen, `localStorage.setItem` global auf Exception gepatcht → kein Konsolenfehler | bestanden NACH Korrektur einer im Plan-Codebeispiel enthaltenen Race Condition (Werte synchron vor `fetch` erfasst, wie beim bestehenden bgcolor-Muster) – vorher hätte das Beispiel `"null"` statt der Klassen-ID geschrieben | Subagent (opus) |
 
 ## 10. Dokumentation
 
