@@ -73,6 +73,7 @@ class CBD_Classroom {
         add_action('wp_ajax_cbd_get_classes', array($this, 'ajax_get_classes'));
         add_action('wp_ajax_cbd_save_drawing', array($this, 'ajax_save_drawing'));
         add_action('wp_ajax_cbd_load_drawing', array($this, 'ajax_load_drawing'));
+        add_action('wp_ajax_cbd_get_page_drawings', array($this, 'ajax_get_page_drawings'));
         add_action('wp_ajax_cbd_toggle_behandelt', array($this, 'ajax_toggle_behandelt'));
         add_action('wp_ajax_cbd_set_behandelt', array($this, 'ajax_set_behandelt'));
         add_action('wp_ajax_cbd_get_block_status', array($this, 'ajax_get_block_status'));
@@ -496,6 +497,69 @@ class CBD_Classroom {
             'drawing_data' => $drawing ? $drawing->drawing_data : null,
             'is_behandelt' => $drawing ? (bool) $drawing->is_behandelt : false
         ));
+    }
+
+    /**
+     * AJAX: Alle serverseitigen Tafelbilder einer Seite in EINEM Aufruf
+     *
+     * Für den PDF-Export gedacht: Eine Seite kann viele Container haben, ein
+     * Request je Container skaliert schlecht (dieselbe N+1-Vermeidung wie bei
+     * cbd/v1/blocks in class-cbd-blocks-rest-api.php).
+     *
+     * Das SQL-Muster ist von ajax_get_page_classroom_data() übernommen, das
+     * Sicherheitsmodell aber ausdrücklich NICHT: Jene Methode prüft einen
+     * Schüler-Transient-Token. Hier ruft eine regulär angemeldete Lehrperson
+     * auf, deshalb dasselbe Muster wie ajax_load_drawing() — Nonce,
+     * Capability cbd_edit_blocks und can_access_class(). Erst can_access_class()
+     * verhindert, dass über eine fremde class_id Zeichnungen einer nicht
+     * zugeordneten Klasse abgefragt werden; Capability allein genügt dafür
+     * nicht, sie hat jede Lehrperson.
+     *
+     * Zwei Sicherheitsmodelle in einer Methode zu mischen wäre genau das
+     * Muster, das das Projekt bei class-cbd-block-content-api.php bewusst
+     * vermeidet.
+     */
+    public function ajax_get_page_drawings() {
+        check_ajax_referer('cbd_classroom_nonce', 'nonce');
+
+        if (!current_user_can('cbd_edit_blocks')) {
+            wp_send_json_error(array('message' => 'Keine Berechtigung.'));
+        }
+
+        global $wpdb;
+
+        $class_id = intval($_POST['class_id'] ?? 0);
+        $page_id = intval($_POST['page_id'] ?? 0);
+
+        if ($class_id <= 0 || $page_id <= 0) {
+            wp_send_json_error(array('message' => 'Fehlende Parameter.'));
+        }
+
+        if (!$this->can_access_class($class_id)) {
+            wp_send_json_error(array('message' => 'Klasse nicht gefunden.'));
+        }
+
+        // drawing_data IS NOT NULL: Ein leerer Canvas wird von
+        // ajax_save_drawing() als NULL abgelegt, die Zeile bleibt aber
+        // stehen. Solche Container gehören nicht in den PDF-Export.
+        $drawings = $wpdb->get_results($wpdb->prepare(
+            "SELECT container_id, drawing_data FROM " . CBD_TABLE_DRAWINGS . "
+             WHERE class_id = %d AND page_id = %d AND drawing_data IS NOT NULL",
+            $class_id, $page_id
+        ));
+
+        // Antwortform bewusst ein flaches Array, nicht ein nach container_id
+        // indiziertes Objekt — analog zu cbd/v1/blocks.
+        $result = array();
+
+        foreach ($drawings as $d) {
+            $result[] = array(
+                'container_id' => $d->container_id,
+                'drawing_data' => $d->drawing_data
+            );
+        }
+
+        wp_send_json_success(array('drawings' => $result));
     }
 
     // =========================================================================
