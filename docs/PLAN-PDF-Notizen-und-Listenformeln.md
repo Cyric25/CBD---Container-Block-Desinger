@@ -1644,7 +1644,7 @@ gepusht.
 
 #### AP-2.rev: Unabhängiges Review Phase 2
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** opus
 **Abhängigkeiten:** AP-2.1, AP-2.2, AP-2.3, AP-2.4
@@ -1695,11 +1695,70 @@ Zugriffsprüfung in AP-2.1 (Negativtest fremde `class_id`).
 
 **Übergabenotiz:**
 
+*(2026-08-24, unabhängiger Review-Agent, opus)*
+
+Alle vier Implementierungsdateien direkt gelesen und gegen ihre
+Akzeptanzkriterien geprüft (nicht nur die Übergabenotizen geglaubt).
+Zusätzlich `php -l`, `node --check`, `tools/check-php74.php` erneut grün;
+Webroot auf liegengebliebene Testskripte geprüft (keine gefunden). Git-Log
+hing wie im bekannten Betriebshinweis beschrieben, nach 20s abgebrochen —
+Bewertung stützt sich auf den tatsächlichen Dateiinhalt.
+
+**AP-2.1 (sicherheitskritisch) — Kriterien erfüllt:**
+`ajax_get_page_drawings()` (`class-cbd-classroom.php:522-563`) ruft
+`can_access_class($class_id)` nachweislich VOR der SQL-Abfrage auf (Zeile
+538 vs. Query ab 545), kein Umgehungspfad. `can_access_class()` prüft
+korrekt Besitzer ODER Abonnent, parametrisiert, strikter Vergleich. Kein
+`wp_ajax_nopriv_*`-Hook.
+
+**AP-2.2 — Kriterien erfüllt:** Race-Condition-Fix im Code vorhanden
+(`classIdKey`/`classIdWert` synchron vor `fetch()` erfasst). Regressionsschutz
+strukturell verankert: Der Dispatcher verzweigt bei fehlendem `classId`
+komplett in andere Funktionen, die den `-classid`-Schlüssel gar nicht
+kennen — ein lokaler Speichervorgang kann den Server-Codepfad nie erreichen.
+
+**AP-2.3 — Kriterien erfüllt:** Signatur exakt wie Vertrag, Default `true`.
+Durchreichung bis `processOneBlock()` bestätigt. Bulk-Optimierung tatsächlich
+umgesetzt: Gruppierung nach `class_id`, ein Aufruf je eindeutiger Klasse,
+exportlaufweiter Cache. Der dokumentierte doppelte `cbdPDFData`-Localize
+zusätzlich selbst nachvollzogen: auf gewöhnlichen Seiten unkritisch
+(Klassen-Enqueue kehrt dort sofort zurück), auf Shortcode-Seiten entschärft
+die WordPress-Hook-Registrierungsreihenfolge den Konflikt bereits selbst
+(die vollständigere Fassung wird als zweite Zeile ausgegeben und gewinnt) —
+kein zusätzlicher Fund nötig.
+
+**AP-2.4 — Kriterien erfüllt:** Parametername/Reihenfolge beim Aufruf von
+`cbdPDFExportServerSide` exakt wie AP-2.3-Signatur. Neues CSS nutzt
+ausschließlich Variablen, kein neuer Hex-Wert.
+
+**Scope-Check bestanden:** Zeichenfunktion unangetastet, genau ein Schalter
+für den ganzen Export-Lauf, alle übrigen Aufrufstellen von
+`cbdPDFExportServerSide` unverändert (Default `true` erhält bisheriges
+Verhalten).
+
+**Phasen-Endzustand:** Aus Testprotokoll-Einträgen + eigener Codeprüfung
+lückenlos nachvollziehbar. Eine Lücke bleibt: kein AP hat eine tatsächlich
+vom Server erzeugte PDF-Datei geöffnet und darin beide Bilder visuell
+bestätigt (nur Payload- bzw. Mock-Ebene geprüft) — Risiko gering, da der
+Injektionsmechanismus identisch zum bereits produktiven lokalen Pfad ist
+und die mPDF-Stufe selbst unangetastet blieb.
+
+**Befunde (alle gering, kein kritischer/mittlerer Fund, kein Fix-AP nötig):**
+1. Fehlender visueller Ende-zu-Ende-PDF-Test (AP-2.3/AP-2.4) — für AP-2.doc
+   als offener Punkt vermerken.
+2. `-classid`-Begleitschlüssel deckt nur Seite 0 ab, nicht `:pN`-Zusatzseiten
+   — bereits in AP-2.2 dokumentiert, keine Neuigkeit.
+3. Mehrfach-Klassen-Container zeigen nur die zuletzt genutzte Klasse —
+   bereits im Risiko-Register (Abschnitt 5) akzeptiert.
+
+**Gesamtbewertung: Phase 2 ist inhaltlich und sicherheitstechnisch
+abgeschlossen. Kein `AP-2.fix1` erforderlich.**
+
 ---
 
 #### AP-2.doc: Dokumentation Phase 2 aktualisieren
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.rev
@@ -1721,9 +1780,9 @@ Abschlusseintrag in `DOKUMENTATION.md` (Root).
   sonst neuen Eintrag anlegen)
 
 **Dateicheckliste:**
-- [ ] `Plugins/CDB-Designer/reference_file_map.md`
-- [ ] `Plugins/CDB-Designer/CLAUDE.md`
-- [ ] `DOKUMENTATION.md`
+- [x] `Plugins/CDB-Designer/reference_file_map.md`
+- [x] `Plugins/CDB-Designer/CLAUDE.md`
+- [x] `DOKUMENTATION.md`
 
 **Vorgehen:**
 1. Übergabenotizen von AP-2.1 bis AP-2.4 sowie AP-2.rev durchgehen.
@@ -1743,11 +1802,11 @@ Abschlusseintrag in `DOKUMENTATION.md` (Root).
 5. „Stand"-Datum in den geänderten Dateien aktualisieren.
 
 **Akzeptanzkriterien:**
-- [ ] Jede in Phase 2 geänderte Datei hat eine aktuelle Zeile in
+- [x] Jede in Phase 2 geänderte Datei hat eine aktuelle Zeile in
       `Plugins/CDB-Designer/reference_file_map.md`.
-- [ ] `CLAUDE.md` beschreibt die bekannte Einschränkung (mehrere Klassen
+- [x] `CLAUDE.md` beschreibt die bekannte Einschränkung (mehrere Klassen
       pro Container) explizit, nicht nur den Erfolgsfall.
-- [ ] `DOKUMENTATION.md` enthält einen vollständigen Eintrag für beide
+- [x] `DOKUMENTATION.md` enthält einen vollständigen Eintrag für beide
       Phasen dieses Vorhabens.
 
 **Tests:**
@@ -1755,6 +1814,33 @@ Abschlusseintrag in `DOKUMENTATION.md` (Root).
   tatsächlichen Dateiinhalt prüfen.
 
 **Übergabenotiz:**
+
+*(2026-08-24, ausführender Agent, sonnet, verifiziert durch Orchestrator)*
+
+`reference_file_map.md`: Zeilen zu `class-cbd-classroom.php`,
+`board-mode.js` und `floating-pdf-button.js` waren bereits von den
+jeweiligen APs selbst nachgezogen (Regel 16). Nur `pdf-server-side.js`
+brauchte die Ergänzung — neuer Absatz zu `includeDrawings`,
+`injectServerDrawings()`/`applyServerDrawings()` mit Bulk-Optimierung je
+`class_id`, dem doppelten `cbdPDFData`-Localize-Fund und den zwei bekannten
+Einschränkungen.
+
+`CLAUDE.md`: neuer Abschnitt „PDF-Export: Tafelbilder und eigene Notizen"
+(Zeile 2103) — Mechanismus, vollständiger Datenweg, und ein explizites
+„Bekannte, bewusst akzeptierte Einschränkungen"-Unterkapitel mit allen drei
+Punkten (Mehrklassen-Container, `:pN`-Zusatzseiten, fehlender visueller
+E2E-PDF-Test).
+
+`DOKUMENTATION.md` (Root): Der von AP-1.doc angelegte Eintrag wurde um
+Phase 2 ergänzt — Abschluss ohne kritische/mittlere Befunde, Zusammenfassung
+der vier APs und des Schalter-Mechanismus, plus dieselben drei
+Einschränkungen mit Verweis auf `CLAUDE.md`.
+
+Orchestrator-Verifikation: Abschnitt in `CLAUDE.md` existiert (Zeile 2103).
+
+**Damit ist `PLAN-PDF-Notizen-und-Listenformeln.md` vollständig
+abgeschlossen — beide Phasen (1: LaTeX-Formeln in Listen, 2: PDF-Tafelbilder)
+sind durchgängig ☑, inklusive Review und Dokumentation.**
 
 ---
 
@@ -1775,8 +1861,8 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-2.2 | Klassen-Zuordnung in board-mode.js | opus | ☑ | – | Race-Condition im Plan-Codebeispiel live gefunden+korrigiert (Werte synchron vor fetch erfassen, wie beim bestehenden bgcolor-Schlüssel); Hinweis für AP-2.3: Begleitschlüssel deckt nur Seite 0 ab, nicht `:pN`-Zusatzseiten |
 | AP-2.3 | Server-Tafelbilder in pdf-server-side.js | sonnet | ☑ | – | Wichtiger Zusatzfund: zweite, unbehandelte cbdPDFData-Localize-Stelle in class-cbd-block-registration.php (Normalfall ohne Klassen-Shortcode) — per Client-Fallback auf window.cbdClassroomData gelöst, siehe Übergabenotiz |
 | AP-2.4 | Checkbox im PDF-Dialog | sonnet | ☑ | – | Vertrag (Parametername/Reihenfolge) exakt eingehalten; E2E-Bildtest steht noch aus (braucht AP-2.3) |
-| AP-2.rev | Review Phase 2 | opus | ◐ | AP-2.1–2.4 | gestartet als Subagent |
-| AP-2.doc | Doku Phase 2 | sonnet | ☐ | AP-2.rev | |
+| AP-2.rev | Review Phase 2 | opus | ☑ | AP-2.1–2.4 | Alle 4 APs im Code bestaetigt (inkl. sicherheitskritischer Zugriffsprüfung AP-2.1), kein Fix-AP noetig; fehlender E2E-PDF-Test als offener Punkt fuer AP-2.doc |
+| AP-2.doc | Doku Phase 2 | sonnet | ☑ | AP-2.rev | CLAUDE.md-Abschnitt "PDF-Export" + Einschraenkungen dokumentiert; Plan vollstaendig abgeschlossen |
 
 ## 9. Testprotokoll
 
