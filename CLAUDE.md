@@ -2056,6 +2056,50 @@ Der Knopf folgt weiterhin ausschließlich seinem Feature-Flag: Ist
 Screenshot- noch PDF-Symbol. Das entspricht der Projektentscheidung „Buttons
 folgen Feature-Flags" (`docs/VERBESSERUNGSPLAN.md`, AP12).
 
+## Darkmode (Phase 2 von `PLAN-Darkmode-Umschaltung.md`, abgeschlossen 2026-08-24)
+
+Der Umschalt-Mechanismus selbst gehört dem Theme, nicht diesem Plugin:
+Ein einziges Attribut `data-theme="dark"` auf `<html>`, gesetzt per
+Toggle-Button und FOUC-Vermeidungsscript in `Theme/header.php`, rein
+nutzergesteuert (**kein** `matchMedia`/`prefers-color-scheme`-Bezug).
+Details, Persistenz (`localStorage`) und die zugehörigen CSS-Variablen:
+`Theme/CLAUDE.md`, Abschnitt „Darkmode".
+
+Phase 2 dieses Vorhabens hat die bis dahin noch systemabhängigen
+`@media (prefers-color-scheme: dark)`-Blöcke im Frontend-Code dieses
+Plugins auf den expliziten Toggle umgestellt:
+
+| Datei | Umstellung |
+|---|---|
+| `assets/css/cbd-frontend-clean.css` | `@media (prefers-color-scheme: dark)` für `.cbd-container-block` → `[data-theme="dark"] .cbd-container-block`. Der Live-Test deckte dabei drei Kaskade-Bugs auf (Inline-Style ohne `!important`, eine aktive `transition` mit Vorrang selbst vor `!important`, eine Variablen-Kollision bei `--color-sidebar-border`) — Details in `reference_file_map.md` bei dieser Datei |
+| `assets/css/latex-formulas.css` | `@media (prefers-color-scheme: dark)` für `.cbd-latex-fallback`/`.cbd-latex-error` → je eine eigene `[data-theme="dark"] …`-Regel. Dieselbe Variablen-Kollision wie oben, gefunden und behoben bei `.cbd-latex-fallback` |
+| `assets/js/floating-pdf-button.js` | keine Selektor-Umstellung (Datei stylt inline, kein `@media`), aber ein bei der Sichtprüfung gefundener Kontrastfehler behoben: weiße Text-/Icon-Farbe auf der orangen Plastikfläche kam aus `--color-background` (im Darkmode dunkel) statt aus `--color-text-on-accent` (in beiden Modi `#ffffff`) |
+
+`assets/css/frontend-consolidated.css` enthält weiterhin einen
+`@media (prefers-color-scheme: dark)`-Block und wurde **bewusst nicht**
+umgestellt: Der zugehörige Style-Handle wird laut AP-2.1 ausschließlich
+über `enqueue_editor_styles()` am rein backendseitigen Hook
+`enqueue_block_editor_assets` registriert und im öffentlichen Frontend
+nie ausgeliefert (empirisch bestätigt, 0 Treffer im Seitenquelltext einer
+echten Frontend-Seite) — Admin-/Editor-Oberflächen sind laut Plan
+ausdrücklich außerhalb des Scopes.
+
+**Pflicht-Konvention für neuen CSS-Code in diesem Plugin:** Neue CSS-Regeln,
+die sich je nach Farbmodus unterscheiden sollen, verwenden
+`[data-theme="dark"] .selektor` statt `@media (prefers-color-scheme: dark)`
+– Letzteres ist für das Frontend dieses Projekts nicht mehr zulässig. Neuer
+CSS-Code generell verwendet ausschließlich `var(--x, #fallback)`, nie
+hartcodierte Hex-Werte.
+
+**Bekannter, offener Nebenbefund außerhalb dieses Vorhabens-Scopes (aus dem
+Phase-2-Review AP-2.rev, nicht Teil von AP-2.1–2.4):** `assets/css/board-mode.css:952-958`,
+`.cbd-board-confirm-cancel:hover` nutzt `background: var(--color-sidebar-border, #e0e0e0)`
+gegen literales `color: #555` — dieselbe Variablen-Kollisions-Fehlerfamilie
+wie oben bei `cbd-frontend-clean.css`/`latex-formulas.css`, Kontrast im
+Darkmode ≈1,2:1. `board-mode.css` war nie Teil des in Phase 2 gelisteten
+Dateiumfangs (keine `[data-theme]`-Regeln dort) und wurde deshalb bewusst
+nicht mitkorrigiert — vorgemerkt für ein künftiges Korrektur-AP.
+
 ## Debugging-Konventionen
 
 - **PHP:** Informations-Logs laufen über klasseneigene `debug_log()`-Helper
