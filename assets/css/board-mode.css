@@ -14,7 +14,7 @@
     position: fixed;
     inset: 0;
     z-index: 999999;
-    background: #ffffff;
+    background: var(--color-background, #ffffff);
     display: flex;
     flex-direction: column;
     animation: cbdBoardFadeIn 0.25s ease-out;
@@ -57,8 +57,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 20px;
-    background: #333333;
-    color: #ffffff;
+    background: var(--color-text-primary, #333333);
+    color: var(--color-background, #ffffff);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     position: relative;
     z-index: 2;
@@ -82,7 +82,7 @@
 .cbd-board-close {
     background: transparent;
     border: 2px solid rgba(255, 255, 255, 0.3);
-    color: #ffffff;
+    color: var(--color-background, #ffffff);
     font-size: 20px;
     line-height: 1;
     width: 36px;
@@ -125,8 +125,8 @@
 .cbd-board-content {
     overflow-y: auto;
     padding: 24px;
-    border-right: 2px solid #e0e0e0;
-    background: #fafafa;
+    border-right: 2px solid var(--color-sidebar-border, #e0e0e0);
+    background: #fafafa; /* kein exakter AP-1.1-Treffer (naher, aber nicht identischer Grauton) */
 }
 
 /* Scrollbar-Styling */
@@ -135,16 +135,16 @@
 }
 
 .cbd-board-content::-webkit-scrollbar-track {
-    background: #f0f0f0;
+    background: #f0f0f0; /* kein AP-1.1-Treffer */
 }
 
 .cbd-board-content::-webkit-scrollbar-thumb {
-    background: #ccc;
+    background: #ccc; /* kein AP-1.1-Treffer */
     border-radius: 4px;
 }
 
 .cbd-board-content::-webkit-scrollbar-thumb:hover {
-    background: #aaa;
+    background: #aaa; /* kein AP-1.1-Treffer */
 }
 
 /* Inhalt innerhalb der linken Seite */
@@ -166,7 +166,7 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background: #f5f5f5;
+    background: #f5f5f5; /* kein AP-1.1-Treffer */
 }
 
 /* =============================================
@@ -178,8 +178,8 @@
     align-items: center;
     gap: 5px;
     padding: 4px 8px;
-    background: #f5f5f5;
-    border-top: 1px solid #ddd;
+    background: #f5f5f5; /* kein AP-1.1-Treffer */
+    border-top: 1px solid var(--color-border, #ddd);
     flex-shrink: 0;
 }
 
@@ -231,7 +231,7 @@
     font-size: 16px;
     width: 16px;
     height: 16px;
-    color: #fff;
+    color: #fff; /* Kontrastfarbe zur aktuellen Tafelfarbe (Inhalt), analog board-mode.js Zeile 685/764 - kein Theme-Chrome, bewusst nicht var()-gekoppelt */
 }
 
 /* Seiten-Navigation in der Toolbar */
@@ -242,21 +242,21 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border: 1px solid #bbb;
+    border: 1px solid #bbb; /* kein AP-1.1-Treffer */
     border-radius: 6px;
-    background: #fff;
+    background: var(--color-background, #fff);
     cursor: pointer;
     font-size: 13px;
-    color: #555;
+    color: #555; /* kein AP-1.1-Treffer */
     transition: all 0.15s ease;
     padding: 0;
 }
 
 .cbd-board-page-prev:hover:not(:disabled),
 .cbd-board-page-next:hover:not(:disabled) {
-    background: #e8f4fd;
-    border-color: #007cba;
-    color: #007cba;
+    background: #e8f4fd; /* kein AP-1.1-Treffer */
+    border-color: #007cba; /* WP-Admin-Blau, kein Treffer */
+    color: #007cba; /* WP-Admin-Blau, kein Treffer */
 }
 
 .cbd-board-page-prev:disabled,
@@ -268,10 +268,10 @@
 .cbd-board-page-indicator {
     font-size: 11px;
     font-weight: 600;
-    color: #555;
+    color: #555; /* kein AP-1.1-Treffer */
     min-width: 34px;
     text-align: center;
-    font-family: monospace;
+    font-family: monospace; /* generisches monospace, kein exakter Treffer zu --font-family-mono ('Courier New', monospace) */
     white-space: nowrap;
 }
 
@@ -281,21 +281,21 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border: 1px solid #4caf50;
+    border: 1px solid #4caf50; /* Material-Grün, kein Treffer zu --color-success (#2ecc40) */
     border-radius: 6px;
-    background: #f1f8f4;
+    background: #f1f8f4; /* kein AP-1.1-Treffer */
     cursor: pointer;
     font-size: 16px;
     font-weight: 700;
-    color: #2e7d32;
+    color: #2e7d32; /* kein AP-1.1-Treffer */
     transition: all 0.15s ease;
     padding: 0;
     line-height: 1;
 }
 
 .cbd-board-page-add:hover {
-    background: #4caf50;
-    color: #fff;
+    background: #4caf50; /* Material-Grün, kein Treffer zu --color-success (#2ecc40) */
+    color: var(--color-background, #fff);
 }
 
 /* Seiten-Navigation in der Schüleransicht */
@@ -310,20 +310,20 @@
 .cbd-drawing-page-next {
     width: 32px;
     height: 32px;
-    border: 1px solid #bbb;
+    border: 1px solid #bbb; /* kein AP-1.1-Treffer */
     border-radius: 6px;
-    background: #fff;
+    background: var(--color-background, #fff);
     cursor: pointer;
     font-size: 14px;
-    color: #555;
+    color: #555; /* kein AP-1.1-Treffer */
     transition: all 0.15s ease;
 }
 
 .cbd-drawing-page-prev:hover:not(:disabled),
 .cbd-drawing-page-next:hover:not(:disabled) {
-    background: #e8f4fd;
-    border-color: #007cba;
-    color: #007cba;
+    background: #e8f4fd; /* kein AP-1.1-Treffer */
+    border-color: #007cba; /* WP-Admin-Blau, kein Treffer */
+    color: #007cba; /* WP-Admin-Blau, kein Treffer */
 }
 
 .cbd-drawing-page-prev:disabled,
@@ -335,10 +335,10 @@
 .cbd-drawing-page-indicator {
     font-size: 13px;
     font-weight: 600;
-    color: #555;
+    color: #555; /* kein AP-1.1-Treffer */
     min-width: 40px;
     text-align: center;
-    font-family: monospace;
+    font-family: monospace; /* generisches monospace, kein exakter Treffer zu --font-family-mono ('Courier New', monospace) */
 }
 
 /* ========================================
@@ -348,7 +348,7 @@
 .cbd-drawing-section {
     margin-top: 24px;
     padding-top: 20px;
-    border-top: 2px solid #e0e0e0;
+    border-top: 2px solid var(--color-sidebar-border, #e0e0e0);
 }
 
 .cbd-drawing-toggle {
@@ -356,8 +356,8 @@
     align-items: center;
     gap: 8px;
     padding: 10px 20px;
-    background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
-    color: #fff;
+    background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); /* Material-Grün-Verlauf, kein Treffer zu --color-success (#2ecc40) */
+    color: var(--color-background, #fff);
     border: none;
     border-radius: 8px;
     font-size: 15px;
@@ -368,26 +368,26 @@
 }
 
 .cbd-drawing-toggle:hover {
-    background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
+    background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%); /* Material-Grün-Verlauf, kein Treffer */
     box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
     transform: translateY(-1px);
 }
 
 .cbd-drawing-toggle.cbd-drawing-toggle-active {
-    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+    background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); /* Material-Orange-Verlauf, kein Treffer zu --color-ui-surface (#e24614) */
     box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
 }
 
 .cbd-drawing-toggle.cbd-drawing-toggle-active:hover {
-    background: linear-gradient(135deg, #f57c00 0%, #e65100 100%);
+    background: linear-gradient(135deg, #f57c00 0%, #e65100 100%); /* Material-Orange-Verlauf, kein Treffer */
     box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
 }
 
 .cbd-drawing-overlay {
     margin-top: 14px;
     padding: 16px;
-    background: #f8f9fa;
-    border: 2px solid #4caf50;
+    background: var(--color-background-light, #f8f9fa);
+    border: 2px solid #4caf50; /* Material-Grün, kein Treffer zu --color-success (#2ecc40) */
     border-radius: 10px;
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
 }
@@ -407,13 +407,13 @@
     justify-content: center;
     width: 26px;
     height: 26px;
-    border: 1px solid #bbb;
+    border: 1px solid #bbb; /* kein AP-1.1-Treffer */
     border-radius: 6px;
-    background: #e8e8e8;
+    background: #e8e8e8; /* kein AP-1.1-Treffer */
     cursor: pointer;
     font-size: 13px;
     line-height: 1;
-    color: #555;
+    color: #555; /* kein AP-1.1-Treffer */
     flex-shrink: 0;
     margin-left: auto;
     transition: all 0.15s ease;
@@ -421,9 +421,9 @@
 }
 
 .cbd-board-toolbar-toggle:hover {
-    background: #d8d8d8;
-    color: #333;
-    border-color: #999;
+    background: #d8d8d8; /* kein AP-1.1-Treffer */
+    color: var(--color-text-primary, #333);
+    border-color: #999; /* kein AP-1.1-Treffer */
 }
 
 /* Werkzeug-Buttons */
@@ -433,25 +433,25 @@
     justify-content: center;
     width: 30px;
     height: 30px;
-    border: 2px solid #ccc;
+    border: 2px solid #ccc; /* kein AP-1.1-Treffer */
     border-radius: 6px;
-    background: #ffffff;
+    background: var(--color-background, #ffffff);
     cursor: pointer;
     transition: all 0.15s ease;
     padding: 0;
-    color: #555;
+    color: #555; /* kein AP-1.1-Treffer */
 }
 
 .cbd-board-tool:hover {
-    border-color: #999;
-    background: #f0f0f0;
-    color: #333;
+    border-color: #999; /* kein AP-1.1-Treffer */
+    background: #f0f0f0; /* kein AP-1.1-Treffer */
+    color: var(--color-text-primary, #333);
 }
 
 .cbd-board-tool.active {
-    border-color: #007cba;
-    background: #e8f4fd;
-    color: #007cba;
+    border-color: #007cba; /* WP-Admin-Blau, kein Treffer */
+    background: #e8f4fd; /* kein AP-1.1-Treffer */
+    color: #007cba; /* WP-Admin-Blau, kein Treffer */
     box-shadow: 0 0 0 2px rgba(0, 124, 186, 0.2);
 }
 
@@ -465,7 +465,7 @@
 .cbd-board-separator {
     width: 1px;
     height: 22px;
-    background: #ddd;
+    background: var(--color-border, #ddd);
     margin: 0 2px;
     flex-shrink: 0;
 }
@@ -474,16 +474,16 @@
 .cbd-board-color {
     width: 30px;
     height: 30px;
-    border: 2px solid #ccc;
+    border: 2px solid #ccc; /* kein AP-1.1-Treffer */
     border-radius: 6px;
     cursor: pointer;
     padding: 2px;
-    background: #fff;
+    background: var(--color-background, #fff);
     transition: border-color 0.15s ease;
 }
 
 .cbd-board-color:hover {
-    border-color: #999;
+    border-color: #999; /* kein AP-1.1-Treffer */
 }
 
 /* Preset Color Buttons */
@@ -517,7 +517,7 @@
 /* Background Color Picker */
 .cbd-board-bg-label {
     font-size: 12px;
-    color: #666;
+    color: #666; /* kein AP-1.1-Treffer */
     font-weight: 600;
     white-space: nowrap;
     margin: 0 4px;
@@ -526,16 +526,16 @@
 .cbd-board-bg-color {
     width: 36px;
     height: 36px;
-    border: 2px solid #ccc;
+    border: 2px solid #ccc; /* kein AP-1.1-Treffer */
     border-radius: 8px;
     cursor: pointer;
     padding: 2px;
-    background: #fff;
+    background: var(--color-background, #fff);
     transition: border-color 0.15s ease;
 }
 
 .cbd-board-bg-color:hover {
-    border-color: #999;
+    border-color: #999; /* kein AP-1.1-Treffer */
 }
 
 /* Grid Toggle Button */
@@ -545,25 +545,25 @@
     justify-content: center;
     width: 30px;
     height: 30px;
-    border: 2px solid #ccc;
+    border: 2px solid #ccc; /* kein AP-1.1-Treffer */
     border-radius: 6px;
-    background: #ffffff;
+    background: var(--color-background, #ffffff);
     cursor: pointer;
     transition: all 0.15s ease;
     padding: 0;
-    color: #555;
+    color: #555; /* kein AP-1.1-Treffer */
 }
 
 .cbd-board-grid-toggle:hover {
-    border-color: #999;
-    background: #f0f0f0;
-    color: #333;
+    border-color: #999; /* kein AP-1.1-Treffer */
+    background: #f0f0f0; /* kein AP-1.1-Treffer */
+    color: var(--color-text-primary, #333);
 }
 
 .cbd-board-grid-toggle.active {
-    border-color: #4caf50;
-    background: #e8f5e9;
-    color: #2e7d32;
+    border-color: #4caf50; /* Material-Grün, kein Treffer zu --color-success (#2ecc40) */
+    background: #e8f5e9; /* kein AP-1.1-Treffer */
+    color: #2e7d32; /* kein AP-1.1-Treffer */
     box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
 }
 
@@ -578,16 +578,16 @@
     width: 70px;
     height: 6px;
     cursor: pointer;
-    accent-color: #007cba;
+    accent-color: #007cba; /* WP-Admin-Blau, kein Treffer */
 }
 
 .cbd-board-width-display {
     font-size: 12px;
-    color: #666;
+    color: var(--color-text-muted, #666);
     min-width: 30px;
     text-align: center;
     font-weight: 600;
-    font-family: monospace;
+    font-family: monospace; /* generisches monospace, kein exakter Treffer zu --font-family-mono ('Courier New', monospace) */
 }
 
 /* Font Size Control */
@@ -600,22 +600,22 @@
     width: 80px;
     height: 6px;
     cursor: pointer;
-    accent-color: #4caf50;
+    accent-color: #4caf50; /* Material-Grün, kein Treffer zu --color-success (#2ecc40) */
 }
 
 .cbd-board-font-size-display {
     font-size: 12px;
-    color: #666;
+    color: var(--color-text-muted, #666);
     min-width: 40px;
     text-align: center;
     font-weight: 600;
-    font-family: monospace;
+    font-family: monospace; /* generisches monospace, kein exakter Treffer zu --font-family-mono ('Courier New', monospace) */
 }
 
 /* Grid Controls */
 .cbd-board-grid-label {
     font-size: 11px;
-    color: #666;
+    color: var(--color-text-muted, #666);
     font-weight: 600;
     white-space: nowrap;
     margin: 0 4px;
@@ -627,18 +627,18 @@
     width: 60px;
     height: 6px;
     cursor: pointer;
-    accent-color: #4caf50;
+    accent-color: #4caf50; /* Material-Grün, kein Treffer zu --color-success (#2ecc40) */
 }
 
 .cbd-board-grid-size-display,
 .cbd-board-grid-offset-x-display,
 .cbd-board-grid-offset-y-display {
     font-size: 11px;
-    color: #666;
+    color: var(--color-text-muted, #666);
     min-width: 25px;
     text-align: center;
     font-weight: 600;
-    font-family: monospace;
+    font-family: monospace; /* generisches monospace, kein exakter Treffer zu --font-family-mono ('Courier New', monospace) */
 }
 
 /* Loeschen-Button */
@@ -648,19 +648,19 @@
     justify-content: center;
     width: 30px;
     height: 30px;
-    border: 2px solid #e0c0c0;
+    border: 2px solid #e0c0c0; /* kein AP-1.1-Treffer */
     border-radius: 6px;
-    background: #fff5f5;
+    background: #fff5f5; /* kein AP-1.1-Treffer */
     cursor: pointer;
     transition: all 0.15s ease;
     padding: 0;
-    color: #cc4444;
+    color: #cc4444; /* kein exakter Treffer zu --color-danger (#cc3333) */
 }
 
 .cbd-board-clear:hover {
-    border-color: #cc4444;
-    background: #ffeeee;
-    color: #aa0000;
+    border-color: #cc4444; /* kein exakter Treffer zu --color-danger (#cc3333) */
+    background: #ffeeee; /* kein AP-1.1-Treffer */
+    color: #aa0000; /* kein AP-1.1-Treffer */
 }
 
 .cbd-board-clear .dashicons {
@@ -676,19 +676,19 @@
     justify-content: center;
     width: 30px;
     height: 30px;
-    border: 1px solid #bbb;
+    border: 1px solid #bbb; /* kein AP-1.1-Treffer */
     border-radius: 6px;
-    background: #fff;
+    background: var(--color-background, #fff);
     cursor: pointer;
     transition: all 0.15s ease;
     padding: 0;
-    color: #555;
+    color: #555; /* kein AP-1.1-Treffer */
 }
 
 .cbd-board-undo:hover {
-    border-color: #007cba;
-    background: #e8f4fd;
-    color: #007cba;
+    border-color: #007cba; /* WP-Admin-Blau, kein Treffer */
+    background: #e8f4fd; /* kein AP-1.1-Treffer */
+    color: #007cba; /* WP-Admin-Blau, kein Treffer */
 }
 
 .cbd-board-undo .dashicons {
@@ -706,13 +706,13 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border: 1px solid #bbb;
+    border: 1px solid #bbb; /* kein AP-1.1-Treffer */
     border-radius: 6px;
-    background: #fff;
+    background: var(--color-background, #fff);
     cursor: pointer;
     font-size: 16px;
     font-weight: 700;
-    color: #555;
+    color: #555; /* kein AP-1.1-Treffer */
     transition: all 0.15s ease;
     padding: 0;
     line-height: 1;
@@ -721,18 +721,18 @@
 .cbd-board-zoom-out:hover,
 .cbd-board-zoom-in:hover,
 .cbd-board-zoom-reset:hover {
-    background: #e8f4fd;
-    border-color: #007cba;
-    color: #007cba;
+    background: #e8f4fd; /* kein AP-1.1-Treffer */
+    border-color: #007cba; /* WP-Admin-Blau, kein Treffer */
+    color: #007cba; /* WP-Admin-Blau, kein Treffer */
 }
 
 .cbd-board-zoom-display {
     font-size: 11px;
     font-weight: 600;
-    color: #555;
+    color: #555; /* kein AP-1.1-Treffer */
     min-width: 34px;
     text-align: center;
-    font-family: monospace;
+    font-family: monospace; /* generisches monospace, kein exakter Treffer zu --font-family-mono ('Courier New', monospace) */
     white-space: nowrap;
 }
 
@@ -796,7 +796,7 @@
 .cbd-board-color-picker-label {
     font-size: 11px;
     font-weight: 600;
-    color: #333;
+    color: var(--color-text-primary, #333);
     text-align: center;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -820,6 +820,14 @@
     min-width: 80px;
 }
 
+/* Tafelfarbe-Vorschau-Buttons (Weiß/Grün/Schwarz als wählbare Papier-/Tafelfarbe):
+   Alle Farbwerte in diesem Block - inkl. Hover-Zustaende - sind der eigentliche
+   Tafelinhalt, keine UI-Chrome-Farbe. Bewusst NICHT auf var() umgestellt, analog
+   zur im AP-Text explizit ausgenommenen Zeichenfarbpalette und zum Praezedenzfall
+   "Screenshot-Canvas-Hintergrund muss unabhaengig vom Theme fix bleiben" aus
+   AP-2.5. Ein spaeterer Darkmode darf diese Vorschau z. B. nicht ungewollt
+   mitkippen lassen, nur weil zufaellig ein Wert (z. B. #666/#ffffff) mit einer
+   Theme-Variable uebereinstimmt. */
 .cbd-board-bg-preset-btn[data-color="#ffffff"] {
     color: #333;
     background-color: #ffffff;
@@ -904,7 +912,7 @@
 }
 
 .cbd-board-confirm-dialog {
-    background: #ffffff;
+    background: var(--color-background, #ffffff);
     border-radius: 12px;
     padding: 24px;
     max-width: 360px;
@@ -916,13 +924,13 @@
 .cbd-board-confirm-dialog h4 {
     margin: 0 0 12px 0;
     font-size: 16px;
-    color: #333;
+    color: var(--color-text-primary, #333);
 }
 
 .cbd-board-confirm-dialog p {
     margin: 0 0 20px 0;
     font-size: 14px;
-    color: #666;
+    color: var(--color-text-muted, #666);
 }
 
 .cbd-board-confirm-actions {
@@ -942,21 +950,21 @@
 }
 
 .cbd-board-confirm-cancel {
-    background: #f0f0f0;
-    color: #555;
+    background: #f0f0f0; /* kein AP-1.1-Treffer */
+    color: #555; /* kein AP-1.1-Treffer */
 }
 
 .cbd-board-confirm-cancel:hover {
-    background: #e0e0e0;
+    background: var(--color-sidebar-border, #e0e0e0);
 }
 
 .cbd-board-confirm-delete {
-    background: #cc4444;
-    color: #ffffff;
+    background: #cc4444; /* kein exakter Treffer zu --color-danger (#cc3333) */
+    color: var(--color-background, #ffffff);
 }
 
 .cbd-board-confirm-delete:hover {
-    background: #aa2222;
+    background: #aa2222; /* kein AP-1.1-Treffer */
 }
 
 /* =============================================
@@ -971,7 +979,7 @@
 
     .cbd-board-content {
         border-right: none;
-        border-bottom: 2px solid #e0e0e0;
+        border-bottom: 2px solid var(--color-sidebar-border, #e0e0e0);
         padding: 16px;
     }
 
@@ -1018,7 +1026,7 @@
 .cbd-board-tool:focus-visible,
 .cbd-board-close:focus-visible,
 .cbd-board-clear:focus-visible {
-    outline: 2px solid #007cba;
+    outline: 2px solid #007cba; /* WP-Admin-Blau, kein Treffer */
     outline-offset: 2px;
 }
 
@@ -1068,40 +1076,40 @@
     align-items: center;
     gap: 10px;
     padding: 12px 16px;
-    border: 2px solid #ddd;
+    border: 2px solid var(--color-border, #ddd);
     border-radius: 8px;
-    background: #fff;
+    background: var(--color-background, #fff);
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
-    color: #333;
+    color: var(--color-text-primary, #333);
     transition: all 0.15s ease;
     text-align: left;
 }
 
 .cbd-class-option:hover {
-    border-color: #007cba;
-    background: #f0f7fc;
+    border-color: #007cba; /* WP-Admin-Blau, kein Treffer */
+    background: #f0f7fc; /* kein AP-1.1-Treffer */
 }
 
 .cbd-class-option-server {
-    border-color: #c8e6c9;
+    border-color: #c8e6c9; /* kein AP-1.1-Treffer */
 }
 
 .cbd-class-option-server:hover {
-    border-color: #4caf50;
-    background: #f1f8e9;
+    border-color: #4caf50; /* Material-Grün, kein Treffer zu --color-success (#2ecc40) */
+    background: #f1f8e9; /* kein AP-1.1-Treffer */
 }
 
 .cbd-class-option .dashicons {
     font-size: 20px;
     width: 20px;
     height: 20px;
-    color: #666;
+    color: var(--color-text-muted, #666);
 }
 
 .cbd-class-option-server .dashicons {
-    color: #4caf50;
+    color: #4caf50; /* Material-Grün, kein Treffer zu --color-success (#2ecc40) */
 }
 
 
@@ -1113,11 +1121,11 @@
 
     .cbd-board-tool.active {
         border-width: 3px;
-        border-color: #000;
+        border-color: #000; /* High-Contrast-Modus: bewusst reines Schwarz, kein AP-1.1-Treffer */
     }
 
     .cbd-board-separator {
-        background: #000;
+        background: #000; /* High-Contrast-Modus: bewusst reines Schwarz, kein AP-1.1-Treffer */
     }
 }
 
@@ -1173,14 +1181,14 @@
     width: 105px;  /* 100 * 1.05 ≈ 105 */
     height: 6px;
     cursor: pointer;
-    accent-color: #9c27b0;
+    accent-color: #9c27b0; /* kein AP-1.1-Treffer */
 }
 
 .cbd-board-opacity-display {
     font-size: 13px;  /* 12 * 1.05 ≈ 13 */
-    color: #666;
+    color: var(--color-text-muted, #666);
     min-width: 42px;  /* 40 * 1.05 ≈ 42 */
     text-align: center;
     font-weight: 600;
-    font-family: monospace;
+    font-family: monospace; /* generisches monospace, kein exakter Treffer zu --font-family-mono ('Courier New', monospace) */
 }
