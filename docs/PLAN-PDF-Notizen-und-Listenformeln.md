@@ -676,7 +676,7 @@ ohnehin bereits eine Ist-Zustands-Prüfung. Vollständige Tabelle:
 
 #### AP-1.rev: Unabhängiges Review Phase 1
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** opus
 **Abhängigkeiten:** AP-1.1, AP-1.2, AP-1.3, AP-1.4
@@ -713,6 +713,146 @@ Implementierung beteiligt war. Nur lesend arbeiten – KEINE Datei verändern.
 
 **Übergabenotiz:**
 
+**Gesamturteil: Die Umplanung trägt — mit einer Einschränkung.** AP-1.2 und
+AP-1.3 entfallen zu Recht (unabhängig nachgemessen: kein Fehler in
+`blocks/accordion/style.css`, `latex-formulas.css`,
+`class-latex-parser.php`), AP-1.4 ist durch AP-1.1 inhaltlich abgedeckt
+(alle sieben Checklistenfälle plus Negativkontrolle live auf Seite 5595
+nachgewiesen). Commit `b854060` unabhängig verifiziert: existiert,
+2026-08-16 20:26, ändert `assets/css/blocks.css` genau wie im Bericht
+beschrieben. Fehler-Rekonstruktion selbst nachgebaut (11/12 Formeln weiß,
+`accordion/style.css` dabei nachweislich unangetastet). Eigene Live-Messung
+auf Testseite 5595 UND Produktivseite 5422 bestätigt: keine blasse Formel
+im Ist-Zustand. Scope-Check bestanden (`git diff main...phase-1-latex-
+listen` = eine Dokumentationsdatei, null Codezeilen).
+
+**Aber: kritischer Fund B1.** Der in AP-1.1 (Bericht Abschnitt 6.2)
+empfohlene nächste Schritt — „Redeploy der Plugin-Basis" — würde den
+Fehler **wieder installieren**: Das einzige vorhandene Basis-ZIP
+(`plugin-zips/modular-blocks-plugin-empty-1.0.6.zip`, Eintrag
+`assets/css/blocks.css` vom 2025-09-25) enthält noch den ALTEN Stand
+— ohne `:not([class*="cbd-"])`, mit dem `prefers-color-scheme`-Block, der
+`--modular-blocks-text` auf Weiß setzte. Dasselbe gilt für
+`modular-blocks-plugin-framework-update.zip`. **Der AP-1.1-Bericht hat nie
+geprüft, ob überhaupt ein fehlerfreies Ausroll-Artefakt existiert.**
+Abhilfe vorhanden und verifiziert: `npm run plugin-zip-empty` →
+`create-empty-plugin-zip.js:112` kopiert `assets/` aus dem aktuellen
+Arbeitsbaum (der den Fix bereits enthält) und würde ein korrektes
+`modular-blocks-plugin-empty-1.1.8.zip` erzeugen. → **AP-1.fix1**
+angelegt.
+
+**Weiterer Fund (mittel, B2):** Die Fehler-Rekonstruktion in AP-1.1
+(Bericht Abschnitt 4) stellte nur EINE von vier ursprünglich zu weit
+gefassten Regeln in `blocks.css` nach. Drei weitere — u. a.
+`[class*="title"]`, das ebenfalls eine Farbe setzt — bekamen ihre
+Ausnahme erst mit dem SPÄTEREN Commit `a2737ff` (2026-08-16 21:25). Auf
+einer Produktivinstallation mit altem Basisstand ist deshalb ein
+zweites, im AP-1.1-Bericht nirgends genanntes Symptom zu erwarten: Der
+Titel eines CDB-Container-Blocks INNERHALB eines Accordion-Panels würde
+ebenfalls weiß erscheinen. Ändert nichts an der Diagnose (im Quellstand
+sind alle vier Regeln repariert), gehört aber zum Fehlerbild, das ein
+Redeploy beheben soll — für AP-1.fix1s Verifikationsschritt relevant.
+
+**Geringfügige Funde (B3–B7, dokumentarisch, kein Handlungsbedarf):**
+AP-1.1s Behauptung „durchgehend rgb(51,51,51)" übersieht, dass
+`figcaption` korrekt, aber abweichend `rgb(102,102,102)`/dunkel
+`rgb(160,160,160)` misst (B3); eine Tabellenzeile im Diagnosebericht nennt
+für „außerhalb des Accordions, dunkel" fälschlich `rgb(51,51,51)` statt
+gemessener `rgb(232,232,232)` (B4); AP-1.4-Checkliste Punkt 6 forderte
+`core/image`-Caption, umgesetzt wurde eine Tabellen-Caption über dieselbe
+CSS-Klasse — vertretbar, aber nicht als Ersetzung kenntlich gemacht (B5);
+die im Bericht gezeigten Farbketten lassen drei Zwischenebenen aus, die
+aber nachweislich keine eigene Regel tragen (B6). Außerhalb dieser Phase
+gefunden: ein liegengebliebenes Test-PHP-Skript im Webroot aus AP-3.2 von
+`PLAN-Darkmode-Umschaltung.md` (B7, nicht Teil dieses Plans, nur gemeldet).
+
+**Rest-Zweifel ohne Handlungsbedarf:** Ein Accordion ohne umgebenden
+CDB-Container und eine Formel in der Zeilenüberschrift selbst wurden nicht
+gemessen; beide mit begründet vernachlässigbarem Risiko, kein Code-Fix
+nahegelegt.
+
+**Fazit:** Phase 1 ist erst abgeschlossen, wenn AP-1.fix1 erledigt ist —
+sonst bliebe der empfohlene nächste Schritt in seiner ursprünglichen Form
+schädlich und Projektziel 1a auf der Produktivinstallation unerfüllt.
+Keine Datei wurde während dieses Reviews verändert.
+
+---
+
+#### AP-1.fix1: Basis-ZIP von „Eigene WP Blocks" mit korrigiertem `blocks.css` neu bauen
+
+**Status:** ☐ offen
+**Umfang:** S
+**Modell:** sonnet (Build-Skript ausführen und Inhalt verifizieren, klar
+vorgezeichnet durch den AP-1.rev-Befund)
+**Abhängigkeiten:** AP-1.rev (Befund B1)
+
+**Ziel & Kontext:**
+AP-1.rev hat festgestellt, dass das einzige vorhandene, ausrollbare
+Basis-ZIP von „Eigene WP Blocks"
+(`Plugins/Eigene WP Blocks/plugin-zips/modular-blocks-plugin-empty-1.0.6.zip`)
+noch den alten, fehlerhaften Stand von `assets/css/blocks.css` enthält —
+ohne die Ausnahme `:not([class*="cbd-"])` in den `[class*="content"]`- UND
+`[class*="title"]`-Regeln, mit dem `@media (prefers-color-scheme:
+dark)`-Block, der `--modular-blocks-text` auf `#ffffff` setzte. Der aktuelle
+Quellstand (`main`-Branch) enthält den Fix bereits vollständig (Commits
+`b854060` und `a2737ff` vom 2026-08-16). Dieses AP baut ein neues,
+korrektes Basis-ZIP aus dem aktuellen Quellstand und verifiziert dessen
+Inhalt — **es lädt NICHTS auf die Produktivinstallation hoch**, das bleibt
+eine bewusste, separate Entscheidung des Nutzers (Nicht-Ziel: kein
+eigenmächtiges Produktiv-Deployment).
+
+**Betroffene Dateien:**
+- `Plugins/Eigene WP Blocks/plugin-zips/modular-blocks-plugin-empty-1.1.8.zip` (neu, generiert)
+
+**Vorgehen:**
+1. Im Verzeichnis `Plugins/Eigene WP Blocks/`: `npm run plugin-zip-empty`
+   ausführen (nutzt `create-empty-plugin-zip.js`, das laut AP-1.rev-Befund
+   `assets/` aus dem aktuellen Arbeitsbaum in das ZIP kopiert).
+2. Das erzeugte ZIP öffnen (z. B. `unzip -p
+   modular-blocks-plugin-empty-1.1.8.zip '*/assets/css/blocks.css'` oder
+   gleichwertig) und den Inhalt von `assets/css/blocks.css` darin
+   gegenprüfen:
+   - Die Regeln um Zeile 106-110 UND die `[class*="title"]`-Regel
+     (siehe AP-1.rev-Befund B2, Commit `a2737ff`) tragen die Ausnahme
+     `:not([class*="cbd-"])`.
+   - Es existiert **kein** `@media (prefers-color-scheme: dark)`-Block, der
+     `--modular-blocks-text` setzt (dieser wurde mit `b854060` entfernt).
+   - `--modular-blocks-text` folgt via `var(--color-text-primary, …)` dem
+     Theme (Zeile ~9), nicht einem hartcodierten Weißwert.
+3. Zusätzlich `php -l` bzw. eine Kurzprüfung der Plugin-Hauptdatei und
+   `includes/class-block-manager.php` im ZIP (Basisdateien, sollten sich
+   gegenüber `1.0.6` nur in unwesentlichen Details unterscheiden — kein
+   funktionaler Regressionscheck nötig, da nur `assets/` sich fachlich
+   ändert).
+4. **Nicht hochladen, nicht deployen.** Das ZIP bleibt im Repo unter
+   `plugin-zips/` liegen, exakt wie die bestehenden älteren ZIPs dort auch
+   liegen (siehe `reference_file_map.md`, Abschnitt „Kern und
+   Infrastruktur": „plugin-zips/ – erzeugte Auslieferungs-ZIPs").
+
+**Akzeptanzkriterien:**
+- [ ] `modular-blocks-plugin-empty-1.1.8.zip` existiert unter
+      `Plugins/Eigene WP Blocks/plugin-zips/`.
+- [ ] `assets/css/blocks.css` im ZIP enthält `:not([class*="cbd-"])` sowohl
+      bei der `[class*="content"]`- als auch bei der
+      `[class*="title"]`-Regel.
+- [ ] `assets/css/blocks.css` im ZIP enthält KEINEN
+      `@media (prefers-color-scheme: dark)`-Block mit
+      `--modular-blocks-text: #ffffff` (bzw. gar keinen
+      `prefers-color-scheme`-Block, der diese Variable setzt).
+- [ ] Keine Produktionsumgebung wurde berührt (kein Upload, kein Deploy).
+
+**Tests:**
+- Smoke-Test: `npm run plugin-zip-empty` läuft ohne Fehler durch, ZIP-Datei
+  entsteht mit plausibler Größe (vergleichbar mit dem alten `1.0.6`-ZIP).
+- Prüfschritt: Inhalt von `assets/css/blocks.css` aus dem neuen ZIP mit dem
+  aktuellen Arbeitsbaum-Stand derselben Datei per `diff` vergleichen —
+  muss identisch sein (das ZIP wurde ja direkt daraus gebaut).
+- Kein Live-Test auf dem Testserver nötig für dieses AP (reine
+  Build-Verifikation); ein etwaiger Produktiv-Rollout ist ausdrücklich
+  NICHT Teil dieses APs.
+
+**Übergabenotiz:**
+
 ---
 
 #### AP-1.doc: Dokumentation Phase 1 aktualisieren
@@ -720,7 +860,7 @@ Implementierung beteiligt war. Nur lesend arbeiten – KEINE Datei verändern.
 **Status:** ☐ offen
 **Umfang:** S
 **Modell:** sonnet
-**Abhängigkeiten:** AP-1.rev
+**Abhängigkeiten:** AP-1.fix1
 
 **Ziel & Kontext:**
 `Plugins/Eigene WP Blocks/reference_file_map.md`,
@@ -1431,8 +1571,9 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.2 | CSS-Fix in accordion/style.css | opus | ☑ | AP-1.1 | entfällt lt. AP-1.1-Diagnose: kein Fehler in dieser Datei, nichts zu ändern |
 | AP-1.3 | Bedingter Fix in CDB-Designer | opus | ☑ | AP-1.1, AP-1.2 | entfällt lt. AP-1.1-Diagnose: kein Fehler in latex-formulas.css/class-latex-parser.php |
 | AP-1.4 | Weitere Blocktypen prüfen | sonnet | ☑ | AP-1.2, AP-1.3 | inhaltlich bereits durch AP-1.1 erledigt (12 Formeln über 8 Blocktypen + Negativkontrolle gemessen, alle bestanden) — kein eigener Agentenlauf nötig |
-| AP-1.rev | Review Phase 1 | opus | ◐ | AP-1.1–1.4 | gestartet als Subagent — prüft insbesondere, ob die Umplanung (AP-1.2/1.3 entfällt) tragfähig ist |
-| AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev | |
+| AP-1.rev | Review Phase 1 | opus | ☑ | AP-1.1–1.4 | Umplanung bestätigt (unabhängig nachgemessen), ABER kritischer Fund B1: einziges Basis-ZIP enthält noch den alten, kaputten CSS-Stand → AP-1.fix1 |
+| AP-1.fix1 | Basis-ZIP mit korrigiertem blocks.css neu bauen | sonnet | ◐ | AP-1.rev | gestartet als Subagent |
+| AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.fix1 | |
 | AP-2.1 | Bulk-Endpoint Tafelbilder | opus | ☑ | – | 37/37 Live-Prüfungen bestanden inkl. Negativtest; Testklasse 17 („Test neu") existiert bereits für Folge-APs |
 | AP-2.2 | Klassen-Zuordnung in board-mode.js | opus | ☑ | – | Race-Condition im Plan-Codebeispiel live gefunden+korrigiert (Werte synchron vor fetch erfassen, wie beim bestehenden bgcolor-Schlüssel); Hinweis für AP-2.3: Begleitschlüssel deckt nur Seite 0 ab, nicht `:pN`-Zusatzseiten |
 | AP-2.3 | Server-Tafelbilder in pdf-server-side.js | sonnet | ◐ | – | AP-2.1 fertig, gestartet als Subagent |
@@ -1447,6 +1588,7 @@ und pro Phasenabschluss.
 
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
+| 2026-08-24 | AP-1.rev | Unabhängige Nachmessung auf Testseite 5595 + Produktivseite 5422; unabhängige Verifikation der Commits `b854060`/`a2737ff`; eigene Rekonstruktion des Fehlerzustands; Prüfung der vorhandenen Plugin-ZIPs auf ihren tatsächlichen `blocks.css`-Inhalt | Umplanung bestätigt, ABER kritischer Fund: einziges Basis-ZIP (`modular-blocks-plugin-empty-1.0.6.zip`) enthält noch den alten, kaputten CSS-Stand → AP-1.fix1 nötig, bevor Phase 1 als abgeschlossen gilt | Subagent (opus) |
 | 2026-08-24 | AP-1.1 | Diagnoseskript `pruefung-formelfarbe.js` auf Testseite 5595 (12 Formeln, 8 Blocktypen) und Produktivseite 5422 (22 Formeln); Fehlerzustand vor Commit `b854060` zur Laufzeit rekonstruiert und erneut gemessen | Ist-Zustand fehlerfrei in allen 12+22 Fällen; Fehler im rekonstruierten Alt-Zustand reproduziert (11/12 Formeln weiß) und eindeutig auf `assets/css/blocks.css` zurückgeführt, nicht auf `blocks/accordion/style.css` | Subagent (opus) |
 | 2026-08-24 | AP-1.2/AP-1.3/AP-1.4 | Kein eigener Test nötig – Disposition „entfällt"/„durch AP-1.1 miterledigt" beruht vollständig auf den AP-1.1-Messungen | entfällt bzw. bereits erfüllt, siehe jeweilige Übergabenotiz | Orchestrator (auf Basis AP-1.1) |
 | 2026-08-24 | AP-2.4 | `node --check`; Live auf `fos.localhost:8080` (Seite „Reinstoffe und Gemische"): Checkbox-Position/Default, Aufrufargumente von `window.cbdPDFExportServerSide` per Mock geprüft (an/aus) | bestanden – Vertrag exakt eingehalten; echter Bild-Vergleich im PDF steht bis AP-2.3 noch aus | Subagent (sonnet) |
