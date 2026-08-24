@@ -817,7 +817,7 @@ verändert.
 
 #### AP-1.fix1: Basis-ZIP von „Eigene WP Blocks" mit korrigiertem `blocks.css` neu bauen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (nach Korrektur durch den Orchestrator)
 **Umfang:** S
 **Modell:** sonnet (Build-Skript ausführen und Inhalt verifizieren, klar
 vorgezeichnet durch den AP-1.rev-Befund)
@@ -890,6 +890,49 @@ eigenmächtiges Produktiv-Deployment).
 
 **Übergabenotiz:**
 
+**Zwei Planungsannahmen widerlegt, beide vom Subagenten korrekt gemeldet
+statt stillschweigend „passend gemacht":**
+
+1. **Dateiname bleibt `-1.0.6.zip`, nicht `-1.1.8.zip`.**
+   `create-empty-plugin-zip.js` hat die Versionsnummer hart im Skript
+   codiert (`VERSION = '1.0.6'`), nicht aus `package.json` (dort: 1.1.8)
+   abgeleitet. Das Skript erzeugt also weiterhin eine Datei namens
+   `modular-blocks-plugin-empty-1.0.6.zip` — nur mit jetzt korrigiertem
+   Inhalt. Der `CLAUDE.md`-Verweis auf genau diesen Dateinamen (siehe
+   AP-1.doc unten) bleibt damit **namentlich korrekt** und muss NICHT auf
+   „1.1.8" geändert werden — die AP-1.rev-Annahme dazu war falsch, hiermit
+   richtiggestellt. Separater, nicht in diesem AP behobener Befund: Der
+   irreführende Versionsstillstand im Dateinamen (Inhalt stammt faktisch
+   aus Quellstand 1.1.8) ist ein eigenständiges, künftiges Aufräum-AP wert
+   (`VERSION` aus `package.json` ableiten).
+2. **Der Subagent baute zunächst in einem isolierten Git-Worktree — dort
+   fehlt `assets/js/vendor/` (ChemViz-Fremdbibliotheken `3Dmol-min.js`,
+   `plotly-2.27.1.min.js`, `imagetracer.js`, zusammen ≈4,17 MB), weil dieses
+   Verzeichnis per `.gitignore` nicht versioniert ist und nur lokal im
+   Haupt-Arbeitsverzeichnis existiert.** Das erste ZIP war dadurch nur
+   49.070 Bytes statt der erwarteten ~1,25 MB — der im Plan geforderte
+   Smoke-Test „plausible Größe" schlug entsprechend fehl, was der Subagent
+   korrekt als Befund meldete, statt es zu verschweigen. **Der
+   Orchestrator hat das ZIP daraufhin selbst im Haupt-Arbeitsverzeichnis
+   neu gebaut** (dort ist `assets/js/vendor/` bereits lokal vorhanden,
+   keine externen CDN-Downloads nötig): `npm run plugin-zip-empty` in
+   `Plugins/Eigene WP Blocks/` → `modular-blocks-plugin-empty-1.0.6.zip`,
+   **1,25 MB**, verifiziert per `diff`: `assets/css/blocks.css` im ZIP
+   zeichengleich mit dem Quellstand, 4 Treffer für
+   `:not([class*="cbd-"])`, `vendor/`-Verzeichnis vollständig enthalten
+   (3Dmol-min.js, plotly-2.27.1.min.js, imagetracer.js, README.md).
+
+**Ergebnis:** `Plugins/Eigene WP Blocks/plugin-zips/modular-blocks-plugin-
+empty-1.0.6.zip` (1,25 MB, Stand 2026-08-24) ist jetzt ein vollständiges,
+korrektes, lokal verfügbares Basis-Artefakt — CSS-Fix UND ChemViz-Vendor-
+Bibliotheken enthalten. Es ist **nicht** in Git versioniert (Projekt-
+konvention: `plugin-zips/` ist reines, generiertes Ausgabeverzeichnis,
+siehe `reference_file_map.md`) und wurde **nicht** hochgeladen/deployt.
+Der vom Subagenten im Worktree `C:\tmp\wt-ap1fix1` erzeugte, unvollständige
+Zwischenstand (Branch `ap-1.fix1-basis-zip`, Commit `d340be1`) wurde
+NICHT gemerged — er diente nur der CSS-Inhaltsverifikation, die bereits im
+finalen, vollständigen ZIP erneut bestätigt ist.
+
 ---
 
 #### AP-1.doc: Dokumentation Phase 1 aktualisieren
@@ -934,14 +977,22 @@ Phase 1 bringen.
    Fehler in dieser Datei; die tatsächliche Ursache und ihr historischer
    Fix lagen in `assets/css/blocks.css` (Commits `b854060`, `a2737ff`,
    2026-08-16), Details siehe `docs/diagnose-latex-listen-2026-08-24.md`.
-3. **In `Plugins/Eigene WP Blocks/CLAUDE.md`, Abschnitt „Plugin
-   Distribution Strategy" Punkt 1: den namentlichen Verweis auf
-   `modular-blocks-plugin-empty-1.0.6.zip` auf die in AP-1.fix1 neu gebaute
-   Version (`…-1.1.8.zip`) aktualisieren.** Das ist kein optionaler
-   Hinweis, sondern der AP-1.rev-Befund B1 (Nachtrag): Der alte Verweis
-   führt bei jedem künftigen Redeploy „nach Vorschrift" wieder zum
-   fehlerhaften CSS-Stand, weil er das einzige je vorhandene Basis-Artefakt
-   mit dem alten `blocks.css` benennt.
+3. **KORRIGIERT nach AP-1.fix1s Übergabenotiz:** Der Dateiname bleibt
+   `modular-blocks-plugin-empty-1.0.6.zip` (die Versionsnummer im
+   Dateinamen ist im Build-Skript `create-empty-plugin-zip.js` hart
+   codiert, nicht aus `package.json` abgeleitet) — der `CLAUDE.md`-Verweis
+   in „Plugin Distribution Strategy" Punkt 1 auf genau diesen Dateinamen
+   ist damit **weiterhin korrekt** und muss NICHT geändert werden. Prüfe
+   stattdessen NUR, ob der begleitende Hinweis „Never needs to be updated
+   unless core functionality changes" noch sinnvoll ist, nachdem der
+   Orchestrator das ZIP bereits einmal wegen eines CSS-Fehlers neu bauen
+   musste — ergänze ggf. eine kurze Fußnote, dass das Basis-ZIP am
+   2026-08-24 mit korrigiertem `assets/css/blocks.css` neu gebaut wurde
+   (Datei liegt lokal unter `plugin-zips/`, nicht versioniert, siehe
+   `docs/PLAN-PDF-Notizen-und-Listenformeln.md`). Erwäge zusätzlich, den
+   in AP-1.fix1s Übergabenotiz gemeldeten Nebenbefund (Versionsnummer im
+   Dateinamen ist hart codiert statt aus `package.json` abgeleitet) als
+   offenen Punkt in `DOKUMENTATION.md` Abschnitt 8 aufzunehmen.
 4. **Im selben `CLAUDE.md`, Abschnitt „Farben kommen aus data-color-*,
    nicht aus dem Stylesheet": den Satz „Wer dort ein Element ergänzt, das
    Text zeigt, muss es in diese Aufzählung aufnehmen" korrigieren/
@@ -967,8 +1018,10 @@ Phase 1 bringen.
 **Akzeptanzkriterien:**
 - [ ] Jede in Phase 1 geänderte Datei hat eine aktuelle Zeile in der
       jeweiligen Datei-Map.
-- [ ] `Eigene WP Blocks/CLAUDE.md` nennt in „Plugin Distribution Strategy"
-      die neu gebaute ZIP-Version (1.1.8), nicht mehr die fehlerhafte 1.0.6.
+- [ ] `Eigene WP Blocks/CLAUDE.md`, „Plugin Distribution Strategy", weist
+      auf den am 2026-08-24 erfolgten Neubau des Basis-ZIPs (korrigiertes
+      `blocks.css`) hin; der Dateiname `-1.0.6.zip` bleibt unverändert
+      (siehe Korrektur in AP-1.doc-Vorgehen Schritt 3).
 - [ ] `Eigene WP Blocks/CLAUDE.md`, Abschnitt „Farben kommen aus
       data-color-*", enthält keine Anweisung mehr, die zu unnötiger
       Enumerationserweiterung anleitet.
@@ -1282,7 +1335,7 @@ gepusht.
 
 #### AP-2.3: `pdf-server-side.js` – serverseitige Tafelbilder einfügen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** sonnet (Schnittstellen aus AP-2.1/AP-2.2 sind hier bereits
 vollständig als Vertrag vorgegeben, mechanische Umsetzung)
@@ -1408,7 +1461,59 @@ einfügt.
   `interactivity-store.js` aufgerufen wird) enthält weiterhin die lokale
   Notiz, wie vor dieser Änderung.
 
+  **Ergebnis:** Alle vier Akzeptanzkriterien live auf `fos.localhost:8080`
+  bestanden (Seite 5595, Testklasse 17). `includeDrawings === false`
+  unterdrückt beide Bildquellen und löst 0 Aufrufe an
+  `cbd_get_page_drawings` aus; `includeDrawings === true`/weggelassen
+  liefert beide Bilder im ausgehenden PDF-Payload; zwei Container
+  identischer `class_id` lösen genau 1 Aufruf aus, zwei Container
+  unterschiedlicher `class_id` lösen 2 Aufrufe aus; der bestehende
+  Apple-PDF-Export-Aufruf ohne 4. Parameter funktioniert unverändert.
+
 **Übergabenotiz:**
+
+Signatur `window.cbdPDFExportServerSide(containerBlocks, mode, quality,
+includeDrawings)` (Default `true`) umgesetzt, durchgereicht bis
+`processOneBlock()`. Neue Funktionen `injectServerDrawings()`/
+`applyServerDrawings()`: gruppieren Container nach dem `-classid`-
+Begleitschlüssel aus AP-2.2, rufen `cbd_get_page_drawings` (AP-2.1) genau
+einmal je `class_id` auf (export-lauf-weiter Cache `serverDrawingsCache` —
+ein reiner Cache innerhalb eines Blocks reichte nicht, da
+`processOneBlock()` pro ausgewähltem Container einzeln läuft). Der
+403-mit-leerem-Rumpf-Fall bei ungültigem Nonce (siehe AP-2.1-Vertrag) wird
+über einen eigenen `error`-Zweig behandelt, nicht nur über
+`response.success`. `class-cbd-classroom.php` ergänzt: `cbdPDFData` (Zeile
+~1273) bekam die fehlenden Felder `pageId`/`classroomNonce`.
+
+**Wichtiger Zusatzfund, im Plan nicht vorgesehen — relevant für AP-2.rev:**
+`cbdPDFData` wird an ZWEI unabhängigen Stellen lokalisiert:
+`class-cbd-classroom.php` (nur auf Seiten mit `[cbd_classroom]`-Shortcode)
+UND `includes/class-cbd-block-registration.php` (~Zeile 646, der
+NORMALFALL — jede gewöhnliche Seite mit Container-Block, ohne
+Klassen-Shortcode). Die zweite Stelle liefert nur `ajaxurl`/`resturl`/
+`nonce`/`restnonce`, KEIN `pageId`/`classroomNonce` — dort blieb die
+Änderung an `class-cbd-classroom.php` wirkungslos (live entdeckt: erster
+Testlauf auf einer gewöhnlichen Seite lieferte `page_id:0, nonce:""` und
+HTTP 403). Da diese dritte Datei außerhalb des AP-Scopes lag, wurde in
+`pdf-server-side.js` stattdessen ein Rückfall eingebaut:
+`cbdPDFData.pageId || window.cbdClassroomData.pageId` (analog für den
+Nonce) — `window.cbdClassroomData` wird bereits unverändert von
+`class-cbd-block-registration.php` im `wp_footer` gesetzt, sobald
+`cbd_edit_blocks` + eingeloggt. **AP-2.rev sollte diesen Fallback explizit
+gegenprüfen**, insbesondere falls `class-cbd-block-registration.php` in
+einem künftigen AP geändert wird.
+
+Testklasse 17 wiederverwendet (keine neue Klasse angelegt); für den
+`class_id`-Dedup-Test zwei synthetische, nie im DOM persistierte
+Test-Divs verwendet (kein DB-Eintrag nötig, da die Deduplizierung rein
+clientseitig anhand des localStorage-Schlüssels läuft). Alle Testzeilen,
+`localStorage`-Testschlüssel und temporären PHP-Skripte entfernt;
+Testklasse 17 unangetastet.
+
+Git: Branch `ap-2.3-server-tafelbilder-v2` (Commit `d84a83c`, Basis
+`main`), gemerged nach `phase-2-pdf-tafelbilder` (Merge-Commit `bb7f8ee`,
+automatisches Zusammenführen von `class-cbd-classroom.php` mit AP-2.1s
+Änderung ohne Konflikt) und zu `origin` gepusht.
 
 ---
 
@@ -1635,11 +1740,11 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.3 | Bedingter Fix in CDB-Designer | opus | ☑ | AP-1.1, AP-1.2 | entfällt lt. AP-1.1-Diagnose: kein Fehler in latex-formulas.css/class-latex-parser.php |
 | AP-1.4 | Weitere Blocktypen prüfen | sonnet | ☑ | AP-1.2, AP-1.3 | inhaltlich bereits durch AP-1.1 erledigt (12 Formeln über 8 Blocktypen + Negativkontrolle gemessen, alle bestanden) — kein eigener Agentenlauf nötig |
 | AP-1.rev | Review Phase 1 | opus | ☑ | AP-1.1–1.4 | Umplanung bestätigt (unabhängig nachgemessen), ABER kritischer Fund B1: einziges Basis-ZIP enthält noch den alten, kaputten CSS-Stand → AP-1.fix1 |
-| AP-1.fix1 | Basis-ZIP mit korrigiertem blocks.css neu bauen | sonnet | ◐ | AP-1.rev | gestartet als Subagent |
+| AP-1.fix1 | Basis-ZIP mit korrigiertem blocks.css neu bauen | sonnet | ☑ | AP-1.rev | CSS-Inhalt verifiziert korrekt; Subagent baute im isolierten Worktree ohne vendor/-Verzeichnis (ChemViz-Libs fehlten, 49 KB statt 1,25 MB) — Orchestrator hat das ZIP danach im Hauptverzeichnis (vendor/ dort lokal vorhanden) korrekt neu gebaut, 1,25 MB, vendor/ + korrektes CSS bestätigt |
 | AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.fix1 | |
 | AP-2.1 | Bulk-Endpoint Tafelbilder | opus | ☑ | – | 37/37 Live-Prüfungen bestanden inkl. Negativtest; Testklasse 17 („Test neu") existiert bereits für Folge-APs |
 | AP-2.2 | Klassen-Zuordnung in board-mode.js | opus | ☑ | – | Race-Condition im Plan-Codebeispiel live gefunden+korrigiert (Werte synchron vor fetch erfassen, wie beim bestehenden bgcolor-Schlüssel); Hinweis für AP-2.3: Begleitschlüssel deckt nur Seite 0 ab, nicht `:pN`-Zusatzseiten |
-| AP-2.3 | Server-Tafelbilder in pdf-server-side.js | sonnet | ◐ | – | AP-2.1 fertig, gestartet als Subagent |
+| AP-2.3 | Server-Tafelbilder in pdf-server-side.js | sonnet | ☑ | – | Wichtiger Zusatzfund: zweite, unbehandelte cbdPDFData-Localize-Stelle in class-cbd-block-registration.php (Normalfall ohne Klassen-Shortcode) — per Client-Fallback auf window.cbdClassroomData gelöst, siehe Übergabenotiz |
 | AP-2.4 | Checkbox im PDF-Dialog | sonnet | ☑ | – | Vertrag (Parametername/Reihenfolge) exakt eingehalten; E2E-Bildtest steht noch aus (braucht AP-2.3) |
 | AP-2.rev | Review Phase 2 | opus | ☐ | AP-2.1–2.4 | |
 | AP-2.doc | Doku Phase 2 | sonnet | ☐ | AP-2.rev | |
@@ -1651,6 +1756,8 @@ und pro Phasenabschluss.
 
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
+| 2026-08-24 | AP-1.fix1 | `npm run plugin-zip-empty` (zunächst im Worktree, dann vom Orchestrator im Hauptverzeichnis wiederholt); `diff` gegen Quellstand; `unzip -l` auf vendor/-Vollständigkeit; `php -l` auf Basisdateien im ZIP | Subagent: CSS-Inhalt korrekt, aber ZIP unvollständig (49 KB, vendor/ fehlte im isolierten Worktree) → vom Orchestrator im Hauptverzeichnis korrekt neu gebaut, 1,25 MB, CSS + vendor/ vollständig verifiziert; nichts deployt | Subagent (sonnet) + Orchestrator |
+| 2026-08-24 | AP-2.3 | `node --check`, `php -l` + `tools/check-php74.php`; Live auf `fos.localhost:8080` (Seite 5595, Testklasse 17): includeDrawings true/false, Dedup-Test 1 vs. 2 AJAX-Aufrufe je class_id, Regressionstest Apple-PDF-Aufruf ohne 4. Parameter | bestanden – alle vier Akzeptanzkriterien live bestätigt; wichtiger Zusatzfund (zweite cbdPDFData-Localize-Stelle ohne pageId/Nonce) live entdeckt und per Client-Fallback gelöst | Subagent (sonnet) |
 | 2026-08-24 | AP-1.rev | Unabhängige Nachmessung auf Testseite 5595 + Produktivseite 5422; unabhängige Verifikation der Commits `b854060`/`a2737ff`; eigene Rekonstruktion des Fehlerzustands; Prüfung der vorhandenen Plugin-ZIPs auf ihren tatsächlichen `blocks.css`-Inhalt | Umplanung bestätigt, ABER kritischer Fund: einziges Basis-ZIP (`modular-blocks-plugin-empty-1.0.6.zip`) enthält noch den alten, kaputten CSS-Stand → AP-1.fix1 nötig, bevor Phase 1 als abgeschlossen gilt | Subagent (opus) |
 | 2026-08-24 | AP-1.1 | Diagnoseskript `pruefung-formelfarbe.js` auf Testseite 5595 (12 Formeln, 8 Blocktypen) und Produktivseite 5422 (22 Formeln); Fehlerzustand vor Commit `b854060` zur Laufzeit rekonstruiert und erneut gemessen | Ist-Zustand fehlerfrei in allen 12+22 Fällen; Fehler im rekonstruierten Alt-Zustand reproduziert (11/12 Formeln weiß) und eindeutig auf `assets/css/blocks.css` zurückgeführt, nicht auf `blocks/accordion/style.css` | Subagent (opus) |
 | 2026-08-24 | AP-1.2/AP-1.3/AP-1.4 | Kein eigener Test nötig – Disposition „entfällt"/„durch AP-1.1 miterledigt" beruht vollständig auf den AP-1.1-Messungen | entfällt bzw. bereits erfüllt, siehe jeweilige Übergabenotiz | Orchestrator (auf Basis AP-1.1) |
