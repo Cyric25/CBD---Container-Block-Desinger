@@ -454,21 +454,57 @@ Inhalt (sonst stünde der Titel doppelt).
 
 ### Elternseite gilt für den ganzen Lauf (seit dem Vorhaben „Importer-Elternseite", 2026-08-21)
 
-Im Dialog wählt ein Feld (`admin/page-import.php`, `wp_dropdown_pages()`,
-Name/ID `cbd-import-parent`) die Elternseite für **alle** Seiten eines
-Laufs — nicht je Datei; eine Elternseite je Datei ist ausdrücklich ein
-Nicht-Ziel des zugehörigen Plans, keine offene Frage. `assets/js/page-importer.js`
+Im Dialog legt ein Feld (`admin/page-import.php`, Name/ID
+`cbd-import-parent`) die Elternseite für **alle** Seiten eines Laufs fest —
+nicht je Datei; eine Elternseite je Datei ist ausdrücklich ein Nicht-Ziel
+des zugehörigen Plans, keine offene Frage. `assets/js/page-importer.js`
 liest den Wert **einmal vor Beginn** des Laufs (`importStarten()`) und
 schickt ihn bei **jedem** der `cbd_import_pages`-Aufrufe je Datei als
 `parent_id` mit; während des Laufs ist das Feld `disabled`, danach wieder
 frei. Würde der Wert je Datei neu gelesen, könnte eine Bedienung mitten im
 Lauf die Zuordnung für die zweite Hälfte der Dateien ändern.
 
-`wp_dropdown_pages()` bekommt `post_status => array('publish', 'draft')` —
-**diese Ergänzung ist notwendig, nicht kosmetisch:** Ohne sie zeigt die
-Funktion nur veröffentlichte Seiten. Der Importer legt aber ausschließlich
-**Entwürfe** an; ohne den Statusfilter wäre ein gerade importiertes Kapitel
-bei einem Folgeimport nie als Elternseite wählbar gewesen.
+**Kaskadierende Auswahl statt Einzeldropdown (seit dem Vorhaben
+„Seitenimporter-Kaskaden-Zielauswahl", 2026-08-25).** Das hier bis dahin
+eingesetzte `wp_dropdown_pages()` ist ersetzt durch eine gestaffelte,
+mit der echten Seitenhierarchie wachsende Reihe von Auswahlfeldern:
+`admin/page-import.php` rendert nur noch ein verstecktes
+`<input type="hidden" id="cbd-import-parent" name="cbd-import-parent">`
+(unverändert dieselbe ID/dasselbe Name-Attribut — der gesamte nachgelagerte
+Code, insbesondere `importStarten()` und `bereinige_elternseite()` unten,
+liest weiterhin nur dieses eine Feld und bleibt unverändert) plus einen
+leeren Container `#cbd-pi-kaskade`. `assets/js/page-importer.js` baut darin
+beim Laden über `window.wp.apiFetch({ path: '/cbd/v1/seitenbaum?entwuerfe=1' })`
+den erweiterten Seitenbaum auf (Route und Parameter siehe Abschnitt
+„Blockreferenz als Textformat und hierarchische Zielauswahl" weiter unten,
+Unterabschnitt „Vertrag B in der Praxis") — der opt-in Parameter
+`entwuerfe=1` schließt Entwürfe ein und übernimmt damit denselben Zweck,
+den vorher `wp_dropdown_pages(['post_status' => ['publish', 'draft']])`
+hatte: ein frisch importiertes, nur als Entwurf angelegtes Kapitel muss bei
+einem Folgeimport als Elternseite wählbar sein. Aus der Antwort entsteht je
+Hierarchieebene ein `<select class="cbd-pi-kaskade-ebene">`; die nächste
+Ebene erscheint erst, nachdem in der vorherigen eine Seite mit Unterseiten
+gewählt wurde. Jede Auswahl setzt das versteckte Feld synchron auf die ID
+der tiefsten gewählten Seite (oder `0`). Schlägt der Aufruf fehl, bleibt das
+Feld auf `0` und der Dialog bleibt benutzbar — dieselbe Fallback-Philosophie
+wie bei `bereinige_elternseite()` unten.
+
+**Bereits gefundene und behobene Falle in dieser Logik (Review-Befund B1,
+behoben in AP-1.fix1):** Die erste Option einer Zwischenebene, „— diese
+Seite als Elternseite —", trägt als Wert die ID der bereits gewählten
+Elternseite, nicht `0`. `kaskadeAuswahlGeaendert()` brach ursprünglich nur
+bei `gewaehlteId === 0` ab und hängte beim Rücksprung auf genau diese
+Option eine zweite, wortgleiche Ebene mit denselben Kindern an, statt die
+Auswahl unverändert zu lassen — ein Verstoß gegen „Erneute Wahl in einer
+höheren Ebene entfernt alle tieferen Ebenen" dem Sinn nach (das versteckte
+Feld blieb dabei in jedem geprüften Ablauf korrekt gesetzt, es entstand
+also keine falsche `post_parent`, nur eine überflüssige Doppel-Ebene). Der
+Fix vergleicht zusätzlich gegen den Wert der eigenen ersten Option der
+Ebene (`ausgewaehltesFeld.options[0].value`) — für die erste Ebene
+weiterhin `0`, für tiefere Ebenen die schon gewählte Eltern-ID. Wer
+`kaskadeAuswahlGeaendert()` künftig ändert, sollte diesen Vergleich
+mitnehmen, statt nur auf `0` zu prüfen — sonst kehrt dieselbe Doppel-Ebene
+zurück. Regressionsschutz: `tools/test-page-importer-kaskade.js`.
 
 Serverseitig bereinigt die private Methode
 `CBD_Page_Importer::bereinige_elternseite($roh): int`
@@ -1753,6 +1789,25 @@ per `(object)` gecastet — ein PHP-Array mit den Schlüsseln `0..n-1` würde
 sonst als JSON-**Liste** ausgegeben und vom Client stillschweigend verworfen
 (AP-3.fix3, Befund S1); ein Cast in `baue_seitenbaum()` hätte dagegen rund 60
 Bestandsprüfungen zerstört, die mit Array-Syntax auf das Ergebnis zugreifen.
+
+**Seit dem Vorhaben „Seitenimporter-Kaskaden-Zielauswahl" (2026-08-25) kennt
+die Route zusätzlich den optionalen Query-Parameter `entwuerfe`** (Wert
+`'1'` schließt Seiten mit `post_status = 'draft'` zusätzlich zu `publish`
+ein). Ohne den Parameter — oder mit jedem anderen Wert als `'1'` — bleibt
+das Verhalten exakt wie zuvor: eine rein additive Opt-in-Erweiterung, die
+Rückwärtskompatibilität zu `assets/js/block-auswahl.js`
+(`window.cbdBlockAuswahl`), das dieselbe Route weiterhin ohne diesen
+Parameter aufruft, bleibt zwingend gewahrt. Der Innerhalb-einer-Anfrage-Cache
+`self::$seitenbaum_cache` ist seither **parameterabhängig**: ein
+assoziatives Array mit den Schlüsseln `'ohne_entwuerfe'`/`'mit_entwuerfe'`
+statt eines einzelnen `WP_REST_Response|null`-Slots — ein zweiter Aufruf mit
+anderem Parameterwert innerhalb derselben Anfrage bekäme sonst das falsch
+gecachte Ergebnis des ersten Aufrufs zurück. `seitenbaum_cache_vergessen()`
+leert beide Schlüssel gemeinsam (`self::$seitenbaum_cache = array();`).
+Konsumiert wird der Parameter aktuell vom Seitenimporter
+(`assets/js/page-importer.js`, `GET cbd/v1/seitenbaum?entwuerfe=1`, siehe
+Abschnitt „Seitenimport" oben, Unterabschnitt „Elternseite gilt für den
+ganzen Lauf").
 
 Das Feld `gesperrt` kommt aus einer **dreistufigen** Kette, jede Stufe hinter
 `function_exists()`: zuerst `simple_clean_gesperrte_seiten_mit_unterbaum()`

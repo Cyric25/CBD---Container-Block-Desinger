@@ -1,6 +1,6 @@
 # Projektplan: Gestaffelte Elternseiten-Auswahl im Seitenimporter
 
-_Erstellt am: 2026-08-25 · Letzte Aktualisierung: 2026-08-25 (AP-1.fix1 abgeschlossen)_
+_Erstellt am: 2026-08-25 · Letzte Aktualisierung: 2026-08-25 (AP-1.doc abgeschlossen, Phase 1 vollständig)_
 
 ## 0. Anweisungen für den ausführenden Agenten
 
@@ -920,7 +920,7 @@ seinen „Betroffenen Dateien" listet.
 
 ### AP-1.doc: Dokumentation aktualisieren
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.rev, AP-1.fix1
@@ -974,7 +974,94 @@ seinen „Betroffenen Dateien" listet.
   `class-cbd-blocks-rest-api.php` gegenprüfen.
 
 **Übergabenotiz:**
-(leer – wird vom ausführenden Agenten nach Abschluss ausgefüllt)
+Umgesetzt wie im Vorgehen beschrieben, keine Abweichung.
+
+**`CLAUDE.md` (Plugin-Root):**
+1. Abschnitt „Seitenimport", Unterabschnitt „Elternseite gilt für den ganzen
+   Lauf": Der bestehende erste Absatz verwies noch auf `wp_dropdown_pages()`
+   als aktuelle Implementierung — das ist seit AP-1.2 nicht mehr korrekt
+   (`admin/page-import.php` ruft diese Funktion nicht mehr auf, per Grep
+   verifiziert: 0 Treffer). Diese Erwähnung entfernt, sonst hätte die
+   Akzeptanzkriterien-Vorgabe „kein Verweis auf nicht mehr existierende
+   Funktionen" nicht gehalten. Direkt danach zwei neue Absätze ergänzt: einer
+   beschreibt die Kaskade (`wp_dropdown_pages()` ersetzt, verstecktes Feld
+   `cbd-import-parent` unverändert namens-/ID-gleich, Laden über
+   `window.wp.apiFetch({ path: '/cbd/v1/seitenbaum?entwuerfe=1' })`), der
+   zweite beschreibt die in AP-1.fix1 behobene Doppel-Ebenen-Falle
+   (Rücksprung auf „— diese Seite als Elternseite —" mit Wert = Eltern-ID statt
+   `0`) als Beispiel für eine bereits gefundene und behobene Falle in dieser
+   Logik, inkl. Hinweis auf den Vergleich gegen
+   `ausgewaehltesFeld.options[0].value` als Regel für künftige Änderungen.
+2. Abschnitt „Blockreferenz als Textformat und hierarchische Zielauswahl",
+   Unterabschnitt „Vertrag B in der Praxis": neuer Absatz zum optionalen
+   Parameter `entwuerfe` (Opt-in, Rückwärtskompatibilität zu
+   `block-auswahl.js` gewahrt) und zur jetzt parameterabhängigen
+   Cache-Struktur (`self::$seitenbaum_cache['ohne_entwuerfe']`/
+   `['mit_entwuerfe']` statt eines einzelnen Slots), mit Verweis auf
+   `seitenbaum_cache_vergessen()` und den konsumierenden Seitenimporter.
+
+**`reference_file_map.md`:** Fünf Stellen wie im AP vorgesehen aktualisiert:
+`class-cbd-blocks-rest-api.php` (Zeile 51, `entwuerfe`-Parameter +
+Cache-Umstellung, `page-importer.js` als zusätzliche Abhängigkeit ergänzt),
+`page-import.php` (Zeile 73, `wp_dropdown_pages()` entfernt vermerkt,
+verstecktes Feld + Kaskaden-Container beschrieben), `page-importer.js`
+(Zeile 99, alle sechs Kaskadenfunktionen benannt, B1-Fix erwähnt),
+`test-seitenbaum.php` (neuer Absatz zu den 6 zusätzlichen Prüfungen aus
+AP-1.1, 97→103), und ein komplett neuer Eintrag für
+`tools/test-page-importer-kaskade.js` (nach dem Vorbild von
+`test-block-auswahl.js`, wie im AP gefordert) direkt nach
+`test-page-importer.php` eingefügt. „Stand"-Datum im Kopf (Zeile 3) auf
+2026-08-25 aktualisiert.
+
+**Stichproben (Tests dieses APs), tatsächlich ausgeführt:**
+- Grep auf `entwuerfe|mit_entwuerfe|ohne_entwuerfe|seitenbaum_cache` in
+  `includes/class-cbd-blocks-rest-api.php` bestätigt Parametername, beide
+  Cache-Schlüssel-Strings und den Array-Typ von `$seitenbaum_cache` exakt
+  wie in der Doku beschrieben.
+- Grep auf alle sechs in `reference_file_map.md` neu genannten
+  Funktionsnamen (`kaskadeLaden`, `kaskadeFehler`, `kaskadeZeichnen`,
+  `kaskadeEbeneBauen`, `kaskadeAuswahlGeaendert`, `kaskadeSperren`) sowie auf
+  die Ankerzeile `var KONF = window.cbdPageImport;` und
+  `options[0].value` in `assets/js/page-importer.js` — alle vorhanden, exakt
+  an den beschriebenen Stellen. `tools/test-page-importer-kaskade.js`
+  existiert im Repo (per Glob bestätigt).
+- Zusätzlich (über die Pflichttests des APs hinaus) beide betroffenen
+  Testsuiten direkt ausgeführt, um die genannten Prüfungszahlen zu
+  verifizieren statt nur die Übergabenotizen zu zitieren:
+  `php tools/test-seitenbaum.php` → **103 Prüfungen, 0 Fehler**, „ALLE TESTS
+  BESTANDEN" (Gruppe 13 „Entwuerfe-Parameter" mit den 6 neuen Fällen
+  bestätigt sichtbar im Log). `node tools/test-page-importer-kaskade.js` →
+  **64 Prüfungen, 0 Fehler**, „ALLE TESTS BESTANDEN".
+
+**Keine Abweichung vom vorgegebenen Vorgehen.** Keine Datei außer den zwei
+genannten Doku-Dateien und dieser Plan-Datei wurde verändert.
+
+**Kleine, nicht umgesetzte Randbeobachtung (außerhalb des AP-Scope, hier nur
+vermerkt statt umgesetzt, siehe Abschnitt 0 Regel 4):** Die Prüfharnisch-Tabelle
+im Abschnitt „Blockreferenz als Textformat und hierarchische Zielauswahl"
+nennt für `tools/test-seitenbaum.php` weiterhin „**97**" Prüfungen — seit
+AP-1.1 sind es 103. Das AP listete diese Tabellenzeile nicht unter den zu
+ändernden Stellen (nur die „Vertrag B in der Praxis"-Prosa direkt darüber),
+daher hier nicht angefasst; für ein künftiges, kleines AP vorgemerkt.
+
+**Abschnitt 8 (Statustabelle) gegengeprüft:** Alle sechs APs (AP-1.1,
+AP-1.2, AP-1.3, AP-1.rev, AP-1.fix1, AP-1.doc) standen bereits korrekt auf
+☑ bzw. wurden mit diesem AP auf ☑ gesetzt — keine falsche Änderung eines
+tatsächlich noch offenen Punkts nötig, da AP-1.rev keine kritischen Befunde
+hinterließ und AP-1.fix1 beide mittleren Befunde (B1, B2) nachweislich
+behoben hat.
+
+**Einschätzung zur Merge-Bereitschaft (Regel 16, nur zur Information — Merge
+nicht selbst durchgeführt):** Aus meiner Sicht sind die Voraussetzungen für
+einen Merge nach `main` erfüllt. Der Phasen-Integrationstest/Regressionscheck
+liegt vor (Testprotokoll-Zeile „Phase 1 Integrationstest", 2026-08-25, alle
+bestanden), das Review-AP (`AP-1.rev`) liegt vor und stufte die Phase als frei
+von kritischen Befunden ein, und die beiden dort gefundenen mittleren Befunde
+(B1, B2) sind über `AP-1.fix1` nachweislich behoben (inkl. per `git stash`
+verifiziertem Testfang). Mit diesem AP ist auch die zuvor offene Regel-14-Lücke
+(Befund B7, Datei-Map-Pflege) geschlossen. Alle sechs APs der Phase stehen auf
+☑. Der eigentliche Merge-Schritt selbst wurde absichtlich nicht ausgeführt, wie
+beauftragt.
 
 ## 8. Status
 
@@ -987,7 +1074,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.3 | Gestaltung der Kaskaden-Auswahlfelder | sonnet | ☑ | AP-1.2 | Klammernbalance geprüft, visueller Live-Test offen mangels Admin-Login |
 | AP-1.rev | Review Phase 1 | opus | ☑ | AP-1.1, AP-1.2, AP-1.3 | Keine kritischen Befunde; B1 (mittel, Doppel-Ebene) und B2 (mittel, fehlender Testharnisch) → AP-1.fix1 |
 | AP-1.fix1 | Kaskade: Doppel-Ebene beheben, Testharnisch nachziehen | sonnet | ☑ | AP-1.2, AP-1.rev | B1 behoben, 64 Prüfungen grün (Testfang per git-stash-Regression bestätigt), keine Regression |
-| AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev, AP-1.fix1 | |
+| AP-1.doc | Doku Phase 1 | sonnet | ☑ | AP-1.rev, AP-1.fix1 | `CLAUDE.md` (2 Abschnitte) + `reference_file_map.md` (5 Stellen inkl. neuer Testharnisch) aktualisiert, Stichproben grün, Phase 1 vollständig ☑ |
 
 ## 9. Testprotokoll
 
@@ -1001,6 +1088,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | 2026-08-25 | Phase 1 Integrationstest | `php tools/test-seitenbaum.php` (103 Prüfungen), `php tools/check-php74.php` (alle Plugin-Dateien), Node-Kaskadentest (25 Prüfungen), `php -l` auf allen drei geänderten PHP-Dateien | Alle bestanden, keine Regression | Vollständiger Regressionslauf |
 | 2026-08-25 | AP-1.rev | `php tools/test-seitenbaum.php` (103/103), `php tools/check-php74.php` (569 Dateien OK), zusätzlich `php -l` (3 Dateien), `php tools/test-page-importer.php` (34/34), `node tools/test-block-auswahl.js` (140/140), eigener Inline-Harnisch für Cache-Isolation/Rückwärtskompatibilität, `git diff`-Scope-Check | Bestanden, keine kritischen Befunde; B1/B2 (mittel) → AP-1.fix1 ergänzt, B3-B8 (gering) dokumentiert | Unabhängiger Review-Agent |
 | 2026-08-25 | AP-1.fix1 | `node tools/test-page-importer-kaskade.js` (neuer Harnisch, B2 behoben), Regression: `php tools/test-seitenbaum.php`, `php tools/test-page-importer.php`, `node tools/test-block-auswahl.js`, `node --check` auf beiden JS-Dateien; Testfang von B1 per temporärem `git stash` gegen den alten Code verifiziert | Bestanden: neuer Harnisch 64/64 (fängt B1 nachweislich, schlägt gegen ungefixten Code exakt an der B1-Prüfung fehl); Regression 103/103 + 34/34 + 140/140, keine Fehler; Live-Smoke-Test auf `fos.localhost:8080` nicht durchgeführt (Server nicht erreichbar, HTTP 000) | Direkte Testausführung |
+| 2026-08-25 | AP-1.doc | Grep auf `entwuerfe`/`mit_entwuerfe`/`ohne_entwuerfe`/`seitenbaum_cache` in `class-cbd-blocks-rest-api.php`; Grep auf alle sechs neu benannten Kaskadenfunktionen, die Ankerzeile `var KONF = window.cbdPageImport;` und `options[0].value` in `page-importer.js`; Glob auf `tools/test-page-importer-kaskade.js`; zusätzlich zur Vertiefung `php tools/test-seitenbaum.php` und `node tools/test-page-importer-kaskade.js` erneut direkt ausgeführt | Bestanden: alle Parameternamen, Cache-Schlüssel und Funktionsnamen exakt wie dokumentiert im Quelltext gefunden; `test-seitenbaum.php` 103/103, `test-page-importer-kaskade.js` 64/64, beide „ALLE TESTS BESTANDEN"; keine Datei außer den beiden Doku-Dateien und dieser Plan-Datei verändert | Direkte Testausführung |
 
 ## 10. Dokumentation
 
