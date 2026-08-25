@@ -206,7 +206,20 @@
         var elternfeld = $('cbd-import-parent');
         if (elternfeld) { elternfeld.value = String(gewaehlteId); }
 
-        if (gewaehlteId === 0 || !seitenbaum) { return; }
+        // Die erste Option dieser Ebene ("— oberste Ebene —" bei der ersten
+        // Ebene, sonst "— diese Seite als Elternseite —") trägt als Wert
+        // genau die ID, die diese Ebene bereits repräsentiert (siehe
+        // kaskadeEbeneBauen(), Parameter elternId). Wird sie gewählt, ist
+        // keine tiefere Auswahl gewollt – unabhängig davon, ob dieser Wert
+        // 0 ist (erste Ebene) oder eine Eltern-ID (tiefere Ebene). Ohne
+        // diesen Vergleich hängte eine erneute Wahl von „— diese Seite als
+        // Elternseite —" eine weitere, wortgleiche Ebene mit denselben
+        // Kindern an (Review-Befund B1).
+        var eigenerElternWert = (ausgewaehltesFeld.options && ausgewaehltesFeld.options.length > 0)
+            ? (parseInt(ausgewaehltesFeld.options[0].value, 10) || 0)
+            : 0;
+
+        if (gewaehlteId === eigenerElternWert || !seitenbaum) { return; }
 
         var kinder = (seitenbaum.kinder && seitenbaum.kinder[gewaehlteId]) || [];
         if (kinder.length === 0) { return; }

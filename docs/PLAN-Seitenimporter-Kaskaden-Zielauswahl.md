@@ -1,6 +1,6 @@
 # Projektplan: Gestaffelte Elternseiten-Auswahl im Seitenimporter
 
-_Erstellt am: 2026-08-25 · Letzte Aktualisierung: 2026-08-25_
+_Erstellt am: 2026-08-25 · Letzte Aktualisierung: 2026-08-25 (AP-1.fix1 abgeschlossen)_
 
 ## 0. Anweisungen für den ausführenden Agenten
 
@@ -770,7 +770,7 @@ kein Korrekturbedarf.
 
 ### AP-1.fix1: Kaskade — Doppel-Ebene beim Rücksprung vermeiden, Testabdeckung nachziehen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.2, AP-1.rev (liefert die Befunde B1/B2)
@@ -839,7 +839,82 @@ Behebt zwei Befunde aus dem Review-Bericht von AP-1.rev:
   zweiten Ebene, prüfen, dass keine doppelte dritte Ebene erscheint.
 
 **Übergabenotiz:**
-(leer – wird vom ausführenden Agenten nach Abschluss ausgefüllt)
+Umgesetzt wie im Vorgehen beschrieben, keine wesentlichen Abweichungen.
+
+**B1 (Doppel-Ebene):** In `kaskadeAuswahlGeaendert()` (`assets/js/page-importer.js`)
+wird jetzt neben `gewaehlteId === 0` zusätzlich geprüft, ob der gewählte Wert
+der ID entspricht, die die Ebene selbst schon repräsentiert — gelesen aus
+`ausgewaehltesFeld.options[0].value` (der Wert der eigenen ersten Option,
+„— oberste Ebene —" bzw. „— diese Seite als Elternseite —"). Für die erste
+Ebene ist dieser Wert weiterhin `0`, für tiefere Ebenen die bereits gewählte
+Eltern-ID — dieselbe Fallunterscheidung wie in `kaskadeEbeneBauen()`, hier
+aber am tatsächlich gerenderten Element abgelesen statt neu berechnet. Das
+verhindert das Anhängen einer wortgleichen Doppel-Ebene, ohne die
+Zuweisung des versteckten Felds `#cbd-import-parent` zu verändern (sie bleibt
+`elternfeld.value = String(gewaehlteId)`, unabhängig vom Fix). Keine andere
+Funktion angefasst.
+
+**B2 (fehlender Testharnisch):** `tools/test-page-importer-kaskade.js` neu
+angelegt, nach dem Vorbild von `tools/test-block-auswahl.js`, aber mit einer
+notwendigen Anpassung: `page-importer.js` exportiert selbst nichts nach
+`window` (anders als `block-auswahl.js`, das `window.cbdBlockAuswahl` setzt),
+die Kaskadenfunktionen sind reine unexportierte Funktionsdeklarationen im
+Rumpf der Datei-IIFE. Der Harnisch liest die Datei deshalb als Text, prüft,
+dass die Ankerzeile `var KONF = window.cbdPageImport;` genau einmal vorkommt,
+und fügt an dieser Stelle eine einzige zusätzliche Zeile ein, die die (dank
+Function-Hoisting bereits existierenden) Funktionsreferenzen auf
+`window.__cbdTestHooks__` legt — kein Funktionsrumpf wird dabei verändert.
+Der so modifizierte Text läuft über `new Function('window', 'document',
+quelle)` gegen einen selbstgeschriebenen, minimalen DOM-Stub (Elemente mit
+`childNodes`/`parentNode`/`appendChild`/`removeChild`/`nextSibling`/
+`firstChild`/`options`/`value`/`text`/`textContent`/`className`/`disabled`/
+`querySelectorAll`, Dokument mit `getElementById`/`createElement`/
+`addEventListener`-No-op). Das entspricht der im AP vorgegebenen Methode
+„Laden der Datei und Ausführen im gleichen Node-Prozess" — keine Logik der
+geprüften Funktionen wurde nachgebaut.
+
+**Bestätigt, dass der neue Test die Regression tatsächlich fängt:** Vor dem
+endgültigen Abschluss wurde der Fix per `git stash` temporär entfernt und der
+Testlauf wiederholt — dabei schlug **exakt** die neue B1-Prüfung fehl
+(„B1: genau zwei Ebenen nach dem Ruecksprung … -> 3", alle anderen 63
+Prüfungen blieben grün), danach `git stash pop` und erneuter grüner Lauf
+(64/64). Der Test ist damit nachweislich kein Blindgänger.
+
+Abgedeckte Fallgruppen (64 Prüfungen, deutlich über den geforderten
+mindestens 26): Hausstil/Sicherheitskonvention (kein `.innerHTML =`,
+Ankerzeile eindeutig), Modul lädt ohne Ausnahme, Ebene-1-Aufbau aus `wurzeln`
+(inkl. eines Titels mit HTML-ähnlichem Text, der wortgleich über `.text`
+ankommt statt geparst zu werden), Drill-down bei Seite mit Kindern, kein
+Anhängen bei einem Blatt, Pruning bei erneuter Wahl in einer höheren Ebene,
+Rücksprung auf „oberste Ebene" (Wert 0), der neue B1-Fall (Rücksprung auf
+„diese Seite als Elternseite" in einer Zwischenebene bei bereits
+existierender dritter Ebene), `kaskadeFehler()`, `kaskadeSperren()` (inkl.
+Randfall ohne Container), und `kaskadeLaden()` in allen drei Pfaden (kein
+`wp.apiFetch`, `apiFetch` schlägt fehl, `apiFetch` erfolgreich — jeweils mit
+Verifikation des angefragten Pfads `/cbd/v1/seitenbaum?entwuerfe=1`).
+
+Keine PHP-Änderung in diesem AP — `check-php74.php` daher nicht ausgeführt
+(wie im Vorgehen vorgesehen), stattdessen `node --check` auf beiden
+JavaScript-Dateien.
+
+**Testnachweis:**
+- `node tools/test-page-importer-kaskade.js` → **64 Prüfungen, 0 Fehler**,
+  „ALLE TESTS BESTANDEN" (Smoke-Test dieses APs).
+- Regressionslauf: `php tools/test-seitenbaum.php` → 103/103 OK, „ALLE TESTS
+  BESTANDEN". `php tools/test-page-importer.php` → 34/34 OK, „ALLE TESTS
+  BESTANDEN". `node tools/test-block-auswahl.js` → 140/140 OK, „ALLE TESTS
+  BESTANDEN". Keine Regression an einer der drei bestehenden Suiten.
+- `node --check assets/js/page-importer.js` und
+  `node --check tools/test-page-importer-kaskade.js` → beide fehlerfrei.
+- Smoke-Test auf `fos.localhost:8080`: **nicht durchgeführt** — Server in
+  dieser Session nicht erreichbar (`curl` auf `http://fos.localhost:8080/`
+  liefert keine Antwort, HTTP-Code 000). Wie im AP vorgesehen im
+  Testprotokoll vermerkt, kein Abbruch.
+
+Keine Abweichung vom vorgegebenen Vorgehen. `reference_file_map.md` wird wie
+in Abschnitt 0/Review-Befund B7 vorgesehen erst in `AP-1.doc` nachgezogen
+(dort auch die neue Testdatei ergänzen), da AP-1.fix1 diese Datei nicht in
+seinen „Betroffenen Dateien" listet.
 
 ---
 
@@ -907,7 +982,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.2 | Kaskadierende Auswahl in JS/PHP | opus | ☑ | AP-1.1 | 25 Verhaltenstests grün, Live-Browser-Test offen mangels Admin-Login |
 | AP-1.3 | Gestaltung der Kaskaden-Auswahlfelder | sonnet | ☑ | AP-1.2 | Klammernbalance geprüft, visueller Live-Test offen mangels Admin-Login |
 | AP-1.rev | Review Phase 1 | opus | ☑ | AP-1.1, AP-1.2, AP-1.3 | Keine kritischen Befunde; B1 (mittel, Doppel-Ebene) und B2 (mittel, fehlender Testharnisch) → AP-1.fix1 |
-| AP-1.fix1 | Kaskade: Doppel-Ebene beheben, Testharnisch nachziehen | sonnet | ☐ | AP-1.2, AP-1.rev | Korrektur-AP aus Review-Befunden B1/B2 |
+| AP-1.fix1 | Kaskade: Doppel-Ebene beheben, Testharnisch nachziehen | sonnet | ☑ | AP-1.2, AP-1.rev | B1 behoben, 64 Prüfungen grün (Testfang per git-stash-Regression bestätigt), keine Regression |
 | AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev, AP-1.fix1 | |
 
 ## 9. Testprotokoll
@@ -921,6 +996,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | 2026-08-25 | AP-1.3 | CSS-Klammernbalance per Node-Skript | Bestanden (Endstand 0), visueller Live-Test bei 480px mangels Admin-Zugang offen | Direkte Prüfung |
 | 2026-08-25 | Phase 1 Integrationstest | `php tools/test-seitenbaum.php` (103 Prüfungen), `php tools/check-php74.php` (alle Plugin-Dateien), Node-Kaskadentest (25 Prüfungen), `php -l` auf allen drei geänderten PHP-Dateien | Alle bestanden, keine Regression | Vollständiger Regressionslauf |
 | 2026-08-25 | AP-1.rev | `php tools/test-seitenbaum.php` (103/103), `php tools/check-php74.php` (569 Dateien OK), zusätzlich `php -l` (3 Dateien), `php tools/test-page-importer.php` (34/34), `node tools/test-block-auswahl.js` (140/140), eigener Inline-Harnisch für Cache-Isolation/Rückwärtskompatibilität, `git diff`-Scope-Check | Bestanden, keine kritischen Befunde; B1/B2 (mittel) → AP-1.fix1 ergänzt, B3-B8 (gering) dokumentiert | Unabhängiger Review-Agent |
+| 2026-08-25 | AP-1.fix1 | `node tools/test-page-importer-kaskade.js` (neuer Harnisch, B2 behoben), Regression: `php tools/test-seitenbaum.php`, `php tools/test-page-importer.php`, `node tools/test-block-auswahl.js`, `node --check` auf beiden JS-Dateien; Testfang von B1 per temporärem `git stash` gegen den alten Code verifiziert | Bestanden: neuer Harnisch 64/64 (fängt B1 nachweislich, schlägt gegen ungefixten Code exakt an der B1-Prüfung fehl); Regression 103/103 + 34/34 + 140/140, keine Fehler; Live-Smoke-Test auf `fos.localhost:8080` nicht durchgeführt (Server nicht erreichbar, HTTP 000) | Direkte Testausführung |
 
 ## 10. Dokumentation
 
