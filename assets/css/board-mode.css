@@ -57,8 +57,16 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 20px;
-    background: var(--color-text-primary, #333333);
-    color: var(--color-background, #ffffff);
+    /* AP-1.4 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): bewusst NICHT
+       var(--color-text-primary)/var(--color-background) - beide Variablen
+       kehren sich im Darkmode um (--color-text-primary wird hell,
+       --color-background dunkel). Als Hintergrund/Textfarbe eingesetzt
+       kippte die Kopfleiste im Darkmode faelschlich auf hell mit dunklem
+       Text statt dunkel mit hellem Text zu bleiben. Diese Leiste ist in
+       beiden Modi bewusst eine dunkle Farbflaeche (wie der plastische Look
+       der Kopfleiste im Theme) - kein Chrome, das dem Farbmodus folgen soll. */
+    background: #333333;
+    color: #ffffff;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
     position: relative;
     z-index: 2;
@@ -950,12 +958,19 @@
 }
 
 .cbd-board-confirm-cancel {
-    background: #f0f0f0; /* kein AP-1.1-Treffer */
-    color: #555; /* kein AP-1.1-Treffer */
+    background: var(--color-background-light, #f0f0f0);
+    color: var(--color-text-primary, #555);
 }
 
+/* AP-1.4 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): vorher stand hier
+   `background: var(--color-sidebar-border, #e0e0e0)` gegen ein literales
+   `color: #555` - im Darkmode loest --color-sidebar-border zu #444444 auf,
+   Kontrast fiel auf ca. 1,2:1 (bereits als offener Nebenbefund aus dem
+   AP-2.rev von PLAN-Darkmode-Umschaltung.md dokumentiert). Beide
+   Eigenschaften jetzt gemeinsam themefaehig, keine Variablen-Kollision mehr. */
 .cbd-board-confirm-cancel:hover {
     background: var(--color-sidebar-border, #e0e0e0);
+    color: var(--color-text-primary, #555);
 }
 
 .cbd-board-confirm-delete {
@@ -965,6 +980,58 @@
 
 .cbd-board-confirm-delete:hover {
     background: #aa2222; /* kein AP-1.1-Treffer */
+}
+
+/* =============================================
+   DARKMODE - Werkzeugleiste, Zeichenflaechen-Rahmen, Farbauswahl-Dialog
+   (AP-1.4, PLAN-PDF-Export-und-Tafelmodus-Fixes.md)
+   ============================================= */
+
+/* Diese Datei war beim urspruenglichen Umbau auf den manuellen Darkmode-
+   Umschalter (PLAN-Darkmode-Umschaltung.md, Phase 2) bewusst ausgenommen
+   (kein [data-theme]-Vorkommen, siehe reference_file_map.md) - deshalb
+   ausschliesslich [data-theme="dark"] .selektor nach dem etablierten
+   Muster, niemals @media (prefers-color-scheme: dark). Die vom Nutzer
+   waehlbare Zeichenfarbpalette (.cbd-board-preset-color,
+   .cbd-board-bg-preset-btn mit den Weiss/Gruen/Schwarz-Tafelfarben) ist
+   Inhalt, nicht Chrome, und bleibt bewusst unangetastet (siehe dortiger
+   Kommentar). */
+
+[data-theme="dark"] .cbd-board-content {
+    background: var(--color-background-light, #1e1e1e);
+}
+
+[data-theme="dark"] .cbd-board-canvas-area {
+    background: var(--color-background-light, #1e1e1e);
+}
+
+[data-theme="dark"] .cbd-board-toolbar {
+    background: var(--color-background-light, #1e1e1e);
+    border-top-color: var(--color-border, #444444);
+}
+
+/* Farbauswahl-Dialog auf der Zeichenflaeche (Tafelfarbe-Presets). Nur die
+   Dialogflaeche selbst wird angepasst - die drei Vorschau-Buttons darin
+   bleiben unangetastet (Inhalt, siehe Kommentar bei
+   .cbd-board-bg-preset-btn weiter oben). */
+[data-theme="dark"] .cbd-board-color-picker-overlay {
+    background: rgba(30, 30, 30, 0.95);
+}
+
+[data-theme="dark"] .cbd-board-color-picker-label {
+    color: var(--color-text-primary, #e8e8e8);
+}
+
+/* AP-1.5 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): invertiert Hintergrund-,
+   Gitter- und Zeichen-Canvas gemeinsam (alle drei liegen als Ebenen in
+   diesem Wrapper, siehe board-mode.js::initCanvases()). Klasse wird von
+   board-mode.js::updateDarkModeInversion() gesetzt/entfernt - nur wenn
+   Darkmode aktiv UND die Tafel auf der weissen Standardfarbe steht (siehe
+   dortiger Kommentar). Bewusst kein [data-theme="dark"]-Praefix vor dem
+   Selektor: die Klasse selbst traegt die Bedingung bereits, sie wird nur
+   im Darkmode ueberhaupt gesetzt. */
+.cbd-board-canvas-container.cbd-board-inverted {
+    filter: invert(1);
 }
 
 /* =============================================

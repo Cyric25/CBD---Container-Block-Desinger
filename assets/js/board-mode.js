@@ -685,6 +685,34 @@
                     if (icon) icon.style.color = color === '#ffffff' ? '#555' : '#fff';
                 }
             }
+            this.updateDarkModeInversion();
+        },
+
+        /**
+         * AP-1.5 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): Invertiert die
+         * Zeichenflaeche (Hintergrund- + Gitter- + Zeichen-Canvas gemeinsam,
+         * ueber den gemeinsamen Wrapper .cbd-board-canvas-container) per
+         * CSS-Filter, wenn die Website im Darkmode ist UND die Tafel auf der
+         * weissen Standardfarbe steht. Wirkt rein visuell auf die Darstellung
+         * (invert(1)) - die in localStorage/serverseitig gespeicherten
+         * Pixel bleiben unveraendert, betrifft also gleichermassen neu
+         * gezeichnete wie bereits vorher gespeicherte Notizen. Bewusst
+         * ausgenommen: Tafeln, die der Nutzer aktiv auf Gruen/Schwarz
+         * gestellt hat (boardColor !== '#ffffff') - eine bewusste
+         * Farbwahl soll nicht zusaetzlich invertiert werden.
+         *
+         * Aufgerufen von setBoardColor() - das deckt sowohl den initialen
+         * Zustand beim Oeffnen (init() ruft setBoardColor(this.boardColor)
+         * auf) als auch jeden Farbwechsel ueber den Tafelfarbe-Zyklus-Button
+         * ab.
+         */
+        updateDarkModeInversion: function() {
+            if (!this.overlay) return;
+            var container = this.overlay.querySelector('.cbd-board-canvas-container');
+            if (!container) return;
+            var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            var shouldInvert = isDark && this.boardColor === '#ffffff';
+            container.classList.toggle('cbd-board-inverted', shouldInvert);
         },
 
         /**
