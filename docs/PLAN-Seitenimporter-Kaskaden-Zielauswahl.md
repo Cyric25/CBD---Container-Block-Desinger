@@ -329,7 +329,7 @@ ist; kein Live-Test-Gap im Sinne der vorherigen Erweiterung.
 
 ### AP-1.2: Kaskadierende Auswahl in `page-importer.js` und `page-import.php`
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** L
 **Modell:** opus
 **Abhängigkeiten:** AP-1.1 (liefert `GET cbd/v1/seitenbaum?entwuerfe=1`)
@@ -482,7 +482,59 @@ während des Laufs) UNVERÄNDERT lauffähig.
   Elternseiten-Auswahl (oberste Ebene) muss weiterhin funktionieren.
 
 **Übergabenotiz:**
-(leer – wird vom ausführenden Agenten nach Abschluss ausgefüllt)
+Umgesetzt wie im Vorgehen beschrieben, keine wesentlichen Abweichungen.
+`admin/page-import.php`: `wp_dropdown_pages()` ersetzt durch
+`<input type="hidden" id="cbd-import-parent" name="cbd-import-parent" value="0">`
+plus `<div id="cbd-pi-kaskade" aria-live="polite" aria-labelledby="cbd-pi-elternseite-label">`
+mit Ladehinweis. Das `<label>` hat keinen `for` mehr (das referenzierte
+Feld ist jetzt versteckt), sondern eine `id`, auf die der Kaskaden-Container
+per `aria-labelledby` verweist — kleine A11y-Entscheidung, die im
+Vorgehen nicht explizit vorgegeben war.
+
+`assets/js/page-importer.js`: Neuer Abschnitt „Elternseite: gestaffelte,
+kaskadierende Auswahl" mit `kaskadeLaden()`, `kaskadeFehler()`,
+`kaskadeZeichnen()`, `kaskadeEbeneBauen()`, `kaskadeAuswahlGeaendert()`,
+`kaskadeSperren()`. `kaskadeLaden()` in `DOMContentLoaded` neben
+`stileLaden()` aufgerufen. `importStarten()` ruft zusätzlich
+`kaskadeSperren(true)`/`kaskadeSperren(false)` an denselben Stellen, an
+denen bisher nur `elternfeld.disabled` gesetzt wurde.
+
+`includes/class-cbd-page-importer.php`: `wp-api-fetch` zur
+Abhängigkeitsliste von `cbd-page-importer` ergänzt, sonst keine Änderung
+(insbesondere `bereinige_elternseite()` nicht angefasst).
+
+**Testnachweis (kein Admin-Login verfügbar, daher kein Live-Browser-Test –
+laut PLAN.md Abschnitt 3 zulässiger Fallback; hier aber zusätzlich über
+den Fallback hinausgehend abgesichert):** `php -l` (beide PHP-Dateien),
+`php tools/check-php74.php` (569 Dateien PHP-7.4-kompatibel) und ein
+JS-Syntax-Check via `new Function()` — alle fehlerfrei.
+
+Zusätzlich ein eigener Node-Testharnisch geschrieben (nach dem Vorbild von
+`tools/test-block-auswahl.js` im selben Plugin: „ohne jsdom", die echten
+Funktionen werden wörtlich aus der Quelldatei extrahiert und gegen einen
+selbst geschriebenen, minimalen DOM-Stub ausgeführt — keine handgebauten
+Attrappen der zu prüfenden Logik selbst, nur ihrer DOM-Umgebung). 25
+Prüfungen, alle bestanden: Ebene-1-Aufbau aus `wurzeln` (korrekte
+`value`/`text` je Option, Text ausschließlich über `.text`-Eigenschaft,
+kein `innerHTML`); Auswahl einer Seite mit Kindern hängt Ebene 2 mit deren
+Kindern an, verstecktes Feld wird synchron aktualisiert; Auswahl eines
+Blatts hängt keine weitere Ebene an; erneute Wahl in einer höheren Ebene
+entfernt alle tieferen Ebenen korrekt; Rücksprung auf „oberste Ebene"
+setzt das Feld auf `0`; `kaskadeFehler()` zeigt die Meldung ohne
+Ausnahme; `kaskadeSperren()` sperrt/entsperrt alle sichtbaren Ebenen;
+`kaskadeLaden()` verhält sich korrekt in allen drei Fällen (kein
+`wp.apiFetch` verfügbar, `apiFetch` schlägt fehl, `apiFetch` erfolgreich
+— dabei auch verifiziert, dass exakt der Pfad
+`/cbd/v1/seitenbaum?entwuerfe=1` angefragt wird, also der in AP-1.1
+gebaute Parameter tatsächlich genutzt wird).
+
+**Nicht abgedeckt (echte Lücke, nicht nur Formsache):** Ein echter
+Live-Test im Browser (`fos.localhost:8080`) — insbesondere ob
+`window.wp.apiFetch` auf dieser Admin-Seite tatsächlich automatisch mit
+REST-Wurzel/Nonce vorkonfiguriert ist, wie in Abschnitt 5 der PLAN.md als
+Risiko vermerkt — konnte in dieser Session mangels WP-Admin-Zugangsdaten
+nicht durchgeführt werden. Das ist der wichtigste noch offene Prüfpunkt
+vor einem Produktiv-Rollout.
 
 ---
 
@@ -669,7 +721,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP | Titel | Modell | Status | Abhängig von | Notiz |
 |---|---|---|---|---|---|
 | AP-1.1 | REST-Route um Entwürfe-Parameter erweitern | opus | ☑ | – | TDD, 97+6 Prüfungen grün, check-php74.php grün |
-| AP-1.2 | Kaskadierende Auswahl in JS/PHP | opus | ☐ | AP-1.1 | |
+| AP-1.2 | Kaskadierende Auswahl in JS/PHP | opus | ☑ | AP-1.1 | 25 Verhaltenstests grün, Live-Browser-Test offen mangels Admin-Login |
 | AP-1.3 | Gestaltung der Kaskaden-Auswahlfelder | sonnet | ☐ | AP-1.2 | |
 | AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1, AP-1.2, AP-1.3 | |
 | AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev | |
@@ -681,6 +733,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
 | 2026-08-25 | AP-1.1 | `php tools/test-seitenbaum.php` (TDD: rot vor Implementierung bestätigt, dann grün), `php tools/check-php74.php` | Bestanden (103 Prüfungen gesamt, 0 Fehler; 569 Dateien PHP-7.4-kompatibel) | Direkte Testausführung |
+| 2026-08-25 | AP-1.2 | `php -l` (2 Dateien), `php tools/check-php74.php`, JS-Syntax-Check; eigener Node-Testharnisch (echte extrahierte Funktionen gegen selbstgeschriebenen DOM-Stub, 25 Prüfungen: Kaskadenaufbau, Drill-down, Pruning, Reset, Fehlerfall, Sperren, alle drei kaskadeLaden()-Pfade inkl. REST-Pfad-Verifikation) | Bestanden (25/25), Live-Browser-Test mangels Admin-Zugang offen | Direkte Code-Ausführung (Node) |
 
 ## 10. Dokumentation
 

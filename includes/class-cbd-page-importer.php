@@ -119,7 +119,13 @@ class CBD_Page_Importer {
         wp_enqueue_script(
             'cbd-page-importer',
             CBD_PLUGIN_URL . 'assets/js/page-importer.js',
-            array('wp-i18n'),
+            // wp-api-fetch (seit Vorhaben „Seitenimporter-Kaskaden-
+            // Zielauswahl"): laedt GET cbd/v1/seitenbaum?entwuerfe=1 fuer
+            // die gestaffelte Elternseiten-Auswahl. Kein wp-element/React
+            // - wp-api-fetch ist nur ein Fetch-Wrapper mit automatischer
+            // REST-Wurzel/Nonce-Konfiguration, verletzt also nicht die
+            // "ohne React"-Konvention dieser Seite (siehe page-importer.js).
+            array('wp-i18n', 'wp-api-fetch'),
             CBD_VERSION,
             true
         );

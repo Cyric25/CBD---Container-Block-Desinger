@@ -109,6 +109,122 @@
     }
 
     // ---------------------------------------------------------------
+    // Elternseite: gestaffelte, kaskadierende Auswahl
+    //
+    // Ersetzt das frühere einzelne wp_dropdown_pages()-Feld. Das Feld
+    // #cbd-import-parent bleibt als verstecktes <input type="hidden">
+    // bestehen (siehe admin/page-import.php) und trägt weiterhin den
+    // finalen Wert – importStarten() liest es unverändert wie vorher.
+    // Die sichtbaren <select class="cbd-pi-kaskade-ebene">-Elemente sind
+    // reine UI und halten dieses Feld synchron.
+    //
+    // KEIN wp.element/React (Projektkonvention dieser Datei, siehe
+    // Datei-Kopf) – nur wp.apiFetch (kein UI-Framework, nur ein
+    // Fetch-Wrapper mit automatischer REST-Wurzel/Nonce-Konfiguration,
+    // sobald das Skript-Handle "wp-api-fetch" als Abhängigkeit eingebunden
+    // ist, siehe includes/class-cbd-page-importer.php).
+    // ---------------------------------------------------------------
+
+    /** {knoten, kinder, wurzeln} aus GET cbd/v1/seitenbaum?entwuerfe=1 – null bis geladen/bei Fehlschlag. */
+    var seitenbaum = null;
+
+    function kaskadeLaden() {
+        var ziel = $('cbd-pi-kaskade');
+        if (!ziel) { return Promise.resolve(); }
+
+        if (!window.wp || 'function' !== typeof window.wp.apiFetch) {
+            kaskadeFehler(ziel, 'Der Auswahlbaustein für die Seitenhierarchie ist nicht verfügbar. Die Elternseite bleibt auf oberster Ebene.');
+            return Promise.resolve();
+        }
+
+        return window.wp.apiFetch({ path: '/cbd/v1/seitenbaum?entwuerfe=1' }).then(function (baum) {
+            seitenbaum = baum;
+            kaskadeZeichnen(ziel);
+        }).catch(function (fehler) {
+            console.error('[CBD Seitenimport] Seitenbaum konnte nicht geladen werden', fehler);
+            kaskadeFehler(ziel, 'Seitenbaum konnte nicht geladen werden — Elternseite bleibt auf oberster Ebene.');
+        });
+    }
+
+    /** Ladeprobleme dürfen den Import nie blockieren – Elternseite bleibt „0" (oberste Ebene). */
+    function kaskadeFehler(ziel, text) {
+        leeren(ziel);
+        ziel.appendChild(el('p', 'cbd-pi-kaskade-status cbd-pi-kaskade-status--fehler', text));
+    }
+
+    /** Baut die erste Kaskaden-Ebene (Wurzeln) auf. */
+    function kaskadeZeichnen(ziel) {
+        leeren(ziel);
+        ziel.appendChild(kaskadeEbeneBauen(0, seitenbaum.wurzeln || []));
+    }
+
+    /**
+     * Baut ein <select class="cbd-pi-kaskade-ebene"> für eine Ebene.
+     *
+     * @param {number} elternId ID der übergeordneten Seite (0 = oberste Ebene). Wird als Wert der ersten Option verwendet, damit diese Ebene selbst als Elternseite gültig bleibt, wenn keine tiefere Unterseite gewählt wird.
+     * @param {Array<number>} kinderIds IDs der in dieser Ebene wählbaren Seiten (aus seitenbaum.wurzeln bzw. seitenbaum.kinder[x]).
+     * @returns {HTMLSelectElement}
+     */
+    function kaskadeEbeneBauen(elternId, kinderIds) {
+        var auswahl = document.createElement('select');
+        auswahl.className = 'cbd-pi-kaskade-ebene';
+
+        var leereOption = document.createElement('option');
+        leereOption.value = String(elternId);
+        // .text setzt den sichtbaren Options-Text ohne HTML-Parsing – wie
+        // textContent an anderer Stelle dieser Datei, kein innerHTML.
+        leereOption.text = (elternId === 0) ? '— oberste Ebene —' : '— diese Seite als Elternseite —';
+        auswahl.appendChild(leereOption);
+
+        (kinderIds || []).forEach(function (id) {
+            var knoten = seitenbaum.knoten[id];
+            if (!knoten) { return; }
+            var option = document.createElement('option');
+            option.value = String(id);
+            option.text = knoten.titel;
+            auswahl.appendChild(option);
+        });
+
+        auswahl.addEventListener('change', function () {
+            kaskadeAuswahlGeaendert(auswahl);
+        });
+
+        return auswahl;
+    }
+
+    /** Bei Auswahl: nachfolgende Ebenen entfernen, verstecktes Feld aktualisieren, ggf. neue Ebene anhängen. */
+    function kaskadeAuswahlGeaendert(ausgewaehltesFeld) {
+        var naechstes = ausgewaehltesFeld.nextSibling;
+        while (naechstes) {
+            var zuLoeschen = naechstes;
+            naechstes = naechstes.nextSibling;
+            zuLoeschen.parentNode.removeChild(zuLoeschen);
+        }
+
+        var gewaehlteId = parseInt(ausgewaehltesFeld.value, 10) || 0;
+
+        var elternfeld = $('cbd-import-parent');
+        if (elternfeld) { elternfeld.value = String(gewaehlteId); }
+
+        if (gewaehlteId === 0 || !seitenbaum) { return; }
+
+        var kinder = (seitenbaum.kinder && seitenbaum.kinder[gewaehlteId]) || [];
+        if (kinder.length === 0) { return; }
+
+        ausgewaehltesFeld.parentNode.appendChild(kaskadeEbeneBauen(gewaehlteId, kinder));
+    }
+
+    /** Während eines Laufs alle sichtbaren Kaskaden-Ebenen sperren/entsperren – analog zum bisherigen elternfeld.disabled. */
+    function kaskadeSperren(gesperrt) {
+        var ziel = $('cbd-pi-kaskade');
+        if (!ziel) { return; }
+        var felder = ziel.querySelectorAll('.cbd-pi-kaskade-ebene');
+        for (var i = 0; i < felder.length; i++) {
+            felder[i].disabled = gesperrt;
+        }
+    }
+
+    // ---------------------------------------------------------------
     // Schritt 1: Dateien aufnehmen
     // ---------------------------------------------------------------
 
@@ -526,6 +642,7 @@
         var elternfeld = $('cbd-import-parent');
         var elternId = elternfeld ? elternfeld.value : '0';
         if (elternfeld) { elternfeld.disabled = true; }
+        kaskadeSperren(true);
 
         laeuft = true;
         zeichneAktionen();
@@ -544,6 +661,7 @@
                 fortschrittVerbergen();
                 laeuft = false;
                 if (elternfeld) { elternfeld.disabled = false; }
+                kaskadeSperren(false);
                 zeichneAktionen();
 
                 var summe = el('p', 'cbd-pi-summe',
@@ -677,5 +795,6 @@
     document.addEventListener('DOMContentLoaded', function () {
         ereignisseBinden();
         stileLaden();
+        kaskadeLaden();
     });
 })();
