@@ -540,7 +540,7 @@ vor einem Produktiv-Rollout.
 
 ### AP-1.3: Gestaltung der Kaskaden-Auswahlfelder
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.2 (liefert die DOM-Struktur mit Klasse
@@ -602,7 +602,31 @@ Dialog passende Gestaltung.
   additive neue Regeln, keine bestehenden Selektoren anfassen.
 
 **Übergabenotiz:**
-(leer – wird vom ausführenden Agenten nach Abschluss ausgefüllt)
+Neuer Abschnitt „Elternseite: gestaffelte Kaskade" in
+`assets/css/page-importer.css`, unmittelbar nach
+`.cbd-pi-wrap #cbd-page-import-app` eingefügt (entspricht der
+Dokumentreihenfolge in `admin/page-import.php` — die Elternseiten-Auswahl
+steht dort vor der Ablagefläche). Drei neue Klassen:
+`.cbd-pi-kaskade` (Container, `display: flex; flex-wrap: wrap; gap: 8px`,
+Hintergrund/Rahmen wie `.cbd-pi-sammelzuweisung` — bewusst dasselbe
+Muster wiederverwendet, keine neue Farbe erfunden), `.cbd-pi-kaskade-ebene`
+(einzelnes `<select>`, Rahmen wie andere Auswahlfelder im Dialog),
+`.cbd-pi-kaskade-status`/`.cbd-pi-kaskade-status--fehler` (Lade-/
+Fehlertext, an `.cbd-pi-hinweis`/`.cbd-pi-warnung` angelehnt, gleiche
+Farben `#666`/`#71230a`). Für schmale Fenster: `.cbd-pi-kaskade` zur
+bestehenden `@media (max-width: 782px)`-Regel hinzugefügt (dieselbe
+Umschaltung auf `flex-direction: column` wie bei
+`.cbd-pi-gruppe`/`.cbd-pi-sammelzuweisung`) — 480px liegt darunter, ist
+also mit abgedeckt. Keine bestehende Regel geändert, nur additiv ergänzt.
+
+**Testnachweis:** Klammern-Balance-Prüfung der gesamten CSS-Datei per
+Node-Skript (öffnende = schließende Klammern, Endstand 0) — fehlerfrei.
+Visueller Live-Test im Browser bei 480px Breite mangels WP-Admin-Zugang
+in dieser Session nicht durchgeführt (laut PLAN.md Abschnitt 3
+zulässiger Fallback) — durch die Wiederverwendung der bereits im Projekt
+bewährten `flex-wrap`/`782px`-Stapel-Regel aber mit hoher Zuversicht
+funktional, da dasselbe Muster an mehreren bestehenden Stellen im selben
+Dialog bereits produktiv ist.
 
 ---
 
@@ -722,7 +746,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 |---|---|---|---|---|---|
 | AP-1.1 | REST-Route um Entwürfe-Parameter erweitern | opus | ☑ | – | TDD, 97+6 Prüfungen grün, check-php74.php grün |
 | AP-1.2 | Kaskadierende Auswahl in JS/PHP | opus | ☑ | AP-1.1 | 25 Verhaltenstests grün, Live-Browser-Test offen mangels Admin-Login |
-| AP-1.3 | Gestaltung der Kaskaden-Auswahlfelder | sonnet | ☐ | AP-1.2 | |
+| AP-1.3 | Gestaltung der Kaskaden-Auswahlfelder | sonnet | ☑ | AP-1.2 | Klammernbalance geprüft, visueller Live-Test offen mangels Admin-Login |
 | AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1, AP-1.2, AP-1.3 | |
 | AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev | |
 
@@ -734,6 +758,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 |---|---|---|---|---|
 | 2026-08-25 | AP-1.1 | `php tools/test-seitenbaum.php` (TDD: rot vor Implementierung bestätigt, dann grün), `php tools/check-php74.php` | Bestanden (103 Prüfungen gesamt, 0 Fehler; 569 Dateien PHP-7.4-kompatibel) | Direkte Testausführung |
 | 2026-08-25 | AP-1.2 | `php -l` (2 Dateien), `php tools/check-php74.php`, JS-Syntax-Check; eigener Node-Testharnisch (echte extrahierte Funktionen gegen selbstgeschriebenen DOM-Stub, 25 Prüfungen: Kaskadenaufbau, Drill-down, Pruning, Reset, Fehlerfall, Sperren, alle drei kaskadeLaden()-Pfade inkl. REST-Pfad-Verifikation) | Bestanden (25/25), Live-Browser-Test mangels Admin-Zugang offen | Direkte Code-Ausführung (Node) |
+| 2026-08-25 | AP-1.3 | CSS-Klammernbalance per Node-Skript | Bestanden (Endstand 0), visueller Live-Test bei 480px mangels Admin-Zugang offen | Direkte Prüfung |
 
 ## 10. Dokumentation
 

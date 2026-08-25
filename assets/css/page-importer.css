@@ -16,6 +16,43 @@
     max-width: 900px;
 }
 
+/* --- Elternseite: gestaffelte Kaskade ------------------------------ */
+/* Seit „Seitenimporter-Kaskaden-Zielauswahl": ersetzt die frühere
+   Einzelauswahl (wp_dropdown_pages()) durch mehrere, nacheinander
+   erscheinende <select>-Ebenen. flex-wrap verhindert horizontales
+   Scrollen bei schmalen Fenstern (bis zu vier Ebenen wurden im Projekt
+   gemessen). */
+
+.cbd-pi-kaskade {
+    background-color: #f5ede9;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin: 6px 0 4px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.cbd-pi-kaskade-ebene {
+    max-width: 100%;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 4px 8px;
+    background-color: #fff;
+}
+
+.cbd-pi-kaskade-status {
+    margin: 0;
+    color: #666;
+    font-size: 13px;
+}
+
+.cbd-pi-kaskade-status--fehler {
+    color: #71230a;
+}
+
 /* --- Ablagefläche ------------------------------------------------- */
 
 .cbd-pi-dropzone {
@@ -279,7 +316,8 @@
 @media screen and (max-width: 782px) {
     .cbd-pi-gruppe,
     .cbd-pi-sammelzuweisung,
-    .cbd-pi-aktionen {
+    .cbd-pi-aktionen,
+    .cbd-pi-kaskade {
         flex-direction: column;
         align-items: stretch;
     }
