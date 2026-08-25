@@ -203,7 +203,7 @@ Archivierung abgeschlossener Pläne in `docs/archiv/`).
 
 | Phase | Ziel | Lauffähiger Endzustand | APs |
 |---|---|---|---|
-| 1 | PDF-Bilder + Direktdownload korrigiert, Tafelmodus darkmode-fähig | PDF-Export zeigt „Eigene Notizen" und „Tafelbilder" als Bilder im PDF in allen drei Modi; PDF lädt ohne Speicherort-Nachfrage direkt herunter, soweit browserseitig steuerbar (sonst dokumentiert); Tafelmodus passt Werkzeugleiste/Overlay/Dialoge an Darkmode an und invertiert die Zeichenfläche bei Standard-Weiß-Tafel automatisch | AP-1.1, AP-1.2, AP-1.3, AP-1.4, AP-1.5, AP-1.rev, AP-1.doc |
+| 1 | PDF-Bilder + Direktdownload korrigiert, Tafelmodus darkmode-fähig | PDF-Export zeigt „Eigene Notizen" und „Tafelbilder" als Bilder im PDF in den Modi **visual** und **print** (im Modus **text** bleiben Bilder gemäß bestehender Konvention — `img:not(.cbd-formula-img) { display: none; }` — grundsätzlich ausgeblendet, unabhängig von diesem Vorhaben); PDF lädt ohne Speicherort-Nachfrage direkt herunter, soweit browserseitig steuerbar (sonst dokumentiert); Tafelmodus passt Werkzeugleiste/Overlay/Dialoge an Darkmode an und invertiert die Zeichenfläche bei Standard-Weiß-Tafel automatisch | AP-1.1, AP-1.2, AP-1.3, AP-1.4, AP-1.5, AP-1.rev, AP-1.doc |
 
 ## 7. Arbeitspakete
 
@@ -1625,7 +1625,7 @@ fertig für den Merge.
 
 ### AP-1.doc: Dokumentation Phase 1 aktualisieren
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-25)
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.rev (inkl. eventueller Korrektur-APs)
@@ -1721,7 +1721,60 @@ das Projekt ohne Kenntnis dieses Plans erweiterbar bleibt.
   Dateiinhalt prüfen (Zweck und Funktionen stimmen).
 
 **Übergabenotiz:**
-(leer – vom ausführenden Agenten auszufüllen)
+Beide Strang-Branches konfliktfrei im Sinne des Codes gemergt — wie im
+Risiko-Register (Abschnitt 5) erwartet, kollidierte ausschließlich dieses
+Plandokument selbst (Abschnitt 8+9, Statustabelle/Testprotokoll), manuell
+aufgelöst, alle AP-Detailabschnitte inkl. Übergabenotizen erhalten. `main`
+gepusht.
+
+**Zusätzlich zum ursprünglichen Vorgehen umgesetzt** (aus AP-1.rev als
+mittlere/geringe Befunde für dieses AP vorgemerkt):
+- **F4:** `CBD_VERSION` von `3.1.103` auf `3.1.104` angehoben
+  (`container-block-designer.php`, Header-Kommentar und Konstante) — ohne
+  Bump hätten Browser-Caches nach dem Deploy weiter den alten Stand der
+  vier geänderten Assets ausgeliefert.
+- **F8:** `reference_file_map.md` für alle vier in Phase 1 geänderten
+  Dateien (`class-cbd-ajax-handler.php`, `class-cbd-pdf-generator.php`,
+  `pdf-server-side.js`, `board-mode.css`) ergänzt bzw. korrigiert — u. a.
+  die zuvor veraltete Zeile zu `pdf-server-side.js`, die den inzwischen
+  durch AP-1.2 behobenen `collectCSSVariables()`-Variablennamen-Fund noch
+  als offen führte.
+- **F9:** Abschnitt 6 (Phasenübersicht) präzisiert — „in allen drei Modi"
+  war wörtlich nicht korrekt, da der Text-Modus laut bestehender Konvention
+  (`img:not(.cbd-formula-img) { display: none; }`) grundsätzlich keine
+  Bilder zeigt, unabhängig von diesem Vorhaben.
+
+`Plugins/CDB-Designer/CLAUDE.md`: Abschnitt „PDF-Export: Tafelbilder und
+eigene Notizen" — Einschränkung 3 als behoben markiert, mit den
+tatsächlichen Ursachen (kses-Data-URI-Stripping, JPEG-Transparenzverlust,
+falsche CSS-Variablennamen) und dem Darkmode-Ausschluss (AP-1.fix1)
+ergänzt; neuer Unterabschnitt „Direktdownload und Bildfehler-Diagnose"
+(AP-1.3/AP-1.fix3). Abschnitt „Darkmode": der bisherige offene Nebenbefund
+zu `board-mode.css` als behoben markiert, neuer Unterabschnitt „Tafelmodus
+im Darkmode" mit Invertierungsregel und der bekannten Live-Toggle-
+Einschränkung aus AP-1.5.
+
+`DOKUMENTATION.md` (Root): neuer Absatz „Vorhaben „PDF-Export- und
+Tafelmodus-Fixes"" nach dem bestehenden Eintrag zu „PDF-Notizen und
+Listenformeln" ergänzt, analog zum dortigen Stil — beide Stränge, beide
+Korrektur-APs, Verweis auf CLAUDE.md-Abschnitte.
+
+Stichprobe (Testkriterium): `class-cbd-pdf-generator.php` (`showImageErrors`
+tatsächlich an `WP_DEBUG` gekoppelt, Zeile geprüft) und `board-mode.css`
+(`.cbd-board-page-indicator`/`.cbd-board-toolbar-toggle` tatsächlich mit
+den in der Datei-Map beschriebenen `[data-theme="dark"]`-Regeln versehen)
+gegen den echten Dateiinhalt geprüft — beide stimmen.
+
+`php -l` (alle `*.php`, `includes/*.php`, `includes/Database/*.php`) und
+`php tools/check-php74.php` auf dem gemergten `main`-Stand erneut grün
+(569 Dateien).
+
+**Phase 1 ist damit vollständig abgeschlossen.** Offener Punkt außerhalb
+des Codes: Der Nutzer sollte in seinem eigenen Browser (Chrome/Edge)
+prüfen, ob die ursprünglich gemeldete Speicherort-Nachfrage beim
+PDF-Download verschwunden ist (AP-1.3) — falls sie bei deaktivierter
+„Vor jedem Download nachfragen"-Einstellung weiterhin erscheint, ist das
+ein neuer, bisher nicht reproduzierter Befund.
 
 ---
 
@@ -1740,7 +1793,7 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 | AP-1.rev | Review Phase 1 | opus | ☑ | AP-1.1…AP-1.5 | Zwei kritische Befunde (F1/F3 Toolbar-Kontrast, F2 showImageErrors-Exportabbruch) → AP-1.fix2/AP-1.fix3; Details in Übergabenotiz |
 | AP-1.fix2 | Werkzeugleisten-Kontrast nachbessern | sonnet | ☑ | AP-1.4, AP-1.rev | Auf Branch `phase-1-tafelmodus-darkmode`; live verifiziert, behebt F1/F3/F10 |
 | AP-1.fix3 | `showImageErrors` darf Export nicht abbrechen | sonnet | ☑ | AP-1.2, AP-1.rev | Auf Branch `phase-1-pdf-export-fixes`; behebt F2, an WP_DEBUG gekoppelt |
-| AP-1.doc | Doku Phase 1 | sonnet | ◐ | AP-1.fix2, AP-1.fix3 | Beide Korrektur-APs abgeschlossen, Merge in `main` durchgeführt — Dokumentation wird gerade nachgezogen |
+| AP-1.doc | Doku Phase 1 | sonnet | ☑ | AP-1.fix2, AP-1.fix3 | `main` gemergt und gepusht; CLAUDE.md/DOKUMENTATION.md/reference_file_map.md aktualisiert; CBD_VERSION auf 3.1.104 angehoben (F4); Phase 1 vollständig abgeschlossen |
 
 ## 9. Testprotokoll
 
@@ -1757,6 +1810,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | 2026-08-25 | AP-1.rev | Read-only Code-Review beider Branches (`git diff main...<branch>`), Stichproben gegen Akzeptanzkriterien, `php tools/check-php74.php` erneut ausgeführt | 4 von 6 Implementierungs-APs PASS, AP-1.4 FAIL (Werkzeugleisten-Kontrast); 16 Befunde dokumentiert (2 kritisch: F1/F3 Toolbar-Kontrast, F2 showImageErrors-Exportabbruch; 5 mittel, 9 gering); PHP-7.4-Check grün | Agent (unabhängig, keine Implementierung in dieser Phase) |
 | 2026-08-25 | AP-1.fix2 | Live auf `fos.localhost:8080`: `getComputedStyle()` von `.cbd-board-page-indicator`, `.cbd-board-zoom-display`, `.cbd-board-tool`, `.cbd-board-undo`, `.cbd-board-toolbar-toggle`, `.cbd-board-toolbar` im Darkmode | Alle Vordergrundfarben `#e8e8e8` (Kontrast >13:1), Aktiv-/Ruheflächen korrekt unterscheidbar, keine helle Fläche mehr | Agent (Strang „Tafelmodus-Darkmode") |
 | 2026-08-25 | AP-1.fix3 | Live-Export auf Testsystem (WP_DEBUG aktiv, `showImageErrors` bleibt dort testbedingt `true`) über `.cbd-pdf-export`-Knopf; `POST cbd/v1/generate-pdf`-Response und erzeugte Datei geprüft; `php -l` + `php tools/check-php74.php` | `{"success":true,...}`, Datei `cbd-pdf-6a8d61fc78ffe.pdf` (112.338 Bytes, 2 `/Subtype /Image`-Einträge, kein 14×16-Platzhalter) — Export mit Notiz weiterhin fehlerfrei; beide PHP-Checks grün | Agent (Live-Browser-Export, echte PDF-Datei geöffnet) |
+| 2026-08-25 | AP-1.doc / Phasenabschluss | Merge beider Strang-Branches nach `main` (Konflikt nur im Plandokument, wie im Risiko-Register erwartet); `php -l` (alle `*.php`, `includes/*.php`, `includes/Database/*.php`) + `php tools/check-php74.php` auf dem gemergten Stand; Stichprobe von zwei Datei-Map-Zeilen gegen echten Dateiinhalt | Merge konfliktfrei im Code, Plandokument-Konflikt manuell aufgelöst, alle Übergabenotizen erhalten; beide PHP-Checks grün (569 Dateien); Stichprobe bestätigt Datei-Map-Einträge zu `class-cbd-pdf-generator.php` und `board-mode.css`; `main` gepusht — **Phase 1 vollständig abgeschlossen** | Agent (AP-1.doc) |
 
 ## 10. Dokumentation
 

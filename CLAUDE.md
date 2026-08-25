@@ -2091,14 +2091,49 @@ die sich je nach Farbmodus unterscheiden sollen, verwenden
 CSS-Code generell verwendet ausschließlich `var(--x, #fallback)`, nie
 hartcodierte Hex-Werte.
 
-**Bekannter, offener Nebenbefund außerhalb dieses Vorhabens-Scopes (aus dem
-Phase-2-Review AP-2.rev, nicht Teil von AP-2.1–2.4):** `assets/css/board-mode.css:952-958`,
-`.cbd-board-confirm-cancel:hover` nutzt `background: var(--color-sidebar-border, #e0e0e0)`
-gegen literales `color: #555` — dieselbe Variablen-Kollisions-Fehlerfamilie
-wie oben bei `cbd-frontend-clean.css`/`latex-formulas.css`, Kontrast im
-Darkmode ≈1,2:1. `board-mode.css` war nie Teil des in Phase 2 gelisteten
-Dateiumfangs (keine `[data-theme]`-Regeln dort) und wurde deshalb bewusst
-nicht mitkorrigiert — vorgemerkt für ein künftiges Korrektur-AP.
+**Behoben durch `docs/PLAN-PDF-Export-und-Tafelmodus-Fixes.md`
+(abgeschlossen 2026-08-25):** Der hier vormals als offen geführte
+Nebenbefund zu `.cbd-board-confirm-cancel:hover` ist korrigiert — siehe
+den eigenen Abschnitt „Tafelmodus im Darkmode" weiter unten für den
+vollständigen, seither darkmode-fähigen Zustand von `board-mode.css`/
+`board-mode.js`.
+
+### Tafelmodus im Darkmode (`docs/PLAN-PDF-Export-und-Tafelmodus-Fixes.md`,
+abgeschlossen 2026-08-25)
+
+`board-mode.css` war beim ursprünglichen Umbau auf den manuellen
+Darkmode-Umschalter (oben) bewusst ausgenommen und blieb bis zu diesem
+Vorhaben durchgehend hell. Seither passen sich Kopfzeile, Inhalt,
+Werkzeugleiste (inkl. aller Buttons, Seiten-/Zoom-Anzeigen, Undo,
+Werkzeugauswahl) und der — aktuell ungenutzte — Farbauswahl-Dialog über
+`[data-theme="dark"] .selektor`-Regeln an; keine `@media
+(prefers-color-scheme: dark)`-Blöcke ergänzt. `.cbd-board-header` ist
+bewusst **fest** `#333333`/`#ffffff` in beiden Modi (kein `var()`-Bezug,
+siehe Kommentar im CSS) — die ursprünglich verwendeten Variablen
+`--color-text-primary`/`--color-background` kehren sich im Darkmode um und
+hätten die Kopfleiste fälschlich hell gemacht.
+
+**Automatische Invertierung der Zeichenfläche:** Eine „Eigene Notiz" ist
+eine Rastergrafik (`<canvas>`-Ebenen). Im Darkmode invertiert die
+Zeichenfläche automatisch per CSS-Filter (`filter: invert(1)` auf
+`.cbd-board-canvas-container`, gesteuert von
+`board-mode.js::updateDarkModeInversion()`) — **aber nur**, wenn die Tafel
+auf der weißen Standardfarbe steht (`this.boardColor === '#ffffff'`). Eine
+bewusst gewählte Grün- oder Schwarz-Tafel bleibt unangetastet, ebenso jede
+tatsächlich vom Nutzer gewählte Stiftfarbe (reine Farbinvertierung ohne
+Hue-Erhalt, z. B. Rot→Cyan — bekannt und akzeptiert). Der Filter wirkt rein
+auf die Darstellung; die in `localStorage`/serverseitig gespeicherten
+Pixel bleiben unverändert, betrifft also gleichermaßen neu gezeichnete wie
+bereits vorher gespeicherte Notizen.
+
+**Bekannte, nicht behobene Einschränkung:** Der Darkmode-Toggle des Themes
+(`Theme/header.php`) setzt `data-theme` ohne Seiten-Reload. Die reinen
+CSS-Regeln oben reagieren dadurch live, die JS-gesteuerte
+Invertierungsklasse aber nicht — wird der Toggle bei bereits offenem
+Tafelmodus geklickt, greift die Notiz-Invertierung erst beim nächsten
+Öffnen des Tafelmodus oder Farbwechsel. Bewusst nicht behoben, um den
+Scope nicht zu sprengen (ein zusätzlicher Event-Listener auf den Toggle
+wäre nötig).
 
 ## PDF-Export: Tafelbilder und eigene Notizen (Phase 2 von
 `docs/archiv/PLAN-PDF-Notizen-und-Listenformeln.md`, abgeschlossen 2026-08-24)
@@ -2182,6 +2217,29 @@ Nonce) — `window.cbdClassroomData` wird bereits unverändert von
 `class-cbd-block-registration.php` im `wp_footer` gesetzt, sobald
 `cbd_edit_blocks` + eingeloggt.
 
+### Direktdownload und Bildfehler-Diagnose (AP-1.3/AP-1.fix3, 2026-08-25)
+
+`CBD_PDF_Generator::ensure_download_htaccess()` legt beim ersten Export in
+`wp-content/uploads/cbd-temp-pdfs/` automatisch eine `.htaccess` mit
+`Content-Disposition: attachment` für `*.pdf` an (idempotent, überlebt
+Verzeichnis-Neuerstellung) — eine defensive Absicherung zusätzlich zur
+bereits korrekten `<a download>`-Technik in `downloadPDF()`
+(`pdf-server-side.js`). **Kann eine im Browser des Nutzers aktivierte
+Einstellung „Vor jedem Download nachfragen, wo die Datei gespeichert
+werden soll" nicht übersteuern** — das ist eine Browser-Entscheidung, keine
+per HTTP-Header oder JavaScript aufhebbare.
+
+`$mpdf->showImageErrors` ist an `WP_DEBUG` gekoppelt
+(`if (defined('WP_DEBUG') && WP_DEBUG)`, siehe Abschnitt
+„Debugging-Konventionen" unten), **nicht** dauerhaft aktiv: mPDF wirft bei
+aktivem Flag bei jedem nicht dekodierbaren Bild eine `MpdfImageException`,
+die den **gesamten** Export abbricht statt nur das eine Bild durch einen
+stillen Platzhalter zu ersetzen. In Produktivumgebungen (WP_DEBUG i. d. R.
+aus) bleibt deshalb der alte, sichere Rückfall erhalten; mit aktivem
+WP_DEBUG steht die laute Diagnose für künftige Fehlersuche weiter zur
+Verfügung — genau darüber wurde die Ursache oben (Einschränkung 3) erst
+gefunden.
+
 ### Bekannte, bewusst akzeptierte Einschränkungen
 
 1. **Ein Container mit Tafelbildern für MEHRERE Klassen exportiert nur die
@@ -2208,18 +2266,27 @@ Nonce) — `window.cbdClassroomData` wird bereits unverändert von
    der AP-2.2-Übergabenotiz dokumentierte Grenze). Ein künftiges AP, das
    alle Seiten abdecken will, müsste zusätzlich nach `:pN`-Suffix-Schlüsseln
    suchen.
-3. **Fehlender visueller Ende-zu-Ende-Test einer echten PDF-Datei.** Kein
-   Arbeitspaket dieser Phase (weder AP-2.3 noch AP-2.4 noch das
-   abschließende Review AP-2.rev) hat eine tatsächlich vom mPDF-Server
-   erzeugte PDF-Datei geöffnet und darin beide Bildtypen (lokale Notiz UND
-   serverseitiges Tafelbild) visuell bestätigt — geprüft wurde ausschließlich
-   auf Payload- bzw. Mock-Ebene (u. a. Zahl und Ziel der AJAX-Aufrufe,
-   `includeDrawings`-Verzweigung, Aufrufsignaturen). Das gilt als bekannte,
-   **niedrig-riskante** Lücke, **kein Code-Fehler**: Der Injektionsmechanismus
-   ist identisch zum bereits produktiven lokalen Notizen-Pfad, und die
-   mPDF-Erzeugungsstufe selbst wurde durch dieses Vorhaben nicht angefasst.
-   Empfehlung für ein künftiges AP: einen echten Export mit beiden
-   Bildquellen auslösen und die erzeugte PDF-Datei öffnen.
+3. **Behoben durch `docs/PLAN-PDF-Export-und-Tafelmodus-Fixes.md`
+   (abgeschlossen 2026-08-25).** Der hier ursprünglich fehlende visuelle
+   Ende-zu-Ende-Test einer echten PDF-Datei wurde in AP-1.1 nachgeholt und
+   deckte die tatsächliche Ursache auf: mPDF konnte die eingebetteten
+   `data:image`-Notizen/-Tafelbilder nicht dekodieren, weil
+   `wp_kses_post()` das `data:`-Protokollpräfix aus dem Bild-URI entfernt
+   (`wp_allowed_protocols()` enthält `data:` nicht) — sichtbar nur als
+   mPDFs eigenes 14×16-Fehler-Platzhalterbild, ganz ohne Log-Ausgabe.
+   AP-1.2 behebt das über eine neue Methode
+   `CBD_Ajax_Handler::sanitize_pdf_block_html()`, die `data:image`-URIs vor
+   `wp_kses_post()` per Platzhalter-Token maskiert und danach wiederherstellt
+   (Muster wie `class-latex-parser.php::mask_protected_regions()`), plus
+   zwei Nebenfunde: verlustbehaftete JPEG-Rekompression zerstörte
+   Transparenz in Notizen-PNGs (jetzt `image/png` statt `image/jpeg` für
+   Zeichnungen), und `collectCSSVariables()`/`replace_css_variables()`
+   lasen falsch benannte CSS-Variablen. **Zusätzlich (AP-1.fix1, nach
+   Nutzer-Feedback):** Ein PDF-Export bildet den Website-Darkmode
+   grundsätzlich **nicht** ab — unabhängig vom angezeigten Website-Modus
+   erscheint das PDF immer im Hellmodus-Farbschema
+   (`collectCSSVariables()` liest `data-theme="dark"` temporär ab). Details:
+   `docs/PLAN-PDF-Export-und-Tafelmodus-Fixes.md`, AP-1.1/AP-1.2/AP-1.fix1.
 
 ## Debugging-Konventionen
 
