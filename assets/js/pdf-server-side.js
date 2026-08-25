@@ -266,6 +266,11 @@
         $clone.find('.cbd-drawing-section').remove();
         $clone.find('.cbd-local-drawing-section').remove();
         $clone.find('.cbd-class-drawing-section').remove();
+        // AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md, AP-1.1-Fund):
+        // injectDrawingsFromStorage() erzeugt tatsaechlich .cbd-pdf-drawing-section
+        // (nicht einen der drei Namen oben) - ohne diese Zeile griff die
+        // Aufraeumung nie und wiederholte Exports haetten Notizen dupliziert.
+        $clone.find('.cbd-pdf-drawing-section').remove();
 
         // AP-2.3: injectServerDrawings() braucht einen asynchronen AJAX-Aufruf
         // (Bulk-Endpoint cbd_get_page_drawings aus AP-2.1). Der Rest der bisher
@@ -631,7 +636,7 @@
                     try { bgColor = localStorage.getItem(key + '-bgcolor'); } catch (e) {}
 
                     // Compress drawing for PDF (PNG → smaller JPEG)
-                    var compressed = recompressBase64(dataUrl, 0.75, 1200);
+                    var compressed = recompressBase64(dataUrl, 0.75, 1200, 'image/png');
                     pages.push({
                         dataUrl: compressed || dataUrl,
                         bgColor: bgColor,
@@ -879,7 +884,7 @@
                 '</div>';
 
             for (var m = 0; m < matched.length; m++) {
-                var compressed = recompressBase64(matched[m].dataUrl, 0.75, 1200);
+                var compressed = recompressBase64(matched[m].dataUrl, 0.75, 1200, 'image/png');
                 drawingHtml += '<div style="margin: 4px 0; text-align: center; ' +
                     'page-break-inside: avoid;">';
                 drawingHtml += '<img src="' + (compressed || matched[m].dataUrl) + '" style="' +
@@ -1151,8 +1156,22 @@
     /**
      * Synchronously recompress a base64 image to lower quality/smaller size.
      * Returns new base64 string or null on failure.
+     *
+     * AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): outputFormat
+     * defaults to 'image/jpeg' (bisheriges Verhalten, unveraendert fuer
+     * Screenshots interaktiver Elemente - die haben keine Transparenz).
+     * Fuer Tafelmodus-Zeichnungen (drawingCanvas.toDataURL('image/png') in
+     * board-mode.js liefert NUR die Zeichenebene mit transparentem
+     * Hintergrund, siehe injectDrawingsFromStorage()/applyServerDrawings())
+     * MUSS 'image/png' uebergeben werden: JPEG kennt keine Transparenz,
+     * ctx.drawImage() auf eine neue Canvas komponiert transparente Pixel
+     * beim Export als JPEG automatisch auf Schwarz - aus duennen schwarzen
+     * Strichen auf transparentem Grund wurde dadurch ein durchgehend
+     * schwarzes Rechteck (im Live-Test nach dem data:-Praefix-Fix
+     * gefunden).
      */
-    function recompressBase64(base64, quality, maxWidth) {
+    function recompressBase64(base64, quality, maxWidth, outputFormat) {
+        outputFormat = outputFormat || 'image/jpeg';
         try {
             var img = document.createElement('img');
             img.src = base64;
@@ -1170,7 +1189,7 @@
             canvas.height = nh;
             var ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, nw, nh);
-            return canvas.toDataURL('image/jpeg', quality);
+            return canvas.toDataURL(outputFormat, quality);
         } catch (e) {
             return null;
         }
@@ -1388,9 +1407,16 @@
             uiSurfaceDark: root.getPropertyValue('--color-ui-surface-dark').trim() || '#c93d12',
             uiSurfaceLight: root.getPropertyValue('--color-ui-surface-light').trim() || '#f5ede9',
             sidebarBorder: root.getPropertyValue('--color-sidebar-border').trim() || '#e0e0e0',
-            primaryText: root.getPropertyValue('--color-primary-text').trim() || '#333333',
+            // AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): Die beiden
+            // Variablennamen waren vertauscht/falsch benannt (--color-primary-text
+            // statt --color-text-primary, --color-light-background statt
+            // --color-background-light) - existierten nie, der Fallback griff
+            // immer. Dadurch blieb der PDF-Text im Darkmode auf #333333 (dunkel)
+            // statt hell zu werden, waehrend --color-background korrekt dunkel
+            // wurde: dunkler Text auf dunklem Grund, praktisch unlesbar.
+            primaryText: root.getPropertyValue('--color-text-primary').trim() || '#333333',
             background: root.getPropertyValue('--color-background').trim() || '#ffffff',
-            lightBackground: root.getPropertyValue('--color-light-background').trim() || '#f8f9fa'
+            lightBackground: root.getPropertyValue('--color-background-light').trim() || '#f8f9fa'
         };
     }
 

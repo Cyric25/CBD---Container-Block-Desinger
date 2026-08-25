@@ -177,6 +177,13 @@ class CBD_PDF_Generator {
             'img_dpi'       => 150,
         ]);
 
+        // AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): Ohne diese
+        // Zeile ersetzt mPDF ein nicht dekodierbares Bild lautlos durch
+        // sein eigenes 14x16px-Platzhalterbild, ohne jede Log-Ausgabe -
+        // genau das hat die fehlenden "Eigenen Notizen"/"Tafelbilder" im
+        // PDF unauffindbar gemacht (siehe AP-1.1-Diagnose).
+        $mpdf->showImageErrors = true;
+
         // Set document info
         $mpdf->SetCreator('Container Block Designer Plugin');
         $mpdf->SetAuthor($options['author']);
@@ -385,9 +392,14 @@ class CBD_PDF_Generator {
             'var(--color-ui-surface-dark)'  => $css_vars['uiSurfaceDark'] ?? '#c93d12',
             'var(--color-ui-surface-light)' => $css_vars['uiSurfaceLight'] ?? '#f5ede9',
             'var(--color-sidebar-border)'   => $css_vars['sidebarBorder'] ?? '#e0e0e0',
-            'var(--color-primary-text)'     => $css_vars['primaryText'] ?? '#333333',
-            'var(--color-background)'       => $css_vars['background'] ?? '#ffffff',
-            'var(--color-light-background)' => $css_vars['lightBackground'] ?? '#f8f9fa',
+            // AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): Die beiden
+            // Schluessel waren mit den vertauschten/falschen Variablennamen
+            // aus pdf-server-side.js::collectCSSVariables() dupliziert (siehe
+            // Fix dort) - trafen dadurch nie auf tatsaechlich im Blockinhalt
+            // vorkommendes var(--color-text-primary)/var(--color-background-light).
+            'var(--color-text-primary)'       => $css_vars['primaryText'] ?? '#333333',
+            'var(--color-background)'         => $css_vars['background'] ?? '#ffffff',
+            'var(--color-background-light)'   => $css_vars['lightBackground'] ?? '#f8f9fa',
         );
 
         foreach ($replacements as $var => $value) {

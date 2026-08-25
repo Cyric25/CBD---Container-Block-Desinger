@@ -17,12 +17,64 @@ if (!defined('ABSPATH')) {
  * Klasse für AJAX-Anfragen
  */
 class CBD_Ajax_Handler {
-    
+
     /**
      * Konstruktor
      */
     public function __construct() {
         $this->init_ajax_handlers();
+    }
+
+    /**
+     * AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): wp_kses_post()
+     * erlaubt standardmaessig kein data:-Protokoll in URLs
+     * (wp_allowed_protocols()) und entfernt bei einem
+     * src="data:image/...;base64,..."-Attribut lautlos das "data:"-Praefix
+     * - der Rest der Zeichenkette bleibt stehen und ergibt ein fuer mPDF
+     * nicht mehr aufloesbares Bild ("image/jpeg;base64,..." wird als
+     * relative URL interpretiert). Betrifft ausschliesslich die client-
+     * seitig direkt eingebetteten Bilder (Eigene Notizen/Tafelbilder aus
+     * injectDrawingsFromStorage()/injectServerDrawings() in
+     * pdf-server-side.js) - Formeln und Screenshots werden erst NACH
+     * dieser Sanitisierung serverseitig per Platzhalter eingefuegt
+     * (siehe prepare_structured_block()) und sind deshalb nicht betroffen.
+     *
+     * Der naheliegende Fix ueber den Filter kses_allowed_protocols wirkt
+     * NICHT: wp_allowed_protocols() (wp-includes/functions.php) wendet
+     * diesen Filter laut eigenem Code nur an, "if ( ! did_action(
+     * 'wp_loaded' ) )" - zur Laufzeit eines AJAX-/REST-Handlers ist dieser
+     * Hook laengst gefeuert, ein hier zur Aufrufzeit registrierter Filter
+     * bleibt wirkungslos (empirisch bestaetigt: Live-Export scheiterte
+     * weiterhin mit identischem Fehler).
+     *
+     * Stattdessen: data:-Bild-URIs vor wp_kses_post() durch Platzhalter
+     * ersetzen (kses sieht das Protokoll dann gar nicht) und danach wieder
+     * einsetzen - dasselbe Masking-Muster wie
+     * class-latex-parser.php::mask_protected_regions()/restore_placeholders().
+     * Sicherer als eine dauerhafte, serverweite Lockerung von kses.
+     *
+     * @param string $html Rohes Block-HTML vom Client
+     * @return string Sanitisiertes HTML mit erhaltenen data:-Bild-URIs
+     */
+    private function sanitize_pdf_block_html($html) {
+        $placeholders = array();
+        $protected_html = preg_replace_callback(
+            '/data:image\/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+\/=]+/',
+            function ($matches) use (&$placeholders) {
+                $token = '@@CBD_DATA_URI_' . count($placeholders) . '@@';
+                $placeholders[$token] = $matches[0];
+                return $token;
+            },
+            $html
+        );
+
+        $sanitized = wp_kses_post($protected_html);
+
+        if (!empty($placeholders)) {
+            $sanitized = strtr($sanitized, $placeholders);
+        }
+
+        return $sanitized;
     }
     
     /**
@@ -142,7 +194,7 @@ class CBD_Ajax_Handler {
 
             foreach ($blocks_data as $block) {
                 $sanitized = array(
-                    'html'        => isset($block['html']) ? wp_kses_post($block['html']) : '',
+                    'html'        => isset($block['html']) ? $this->sanitize_pdf_block_html($block['html']) : '',
                     'title'       => isset($block['title']) ? sanitize_text_field($block['title']) : '',
                     'formulas'    => array(),
                     'screenshots' => array(),
@@ -395,7 +447,7 @@ class CBD_Ajax_Handler {
 
             foreach ($blocks_data as $block) {
                 $sanitized = array(
-                    'html'        => isset($block['html']) ? wp_kses_post($block['html']) : '',
+                    'html'        => isset($block['html']) ? $this->sanitize_pdf_block_html($block['html']) : '',
                     'title'       => isset($block['title']) ? sanitize_text_field($block['title']) : '',
                     'formulas'    => array(),
                     'screenshots' => array(),
@@ -440,7 +492,7 @@ class CBD_Ajax_Handler {
         } elseif (!empty($_POST['blocks']) && is_array($_POST['blocks'])) {
             // Legacy format: array of HTML strings
             foreach ($_POST['blocks'] as $block_html) {
-                $blocks[] = wp_kses_post($block_html);
+                $blocks[] = $this->sanitize_pdf_block_html($block_html);
             }
         } else {
             wp_send_json_error(array('message' => 'Keine Blöcke zum Exportieren gefunden'));

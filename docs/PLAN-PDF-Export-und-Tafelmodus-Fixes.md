@@ -435,7 +435,7 @@ tmp\` und im Scratchpad, wurden nach Abschluss der Diagnose entfernt.
 
 ### AP-1.2: PDF-Bilder-Fehler beheben
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-25)
 **Umfang:** M
 **Modell:** opus
 **Abhängigkeiten:** AP-1.1 (Übergabenotiz mit bestätigter Ursache)
@@ -579,7 +579,130 @@ diagnostizierbar macht.
   durchläuft).
 
 **Übergabenotiz:**
-(leer – vom ausführenden Agenten auszufüllen)
+Die tatsächliche Ursache deckte sich **nicht** mit den beiden in AP-1.1
+untersuchten Verdachtsstellen — beide waren korrekt widerlegt bzw. betrafen
+nur einen Nebenaspekt. Die Live-Diagnose (mit Browserzugriff über „Claude in
+Chrome", Login durch den Nutzer, Rest über Dateisystemzugriff auf den
+Testserver + isolierte PHP-Reflection-Tests gegen die echten Klassen) ergab
+**drei unabhängige, sich gegenseitig verdeckende Ursachen**, die alle behoben
+wurden:
+
+**1. `wp_kses_post()` zerstört `data:`-Bild-URIs (Hauptursache für „Bild
+fehlt komplett" / mPDF-Platzhalterbild).** `wp_kses_post()` erlaubt laut
+WordPress-Core (`wp_allowed_protocols()`, `wp-includes/functions.php`) das
+Protokoll `data:` nicht und entfernt bei `src="data:image/...;base64,..."`
+lautlos das Präfix `data:` — übrig bleibt `image/jpeg;base64,...`, das mPDF
+als relative URL fehlinterpretiert (`Could not find image file
+(http://.../wp-admin/image/jpeg;base64,...)`, erst nach Aktivieren von
+`showImageErrors` sichtbar geworden). Der naheliegende Fix über
+`add_filter('kses_allowed_protocols', ...)` **wirkt nicht**: WordPress wendet
+diesen Filter laut eigenem Code nur an, „if ( ! did_action( 'wp_loaded' ) )"
+— zur Laufzeit eines AJAX-/REST-Handlers ist dieser Hook längst gefeuert
+(empirisch bestätigt: identischer Fehler blieb trotz Filter bestehen).
+Stattdessen behebt eine neue Methode `CBD_Ajax_Handler::sanitize_pdf_block_html()`
+das Problem, indem `data:image/...`-URIs vor `wp_kses_post()` durch
+Platzhalter-Tokens (`@@CBD_DATA_URI_N@@`) ersetzt und danach per `strtr()`
+wiederhergestellt werden — dasselbe Masking-Muster wie
+`class-latex-parser.php::mask_protected_regions()`/`restore_placeholders()`.
+Betraf alle drei Aufrufstellen (`rest_generate_pdf()`, `generate_pdf()`,
+Legacy-Zweig).
+
+**2. `recompressBase64()` zerstört Transparenz beim JPEG-Re-Encoding
+(Ursache für „Notiz erscheint als durchgehend schwarzes Rechteck", nachdem
+Fund 1 behoben war).** `drawingCanvas.toDataURL('image/png')` in
+`board-mode.js` liefert nur die Zeichenebene mit **transparentem**
+Hintergrund. `recompressBase64()` in `pdf-server-side.js` re-encodierte
+das aber verlustbehaftet als JPEG (`canvas.toDataURL('image/jpeg', ...)`)
+— JPEG kennt keine Transparenz, der HTML5-Canvas komponiert transparente
+Pixel beim Export als opake Formate standardmäßig auf **Schwarz**. Aus
+dünnen schwarzen Strichen auf transparentem Grund wurde dadurch ein
+durchgehend schwarzes Rechteck (die Striche gingen im ebenfalls
+schwarzen „Hintergrund" unter). Fix: `recompressBase64()` bekam einen
+vierten Parameter `outputFormat` (Default weiterhin `'image/jpeg'`,
+unverändert für Screenshots interaktiver Elemente ohne Transparenzbedarf);
+die beiden Aufrufstellen für Zeichnungen
+(`injectDrawingsFromStorage()`/`applyServerDrawings()`) übergeben jetzt
+explizit `'image/png'`. Per Live-Test mit echten `localStorage`-Rohdaten
+bestätigt: mPDF selbst verarbeitet transparente PNGs (auch mit
+Alphakanal, auch aus echten Canvas-Exporten, auch bei realistischer
+Größe 649×385) korrekt — die Bildverarbeitung war nie das Problem,
+sondern ausschließlich die verlustbehaftete Zwischenkonvertierung.
+
+**3. `collectCSSVariables()` liest zwei falsch benannte CSS-Variablen
+(Darkmode-Textkontrast, in Abschnitt 9 der Analyse als Zusatzfund notiert,
+per Nutzerentscheidung mitbehoben).** `--color-primary-text`/
+`--color-light-background` existierten nie als CSS-Variablen (korrekt:
+`--color-text-primary`/`--color-background-light`, siehe Root-`CLAUDE.md`),
+`getPropertyValue()` lieferte deshalb immer leer und der Fallback
+`#333333` griff **unabhängig vom Farbmodus**. Im Darkmode wurde so zwar
+der Block-Hintergrund korrekt dunkel (`--color-background` existiert und
+wurde korrekt gelesen), der Text blieb aber auf `#333333` (dunkel) stehen
+— dunkler Text auf dunklem Grund, praktisch unlesbar. Dieselbe
+Namensverwechslung stand identisch auch in
+`class-cbd-pdf-generator.php::replace_css_variables()` und wurde dort
+ebenfalls korrigiert (betraf `var(--color-text-primary)`-Vorkommen direkt
+im Blockinhalt, nicht das generierte Stylesheet). Dieser Fund war bereits
+vor AP-1.1 in `reference_file_map.md` als bekannter, nicht behobener
+Mismatch dokumentiert (Zeile zu `pdf-server-side.js`) — jetzt geschlossen.
+
+**Verdachtsstelle 2 aus AP-1.1 (Duplikat-Notizen durch falsche
+Aufräum-Selektoren) wie vorgesehen behoben:** `.cbd-pdf-drawing-section`
+zur Selektorliste in `processOneBlock()` ergänzt.
+
+**Live-Verifikation (nicht nur Payload-/Mock-Ebene, echte erzeugte
+PDF-Dateien geöffnet):**
+- Export mit „Eigener Notiz" (Modus visual, Hellmodus): X-förmige
+  Zeichnung korrekt sichtbar, kein Platzhalterbild mehr. ✅
+- Zwei aufeinanderfolgende Exports derselben Notiz: keine doppelten
+  Notizabschnitte. ✅
+- Export derselben Seite **im Darkmode**: Blocktext hell auf dunklem
+  Grund (vorher dunkel auf dunkel), UND die Notiz weiterhin korrekt mit
+  ihrer eigenen (hier: weißen) Tafelfarbe sichtbar. ✅
+- Regression: Text-only-Export einer Seite ohne Notizen lief in allen
+  bisherigen Tests unverändert durch (keine Fehler in Werkzeugleiste/
+  anderen Blöcken beobachtet).
+
+**Nicht abschließend automatisiert nachgewiesen:** Print- und Text-Modus
+wurden im Rahmen dieser Live-Sitzung nicht explizit einzeln durchexportiert
+(nur der Modus „visual"); die Codeänderungen betreffen aber ausschließlich
+Funktionen, die alle drei Modi gemeinsam durchlaufen
+(`prepare_structured_block()`, `sanitize_pdf_block_html()`,
+`recompressBase64()`), sodass kein moduspezifisches Risiko ersichtlich ist.
+Empfehlung für AP-1.rev: stichprobenartig auch Print-/Text-Modus mit Notiz
+exportieren.
+
+**Diagnosemethodik (für künftige, ähnlich gelagerte Fehler notiert):**
+Reines Lesen des Codes und isolierte Tests mit synthetischen Bilddaten
+reichten hier **nicht** aus, um die Ursache zu finden — jede synthetische
+Variante (klein, groß, PNG, JPEG, transparent) lief durch die identischen
+Funktionen fehlerfrei. Erst der Abgleich der **echten** Browser-Rohdaten
+(direkt aus `localStorage` gelesen, per `fetch()` byteecht auf den Server
+übertragen) gegen jede einzelne Pipeline-Stufe (`error_log()`-Traces direkt
+in `sanitize_pdf_block_html()` und `prepare_structured_block()`, Logziel
+ist `wp-content/debug.log`, **nicht** `php_error.log` trotz
+`error_log`-Ini-Direktive — WordPress überschreibt das Ziel via `ini_set()`
+beim Bootstrap) hat die tatsächliche Ursache sichtbar gemacht. Zusätzliche
+Falle dabei: Der Browser cachte die versionierte Skript-URL
+(`pdf-server-side.js?ver=3.1.100`, statische Versionsnummer statt
+`filemtime()`) hartnäckig über mehrere Seiten-Navigationen hinweg — ein
+frisch injizierter `<script>`-Tag mit echtem Cache-Buster
+(`?forcefresh=<timestamp>`) war nötig, um wirklich den aktuellen Codestand
+zu testen.
+
+**Geänderte Dateien:**
+- `includes/class-cbd-ajax-handler.php` — neue Methode
+  `sanitize_pdf_block_html()`, an drei Stellen statt `wp_kses_post()`
+  direkt verwendet.
+- `includes/class-cbd-pdf-generator.php` — `showImageErrors = true`
+  ergänzt; `replace_css_variables()`-Schlüssel korrigiert.
+- `assets/js/pdf-server-side.js` — Aufräum-Selektor
+  `.cbd-pdf-drawing-section` ergänzt; `recompressBase64()` um
+  `outputFormat`-Parameter erweitert, beide Zeichnungs-Aufrufstellen auf
+  `'image/png'` umgestellt; `collectCSSVariables()`-Variablennamen
+  korrigiert.
+
+`Plugins/CDB-Designer/reference_file_map.md` noch **nicht** aktualisiert —
+folgt in AP-1.doc (Sammel-Update für die ganze Phase, wie dort vorgesehen).
 
 ---
 
@@ -1116,7 +1239,7 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 | AP | Titel | Modell | Status | Abhängig von | Notiz |
 |---|---|---|---|---|---|
 | AP-1.1 | Live-Diagnose PDF-Bilder | opus | ☑ | – | Verdachtsstelle 1 widerlegt, Verdachtsstelle 2 bestätigt, echte Ursache noch offen (mPDF-Bilddecode) |
-| AP-1.2 | PDF-Bilder-Fehler beheben | opus | ☐ | AP-1.1 | |
+| AP-1.2 | PDF-Bilder-Fehler beheben | opus | ☑ | AP-1.1 | Ursache war weder Verdachtsstelle 1 noch 2 allein, sondern kses+Transparenz+Variablennamen (siehe Übergabenotiz) |
 | AP-1.3 | PDF-Direktdownload prüfen/absichern | opus | ☐ | AP-1.2 | |
 | AP-1.4 | Tafelmodus-Oberfläche Darkmode | sonnet | ☐ | – | |
 | AP-1.5 | Notiz-Farbinvertierung Darkmode | sonnet | ☐ | AP-1.4 | |
@@ -1130,6 +1253,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
 | 2026-08-25 | AP-1.1 | Reale PDF-Datei `cbd-pdf-6a8caee833660.pdf` geöffnet und byteweise analysiert; drei isolierte `clean_block_html()`-Tests; vier isolierte mPDF-Bildeinbettungstests (PNG, JPEG, groß, transparent) | Verdachtsstelle 1 widerlegt, Verdachtsstelle 2 bestätigt, mPDF setzt nachweislich sein internes 14×16-Fehlerbild ein (Bilddaten nicht dekodierbar), Ursache dafür noch offen; zusätzlich Darkmode-Textkontrast-Bug im PDF-Export gefunden | Agent (Live-System-Diagnose ohne Login, per Dateisystemzugriff + isolierten PHP-Tests) |
+| 2026-08-25 | AP-1.2 | Live-Export über echten Browser (Claude in Chrome, Login durch Nutzer) auf Testseite „Reinstoffe und Gemische", Modus visual, mit „Eigener Notiz"; wiederholt nach jedem Teilfix; zusätzlich Export im Darkmode; mehrere isolierte PHP-Reflection-Tests mit echten `localStorage`-Rohdaten gegen `sanitize_pdf_block_html()`/`prepare_structured_block()`/mPDF | Alle drei Teilursachen (kses-data:-Stripping, JPEG-Transparenzverlust, falsch benannte CSS-Variablen) bestätigt behoben: Notiz erscheint korrekt im PDF, keine Duplikate bei Wiederholung, Darkmode-Text hell auf dunkel lesbar | Agent (Live-Browser-Export, echte PDF-Dateien geöffnet, kein Mock) |
 
 ## 10. Dokumentation
 
