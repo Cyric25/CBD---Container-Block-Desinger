@@ -559,7 +559,7 @@ Fix erzwingen, der technisch nicht wirken kann.
 
 ### AP-1.4: Tafelmodus-Oberfläche an Darkmode anpassen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-25)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** keine
@@ -669,13 +669,52 @@ Wert annehmen (Variablen-Kollision) – bei Verwendung dieser Variable in
   visuell/mit Browser-DevTools-Kontrastprüfer bestätigen.
 
 **Übergabenotiz:**
-(leer – vom ausführenden Agenten auszufüllen)
+Live auf `fos.localhost:8080` geprüft (Testserver, beide Modi). Im
+Hellmodus vor der Änderung notierte helle Flächen im Darkmode: Kopfzeile
+(`.cbd-board-header`, fälschlich hell statt dunkel — echter Bug, siehe
+unten), `.cbd-board-content`, `.cbd-board-canvas-area`, `.cbd-board-toolbar`
+(inkl. oberer Trennlinie), Farbauswahl-Dialog-Overlay und dessen Label.
+
+Zwei echte Fehler gefunden und mitbehoben (kein reines "noch nicht
+umgestellt"):
+1. `.cbd-board-header` nutzte `background: var(--color-text-primary,
+   #333333); color: var(--color-background, #ffffff)` — beide Variablen
+   **kehren sich im Darkmode um** (`--color-text-primary` wird hell,
+   `--color-background` dunkel), die Kopfleiste wäre also im Darkmode
+   fälschlich hell mit dunklem Text geworden statt wie gewollt durchgehend
+   dunkel zu bleiben. Fix: feste Literalwerte `#333333`/`#ffffff` — bewusst
+   kein Theme-Bezug, da die Kopfleiste in beiden Modi eine dunkle Fläche
+   sein soll (wie der plastische Look der Theme-Kopfleiste).
+2. Der bereits im Code vermerkte Nebenbefund `.cbd-board-confirm-cancel:hover`
+   (Variablen-Kollision `background: var(--color-sidebar-border, #e0e0e0)`
+   gegen literales `color: #555`) behoben: `color` jetzt ebenfalls
+   `var(--color-text-primary, #555)`. Kontrast rechnerisch gemessen
+   (`--color-sidebar-border`/`--color-text-primary` im Darkmode: `#444444`
+   auf `#e8e8e8`) ≈ **7,97:1** — deutlich über der WCAG-AA-Grenze von 4,5:1
+   (vorher ≈1,2:1).
+
+Alle neuen/geänderten Regeln nutzen ausschließlich
+`[data-theme="dark"] .selektor` (keine `@media`-Blöcke), neue Farbwerte
+`var(--x, #fallback)` außer den zwei bewusst literalen Header-Werten (siehe
+Fund 1) und der unangetasteten Stiftfarbpalette (Inhalt, Nicht-Ziel).
+
+Hellmodus nach der Änderung optisch unverändert (Regressionscheck bestanden
+— alle geänderten Regeln stehen entweder hinter `[data-theme="dark"]` oder
+betreffen nur den zuvor falsch berechneten Darkmode-Fall).
+
+Diese Änderung wurde zusammen mit AP-1.5 in einem gemeinsamen Commit
+`AP-1.4/AP-1.5: Tafelmodus im Darkmode - Oberflaeche + Notiz-Invertierung`
+auf `phase-1-tafelmodus-darkmode` committet und gepusht (Abweichung vom im
+Vorgehen genannten separaten Commit je AP — beide APs wurden im selben
+Arbeitsgang umgesetzt und geprüft, der Commit-Text nennt beide AP-IDs
+ausdrücklich, sodass eine Suche nach `AP-1.4` bzw. `AP-1.5` im Log weiterhin
+fündig wird).
 
 ---
 
 ### AP-1.5: Farbinvertierung der Zeichenfläche im Darkmode
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-25)
 **Umfang:** M
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.4 (dieselbe Datei `board-mode.css`, sequenziell
@@ -788,7 +827,71 @@ für bereits vorher gespeicherte Notizen.
   dass der Filteransatz nicht von neu gezeichneten Pixeln abhängt).
 
 **Übergabenotiz:**
-(leer – vom ausführenden Agenten auszufüllen)
+Gemeinsamer Eltern-Container der drei Canvas-Ebenen (Hintergrund, Gitter,
+Zeichnung) ist `.cbd-board-canvas-container` — dorthin, nicht auf das ganze
+Overlay/die Werkzeugleiste, wirkt der Filter. Neue Methode
+`updateDarkModeInversion()` in `board-mode.js` setzt/entfernt die Klasse
+`cbd-board-inverted` anhand von `document.documentElement.getAttribute(
+'data-theme') === 'dark'` UND `this.boardColor === '#ffffff'`. Aufgerufen
+aus `setBoardColor()` — deckt damit sowohl den initialen Zustand beim
+Öffnen ab (`init()` ruft `setBoardColor(this.boardColor)` bereits auf) als
+auch jeden Farbwechsel über den `.cbd-board-bg-cycle`-Zyklus-Button. Der in
+der Analyse vermutete zweite Aufrufpunkt (`.cbd-board-bg-preset-btn`,
+Presets ca. Zeile 94–105) existiert im tatsächlichen Code **nicht** als
+aktiver Eventhandler — `boardPresetHtml` wird zwar erzeugt, aber nie ins
+DOM eingefügt (bereits als toter Code in `reference_file_map.md`
+dokumentiert, AP-2.6-Nebenbefund aus `PLAN-Darkmode-Umschaltung.md`). Der
+einzige tatsächliche Farbwechsel-Einstiegspunkt ist der Zyklus-Button, der
+ist abgedeckt.
+
+CSS-Regel `.cbd-board-canvas-container.cbd-board-inverted { filter:
+invert(1); }` in `board-mode.css`, bewusst **ohne** `[data-theme="dark"]`-
+Präfix — die Bedingung steckt bereits vollständig in der Klasse selbst
+(wird nur im Darkmode überhaupt gesetzt), ein zusätzliches Attribut-Präfix
+wäre redundant.
+
+**Live-Verifikation (Testserver, echter Browser, `data-theme="dark"`,
+vorhandene weiße Standardtafel mit X-förmiger Notiz):**
+- `container.classList.contains('cbd-board-inverted')` → `true`,
+  `getComputedStyle(container).filter` → `'invert(1)'`; Notiz sichtbar als
+  weißer Strich auf schwarzem Grund (Screenshot bestätigt).
+- Tafelfarbe per `CBDBoardMode.setBoardColor('#1a472a')` (Grün) gewechselt
+  → Klasse und Filter sofort entfernt (`hasInvertedClass: false, filter:
+  'none'`) — keine Invertierung auf bewusst gewählter Farbe, wie gefordert.
+  Zurückwechseln auf `#ffffff` stellt die Invertierung sofort wieder her.
+- Mehrfarbige Testnotiz gezeichnet (roter und blauer Strich direkt auf
+  `drawingCtx`): Ergebnis exakt die erwartete reine Farbinvertierung
+  (Rot `#ff0000` → Cyan `#00ffff`, Blau `#0000ff` → Gelb `#ffff00`) — kein
+  perzeptueller Hue-Erhalt, wie in Abschnitt 5 (Risiko „Invertierungs-Filter
+  kehrt auch bewusst bunte Stiftfarben um") als bekannt/akzeptiert vermerkt.
+- Hellmodus: kein Filter aktiv, Zeichenfläche unverändert (Regressionscheck
+  bestanden).
+- Bereits vor dieser Änderung gespeicherte Notiz (aus einem früheren Test)
+  invertiert sich beim Öffnen im Darkmode ebenfalls korrekt — bestätigt,
+  dass der Filteransatz rein auf der Darstellung wirkt, unabhängig davon,
+  wann/wie die Pixel gezeichnet wurden.
+
+**Edge Case (Schritt 5 des Vorgehens) geprüft:** `Theme/header.php`,
+Klick-Handler von `#fos-theme-toggle` (Zeilen 106–117), setzt/entfernt
+`data-theme` **ohne Seiten-Reload** (`setAttribute`/`removeAttribute` plus
+`localStorage`-Persistenz, kein `location.reload()`). Da hier kein
+zusätzlicher Listener auf diesen Toggle existiert (Schritt 5 verbietet
+das ausdrücklich, um den Scope nicht zu sprengen), gilt: Die
+`[data-theme="dark"]`-CSS-Regeln aus AP-1.4 reagieren live (reine
+CSS-Selektoren, browserseitig automatisch neu ausgewertet), aber die
+JS-gesteuerte `cbd-board-inverted`-Klasse **nicht** — wird der Toggle bei
+bereits offenem Tafelmodus geklickt, greift die Invertierung der Notiz
+erst beim nächsten Öffnen des Tafelmodus oder Farbwechsel, nicht sofort.
+**Bekannte, bewusst nicht behobene Einschränkung**, exakt wie im Vorgehen
+antizipiert — kein zusätzlicher Event-Listener ergänzt.
+
+Zusammen mit AP-1.4 in einem gemeinsamen Commit `AP-1.4/AP-1.5: Tafelmodus
+im Darkmode - Oberflaeche + Notiz-Invertierung` auf
+`phase-1-tafelmodus-darkmode` committet und gepusht (siehe Begründung in
+der AP-1.4-Übergabenotiz).
+
+`reference_file_map.md` für `board-mode.js` und `board-mode.css` ist
+aktualisiert.
 
 ---
 
@@ -969,12 +1072,13 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 
 | AP | Titel | Modell | Status | Abhängig von | Notiz |
 |---|---|---|---|---|---|
-| AP-1.1 | Live-Diagnose PDF-Bilder | opus | ☐ | – | |
-| AP-1.2 | PDF-Bilder-Fehler beheben | opus | ☐ | AP-1.1 | |
-| AP-1.3 | PDF-Direktdownload prüfen/absichern | opus | ☐ | AP-1.2 | |
-| AP-1.4 | Tafelmodus-Oberfläche Darkmode | sonnet | ☐ | – | |
-| AP-1.5 | Notiz-Farbinvertierung Darkmode | sonnet | ☐ | AP-1.4 | |
-| AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1…AP-1.5 | |
+| AP-1.1 | Live-Diagnose PDF-Bilder | opus | ☑ | – | Auf Branch `phase-1-pdf-export-fixes`; Details/Übergabenotiz dort — Verdachtsstelle 1 widerlegt, Verdachtsstelle 2 bestätigt |
+| AP-1.2 | PDF-Bilder-Fehler beheben | opus | ☑ | AP-1.1 | Auf Branch `phase-1-pdf-export-fixes`; Ursache war kses-Data-URI-Stripping + JPEG-Transparenzverlust + falsch benannte CSS-Variablen |
+| AP-1.fix1 | PDF soll Darkmode nicht abbilden | sonnet | ☑ | AP-1.2 | Auf Branch `phase-1-pdf-export-fixes`; Korrektur-AP nach Nutzer-Feedback (Regel 15), PDF immer im Hellmodus-Farbschema |
+| AP-1.3 | PDF-Direktdownload prüfen/absichern | opus | ☑* | AP-1.2 | Auf Branch `phase-1-pdf-export-fixes`; *Code fertig, Browser-„Speichern unter"-Verhalten noch vom Nutzer selbst zu prüfen |
+| AP-1.4 | Tafelmodus-Oberfläche Darkmode | sonnet | ☑ | – | Auf Branch `phase-1-tafelmodus-darkmode`; zwei echte Fehler mitbehoben (Header-Variablen invertiert, Confirm-Cancel-Kontrast) |
+| AP-1.5 | Notiz-Farbinvertierung Darkmode | sonnet | ☑ | AP-1.4 | Auf Branch `phase-1-tafelmodus-darkmode`; live verifiziert inkl. Mehrfarben-Test und Edge-Case-Prüfung |
+| AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1…AP-1.5 | Beide Stränge fertig, Review kann beginnen |
 | AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev | |
 
 ## 9. Testprotokoll
@@ -983,7 +1087,9 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
-| | | | | |
+| 2026-08-25 | AP-1.1–AP-1.3, AP-1.fix1 | Siehe Testprotokoll auf Branch `phase-1-pdf-export-fixes` (Abschnitt 9 dort) | Alle vier APs bestanden, Details/Belege dort dokumentiert | Agent (Strang „PDF") |
+| 2026-08-25 | AP-1.4 | Live auf `fos.localhost:8080`, Hell- vs. Darkmode-Vergleich von Kopfzeile, Inhalt, Werkzeugleiste, Farbauswahl-Dialog, Bestätigungsdialog; Kontrastberechnung für `.cbd-board-confirm-cancel:hover` | Keine unangepasste helle Fläche mehr im Darkmode; Kontrast ≈7,97:1 (vorher ≈1,2:1); Hellmodus unverändert (Regressionscheck bestanden) | Agent (Strang „Tafelmodus-Darkmode") |
+| 2026-08-25 | AP-1.5 | Live auf `fos.localhost:8080`: `classList`/`getComputedStyle`-Zustandsprüfung, Farbwechsel Weiß→Grün→Weiß, mehrfarbige Testnotiz (Rot/Blau direkt auf Canvas gezeichnet), bereits gespeicherte Altnotiz erneut geöffnet, Edge-Case-Prüfung des Theme-Toggle-Handlers (`Theme/header.php`) | Invertierung korrekt nur bei Darkmode+Weißtafel; Grün-/Schwarztafel unverändert; Rot→Cyan/Blau→Gelb wie erwartet; Altnotiz invertiert korrekt; Live-Toggle-Edge-Case als bekannte Einschränkung bestätigt (kein Reload, aber kein Listener für die Invertierung) | Agent (Strang „Tafelmodus-Darkmode") |
 
 ## 10. Dokumentation
 
