@@ -939,6 +939,112 @@ bisher nicht reproduzierter Befund und sollte gemeldet werden.
 
 ---
 
+### AP-1.fix3: `showImageErrors` darf den Export nicht abbrechen
+
+**Status:** ☑ erledigt (2026-08-25)
+**Umfang:** S
+**Modell:** sonnet
+**Abhängigkeiten:** AP-1.2, AP-1.rev (Befund F2)
+
+**Ziel & Kontext:**
+Korrektur-AP nach Regel 15, ausgelöst durch AP-1.rev-Befund F2. AP-1.2 hatte
+`$mpdf->showImageErrors = true;` dauerhaft aktiviert, um das ursprüngliche
+Bug-Symptom (stiller 14×16-Platzhalter statt der echten Notiz) überhaupt
+sichtbar zu machen (siehe AP-1.1-Diagnose). Das Flag hat aber eine
+Nebenwirkung, die zur Diagnosezeit nicht auffiel: mPDF wirft bei **jedem**
+nicht dekodierbaren Bild eine `MpdfImageException`
+(`vendor/mpdf/mpdf/src/Image/ImageProcessor.php::imageError()`), die vom
+umschließenden `catch (\Exception $e)` in `generate_pdf()` aufgefangen wird
+und den **gesamten** Export als fehlgeschlagen zurückgibt — nicht nur die
+eine betroffene Notiz. Betroffen wäre z. B. ein einzelnes, mit der
+eigentlichen Notiz/dem Tafelbild unzusammenhängendes Fremdbild (nicht
+erreichbare Remote-URL, zu großes Same-Site-Bild, siehe
+`embed_remote_images()`). Vor AP-1.2 führte genau dieser Fall nur zu einem
+stillen Platzhalter, der Export selbst lief durch — AP-1.2 hat also ein
+mildes, schwer diagnostizierbares Problem gegen ein selteneres, aber
+härteres (Totalausfall) eingetauscht, ohne das zu beabsichtigen. Das Flag
+war ausschließlich als Diagnosewerkzeug für AP-1.1 gedacht, nicht Teil der
+eigentlichen Bildkorrektur (die liegt in `sanitize_pdf_block_html()` in
+`class-cbd-ajax-handler.php`, `recompressBase64()` in `pdf-server-side.js`
+und den korrigierten CSS-Variablennamen — alle drei bleiben unverändert und
+wirken unabhängig von diesem Flag).
+
+**Betroffene Dateien:**
+- `includes/class-cbd-pdf-generator.php` (ändern)
+
+**Vorgehen:**
+1. Branch `phase-1-pdf-export-fixes` auschecken.
+2. `$mpdf->showImageErrors = true;` (Zeile 186) an dieselbe
+   Debug-Konvention koppeln, die im Plugin bereits für Diagnose-Logs gilt
+   (`CLAUDE.md`, Abschnitt „Debugging-Konventionen":
+   `if (defined('WP_DEBUG') && WP_DEBUG)`): `$mpdf->showImageErrors =
+   defined('WP_DEBUG') && WP_DEBUG;`. In Produktivumgebungen (WP_DEBUG
+   typischerweise aus) gilt damit wieder der alte, sichere Rückfall auf den
+   stillen Platzhalter bei einem einzelnen defekten Fremdbild — der Export
+   selbst bricht nicht mehr ab. Mit aktivem WP_DEBUG (z. B. auf dem
+   Testsystem) bleibt die laute Diagnose für künftige Fehlersuche
+   verfügbar.
+3. Bewusst **kein** Try-Catch pro Bild innerhalb der `WriteHTML()`-Schleife
+   als Alternative gewählt — mPDFs internen Renderzustand nach einer
+   mittendrin abgefangenen `MpdfImageException` als konsistent für einen
+   Fortsetzungsversuch anzunehmen, wäre eine ungeprüfte Annahme über eine
+   fremde Bibliothek gewesen; die Debug-Gate-Lösung ist die risikoärmere.
+4. `php -l` und `php tools/check-php74.php` gegen die geänderte Datei
+   laufen lassen.
+5. Live auf dem Testsystem (WP_DEBUG dort aktiv, siehe `wp-config.php`):
+   regulären PDF-Export einer Seite mit „Eigener Notiz" auslösen, Response
+   der `cbd/v1/generate-pdf`-Route sowie die tatsächlich erzeugte
+   PDF-Datei prüfen — Regressionscheck, dass der Export mit funktionierenden
+   Bildern weiterhin unverändert erfolgreich durchläuft.
+
+**Akzeptanzkriterien:**
+- [x] `showImageErrors` ist an `WP_DEBUG` gekoppelt, nicht mehr dauerhaft
+      `true`.
+- [x] Ein regulärer PDF-Export mit funktionierender Notiz/funktionierendem
+      Tafelbild läuft weiterhin unverändert erfolgreich durch (kein
+      Bildverlust, keine neue Fehlermeldung).
+- [x] `php -l` und `php tools/check-php74.php` bleiben grün.
+
+**Tests:**
+- Live-Export auf dem Testsystem (WP_DEBUG aktiv): Response der
+  `generate-pdf`-Route und erzeugte PDF-Datei geprüft.
+
+**Übergabenotiz:**
+Einzeiliger, gezielter Fix analog zu AP-1.fix1: `$mpdf->showImageErrors =
+true;` → `$mpdf->showImageErrors = defined('WP_DEBUG') && WP_DEBUG;`. Vor
+dem Fix per Quelltextlesen verifiziert (nicht nur vermutet): `\Mpdf\
+MpdfImageException extends \Mpdf\MpdfException extends \ErrorException`
+(damit tatsächlich von `catch (\Exception $e)` in `generate_pdf()`
+erfasst), und die Wurfstelle `imageError()` in
+`vendor/mpdf/mpdf/src/Image/ImageProcessor.php:574` wirft exakt dann, wenn
+`$this->mpdf->showImageErrors || $this->mpdf->debug` beim ersten
+Fehlschlag eines Bildes zutrifft — die Ursachenkette aus AP-1.rev-Befund F2
+war damit vor der Umsetzung bereits bestätigt, nicht nur plausibel.
+
+`php -l` und `php tools/check-php74.php` (569 Dateien) beide grün.
+
+Live-Regressionstest auf dem Testsystem (WP_DEBUG dort aktiv laut
+`wp-config.php`, `showImageErrors` bleibt dort also weiterhin `true` —
+identische Testbedingung wie bei AP-1.2/AP-1.1): PDF-Export über den
+Block-eigenen PDF-Knopf (`.cbd-pdf-export` innerhalb
+`#cbd-container-1-content`, Block „Zwei klare Flüssigkeiten, ein Uhrglas")
+ausgelöst. `POST /wp-json/cbd/v1/generate-pdf` → `200 OK`,
+`{"success":true,...}`; erzeugte Datei `cbd-pdf-6a8d61fc78ffe.pdf`
+tatsächlich auf dem Dateisystem geöffnet: 112.338 Bytes, zwei
+`/Subtype /Image`-Einträge, kein 14×16-Platzhaltermuster gefunden — Export
+mit eingebetteter Notiz weiterhin fehlerfrei und ohne Bildverlust.
+
+**Bewusst nicht durchgeführt (außerhalb des engen Scopes dieses
+Korrektur-APs):** ein gezielter Test mit einem tatsächlich unerreichbaren
+Fremdbild bei WP_DEBUG=false, um den in F2 beschriebenen alten
+Rückfall-Pfad (stiller Platzhalter statt Exportabbruch) live zu
+reproduzieren. Die Korrektheit dieses Rückfalls ergibt sich unmittelbar aus
+der Codeänderung selbst (dieselbe Zeile, die vor AP-1.2 bereits diesen
+Rückfall erzeugte) und der oben verifizierten Wurfbedingung in mPDF, nicht
+aus einer zusätzlichen Live-Reproduktion.
+
+---
+
 ### AP-1.4: Tafelmodus-Oberfläche an Darkmode anpassen
 
 **Status:** ☐ offen
@@ -1355,10 +1461,12 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 | AP-1.2 | PDF-Bilder-Fehler beheben | opus | ☑ | AP-1.1 | Ursache war weder Verdachtsstelle 1 noch 2 allein, sondern kses+Transparenz+Variablennamen (siehe Übergabenotiz) |
 | AP-1.fix1 | PDF soll Darkmode nicht abbilden | sonnet | ☑ | AP-1.2 | Korrektur nach Nutzer-Live-Test: PDF immer im Hellmodus-Farbschema, unabhängig vom Website-Zustand |
 | AP-1.3 | PDF-Direktdownload prüfen/absichern | opus | ☑* | AP-1.2 | *Code fertig (Content-Disposition-Header live bestätigt); ob Browser-Nachfrage komplett verschwindet, muss der Nutzer selbst noch prüfen |
-| AP-1.4 | Tafelmodus-Oberfläche Darkmode | sonnet | ☐ | – | |
-| AP-1.5 | Notiz-Farbinvertierung Darkmode | sonnet | ☐ | AP-1.4 | |
-| AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1…AP-1.5 | |
-| AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev | |
+| AP-1.fix3 | `showImageErrors` darf Export nicht abbrechen | sonnet | ☑ | AP-1.2, AP-1.rev | Korrektur nach AP-1.rev-Befund F2: an WP_DEBUG gekoppelt statt dauerhaft aktiv |
+| AP-1.4 | Tafelmodus-Oberfläche Darkmode | sonnet | ☑ | – | Auf Branch `phase-1-tafelmodus-darkmode`; Details/Übergabenotiz dort |
+| AP-1.5 | Notiz-Farbinvertierung Darkmode | sonnet | ☑ | AP-1.4 | Auf Branch `phase-1-tafelmodus-darkmode`; Details/Übergabenotiz dort |
+| AP-1.rev | Review Phase 1 | opus | ☑ | AP-1.1…AP-1.5 | Auf Branch `phase-1-tafelmodus-darkmode` durchgeführt und dokumentiert (dateiübergreifend, beide Branches per `git diff main...<branch>` geprüft); 2 kritische Befunde → AP-1.fix2 (dort) + AP-1.fix3 (hier) |
+| AP-1.fix2 | Werkzeugleisten-Kontrast nachbessern | sonnet | ☑ | AP-1.4, AP-1.rev | Auf Branch `phase-1-tafelmodus-darkmode`; Details/Übergabenotiz dort |
+| AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.fix2, AP-1.fix3 | Beide Korrektur-APs abgeschlossen — Merge kann beginnen |
 
 ## 9. Testprotokoll
 
@@ -1370,6 +1478,8 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | 2026-08-25 | AP-1.2 | Live-Export über echten Browser (Claude in Chrome, Login durch Nutzer) auf Testseite „Reinstoffe und Gemische", Modus visual, mit „Eigener Notiz"; wiederholt nach jedem Teilfix; zusätzlich Export im Darkmode; mehrere isolierte PHP-Reflection-Tests mit echten `localStorage`-Rohdaten gegen `sanitize_pdf_block_html()`/`prepare_structured_block()`/mPDF | Alle drei Teilursachen (kses-data:-Stripping, JPEG-Transparenzverlust, falsch benannte CSS-Variablen) bestätigt behoben: Notiz erscheint korrekt im PDF, keine Duplikate bei Wiederholung, Darkmode-Text hell auf dunkel lesbar | Agent (Live-Browser-Export, echte PDF-Dateien geöffnet, kein Mock) |
 | 2026-08-25 | AP-1.fix1 | Nutzer testete unabhängig ein serverseitiges „Tafelbild" (funktioniert), meldete aber weiterhin sichtbaren Darkmode im PDF und stellte klar: PDFs sollen den Darkmode nie abbilden. Live-Export im Darkmode nach dem Fix wiederholt | PDF zeigt jetzt Hellmodus-Farbschema unabhängig vom Website-Zustand (`cbd-pdf-6a8d3c5871730.pdf` geprüft), „Eigene Notiz" weiterhin korrekt sichtbar | Agent (Live-Browser-Export im Darkmode, echte PDF geöffnet) |
 | 2026-08-25 | AP-1.3 | `fetch(url, {method:'HEAD'})` auf eine frisch erzeugte PDF-Datei nach automatischem Anlegen der `.htaccess`; Regressionscheck: Export lief weiterhin fehlerfrei durch | Response-Header enthält `content-disposition: attachment`; `.htaccess`-Inhalt auf dem Dateisystem verifiziert. Natives Browser-„Speichern unter"-Verhalten nicht automatisiert testbar — vom Nutzer noch zu bestätigen | Agent (HTTP-Header-Prüfung), Rest offen für Nutzer |
+| 2026-08-25 | AP-1.rev | Read-only Code-Review beider Branches (`git diff main...<branch>`), Stichproben gegen Akzeptanzkriterien, `php tools/check-php74.php` erneut ausgeführt | 4 von 6 Implementierungs-APs PASS, AP-1.4 FAIL (Werkzeugleisten-Kontrast); 16 Befunde dokumentiert (2 kritisch: F1/F3 Toolbar-Kontrast, F2 showImageErrors-Exportabbruch; 5 mittel, 9 gering); PHP-7.4-Check grün | Agent (unabhängig, keine Implementierung in dieser Phase; volle Übergabenotiz auf Branch `phase-1-tafelmodus-darkmode`) |
+| 2026-08-25 | AP-1.fix3 | Live-Export auf Testsystem (WP_DEBUG aktiv, `showImageErrors` bleibt dort testbedingt `true`) über `.cbd-pdf-export`-Knopf; `POST cbd/v1/generate-pdf`-Response und erzeugte Datei geprüft; `php -l` + `php tools/check-php74.php` | `{"success":true,...}`, Datei `cbd-pdf-6a8d61fc78ffe.pdf` (112.338 Bytes, 2 `/Subtype /Image`-Einträge, kein 14×16-Platzhalter) — Export mit Notiz weiterhin fehlerfrei; beide PHP-Checks grün | Agent (Live-Browser-Export, echte PDF-Datei geöffnet) |
 
 ## 10. Dokumentation
 

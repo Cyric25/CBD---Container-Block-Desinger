@@ -178,12 +178,34 @@ class CBD_PDF_Generator {
             'img_dpi'       => 150,
         ]);
 
-        // AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): Ohne diese
-        // Zeile ersetzt mPDF ein nicht dekodierbares Bild lautlos durch
+        // AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): Ohne dieses
+        // Flag ersetzt mPDF ein nicht dekodierbares Bild lautlos durch
         // sein eigenes 14x16px-Platzhalterbild, ohne jede Log-Ausgabe -
         // genau das hat die fehlenden "Eigenen Notizen"/"Tafelbilder" im
         // PDF unauffindbar gemacht (siehe AP-1.1-Diagnose).
-        $mpdf->showImageErrors = true;
+        //
+        // AP-1.fix3 (Korrektur nach AP-1.rev-Befund F2): dauerhaft aktiviert
+        // war das Flag selbst ein Regressionsrisiko - mPDF wirft bei JEDEM
+        // nicht dekodierbaren Bild eine MpdfImageException
+        // (vendor/mpdf/mpdf/src/Image/ImageProcessor.php::imageError()),
+        // die hier nicht abgefangen wird und den GESAMTEN Export abbrechen
+        // laesst (siehe catch (\Exception) in generate_pdf() oben) - auch
+        // wenn nur ein einziges, mit der eigentlichen Notiz/dem Tafelbild
+        // unzusammenhaengendes Fremdbild betroffen ist (z. B. eine nicht
+        // erreichbare Remote-URL oder ein zu grosses Same-Site-Bild, siehe
+        // embed_remote_images()). Vor AP-1.2 fuehrte genau dieser Fall nur
+        // zu einem stillen Platzhalter, der Export selbst lief durch - das
+        // war zwar schlecht diagnostizierbar, aber nie ein Totalausfall.
+        // Das Flag ist als Diagnosewerkzeug fuer AP-1.1 entstanden, nicht
+        // als Teil der eigentlichen Bildkorrektur (die liegt in
+        // sanitize_pdf_block_html()/recompressBase64()/den korrigierten
+        // CSS-Variablennamen) - es ist deshalb an dieselbe Debug-Konvention
+        // gekoppelt wie die uebrigen Diagnose-Logs im Plugin (siehe
+        // CLAUDE.md, Abschnitt "Debugging-Konventionen"): in der
+        // Produktivumgebung bleibt der alte, sichere Rueckfall auf den
+        // stillen Platzhalter erhalten, mit WP_DEBUG steht die laute
+        // Diagnose weiterhin zur Verfuegung.
+        $mpdf->showImageErrors = defined('WP_DEBUG') && WP_DEBUG;
 
         // Set document info
         $mpdf->SetCreator('Container Block Designer Plugin');
