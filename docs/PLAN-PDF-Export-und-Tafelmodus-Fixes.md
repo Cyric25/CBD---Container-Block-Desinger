@@ -774,7 +774,7 @@ Blocktext/-hintergrund selbst).
 
 ### AP-1.3: PDF-Direktdownload prüfen und absichern
 
-**Status:** ☐ offen
+**Status:** ☑ code-seitig erledigt (2026-08-25) — Browser-Verhalten noch vom Nutzer zu bestätigen
 **Umfang:** S
 **Modell:** opus
 **Abhängigkeiten:** AP-1.2
@@ -888,7 +888,54 @@ Fix erzwingen, der technisch nicht wirken kann.
   Browser-Nachfrage-Einstellung, jeweils Ergebnis notiert.
 
 **Übergabenotiz:**
-(leer – vom ausführenden Agenten auszufüllen)
+Schritt 1 (Browser-Einstellung testweise deaktivieren) und Schritt 3
+(Netzwerktab-Fehleranalyse) konnten in dieser Sitzung **nicht** über den
+automatisierten Browser durchgeführt werden — ein natives OS-„Speichern
+unter"-Dialogfenster ist von einem automatisierten Browser-Tool nicht
+beobachtbar, und `chrome://settings/downloads` lässt sich darüber nicht
+bedienen. Stattdessen umgesetzt:
+
+- **Code-Bestätigung:** `downloadPDF()` nutzt nachweislich bereits die
+  korrekte `<a download>`-Technik (unverändert, kein Fehler gefunden).
+- **Schritt 4 (defensive Absicherung) vollständig umgesetzt und live
+  verifiziert:** `ensure_download_htaccess()` in
+  `includes/class-cbd-pdf-generator.php` legt beim ersten PDF-Export
+  automatisch eine `.htaccess` mit
+  `Header set Content-Disposition "attachment"` für `*.pdf` in
+  `wp-content/uploads/cbd-temp-pdfs/` an (idempotent — nur falls die Datei
+  noch nicht existiert; per PHP-Code statt manuell platzierter Datei, damit
+  sie auf jeder Installation automatisch entsteht, auch nach einem
+  Update/Neuinstallation des Uploads-Verzeichnisses). `mod_headers` ist auf
+  dem Testserver geladen (`apache/conf/httpd.conf`, Zeile 38); dass
+  `.htaccess`-Overrides für dieses Verzeichnis überhaupt wirken, ist durch
+  die bereits funktionierenden WordPress-Rewrite-Regeln im Seitenaufruf
+  selbst belegt. Per `fetch(..., {method:'HEAD'})` auf die tatsächlich
+  erzeugte PDF-Datei bestätigt: Response-Header enthält
+  `content-disposition: attachment`.
+- **Schritt 5 (mod_headers auf Produktivhosting All-Inkl):** nicht prüfbar
+  ohne Zugriff auf die Produktivinstallation — als offene Prüfung für den
+  Nutzer vermerkt. Schlägt das Schreiben der `.htaccess` fehl (Verzeichnis
+  nicht beschreibbar o. Ä.), bricht der PDF-Export dadurch **nicht** ab
+  (Schreibversuch mit `@file_put_contents()`, bewusst ohne Fehlerprüfung —
+  rein defensive Zusatzmaßnahme, kein Pflichtschritt).
+- **Schritt 6 (Regressionscheck mit aktivierter Nachfrage-Einstellung):**
+  nicht prüfbar aus demselben Grund wie Schritt 1.
+
+**Offen für den Nutzer:** Ob das ursprünglich gemeldete Verhalten (Browser
+fragt nach Speicherort) durch den neuen `Content-Disposition`-Header bereits
+behoben ist, oder ob es sich — wie in der Erweiterungsanalyse als
+wahrscheinlichste Ursache vermutet — um die eigene Chrome/Edge-Einstellung
+„Vor jedem Download nachfragen, wo die Datei gespeichert werden soll"
+handelt (`chrome://settings/downloads` bzw. `edge://settings/downloads`),
+kann nur der Nutzer in seinem eigenen Browser abschließend feststellen. Bitte
+nach Abschluss dieses Plans einmal prüfen: Falls die Nachfrage weiterhin
+erscheint UND die genannte Einstellung deaktiviert ist, ist das ein neuer,
+bisher nicht reproduzierter Befund und sollte gemeldet werden.
+
+**Geänderte Dateien:**
+- `includes/class-cbd-pdf-generator.php` — neue Methode
+  `ensure_download_htaccess()`, Aufruf direkt nach dem Anlegen von
+  `cbd-temp-pdfs/`.
 
 ---
 
@@ -1307,7 +1354,7 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 | AP-1.1 | Live-Diagnose PDF-Bilder | opus | ☑ | – | Verdachtsstelle 1 widerlegt, Verdachtsstelle 2 bestätigt, echte Ursache noch offen (mPDF-Bilddecode) |
 | AP-1.2 | PDF-Bilder-Fehler beheben | opus | ☑ | AP-1.1 | Ursache war weder Verdachtsstelle 1 noch 2 allein, sondern kses+Transparenz+Variablennamen (siehe Übergabenotiz) |
 | AP-1.fix1 | PDF soll Darkmode nicht abbilden | sonnet | ☑ | AP-1.2 | Korrektur nach Nutzer-Live-Test: PDF immer im Hellmodus-Farbschema, unabhängig vom Website-Zustand |
-| AP-1.3 | PDF-Direktdownload prüfen/absichern | opus | ☐ | AP-1.2 | |
+| AP-1.3 | PDF-Direktdownload prüfen/absichern | opus | ☑* | AP-1.2 | *Code fertig (Content-Disposition-Header live bestätigt); ob Browser-Nachfrage komplett verschwindet, muss der Nutzer selbst noch prüfen |
 | AP-1.4 | Tafelmodus-Oberfläche Darkmode | sonnet | ☐ | – | |
 | AP-1.5 | Notiz-Farbinvertierung Darkmode | sonnet | ☐ | AP-1.4 | |
 | AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1…AP-1.5 | |
@@ -1322,6 +1369,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | 2026-08-25 | AP-1.1 | Reale PDF-Datei `cbd-pdf-6a8caee833660.pdf` geöffnet und byteweise analysiert; drei isolierte `clean_block_html()`-Tests; vier isolierte mPDF-Bildeinbettungstests (PNG, JPEG, groß, transparent) | Verdachtsstelle 1 widerlegt, Verdachtsstelle 2 bestätigt, mPDF setzt nachweislich sein internes 14×16-Fehlerbild ein (Bilddaten nicht dekodierbar), Ursache dafür noch offen; zusätzlich Darkmode-Textkontrast-Bug im PDF-Export gefunden | Agent (Live-System-Diagnose ohne Login, per Dateisystemzugriff + isolierten PHP-Tests) |
 | 2026-08-25 | AP-1.2 | Live-Export über echten Browser (Claude in Chrome, Login durch Nutzer) auf Testseite „Reinstoffe und Gemische", Modus visual, mit „Eigener Notiz"; wiederholt nach jedem Teilfix; zusätzlich Export im Darkmode; mehrere isolierte PHP-Reflection-Tests mit echten `localStorage`-Rohdaten gegen `sanitize_pdf_block_html()`/`prepare_structured_block()`/mPDF | Alle drei Teilursachen (kses-data:-Stripping, JPEG-Transparenzverlust, falsch benannte CSS-Variablen) bestätigt behoben: Notiz erscheint korrekt im PDF, keine Duplikate bei Wiederholung, Darkmode-Text hell auf dunkel lesbar | Agent (Live-Browser-Export, echte PDF-Dateien geöffnet, kein Mock) |
 | 2026-08-25 | AP-1.fix1 | Nutzer testete unabhängig ein serverseitiges „Tafelbild" (funktioniert), meldete aber weiterhin sichtbaren Darkmode im PDF und stellte klar: PDFs sollen den Darkmode nie abbilden. Live-Export im Darkmode nach dem Fix wiederholt | PDF zeigt jetzt Hellmodus-Farbschema unabhängig vom Website-Zustand (`cbd-pdf-6a8d3c5871730.pdf` geprüft), „Eigene Notiz" weiterhin korrekt sichtbar | Agent (Live-Browser-Export im Darkmode, echte PDF geöffnet) |
+| 2026-08-25 | AP-1.3 | `fetch(url, {method:'HEAD'})` auf eine frisch erzeugte PDF-Datei nach automatischem Anlegen der `.htaccess`; Regressionscheck: Export lief weiterhin fehlerfrei durch | Response-Header enthält `content-disposition: attachment`; `.htaccess`-Inhalt auf dem Dateisystem verifiziert. Natives Browser-„Speichern unter"-Verhalten nicht automatisiert testbar — vom Nutzer noch zu bestätigen | Agent (HTTP-Header-Prüfung), Rest offen für Nutzer |
 
 ## 10. Dokumentation
 

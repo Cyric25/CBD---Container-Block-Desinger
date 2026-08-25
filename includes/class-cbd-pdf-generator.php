@@ -150,6 +150,7 @@ class CBD_PDF_Generator {
         if (!file_exists($temp_dir)) {
             wp_mkdir_p($temp_dir);
         }
+        $this->ensure_download_htaccess($temp_dir);
 
         if (!is_writable($temp_dir)) {
             return array(
@@ -227,6 +228,42 @@ class CBD_PDF_Generator {
             'url'      => $upload_dir['baseurl'] . '/cbd-temp-pdfs/' . $temp_filename,
             'engine'   => 'mpdf'
         );
+    }
+
+    /**
+     * AP-1.3 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): Legt in
+     * cbd-temp-pdfs/ eine .htaccess mit Content-Disposition: attachment fuer
+     * .pdf-Dateien an, als defensive Absicherung fuer den Direktdownload.
+     *
+     * `downloadPDF()` in pdf-server-side.js nutzt bereits die korrekte
+     * `<a download>`-Technik, die same-origin ohne Nachfrage funktioniert -
+     * dieser Header ist eine zusaetzliche Absicherung (z. B. falls der
+     * Download-Link mal direkt aufgerufen statt per Klick auf den Anchor
+     * ausgeloest wird) und **kein** Ersatz dafuer. Eine vom Nutzer selbst in
+     * seinem Browser aktivierte Einstellung „Vor jedem Download nachfragen,
+     * wo die Datei gespeichert werden soll" kann dieser Header nicht
+     * uebersteuern - das ist eine Browser-Entscheidung, keine, die eine
+     * Website per HTTP-Header oder JavaScript aufheben kann.
+     *
+     * Schreibt die Datei nur, wenn sie noch nicht existiert (idempotent,
+     * kein Schreibzugriff bei jedem Export). Schlaegt das Schreiben fehl
+     * (z. B. Verzeichnis nicht beschreibbar), wird der PDF-Export dadurch
+     * NICHT blockiert - rein defensive Ergaenzung.
+     *
+     * @param string $temp_dir Absoluter Pfad zu cbd-temp-pdfs/ (mit
+     *                          abschliessendem Slash)
+     */
+    private function ensure_download_htaccess($temp_dir) {
+        $htaccess_path = $temp_dir . '.htaccess';
+        if (file_exists($htaccess_path)) {
+            return;
+        }
+        $contents = "<IfModule mod_headers.c>\n"
+            . "<FilesMatch \"\\.pdf$\">\n"
+            . "Header set Content-Disposition \"attachment\"\n"
+            . "</FilesMatch>\n"
+            . "</IfModule>\n";
+        @file_put_contents($htaccess_path, $contents);
     }
 
     /**
