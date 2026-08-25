@@ -442,20 +442,67 @@ tmp\` und im Scratchpad, wurden nach Abschluss der Diagnose entfernt.
 
 **Ziel & Kontext:**
 Behebt die in AP-1.1 bestätigte Ursache dafür, dass „Eigene Notizen" und
-„Tafelbilder" nicht im PDF erscheinen, sowie den in AP-1.1 geprüften
-Duplikat-Nebenbefund. Lies zuerst die Übergabenotiz von AP-1.1 in diesem
-Dokument (Abschnitt 7, AP-1.1) – sie benennt die tatsächliche Ursache
-konkret.
+„Tafelbilder" nicht im PDF erscheinen, sowie den in AP-1.1 bestätigten
+Duplikat-Nebenbefund (Klassennamen-Diskrepanz bei den Aufräum-Selektoren).
+Lies zuerst die Übergabenotiz von AP-1.1 in diesem Dokument (Abschnitt 7,
+AP-1.1) – sie hält den konkreten Befund fest: mPDF bettet an der
+Notiz-Stelle sein eigenes 14×16px-Fehler-Platzhalterbild ein, weil es die
+echten Bilddaten nicht dekodieren kann; die genaue Ursache dafür ist noch
+nicht abschließend geklärt (Verdachtsstelle 1 ist widerlegt, mPDFs
+generelle Bildverarbeitung wurde isoliert für PNG/JPEG/Größe/Transparenz
+bereits ausgeschlossen).
+
+**Per Nutzerentscheidung zusätzlich in diesem AP zu beheben:** Der in AP-1.1
+gefundene Zusatzbefund – ein PDF-Export während aktivem Website-Darkmode
+zeigt dunklen Text auf schwarzem Hintergrund im Container-Block, praktisch
+unlesbar. Vermutete Ursache: `replace_css_variables()` übernimmt die
+dunklen Werte für den Block-Hintergrund korrekt, eine andere, unabhängige
+Text-/Standardfarbe im mPDF-Stylesheet (`get_mpdf_stylesheet()`) zieht
+nicht mit.
+
+**Schritt 0 – Fehlerausgabe aktivieren (Voraussetzung für die restliche
+Diagnose):** `$mpdf->showImageErrors = true;` in `generate_with_mpdf()`
+dauerhaft ergänzen (direkt nach der `\Mpdf\Mpdf`-Instanziierung, vor
+`SetCreator()`). Damit werden künftige Bildfehler sichtbar statt lautlos
+durch einen Platzhalter ersetzt – notwendig, um die in AP-1.1 offen
+gebliebene, exakte mPDF-Fehlermeldung für die echten Browserdaten
+überhaupt erst zu sehen. Diese Änderung ist dauerhaft (keine Test-only-Änderung, die
+wieder entfernt wird), da sie zukünftige Fehler dieser Art generell
+diagnostizierbar macht.
 
 **Betroffene Dateien:**
-- `includes/class-cbd-pdf-generator.php` (ändern, falls AP-1.1
-  Verdachtsstelle 1 oder eine andere serverseitige Ursache bestätigt hat)
-- `assets/js/pdf-server-side.js` (ändern, falls AP-1.1 Verdachtsstelle 2
-  bestätigt hat oder eine clientseitige Ursache gefunden wurde)
+- `includes/class-cbd-pdf-generator.php` (ändern – `showImageErrors`,
+  Bildfehler-Ursache je nach live beobachteter mPDF-Fehlermeldung,
+  Darkmode-Textkontrast im mPDF-Stylesheet)
+- `assets/js/pdf-server-side.js` (ändern – Aufräum-Selektoren-Diskrepanz,
+  siehe unten)
 
 **Vorgehen:**
 0. Sicherstellen, dass der Branch `phase-1-pdf-export-fixes` ausgecheckt
    ist (`git checkout phase-1-pdf-export-fixes`) – angelegt in AP-1.1.
+0a. `$mpdf->showImageErrors = true;` in `generate_with_mpdf()` ergänzen
+   (siehe „Schritt 0" im Ziel-&-Kontext-Abschnitt oben).
+0b. Mit dem Nutzer einen echten PDF-Export einer Seite mit „Eigener Notiz"
+   auslösen (Browser-Zugriff über „Claude in Chrome", Login übernimmt der
+   Nutzer selbst). Die neu erzeugte PDF-Datei öffnen (Browser-Download oder
+   Dateipfad `wp-content/uploads/cbd-temp-pdfs/` auf dem Testserver) und
+   die jetzt sichtbare mPDF-Fehlermeldung an der Bildstelle lesen und in
+   der Übergabenotiz wörtlich festhalten.
+0c. Anhand der Fehlermeldung die tatsächliche Ursache bestimmen und gezielt
+   beheben. **Falls die Fehlermeldung auf eine der beiden ursprünglichen
+   Verdachtsstellen zurückführt, entfallen die Schritte 1–3 unten** – sonst
+   gilt die live beobachtete Ursache, mit der Fehlermeldung als Beleg in
+   der Übergabenotiz.
+0d. **Darkmode-Textkontrast im PDF-Export** (Nutzerentscheidung, siehe
+   Ziel-&-Kontext oben): In `get_mpdf_stylesheet()` prüfen, welche
+   Text-/Standardfarbe für den Blockinhalt gesetzt wird, wenn
+   `replace_css_variables()` dunkle Werte liefert (Website war beim Export
+   im Darkmode). Vermutlich ein Fall, in dem `$css_vars['primaryText']`
+   nicht wie `$css_vars['background']` in die generierte CSS-Regel für
+   Absatz-/Überschriftentext einfließt. Live mit demselben Export aus
+   Schritt 0b gegenprüfen (Website vor dem Export in den Darkmode
+   schalten): Text muss nach dem Fix hell auf dunklem Grund erscheinen,
+   genau wie es die Website im Darkmode selbst zeigt.
 1. **Falls AP-1.1 Verdachtsstelle 1 bestätigt** (die `display:none`-Regel
    in `clean_block_html()` entfernt zu viel): Die Regel so ändern, dass
    nur die Eigenschaft `display:none` aus dem Style-Wert entfernt wird,
@@ -497,6 +544,10 @@ konkret.
 **Akzeptanzkriterien:**
 - [ ] Commit mit AP-ID `AP-1.2` im Commit-Text erstellt und zum Remote
       gepusht.
+- [ ] `showImageErrors` ist dauerhaft aktiviert; die live beobachtete
+      mPDF-Fehlermeldung ist in der Übergabenotiz wörtlich festgehalten.
+- [ ] Ein PDF-Export während aktivem Website-Darkmode zeigt hellen Text auf
+      dunklem Grund (nicht mehr dunkel auf dunkel).
 - [ ] Ein PDF-Export mit „Eigener Notiz" UND „Tafelbild" (Modus visual)
       zeigt beide Bilder in der tatsächlich erzeugten, geöffneten
       PDF-Datei.
