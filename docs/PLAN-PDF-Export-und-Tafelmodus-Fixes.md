@@ -213,7 +213,7 @@ Archivierung abgeschlossener Pläne in `docs/archiv/`).
 
 ### AP-1.1: Live-Diagnose – warum fehlen die Bilder im PDF?
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt (2026-08-25)
 **Umfang:** M
 **Modell:** opus
 **Abhängigkeiten:** keine
@@ -334,7 +334,102 @@ Zwei konkrete, unbestätigte Verdachtsstellen (aus einem Code-Durchgang):
   APs.
 
 **Übergabenotiz:**
-(leer – vom ausführenden Agenten auszufüllen)
+Diagnose lief nicht wie ursprünglich geplant über eine manuelle Browser-Sitzung
+(Testserver `fos.localhost:8080` war für das Browser-Pane aus Sicherheitsgründen
+nicht erreichbar, Login-Zugang lag nicht vor), sondern über direkten
+Dateisystemzugriff auf den lokalen Testserver (`C:\allinkl-testserver\`, vom
+Nutzer benannt) plus isolierte PHP-Tests. Ergebnis ist trotzdem eine echte,
+tatsächlich erzeugte PDF-Datei, keine Payload-/Mock-Prüfung.
+
+**1. Reale Beweisdatei gefunden und geöffnet:** `wp-content/uploads/cbd-temp-pdfs/
+cbd-pdf-6a8caee833660.pdf` (77.823 Bytes, erzeugt 2026-08-24 22:51 vom Nutzer
+selbst beim Testen). Sichtprüfung (PDF direkt geöffnet):
+- Textinhalt des Container-Blocks ist vorhanden, aber **dunkler Text auf
+  schwarzem Hintergrund, praktisch unlesbar** — ein bisher unbekannter,
+  zusätzlicher Befund (siehe Punkt 4 unten), nicht Teil der ursprünglich
+  vermuteten Verdachtsstellen.
+- An der Stelle der „Eigenen Notiz" erscheint **kein Bild**, sondern ein
+  kleines rotes Symbol mit weißem X.
+
+**2. Das rote X ist identifiziert:** Byte-Analyse der PDF-Datei
+(`/Subtype /Image`-Objekt extrahiert, `getimagesizefromstring()`) ergibt ein
+gültiges, aber nur **14×16 Pixel** großes JPEG (JFIF-Header). Das ist **mPDFs
+eigenes internes Fehler-Platzhalterbild**, kein beschädigtes Fragment der
+echten Zeichnung. **Schlussfolgerung: mPDF bekommt das `<img src="data:...">`
+zwar an der richtigen Stelle im HTML, kann die referenzierten Bilddaten aber
+nicht dekodieren und setzt lautlos seinen Platzhalter ein** — der
+Produktivcode (`generate_with_mpdf()`) setzt `$mpdf->showImageErrors` nicht,
+daher landet kein Hinweis im `debug.log` (leer für diesen Zeitraum, geprüft).
+
+**3. Verdachtsstelle 1 ist WIDERLEGT, empirisch mit drei isolierten Tests
+(kein WordPress/Browser nötig, per Reflection direkt gegen
+`clean_block_html()` in `includes/class-cbd-pdf-generator.php`):**
+- Normalfall (Zeichnungs-Wrapper in bereits sichtbar gesetztem
+  `.cbd-container-content`): Bild bleibt erhalten.
+- Geschwisterelement mit `display:none` im selben Container: Bild bleibt
+  erhalten (nur das Geschwisterelement verliert sein `style`-Attribut, wie
+  dokumentiert, aber folgenlos für die Notiz).
+- Sogar wenn der Zeichnungs-Wrapper selbst in einem Elternelement mit
+  `display:none` steckt (Worst Case): Bild bleibt erhalten.
+- **Zusätzlich mit realistischer Bildgröße bestätigt:** ein synthetisches
+  1200×800-JPEG (~148 KB Base64) durchläuft `clean_block_html()`
+  **zeichengleich** (Länge vorher/nachher identisch) und wird von mPDF
+  danach korrekt mit den richtigen Dimensionen eingebettet.
+- **Verdachtsstelle 2 (Duplikate durch falsche Aufräum-Selektoren) ist
+  hingegen bestätigt**, rein durch Codelesen (kein Test nötig, da
+  Zeichenkette-für-Zeichenkette eindeutig): `processOneBlock()` sucht
+  `.cbd-drawing-section`/`.cbd-local-drawing-section`/
+  `.cbd-class-drawing-section`, aber `injectDrawingsFromStorage()` erzeugt
+  tatsächlich `.cbd-pdf-drawing-section` — die Aufräum-Selektoren greifen
+  nie. Eigenständiger Bug, unabhängig vom Bild-Problem, sollte in AP-1.2
+  mitkorrigiert werden.
+
+**4. Weitere Tests haben mPDFs Bildverarbeitung selbst als Fehlerquelle
+ausgeschlossen** (jeweils eigenes Skript, gegen die reale mPDF-Instanz aus
+`vendor/`):
+- Einfaches valides PNG (1×1 Pixel): korrekt eingebettet.
+- Einfaches valides JPEG: korrekt eingebettet.
+- Realistisch großes JPEG (1200×800, ~111 KB roh): korrekt eingebettet,
+  auch nach vollem Durchlauf durch `clean_block_html()`.
+- **Realistisch nachgebautes transparentes PNG** (wie es
+  `drawingCanvas.toDataURL('image/png')` in `board-mode.js`, Zeile 1657/1778,
+  tatsächlich erzeugt — nur die Zeichenebene, transparenter Hintergrund,
+  KEIN zusammengesetztes Bild mit Tafelhintergrund): ebenfalls korrekt
+  eingebettet (mit Soft-Mask, zwei Bildobjekte im PDF, beide 1200×800).
+- Damit sind Bildformat (PNG/JPEG), realistische Größe UND Transparenz als
+  alleinige Erklärung ausgeschlossen — mPDF verarbeitet all das synthetisch
+  einwandfrei.
+
+**5. Offen geblieben (braucht Live-Reproduktion, nicht mehr synthetisch
+nachstellbar):** Warum die tatsächlich im Browser erzeugten Bilddaten
+(reale `localStorage`-Zeichnung → JS-Extraktion → JSON → HTTP → PHP
+`json_decode`) am Ende nicht mehr dekodierbar sind, obwohl jede synthetisch
+nachgebaute Variante (Format, Größe, Transparenz) funktioniert, konnte mit
+den verfügbaren Mitteln (kein Live-Zugriff auf den Browser: Browser-Pane
+blockiert `localhost`-Navigation aus Sicherheitsgründen, „Claude in Chrome"
+war nicht verbunden, Login-Zugangsdaten liegen aus Sicherheitsgründen
+grundsätzlich nicht bei mir) nicht abschließend geklärt werden. Konkreter
+nächster Schritt für AP-1.2: `$mpdf->showImageErrors = true;` in
+`generate_with_mpdf()` **dauerhaft ergänzen** (deckt künftige Fehler dieser
+Art sofort auf, statt sie lautlos zu verschlucken), dann gemeinsam mit dem
+Nutzer einen Export live wiederholen und die jetzt sichtbare mPDF-
+Fehlermeldung auswerten.
+
+**Zusatzfund, außerhalb des ursprünglichen Verdachtsstellen-Scopes:** Beim
+Sichten der echten PDF-Datei fiel auf, dass der Container-Blockinhalt bei
+einem Export **während aktivem Website-Darkmode** mit dunklem Text auf
+schwarzem Hintergrund fast unlesbar wird — vermutlich weil
+`collectCSSVariables()`/`replace_css_variables()` die dunklen Farbwerte
+korrekt für den Block-Hintergrund übernehmen, eine andere, unabhängige
+Stelle (z. B. Standard-Textfarbe im mPDF-Stylesheet) aber hell/dunkel nicht
+mitzieht. Nicht Teil der drei ursprünglich beauftragten Bugs, aber direkt
+im selben Datenpfad (`class-cbd-pdf-generator.php`) und beim PDF-Export
+sichtbar — dem Nutzer zur Entscheidung vorgelegt, ob das in diesem Plan
+mitbehoben werden soll oder als separater Punkt vorgemerkt bleibt.
+
+**Geänderte Dateien in diesem AP:** keine Produktivcode-Änderung (wie
+vorgeschrieben). Temporäre Testskripte lagen unter `C:\allinkl-testserver\
+tmp\` und im Scratchpad, wurden nach Abschluss der Diagnose entfernt.
 
 ---
 
@@ -969,7 +1064,7 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 
 | AP | Titel | Modell | Status | Abhängig von | Notiz |
 |---|---|---|---|---|---|
-| AP-1.1 | Live-Diagnose PDF-Bilder | opus | ☐ | – | |
+| AP-1.1 | Live-Diagnose PDF-Bilder | opus | ☑ | – | Verdachtsstelle 1 widerlegt, Verdachtsstelle 2 bestätigt, echte Ursache noch offen (mPDF-Bilddecode) |
 | AP-1.2 | PDF-Bilder-Fehler beheben | opus | ☐ | AP-1.1 | |
 | AP-1.3 | PDF-Direktdownload prüfen/absichern | opus | ☐ | AP-1.2 | |
 | AP-1.4 | Tafelmodus-Oberfläche Darkmode | sonnet | ☐ | – | |
@@ -983,7 +1078,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
-| | | | | |
+| 2026-08-25 | AP-1.1 | Reale PDF-Datei `cbd-pdf-6a8caee833660.pdf` geöffnet und byteweise analysiert; drei isolierte `clean_block_html()`-Tests; vier isolierte mPDF-Bildeinbettungstests (PNG, JPEG, groß, transparent) | Verdachtsstelle 1 widerlegt, Verdachtsstelle 2 bestätigt, mPDF setzt nachweislich sein internes 14×16-Fehlerbild ein (Bilddaten nicht dekodierbar), Ursache dafür noch offen; zusätzlich Darkmode-Textkontrast-Bug im PDF-Export gefunden | Agent (Live-System-Diagnose ohne Login, per Dateisystemzugriff + isolierten PHP-Tests) |
 
 ## 10. Dokumentation
 
