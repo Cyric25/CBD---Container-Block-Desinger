@@ -41,19 +41,13 @@ if (defined('CBD_TABLE_BLOCKS')) {
     <div id="cbd-page-import-app">
 
         <div class="cbd-pi-elternseite" id="cbd-pi-elternseite">
-            <label for="cbd-import-parent"><?php esc_html_e('Elternseite', 'container-block-designer'); ?></label>
-            <?php
-            wp_dropdown_pages(array(
-                'show_option_none'  => esc_html__('— oberste Ebene —', 'container-block-designer'),
-                'option_none_value' => 0,
-                'name'              => 'cbd-import-parent',
-                'id'                => 'cbd-import-parent',
-                'sort_column'       => 'menu_order,post_title',
-                'post_status'       => array('publish', 'draft'),
-            ));
-            ?>
+            <label id="cbd-pi-elternseite-label"><?php esc_html_e('Elternseite', 'container-block-designer'); ?></label>
+            <input type="hidden" id="cbd-import-parent" name="cbd-import-parent" value="0">
+            <div id="cbd-pi-kaskade" class="cbd-pi-kaskade" aria-live="polite" aria-labelledby="cbd-pi-elternseite-label">
+                <p class="cbd-pi-kaskade-status"><?php esc_html_e('Lade Seitenbaum …', 'container-block-designer'); ?></p>
+            </div>
             <p class="description">
-                <?php esc_html_e('Gilt für den gesamten Lauf: Alle Seiten, die aus den unten gewählten Dateien entstehen, bekommen dieselbe Elternseite.', 'container-block-designer'); ?>
+                <?php esc_html_e('Gilt für den gesamten Lauf: Alle Seiten, die aus den unten gewählten Dateien entstehen, bekommen dieselbe Elternseite. Jede Ebene erscheint erst, nachdem in der vorherigen eine Seite gewählt wurde.', 'container-block-designer'); ?>
             </p>
         </div>
 

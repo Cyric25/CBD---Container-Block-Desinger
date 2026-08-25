@@ -15,13 +15,20 @@ if (!defined('ABSPATH')) {
 class CBD_Blocks_REST_API {
 
     /**
-     * Innerhalb einer Anfrage gehaltenes Ergebnis von `get_seitenbaum()`.
-     * Bewusst eine Klasseneigenschaft statt einer Funktions-static: nur so
-     * laesst sie sich fuer Tests zuruecksetzen (`seitenbaum_cache_vergessen()`).
+     * Innerhalb einer Anfrage gehaltene Ergebnisse von `get_seitenbaum()`,
+     * ein Eintrag je Parametervariante (siehe `get_seitenbaum()`). Bewusst
+     * eine Klasseneigenschaft statt einer Funktions-static: nur so laesst
+     * sie sich fuer Tests zuruecksetzen (`seitenbaum_cache_vergessen()`).
      *
-     * @var WP_REST_Response|null
+     * Seit dem opt-in Parameter `entwuerfe` (Vorhaben „Seitenimporter-
+     * Kaskaden-Zielauswahl") ein Array statt eines einzelnen Werts: Zwei
+     * Aufrufe mit unterschiedlichem Parameterwert innerhalb derselben
+     * Anfrage muessen getrennt gecacht werden, sonst liefert der zweite
+     * Aufruf faelschlich das gecachte Ergebnis des ersten.
+     *
+     * @var array<string, WP_REST_Response>
      */
-    private static $seitenbaum_cache = null;
+    private static $seitenbaum_cache = array();
 
     /**
      * Initialize the REST API routes
@@ -266,15 +273,28 @@ class CBD_Blocks_REST_API {
      *
      * Geladen wird mit rohem $wpdb und fuenf Spalten, KEIN post_content
      * (Vorbild: Theme/includes/page-index.php:146-151). Innerhalb einer
-     * Anfrage wird das Ergebnis in einer Klasseneigenschaft gehalten
-     * (mehrfache Aufrufe kosten dann keine weitere Abfrage).
+     * Anfrage wird das Ergebnis je Parametervariante in einer
+     * Klasseneigenschaft gehalten (mehrfache Aufrufe derselben Variante
+     * kosten dann keine weitere Abfrage).
+     *
+     * Seit dem Vorhaben „Seitenimporter-Kaskaden-Zielauswahl": optionaler
+     * Query-Parameter `entwuerfe`. Nur der Wert `'1'` schliesst zusaetzlich
+     * Seiten mit `post_status = 'draft'` ein - jeder andere Wert (inkl.
+     * fehlendem Parameter) verhaelt sich exakt wie bisher (nur `publish`).
+     * Das ist bewusst additiv und rein opt-in: `assets/js/block-auswahl.js`
+     * ruft dieselbe Route ohne diesen Parameter auf und muss weiterhin nur
+     * veroeffentlichte Seiten bekommen - keine Aenderung fuer diesen
+     * bestehenden Konsumenten.
      *
      * @param WP_REST_Request $request
      * @return WP_REST_Response
      */
     public static function get_seitenbaum($request) {
-        if (null !== self::$seitenbaum_cache) {
-            return self::$seitenbaum_cache;
+        $mit_entwuerfe = ('1' === (string) $request->get_param('entwuerfe'));
+        $cache_key = $mit_entwuerfe ? 'mit_entwuerfe' : 'ohne_entwuerfe';
+
+        if (isset(self::$seitenbaum_cache[$cache_key])) {
+            return self::$seitenbaum_cache[$cache_key];
         }
 
         global $wpdb;
@@ -286,10 +306,14 @@ class CBD_Blocks_REST_API {
         // Spalte post_type wird trotzdem mitgelesen, weil `baue_seitenbaum()`
         // sie zusaetzlich als Verteidigung in der Tiefe prueft, statt sich
         // allein auf die WHERE-Klausel zu verlassen.
+        $status_klausel = $mit_entwuerfe
+            ? "post_status IN ('publish', 'draft')"
+            : "post_status = 'publish'";
+
         $zeilen = $wpdb->get_results(
             "SELECT ID, post_parent, post_title, menu_order, post_type
              FROM {$wpdb->posts}
-             WHERE post_type = 'page' AND post_status = 'publish'
+             WHERE post_type = 'page' AND {$status_klausel}
              ORDER BY menu_order ASC, post_title ASC"
         );
 
@@ -314,9 +338,9 @@ class CBD_Blocks_REST_API {
         $baum['knoten'] = (object) $baum['knoten'];
         $baum['kinder'] = (object) $baum['kinder'];
 
-        self::$seitenbaum_cache = new WP_REST_Response($baum, 200);
+        self::$seitenbaum_cache[$cache_key] = new WP_REST_Response($baum, 200);
 
-        return self::$seitenbaum_cache;
+        return self::$seitenbaum_cache[$cache_key];
     }
 
     /**
@@ -501,6 +525,6 @@ class CBD_Blocks_REST_API {
      * ersten. Nach dem Vorbild von `CBD_Classroom_Gate::sitzung_vergessen()`.
      */
     public static function seitenbaum_cache_vergessen() {
-        self::$seitenbaum_cache = null;
+        self::$seitenbaum_cache = array();
     }
 }
