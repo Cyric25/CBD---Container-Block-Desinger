@@ -1013,13 +1013,106 @@
 /* Farbauswahl-Dialog auf der Zeichenflaeche (Tafelfarbe-Presets). Nur die
    Dialogflaeche selbst wird angepasst - die drei Vorschau-Buttons darin
    bleiben unangetastet (Inhalt, siehe Kommentar bei
-   .cbd-board-bg-preset-btn weiter oben). */
+   .cbd-board-bg-preset-btn weiter oben).
+   AP-1.rev-Befund F10 (2026-08-25): board-mode.js baut boardPresetHtml mit
+   diesen Klassen, fuegt das Ergebnis aber nie ins DOM ein (derselbe tote
+   Code wie .cbd-board-bg-preset-btn, siehe reference_file_map.md) - die
+   tatsaechliche Farbwahl laeuft ausschliesslich ueber den
+   .cbd-board-bg-cycle-Button. Diese beiden Regeln greifen aktuell nirgends;
+   bewusst nicht geloescht, falls der Dialog kuenftig doch verdrahtet wird. */
 [data-theme="dark"] .cbd-board-color-picker-overlay {
     background: rgba(30, 30, 30, 0.95);
 }
 
 [data-theme="dark"] .cbd-board-color-picker-label {
     color: var(--color-text-primary, #e8e8e8);
+}
+
+/* AP-1.fix2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md, Korrektur nach
+   AP-1.rev-Befunden F1/F3): Die drei obigen AP-1.4-Regeln verdunkeln
+   .cbd-board-content/-canvas-area/-toolbar als Flaeche, liessen aber die
+   Vordergrundfarben und Hover-/Aktiv-Zustaende der Werkzeugleisten-Buttons
+   literal auf helle Werte stehen (jeweils mit Kommentar "kein
+   AP-1.1-Treffer" aus der frueheren Variablen-Umstellung, PLAN-CSS-
+   Variablen-Darkmode.md AP-2.6 - kein exakter Vokabular-Treffer, deshalb
+   damals bewusst literal belassen). Gegen die jetzt dunkle Flaeche ergab
+   das WCAG-Kontraste bis hinunter zu ca. 2,2:1 (color:#555 auf
+   var(--color-background)=#121212) sowie helle "Aufblitz"-Flaechen bei
+   Hover/Aktiv-Zustaenden. Fix: Vordergrundfarben auf
+   var(--color-text-primary, #555)/var(--color-text-muted, #666) umgestellt
+   (in beiden Modi optisch gleichwertig, da die Variablen im Hellmodus zu
+   nahezu identischen Grautoenen aufloesen), helle Hover-/Aktiv-Flaechen
+   ueber gezielte [data-theme="dark"]-Ersatzwerte gedaempft. Die farbigen
+   WP-Admin-Blau-Akzente (#007cba) und Material-Gruen-Akzente (#4caf50) sind
+   bewusst unveraendert - sie werden nur auf Icons/Rahmen verwendet, nicht
+   auf Fliesstext, dafuer genuegt nach WCAG 2.1 SC 1.4.11 (Grafikobjekte/
+   UI-Komponenten) ein Kontrast von 3:1 statt 4,5:1; gemessen: #007cba auf
+   #121212 ≈ 4,1:1. */
+
+[data-theme="dark"] .cbd-board-page-prev,
+[data-theme="dark"] .cbd-board-page-next,
+[data-theme="dark"] .cbd-board-page-indicator,
+[data-theme="dark"] .cbd-drawing-page-indicator,
+[data-theme="dark"] .cbd-board-tool,
+[data-theme="dark"] .cbd-board-grid-toggle,
+[data-theme="dark"] .cbd-board-undo,
+[data-theme="dark"] .cbd-board-zoom-out,
+[data-theme="dark"] .cbd-board-zoom-in,
+[data-theme="dark"] .cbd-board-zoom-reset,
+[data-theme="dark"] .cbd-board-zoom-display,
+[data-theme="dark"] .cbd-board-toolbar-toggle {
+    color: var(--color-text-primary, #e8e8e8);
+}
+
+[data-theme="dark"] .cbd-board-bg-label {
+    color: var(--color-text-muted, #999999);
+}
+
+[data-theme="dark"] .cbd-board-page-prev:hover:not(:disabled),
+[data-theme="dark"] .cbd-board-page-next:hover:not(:disabled),
+[data-theme="dark"] .cbd-board-tool:hover,
+[data-theme="dark"] .cbd-board-grid-toggle:hover,
+[data-theme="dark"] .cbd-board-undo:hover,
+[data-theme="dark"] .cbd-board-zoom-out:hover,
+[data-theme="dark"] .cbd-board-zoom-in:hover,
+[data-theme="dark"] .cbd-board-zoom-reset:hover {
+    /* bewusst --color-background-light (#1e1e1e), nicht --color-background
+       (#121212, = die eigene Grundflaeche dieser Buttons) - sonst waere der
+       Hover-Zustand optisch identisch zur Ruheflaeche und ohne Feedback */
+    background: var(--color-background-light, #2a2a2a);
+}
+
+[data-theme="dark"] .cbd-board-tool.active {
+    background: rgba(0, 124, 186, 0.25);
+}
+
+[data-theme="dark"] .cbd-board-grid-toggle.active {
+    background: rgba(76, 175, 80, 0.25);
+}
+
+[data-theme="dark"] .cbd-board-toolbar-toggle {
+    background: var(--color-background, #2a2a2a);
+}
+
+[data-theme="dark"] .cbd-board-toolbar-toggle:hover {
+    background: var(--color-border, #444444);
+}
+
+[data-theme="dark"] .cbd-board-page-add {
+    background: rgba(76, 175, 80, 0.15);
+}
+
+/* Scrollbar der linken Inhaltsspalte (.cbd-board-content, AP-1.4-Zielelement) */
+[data-theme="dark"] .cbd-board-content::-webkit-scrollbar-track {
+    background: var(--color-background, #2a2a2a);
+}
+
+[data-theme="dark"] .cbd-board-content::-webkit-scrollbar-thumb {
+    background: var(--color-border, #555555);
+}
+
+[data-theme="dark"] .cbd-board-content::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted, #777777);
 }
 
 /* AP-1.5 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): invertiert Hintergrund-,
