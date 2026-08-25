@@ -266,6 +266,11 @@
         $clone.find('.cbd-drawing-section').remove();
         $clone.find('.cbd-local-drawing-section').remove();
         $clone.find('.cbd-class-drawing-section').remove();
+        // AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md, AP-1.1-Fund):
+        // injectDrawingsFromStorage() erzeugt tatsaechlich .cbd-pdf-drawing-section
+        // (nicht einen der drei Namen oben) - ohne diese Zeile griff die
+        // Aufraeumung nie und wiederholte Exports haetten Notizen dupliziert.
+        $clone.find('.cbd-pdf-drawing-section').remove();
 
         // AP-2.3: injectServerDrawings() braucht einen asynchronen AJAX-Aufruf
         // (Bulk-Endpoint cbd_get_page_drawings aus AP-2.1). Der Rest der bisher
@@ -631,7 +636,7 @@
                     try { bgColor = localStorage.getItem(key + '-bgcolor'); } catch (e) {}
 
                     // Compress drawing for PDF (PNG → smaller JPEG)
-                    var compressed = recompressBase64(dataUrl, 0.75, 1200);
+                    var compressed = recompressBase64(dataUrl, 0.75, 1200, 'image/png');
                     pages.push({
                         dataUrl: compressed || dataUrl,
                         bgColor: bgColor,
@@ -879,7 +884,7 @@
                 '</div>';
 
             for (var m = 0; m < matched.length; m++) {
-                var compressed = recompressBase64(matched[m].dataUrl, 0.75, 1200);
+                var compressed = recompressBase64(matched[m].dataUrl, 0.75, 1200, 'image/png');
                 drawingHtml += '<div style="margin: 4px 0; text-align: center; ' +
                     'page-break-inside: avoid;">';
                 drawingHtml += '<img src="' + (compressed || matched[m].dataUrl) + '" style="' +
@@ -1151,8 +1156,22 @@
     /**
      * Synchronously recompress a base64 image to lower quality/smaller size.
      * Returns new base64 string or null on failure.
+     *
+     * AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): outputFormat
+     * defaults to 'image/jpeg' (bisheriges Verhalten, unveraendert fuer
+     * Screenshots interaktiver Elemente - die haben keine Transparenz).
+     * Fuer Tafelmodus-Zeichnungen (drawingCanvas.toDataURL('image/png') in
+     * board-mode.js liefert NUR die Zeichenebene mit transparentem
+     * Hintergrund, siehe injectDrawingsFromStorage()/applyServerDrawings())
+     * MUSS 'image/png' uebergeben werden: JPEG kennt keine Transparenz,
+     * ctx.drawImage() auf eine neue Canvas komponiert transparente Pixel
+     * beim Export als JPEG automatisch auf Schwarz - aus duennen schwarzen
+     * Strichen auf transparentem Grund wurde dadurch ein durchgehend
+     * schwarzes Rechteck (im Live-Test nach dem data:-Praefix-Fix
+     * gefunden).
      */
-    function recompressBase64(base64, quality, maxWidth) {
+    function recompressBase64(base64, quality, maxWidth, outputFormat) {
+        outputFormat = outputFormat || 'image/jpeg';
         try {
             var img = document.createElement('img');
             img.src = base64;
@@ -1170,7 +1189,7 @@
             canvas.height = nh;
             var ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, nw, nh);
-            return canvas.toDataURL('image/jpeg', quality);
+            return canvas.toDataURL(outputFormat, quality);
         } catch (e) {
             return null;
         }
@@ -1378,20 +1397,45 @@
     }
 
     /**
-     * Collect current CSS variable values from the page
+     * Collect current CSS variable values from the page.
+     *
+     * AP-1.fix1 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): PDFs sollen den
+     * Darkmode grundsaetzlich NICHT abbilden, unabhaengig davon, ob die Seite
+     * gerade im Hell- oder Dunkelmodus angezeigt wird - ein PDF ist ein
+     * eigenstaendiges Dokument, kein Theme-Snapshot. AP-1.2 hatte
+     * urspruenglich nur dafuer gesorgt, dass der Darkmode-Zustand *korrekt*
+     * uebernommen wird (dunkler Text auf dunklem Grund -> heller Text auf
+     * dunklem Grund) - das war nicht die gewuenschte Loesung. Fix: das
+     * data-theme-Attribut auf <html> wird waehrend des synchronen Auslesens
+     * kurzzeitig entfernt (erzwingt den Hellmodus-Wertesatz aus dem
+     * bestehenden :root-Block, inkl. etwaiger Customizer-Anpassungen) und
+     * direkt danach wiederhergestellt - kein sichtbarer Flackereffekt, da
+     * synchron und ohne Repaint zwischen den beiden Zeilen.
      */
     function collectCSSVariables() {
-        var root = getComputedStyle(document.documentElement);
-        return {
+        var htmlEl = document.documentElement;
+        var previousTheme = htmlEl.getAttribute('data-theme');
+        if (previousTheme === 'dark') {
+            htmlEl.removeAttribute('data-theme');
+        }
+
+        var root = getComputedStyle(htmlEl);
+        var result = {
             specialText: root.getPropertyValue('--color-special-text').trim() || '#71230a',
             uiSurface: root.getPropertyValue('--color-ui-surface').trim() || '#e24614',
             uiSurfaceDark: root.getPropertyValue('--color-ui-surface-dark').trim() || '#c93d12',
             uiSurfaceLight: root.getPropertyValue('--color-ui-surface-light').trim() || '#f5ede9',
             sidebarBorder: root.getPropertyValue('--color-sidebar-border').trim() || '#e0e0e0',
-            primaryText: root.getPropertyValue('--color-primary-text').trim() || '#333333',
+            primaryText: root.getPropertyValue('--color-text-primary').trim() || '#333333',
             background: root.getPropertyValue('--color-background').trim() || '#ffffff',
-            lightBackground: root.getPropertyValue('--color-light-background').trim() || '#f8f9fa'
+            lightBackground: root.getPropertyValue('--color-background-light').trim() || '#f8f9fa'
         };
+
+        if (previousTheme === 'dark') {
+            htmlEl.setAttribute('data-theme', previousTheme);
+        }
+
+        return result;
     }
 
     // =========================================================================

@@ -150,6 +150,7 @@ class CBD_PDF_Generator {
         if (!file_exists($temp_dir)) {
             wp_mkdir_p($temp_dir);
         }
+        $this->ensure_download_htaccess($temp_dir);
 
         if (!is_writable($temp_dir)) {
             return array(
@@ -176,6 +177,35 @@ class CBD_PDF_Generator {
             'tempDir'       => $temp_dir,
             'img_dpi'       => 150,
         ]);
+
+        // AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): Ohne dieses
+        // Flag ersetzt mPDF ein nicht dekodierbares Bild lautlos durch
+        // sein eigenes 14x16px-Platzhalterbild, ohne jede Log-Ausgabe -
+        // genau das hat die fehlenden "Eigenen Notizen"/"Tafelbilder" im
+        // PDF unauffindbar gemacht (siehe AP-1.1-Diagnose).
+        //
+        // AP-1.fix3 (Korrektur nach AP-1.rev-Befund F2): dauerhaft aktiviert
+        // war das Flag selbst ein Regressionsrisiko - mPDF wirft bei JEDEM
+        // nicht dekodierbaren Bild eine MpdfImageException
+        // (vendor/mpdf/mpdf/src/Image/ImageProcessor.php::imageError()),
+        // die hier nicht abgefangen wird und den GESAMTEN Export abbrechen
+        // laesst (siehe catch (\Exception) in generate_pdf() oben) - auch
+        // wenn nur ein einziges, mit der eigentlichen Notiz/dem Tafelbild
+        // unzusammenhaengendes Fremdbild betroffen ist (z. B. eine nicht
+        // erreichbare Remote-URL oder ein zu grosses Same-Site-Bild, siehe
+        // embed_remote_images()). Vor AP-1.2 fuehrte genau dieser Fall nur
+        // zu einem stillen Platzhalter, der Export selbst lief durch - das
+        // war zwar schlecht diagnostizierbar, aber nie ein Totalausfall.
+        // Das Flag ist als Diagnosewerkzeug fuer AP-1.1 entstanden, nicht
+        // als Teil der eigentlichen Bildkorrektur (die liegt in
+        // sanitize_pdf_block_html()/recompressBase64()/den korrigierten
+        // CSS-Variablennamen) - es ist deshalb an dieselbe Debug-Konvention
+        // gekoppelt wie die uebrigen Diagnose-Logs im Plugin (siehe
+        // CLAUDE.md, Abschnitt "Debugging-Konventionen"): in der
+        // Produktivumgebung bleibt der alte, sichere Rueckfall auf den
+        // stillen Platzhalter erhalten, mit WP_DEBUG steht die laute
+        // Diagnose weiterhin zur Verfuegung.
+        $mpdf->showImageErrors = defined('WP_DEBUG') && WP_DEBUG;
 
         // Set document info
         $mpdf->SetCreator('Container Block Designer Plugin');
@@ -220,6 +250,42 @@ class CBD_PDF_Generator {
             'url'      => $upload_dir['baseurl'] . '/cbd-temp-pdfs/' . $temp_filename,
             'engine'   => 'mpdf'
         );
+    }
+
+    /**
+     * AP-1.3 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): Legt in
+     * cbd-temp-pdfs/ eine .htaccess mit Content-Disposition: attachment fuer
+     * .pdf-Dateien an, als defensive Absicherung fuer den Direktdownload.
+     *
+     * `downloadPDF()` in pdf-server-side.js nutzt bereits die korrekte
+     * `<a download>`-Technik, die same-origin ohne Nachfrage funktioniert -
+     * dieser Header ist eine zusaetzliche Absicherung (z. B. falls der
+     * Download-Link mal direkt aufgerufen statt per Klick auf den Anchor
+     * ausgeloest wird) und **kein** Ersatz dafuer. Eine vom Nutzer selbst in
+     * seinem Browser aktivierte Einstellung „Vor jedem Download nachfragen,
+     * wo die Datei gespeichert werden soll" kann dieser Header nicht
+     * uebersteuern - das ist eine Browser-Entscheidung, keine, die eine
+     * Website per HTTP-Header oder JavaScript aufheben kann.
+     *
+     * Schreibt die Datei nur, wenn sie noch nicht existiert (idempotent,
+     * kein Schreibzugriff bei jedem Export). Schlaegt das Schreiben fehl
+     * (z. B. Verzeichnis nicht beschreibbar), wird der PDF-Export dadurch
+     * NICHT blockiert - rein defensive Ergaenzung.
+     *
+     * @param string $temp_dir Absoluter Pfad zu cbd-temp-pdfs/ (mit
+     *                          abschliessendem Slash)
+     */
+    private function ensure_download_htaccess($temp_dir) {
+        $htaccess_path = $temp_dir . '.htaccess';
+        if (file_exists($htaccess_path)) {
+            return;
+        }
+        $contents = "<IfModule mod_headers.c>\n"
+            . "<FilesMatch \"\\.pdf$\">\n"
+            . "Header set Content-Disposition \"attachment\"\n"
+            . "</FilesMatch>\n"
+            . "</IfModule>\n";
+        @file_put_contents($htaccess_path, $contents);
     }
 
     /**
@@ -385,9 +451,14 @@ class CBD_PDF_Generator {
             'var(--color-ui-surface-dark)'  => $css_vars['uiSurfaceDark'] ?? '#c93d12',
             'var(--color-ui-surface-light)' => $css_vars['uiSurfaceLight'] ?? '#f5ede9',
             'var(--color-sidebar-border)'   => $css_vars['sidebarBorder'] ?? '#e0e0e0',
-            'var(--color-primary-text)'     => $css_vars['primaryText'] ?? '#333333',
-            'var(--color-background)'       => $css_vars['background'] ?? '#ffffff',
-            'var(--color-light-background)' => $css_vars['lightBackground'] ?? '#f8f9fa',
+            // AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): Die beiden
+            // Schluessel waren mit den vertauschten/falschen Variablennamen
+            // aus pdf-server-side.js::collectCSSVariables() dupliziert (siehe
+            // Fix dort) - trafen dadurch nie auf tatsaechlich im Blockinhalt
+            // vorkommendes var(--color-text-primary)/var(--color-background-light).
+            'var(--color-text-primary)'       => $css_vars['primaryText'] ?? '#333333',
+            'var(--color-background)'         => $css_vars['background'] ?? '#ffffff',
+            'var(--color-background-light)'   => $css_vars['lightBackground'] ?? '#f8f9fa',
         );
 
         foreach ($replacements as $var => $value) {
