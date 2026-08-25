@@ -2119,12 +2119,26 @@ Zeichenfläche automatisch per CSS-Filter (`filter: invert(1)` auf
 `.cbd-board-canvas-container`, gesteuert von
 `board-mode.js::updateDarkModeInversion()`) — **aber nur**, wenn die Tafel
 auf der weißen Standardfarbe steht (`this.boardColor === '#ffffff'`). Eine
-bewusst gewählte Grün- oder Schwarz-Tafel bleibt unangetastet, ebenso jede
-tatsächlich vom Nutzer gewählte Stiftfarbe (reine Farbinvertierung ohne
-Hue-Erhalt, z. B. Rot→Cyan — bekannt und akzeptiert). Der Filter wirkt rein
-auf die Darstellung; die in `localStorage`/serverseitig gespeicherten
-Pixel bleiben unverändert, betrifft also gleichermaßen neu gezeichnete wie
-bereits vorher gespeicherte Notizen.
+bewusst gewählte Grün- oder Schwarz-Tafel bleibt unangetastet.
+
+**Bewusst akzeptierte Nebenwirkung, vom Nutzer nach Rückfrage bestätigt
+(2026-08-25):** Der Filter ist eine reine Farbinvertierung ohne
+Hue-Erhalt (z. B. Rot→Cyan, Blau→Gelb) und wirkt auf **alle** Ebenen des
+Wrappers gemeinsam — Hintergrund, Gitter **und** Zeichnung, nicht nur die
+eigentlich riskanten Schwarz-/Weiß-Töne. Die Stiftfarbpalette
+(`.cbd-board-preset-colors`) sitzt strukturell außerhalb von
+`.cbd-board-canvas-container` (in der Werkzeugleiste) und wird deshalb
+selbst **nie** invertiert: Sie zeigt weiterhin die echte, gewählte Farbe,
+während ein damit gezeichneter Strich auf der Tafel invertiert erscheint —
+Palette-Vorschau und tatsächliches Zeichenergebnis laufen bei farbigen
+Stiften (nicht bei Schwarz/Weiß) auseinander. Bei der Rückfrage wurden
+zwei Alternativen erwogen (nur Hintergrund/Gitter invertieren — bricht dann
+aber den eigentlichen Schwarz-auf-Schwarz-Kernfall, den dieses Feature
+lösen soll; Farbpalette im Darkmode auf Schwarz/Weiß einschränken) und
+bewusst verworfen zugunsten des bestehenden, einfacheren Verhaltens. Der
+Filter wirkt rein auf die Darstellung; die in `localStorage`/serverseitig
+gespeicherten Pixel bleiben unverändert, betrifft also gleichermaßen neu
+gezeichnete wie bereits vorher gespeicherte Notizen.
 
 **Bekannte, nicht behobene Einschränkung:** Der Darkmode-Toggle des Themes
 (`Theme/header.php`) setzt `data-theme` ohne Seiten-Reload. Die reinen
