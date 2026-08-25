@@ -817,6 +817,60 @@ $einzeln = CBD_Blocks_REST_API::baue_seitenbaum(array(zeile(1, 0, 'Einsam')));
 check('12.2 - einzelner Wurzelknoten ohne Kinder', array(1) === $einzeln['wurzeln'] && !isset($einzeln['kinder'][1]));
 
 // =========================================================================
+// 13 - Entwuerfe-Parameter (opt-in, fuer den Seitenimporter)
+// =========================================================================
+//
+// GET cbd/v1/seitenbaum bekommt einen neuen, additiven Query-Parameter
+// "entwuerfe": Wert '1' schliesst zusaetzlich Seiten mit post_status =
+// 'draft' ein. OHNE den Parameter (oder mit jedem anderen Wert als '1')
+// bleibt das Verhalten exakt wie bisher - zwingend, weil
+// assets/js/block-auswahl.js dieselbe Route ohne diesen Parameter aufruft
+// und weiterhin nur veroeffentlichte Seiten erwarten darf.
+//
+// baue_seitenbaum() selbst bleibt unveraendert (sie ist status-agnostisch,
+// verarbeitet nur post_type) - die Aenderung betrifft ausschliesslich die
+// SQL-Abfrage und die Cache-Struktur in get_seitenbaum().
+
+echo "\n== 13 - Entwuerfe-Parameter (opt-in) ==\n";
+
+$GLOBALS['test_wpdb_zeilen'] = array(
+    zeile(600, 0, 'Ohne Entwurf'),
+);
+CBD_Blocks_REST_API::seitenbaum_cache_vergessen();
+$wpdb->abfragen = 0;
+CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request());
+$sql_ohne = $wpdb->letzte_sql();
+check('13.1 - ohne Parameter: SQL filtert weiterhin nur auf publish, kein draft', false !== strpos($sql_ohne, "post_status = 'publish'") && false === strpos($sql_ohne, 'draft'), $sql_ohne);
+
+CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request(array('entwuerfe' => '1')));
+$sql_mit = $wpdb->letzte_sql();
+check('13.2 - mit entwuerfe=1: SQL schliesst zusaetzlich draft ein', false !== strpos($sql_mit, "'draft'"), $sql_mit);
+
+check('13.3 - beide Varianten loesen je EINE eigene $wpdb-Abfrage aus (Cache-Isolation, insgesamt 2)', 2 === $wpdb->abfragen, $wpdb->abfragen);
+
+// Wiederholter Aufruf je Variante darf KEINE weitere Abfrage ausloesen -
+// die Memoisierung bleibt je Parameterwert erhalten.
+CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request());
+CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request(array('entwuerfe' => '1')));
+check('13.4 - wiederholte Aufrufe beider Varianten loesen keine weitere Abfrage aus (weiterhin 2)', 2 === $wpdb->abfragen, $wpdb->abfragen);
+
+// Rueckwaertskompatibilitaet: Antwortform ohne Parameter bleibt exakt
+// Vertrag B (knoten, kinder, wurzeln) - kein neues Feld, keine geaenderte
+// Struktur fuer bestehende Konsumenten (cbdBlockAuswahl).
+CBD_Blocks_REST_API::seitenbaum_cache_vergessen();
+$antwort_rueckwaerts = CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request());
+$daten_rueckwaerts = $antwort_rueckwaerts->get_data();
+check('13.5 - Antwortform ohne Parameter unveraendert (genau knoten, kinder, wurzeln)', array('knoten', 'kinder', 'wurzeln') === array_keys((array) $daten_rueckwaerts), array_keys((array) $daten_rueckwaerts));
+
+// Jeder andere Wert als '1' wird wie "kein Parameter" behandelt (kein
+// stillschweigendes "truthy" wie '0', 'false' als Zeichenkette o. Ae.).
+CBD_Blocks_REST_API::seitenbaum_cache_vergessen();
+$wpdb->abfragen = 0;
+CBD_Blocks_REST_API::get_seitenbaum(new WP_REST_Request(array('entwuerfe' => 'ja')));
+$sql_anderer_wert = $wpdb->letzte_sql();
+check('13.6 - anderer Wert als 1 (z. B. "ja") wird wie kein Parameter behandelt', false === strpos($sql_anderer_wert, 'draft'), $sql_anderer_wert);
+
+// =========================================================================
 
 $fails = $GLOBALS['fails'];
 echo "\n" . (0 === $fails ? "ALLE TESTS BESTANDEN\n" : "$fails FEHLER\n");
