@@ -125,10 +125,10 @@ es Container-Blöcke mit Titeln gibt — der Seitenimporter umgeht kses bewusst
 nicht (siehe Kommentar bei `class-cbd-page-importer.php:248`), ist aber auch
 nicht die Ursache. **Noch nicht gemessen:** ein Ende-zu-Ende-Nachweis mit
 einem echten Block-Redakteur-Konto steht aus (auf dem Testserver existiert
-keines). Folge für `docs/PLAN-Formeln-in-Blocktiteln.md`: Ein dort geplantes
+keines). Folge für `docs/archiv/PLAN-Formeln-in-Blocktiteln.md`: Ein dort geplantes
 Rendern von Formeln in Blocktiteln liefe für Block-Redakteure ins Leere,
 solange der Titel beim Speichern bereits zerstört wird. Details:
-`docs/PLAN-Importer-Elternseite.md`, Abschnitt 10.
+`docs/archiv/PLAN-Importer-Elternseite.md`, Abschnitt 10.
 
 ## Development Commands
 
@@ -1024,7 +1024,7 @@ Die Leiste oben rechts im Container (`.cbd-action-buttons`) erscheint per
 nach einer Sekunde von selbst wieder aus (`cbd-actions-verborgen`, gesetzt in
 `assets/js/interactivity-store.js` **und** `interactivity-fallback.js` — je
 Installation läuft nur eines der beiden). Anlass war das haftende `:hover` auf
-Tablets. Plan: `docs/PLAN-Aktionsleiste-Autoausblenden.md`.
+Tablets. Plan: `docs/archiv/PLAN-Aktionsleiste-Autoausblenden.md`.
 
 **Das gerenderte Markup trägt `.cbd-container` zweimal je Block** — einmal am
 interaktiven Wurzelelement (`#cbd-container-N`, darin
@@ -1234,7 +1234,7 @@ Richtung hat bisher Fließtext getroffen. Prüfungen dazu:
 Es hielt sich in diesem Projekt zeitweise die Annahme, `wp_kses_post()`
 zerstöre LaTeX in Blocktiteln, sobald eine Rolle ohne `unfiltered_html`
 speichert. **Das ist widerlegt** (Messung am 2026-08-21 mit dem Konto
-`blockredakteur`, Belege in `docs/PLAN-Blocktrenner-vor-kses-schuetzen.md`,
+`blockredakteur`, Belege in `docs/archiv/PLAN-Blocktrenner-vor-kses-schuetzen.md`,
 Abschnitt 10). Zwei Kernmechanismen schützen den Trenner:
 
 | Mechanismus | Was er tut |
@@ -2101,7 +2101,7 @@ Dateiumfangs (keine `[data-theme]`-Regeln dort) und wurde deshalb bewusst
 nicht mitkorrigiert — vorgemerkt für ein künftiges Korrektur-AP.
 
 ## PDF-Export: Tafelbilder und eigene Notizen (Phase 2 von
-`docs/PLAN-PDF-Notizen-und-Listenformeln.md`, abgeschlossen 2026-08-24)
+`docs/archiv/PLAN-PDF-Notizen-und-Listenformeln.md`, abgeschlossen 2026-08-24)
 
 Der serverseitige PDF-Export (`assets/js/pdf-server-side.js`) schließt neben
 den bereits bestehenden lokalen „Eigenen Notizen" (`localStorage`) seit

@@ -7,7 +7,7 @@ Navigationshilfe auf Dateiebene. Die fachlichen Details stehen in `CLAUDE.md`
 Seitenimport, zur Icon-Bibliothek und zur Icon-Größe.
 
 Diese Datei entstand am 2026-08-10 im Zuge des Vorhabens „Seitenimport"
-(`docs/PLAN-Seitenimport.md`, AP-4.1). Sie war die letzte fehlende
+(`docs/archiv/PLAN-Seitenimport.md`, AP-4.1). Sie war die letzte fehlende
 Datei-Map des Projekts; Theme und „Eigene WP Blocks" hatten längst eine.
 
 ## Wurzel und Bootstrap
@@ -58,7 +58,7 @@ Datei-Map des Projekts; Theme und „Eigene WP Blocks" hatten längst eine.
 
 | Datei | Zweck | Wichtige Funktionen/Inhalte | Hängt ab von |
 |---|---|---|---|
-| `class-schema-manager.php` | Schema und Migrationen | `DB_VERSION` (3.1.61), `CREATE TABLE` für `cbd_blocks` und `cbd_classes`, `run_migrations()`. **Legt `slug` NICHT an** und benennt eine vorgefundene `slug`-Spalte nach `name` um — während `CBD_Admin::handle_database_repair()` `slug` als Pflichtspalte führt. Bekannte Unstimmigkeit, siehe `docs/PLAN-Seitenimport.md`, AP-1.0.fix1 | – |
+| `class-schema-manager.php` | Schema und Migrationen | `DB_VERSION` (3.1.61), `CREATE TABLE` für `cbd_blocks` und `cbd_classes`, `run_migrations()`. **Legt `slug` NICHT an** und benennt eine vorgefundene `slug`-Spalte nach `name` um — während `CBD_Admin::handle_database_repair()` `slug` als Pflichtspalte führt. Bekannte Unstimmigkeit, siehe `docs/archiv/PLAN-Seitenimport.md`, AP-1.0.fix1 | – |
 
 ## Admin-Ansichten (`admin/`)
 
