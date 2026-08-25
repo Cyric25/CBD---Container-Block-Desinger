@@ -192,7 +192,7 @@ DB-Dump nötig.
 
 ### AP-1.1: REST-Route `cbd/v1/seitenbaum` um Entwürfe-Parameter erweitern
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** opus
 **Abhängigkeiten:** keine
@@ -303,7 +303,27 @@ erwarten darf.
   dieses bereits produktiven Features.
 
 **Übergabenotiz:**
-(leer – wird vom ausführenden Agenten nach Abschluss ausgefüllt)
+TDD wie geplant: sechs neue Prüfungen (13.1-13.6) zuerst geschrieben, Lauf
+bestätigte drei rote Fälle (13.2-13.4), Commit `a95cfbb` als roter
+Zwischenstand. Danach implementiert: `self::$seitenbaum_cache` von
+`WP_REST_Response|null` auf `array` umgestellt (Schlüssel
+`'mit_entwuerfe'`/`'ohne_entwuerfe'`), `get_seitenbaum()` liest
+`$request->get_param('entwuerfe')`, baut die SQL-WHERE-Klausel bedingt
+(`post_status IN ('publish', 'draft')` nur bei exakt `'1'`, sonst
+unverändert `post_status = 'publish'`), `seitenbaum_cache_vergessen()`
+setzt jetzt `array()` statt `null`. `baue_seitenbaum()` unverändert
+gelassen (bereits status-agnostisch, wie im Vorgehen erwartet).
+
+Keine Abweichung von der Vorgehensbeschreibung.
+
+**Testnachweis:** `php tools/test-seitenbaum.php` → alle 97 ursprünglichen
+Prüfungen weiterhin OK, alle 6 neuen Prüfungen OK, „ALLE TESTS BESTANDEN".
+`php tools/check-php74.php` → „OK: 569 Dateien sind PHP-7.4-kompatibel (1
+große Datei(en) übersprungen)" — keine 8.0-only-Syntax gefunden. Live-Test
+auf `fos.localhost:8080` nicht durchgeführt (kein WP-Admin-Zugang in
+dieser Session) — dieses AP betrifft aber ausschließlich reine PHP-Logik,
+die vollständig über den WordPress-unabhängigen Testharnisch abgedeckt
+ist; kein Live-Test-Gap im Sinne der vorherigen Erweiterung.
 
 ---
 
@@ -648,7 +668,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 
 | AP | Titel | Modell | Status | Abhängig von | Notiz |
 |---|---|---|---|---|---|
-| AP-1.1 | REST-Route um Entwürfe-Parameter erweitern | opus | ☐ | – | |
+| AP-1.1 | REST-Route um Entwürfe-Parameter erweitern | opus | ☑ | – | TDD, 97+6 Prüfungen grün, check-php74.php grün |
 | AP-1.2 | Kaskadierende Auswahl in JS/PHP | opus | ☐ | AP-1.1 | |
 | AP-1.3 | Gestaltung der Kaskaden-Auswahlfelder | sonnet | ☐ | AP-1.2 | |
 | AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1, AP-1.2, AP-1.3 | |
@@ -660,7 +680,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
-| | | | | |
+| 2026-08-25 | AP-1.1 | `php tools/test-seitenbaum.php` (TDD: rot vor Implementierung bestätigt, dann grün), `php tools/check-php74.php` | Bestanden (103 Prüfungen gesamt, 0 Fehler; 569 Dateien PHP-7.4-kompatibel) | Direkte Testausführung |
 
 ## 10. Dokumentation
 
