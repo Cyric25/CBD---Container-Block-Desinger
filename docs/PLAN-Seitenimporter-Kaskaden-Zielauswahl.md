@@ -951,6 +951,10 @@ seinen „Betroffenen Dateien" listet.
    (Zeile ~99) und `test-seitenbaum.php` (Zeile ~152) um die jeweilige
    Änderung ergänzen (neuer Parameter bzw. neue Kaskaden-UI). „Stand"-Datum
    im Kopf der Datei (Zeile 3) aktualisieren.
+3a. (Ergänzt nach AP-1.fix1) Zusätzlich einen Eintrag für die neue Datei
+   `tools/test-page-importer-kaskade.js` (Node-Testharnisch für die
+   Kaskadenlogik, 64 Prüfungen, siehe AP-1.fix1) in `reference_file_map.md`
+   anlegen — analog zum bestehenden Eintrag für `tools/test-block-auswahl.js`.
 4. „Letzte Aktualisierung" im Kopf dieser `PLAN.md` aktualisieren, Status
    aller APs in Abschnitt 8 auf ☑ prüfen.
 
