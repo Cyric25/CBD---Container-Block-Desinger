@@ -536,6 +536,18 @@ Risiko vermerkt — konnte in dieser Session mangels WP-Admin-Zugangsdaten
 nicht durchgeführt werden. Das ist der wichtigste noch offene Prüfpunkt
 vor einem Produktiv-Rollout.
 
+**Nachtrag (2026-08-25, nach AP-1.doc, live im Browser nachgeholt):** Die
+oben genannte Lücke ist geschlossen. Auf dem synchronisierten Testserver
+(`fos.localhost:8080`, angemeldeter Admin) lädt die Kaskade beim Öffnen des
+Seitenimporters fehlerfrei (0 Konsolenfehler) — `window.wp.apiFetch` ist
+also tatsächlich automatisch mit REST-Wurzel/Nonce vorkonfiguriert, wie
+vermutet. Drill-down über vier echte Ebenen der Produktivseitenhierarchie
+(Chemie → Stoffe und Stoffeigenschaften → Reinstoffe und Gemische →
+Reinstoffe und Gemische — Erwartungshorizont) funktionierte je Ebene
+korrekt, inklusive Entwürfen in Ebene 1 (`AP-1.1 Formeldiagnose Liste vs
+Absatz`, `AP-3-2-Testseite`). Details zum zusätzlich reproduzierten
+B1-Fix siehe Nachtrag bei AP-1.fix1.
+
 ---
 
 ### AP-1.3: Gestaltung der Kaskaden-Auswahlfelder
@@ -911,6 +923,22 @@ JavaScript-Dateien.
   liefert keine Antwort, HTTP-Code 000). Wie im AP vorgesehen im
   Testprotokoll vermerkt, kein Abbruch.
 
+**Nachtrag (2026-08-25, nach AP-1.doc, live im Browser nachgeholt):** Der
+zuvor fehlende Smoke-Test wurde nachgeholt. Testserver aktualisiert
+(`robocopy` des gesamten Plugin-Ordners nach
+`C:\allinkl-testserver\www\htdocs\w0000001\fos\wp-content\plugins\container-block-designer`,
+4514 Dateien), angemeldeter Admin, Seitenimporter geöffnet. Reproduktion
+exakt des B1-Szenarios: Chemie (17) → Stoffe und Stoffeigenschaften (5553)
+→ Reinstoffe und Gemische (5414) → Reinstoffe und Gemische —
+Erwartungshorizont (Ebene 4 sichtbar) → auf Ebene 3
+(„Reinstoffe und Gemische") zurück auf „— diese Seite als Elternseite —"
+(Wert 5553) gewechselt. Ergebnis: Ebene 4 wird korrekt entfernt (gepruned),
+**keine** neue/doppelte Ebene erscheint — genau das erwartete, per Fix
+korrigierte Verhalten. `document.getElementById('cbd-import-parent').value`
+bestätigt danach `"5553"`. Keine Fehler in der Browser-Konsole während des
+gesamten Ablaufs. Damit ist der Fix zusätzlich zum Node-Testharnisch auch
+im echten Browser gegen echte Produktionsseiten-Hierarchie verifiziert.
+
 Keine Abweichung vom vorgegebenen Vorgehen. `reference_file_map.md` wird wie
 in Abschnitt 0/Review-Befund B7 vorgesehen erst in `AP-1.doc` nachgezogen
 (dort auch die neue Testdatei ergänzen), da AP-1.fix1 diese Datei nicht in
@@ -1089,6 +1117,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | 2026-08-25 | AP-1.rev | `php tools/test-seitenbaum.php` (103/103), `php tools/check-php74.php` (569 Dateien OK), zusätzlich `php -l` (3 Dateien), `php tools/test-page-importer.php` (34/34), `node tools/test-block-auswahl.js` (140/140), eigener Inline-Harnisch für Cache-Isolation/Rückwärtskompatibilität, `git diff`-Scope-Check | Bestanden, keine kritischen Befunde; B1/B2 (mittel) → AP-1.fix1 ergänzt, B3-B8 (gering) dokumentiert | Unabhängiger Review-Agent |
 | 2026-08-25 | AP-1.fix1 | `node tools/test-page-importer-kaskade.js` (neuer Harnisch, B2 behoben), Regression: `php tools/test-seitenbaum.php`, `php tools/test-page-importer.php`, `node tools/test-block-auswahl.js`, `node --check` auf beiden JS-Dateien; Testfang von B1 per temporärem `git stash` gegen den alten Code verifiziert | Bestanden: neuer Harnisch 64/64 (fängt B1 nachweislich, schlägt gegen ungefixten Code exakt an der B1-Prüfung fehl); Regression 103/103 + 34/34 + 140/140, keine Fehler; Live-Smoke-Test auf `fos.localhost:8080` nicht durchgeführt (Server nicht erreichbar, HTTP 000) | Direkte Testausführung |
 | 2026-08-25 | AP-1.doc | Grep auf `entwuerfe`/`mit_entwuerfe`/`ohne_entwuerfe`/`seitenbaum_cache` in `class-cbd-blocks-rest-api.php`; Grep auf alle sechs neu benannten Kaskadenfunktionen, die Ankerzeile `var KONF = window.cbdPageImport;` und `options[0].value` in `page-importer.js`; Glob auf `tools/test-page-importer-kaskade.js`; zusätzlich zur Vertiefung `php tools/test-seitenbaum.php` und `node tools/test-page-importer-kaskade.js` erneut direkt ausgeführt | Bestanden: alle Parameternamen, Cache-Schlüssel und Funktionsnamen exakt wie dokumentiert im Quelltext gefunden; `test-seitenbaum.php` 103/103, `test-page-importer-kaskade.js` 64/64, beide „ALLE TESTS BESTANDEN"; keine Datei außer den beiden Doku-Dateien und dieser Plan-Datei verändert | Direkte Testausführung |
+| 2026-08-25 | Live-Smoke-Test (Nachtrag zu AP-1.2/AP-1.fix1) | Plugin per `robocopy` auf `fos.localhost:8080` synchronisiert (4514 Dateien); im Browser als angemeldeter Admin Seitenimporter geöffnet, Kaskade über vier echte Ebenen der Produktivhierarchie durchklickt (Chemie → Stoffe und Stoffeigenschaften → Reinstoffe und Gemische → Erwartungshorizont), danach exakt das B1-Szenario reproduziert (Rücksprung auf „diese Seite als Elternseite" auf Ebene 3 bei bereits bestehender Ebene 4) | Bestanden: Kaskade lädt fehlerfrei inkl. Entwürfen in Ebene 1, `window.wp.apiFetch` ist automatisch vorkonfiguriert (damit ist das in Abschnitt 5 vermerkte Risiko entkräftet), Ebene 4 wird beim Rücksprung korrekt entfernt statt verdoppelt, verstecktes Feld bestätigt `"5553"`, keine Konsolenfehler | Direkter Browser-Test (angemeldeter Nutzer, Claude Browser) |
 
 ## 10. Dokumentation
 
