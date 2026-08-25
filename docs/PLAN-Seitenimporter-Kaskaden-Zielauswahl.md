@@ -184,7 +184,7 @@ DB-Dump nötig.
 
 | Phase | Ziel | Lauffähiger Endzustand | APs |
 |---|---|---|---|
-| 1 | Seitenimporter bietet eine gestaffelte, kaskadierende Elternseiten-Auswahl inkl. Entwürfen; bestehende Nutzung von `cbd/v1/seitenbaum` bleibt unverändert | Admin öffnet den Seitenimporter, sieht eine Kaskade statt eines Einzeldropdowns, kann eine Seite (inkl. Entwürfe) beliebig tief auswählen, der Importlauf funktioniert wie bisher; die Block-Referenz-Zielauswahl im Editor funktioniert unverändert weiter | AP-1.1, AP-1.2, AP-1.3, AP-1.rev, AP-1.doc |
+| 1 | Seitenimporter bietet eine gestaffelte, kaskadierende Elternseiten-Auswahl inkl. Entwürfen; bestehende Nutzung von `cbd/v1/seitenbaum` bleibt unverändert | Admin öffnet den Seitenimporter, sieht eine Kaskade statt eines Einzeldropdowns, kann eine Seite (inkl. Entwürfe) beliebig tief auswählen, der Importlauf funktioniert wie bisher; die Block-Referenz-Zielauswahl im Editor funktioniert unverändert weiter | AP-1.1, AP-1.2, AP-1.3, AP-1.rev, AP-1.fix1, AP-1.doc |
 
 ## 7. Arbeitspakete
 
@@ -632,7 +632,7 @@ Dialog bereits produktiv ist.
 
 ### AP-1.rev: Unabhängiges Review Phase 1
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** opus
 **Abhängigkeiten:** AP-1.1, AP-1.2, AP-1.3 (inkl. Phasen-Integrationstest)
@@ -680,7 +680,166 @@ erlaubt) – KEINE Datei verändern.
 - entfällt (Review-AP; das Ergebnis ist der Bericht).
 
 **Übergabenotiz:**
-(leer – wird vom ausführenden Review-Agenten nach Abschluss ausgefüllt)
+Review durchgeführt 2026-08-25, strikt lesend, keine Datei verändert
+(`git status` zeigt am Ende nur die Änderung an dieser Plan-Datei). Branch
+`phase-1-seitenimporter-kaskade`, HEAD `b92ddfb`, synchron mit `origin`.
+
+Selbst ausgeführte Pflichttests: `php tools/test-seitenbaum.php` → **103
+Prüfungen, 0 FAIL** (97 Alt- + 6 neue aus AP-1.1), „ALLE TESTS BESTANDEN".
+`php tools/check-php74.php` → „OK: 569 Dateien PHP-7.4-kompatibel (1 große
+Datei übersprungen)". Zusätzlich freiwillig: `php -l` auf allen drei
+geänderten PHP-Dateien fehlerfrei, `php tools/test-page-importer.php`
+(34/34), `node tools/test-block-auswahl.js` (140/140) — keine Regression an
+`bereinige_elternseite()` oder der Block-Referenz-Zielauswahl.
+
+Kritischer Punkt (Rückwärtskompatibilität/Cache-Isolation) zusätzlich über
+einen eigenen Inline-Harnisch (kein Dateischreiben) verifiziert: Das SQL
+ohne Parameter ist byte-identisch zum Altzustand, die beiden
+Cache-Varianten liefern nachweislich unterschiedliche, nicht vermischte
+Bäume (`wurzeln ohne: [1]`, `wurzeln mit: [1,2]`, dritter Aufruf ohne
+Parameter wieder `[1]`), `seitenbaum_cache_vergessen()` leert beide
+Schlüssel korrekt (2→3→4 Abfragen).
+
+Scope-Check: `baue_seitenbaum()`, `assets/js/block-auswahl.js`,
+`blocks/block-reference/`, `bereinige_elternseite()` unverändert (per
+`git diff --stat` bestätigt); kein `wp.element`/React in
+`page-importer.js`; Phasen-Diff exakt auf die in den APs genannten sieben
+Dateien begrenzt.
+
+Sicherheitscheck: Titel werden in `page-importer.js` ausschließlich über
+`option.text`/`textContent` gesetzt — 0 Treffer für `innerHTML` außerhalb
+von Kommentaren.
+
+**Befunde (Schweregrad · AP · Fundstelle):**
+- **B1 (mittel, AP-1.2, `assets/js/page-importer.js:209-214`):** Rücksprung
+  auf „— diese Seite als Elternseite —" (Wert = Eltern-ID, nicht `0`)
+  erzeugt eine wortgleiche Doppel-Ebene, weil `kaskadeAuswahlGeaendert()`
+  nur auf `gewaehlteId === 0` abbricht. Verstößt gegen AK „Erneute Wahl in
+  einer höheren Ebene entfernt alle tieferen Ebenen" dem Sinn nach. Per
+  extrahierter Funktion gegen DOM-Stub reproduziert. Das versteckte Feld
+  `#cbd-import-parent` bleibt in allen geprüften Abläufen korrekt — **kein
+  falscher `post_parent`**, rein optisch/bedienbar.
+- **B2 (mittel, AP-1.2, `tools/`):** Der in der AP-1.2-Übergabenotiz
+  zitierte Node-Testharnisch mit 25 Prüfungen existiert **nicht** im Repo
+  (`git status` zeigt keine unversionierte Datei) — die Kaskadenlogik hat
+  damit keine dauerhafte Regressionsabdeckung. Erklärt teilweise, warum B1
+  unentdeckt blieb.
+- **B3 (gering, AP-1.1, `includes/class-cbd-blocks-rest-api.php:293`):**
+  `?entwuerfe[]=1` (Array-Parameter) erzeugt eine PHP-„Array to string
+  conversion"-Warnung; fällt aber korrekt auf „nur publish" zurück, kein
+  Fatal, Route erfordert `edit_posts`.
+- **B4 (gering, AP-1.2, `admin/page-import.php:44-48`):** `<label>` ohne
+  `for`/Steuerelement plus `aria-labelledby` auf einem `<div>` ohne Rolle —
+  schwache A11y-Benennung; einzelne Kaskaden-Selects ohne eigene
+  Beschriftung.
+- **B5 (gering, AP-1.2, `assets/js/page-importer.js:184`):**
+  `option.text = knoten.titel` ohne Rückfall — ein fehlendes `titel`-Feld
+  zeigt „undefined" statt eines Platzhaltertexts.
+- **B6 (gering, AP-1.1, `tools/test-seitenbaum.php` 13.3):**
+  Cache-Isolation wird im dauerhaften Testharnisch nur über die
+  Abfragenzahl geprüft, nicht über den Inhalt der beiden Antworten — Lücke
+  im Review selbst geschlossen (s. o.), im Harnisch aber offen.
+- **B7 (gering, Prozess, `reference_file_map.md`):** Regel 14 (Datei-Map
+  pflegen) wurde von keinem der drei Implementierungs-APs erfüllt; wird von
+  `AP-1.doc` nachgezogen, kein eigenständiges AP nötig.
+- **B8 (gering, AP-1.3, `assets/css/page-importer.css`):** Eine bestehende
+  `@media`-Regel wurde um einen Selektor erweitert (formal keine reine
+  Ergänzung, wirkungslos für Bestandsregeln); neue Regeln nutzen harte
+  Hex-Werte statt `var()` — vertretbar, weil die Datei bereits vollständig
+  mit Hex-Werten aus der dokumentierten Palette arbeitet und reines,
+  laut Darkmode-Plan explizit ausgenommenes Admin-CSS ist.
+
+Ausdrücklich geprüft und entkräftet (nicht erneut untersuchen): verwaiste
+Seiten (kein Unterschied zu `wp_dropdown_pages()`, am WordPress-Kernquelltext
+verifiziert), `wp.apiFetch`-Vorkonfiguration (analytisch am Core-Code
+bestätigt, Fehlerpfad ohnehin robust), Capability-Bruch (Block-Redakteur hat
+`edit_posts`), Geschwister-Entfernungsreihenfolge, alle Nicht-Ziele
+eingehalten.
+
+**Keine kritischen Befunde.** Keine Sicherheitslücke, keine
+Datenkorruption, keine Regression am produktiven Block-Referenz-Feature,
+keine PHP-8.0-only-Syntax.
+
+**Freigabeempfehlung:** Phase nicht direkt abschließen — zuerst ein
+Korrektur-AP. Ergänzt als `AP-1.fix1` (siehe unten): behebt B1 und legt den
+fehlenden Testharnisch (B2) nachträglich versioniert an. B3–B6 optional/
+gering, B7 erledigt sich über `AP-1.doc`, B8 als vertretbar eingestuft,
+kein Korrekturbedarf.
+
+---
+
+### AP-1.fix1: Kaskade — Doppel-Ebene beim Rücksprung vermeiden, Testabdeckung nachziehen
+
+**Status:** ☐ offen
+**Umfang:** S
+**Modell:** sonnet
+**Abhängigkeiten:** AP-1.2, AP-1.rev (liefert die Befunde B1/B2)
+
+**Ziel & Kontext:**
+Behebt zwei Befunde aus dem Review-Bericht von AP-1.rev:
+
+- **B1:** In `assets/js/page-importer.js`, Funktion
+  `kaskadeAuswahlGeaendert()` (Zeile ~209-214), bricht der Code nur ab, wenn
+  der gewählte Wert `0` ist. Die erste Option einer Zwischenebene ist aber
+  „— diese Seite als Elternseite —" mit dem Wert = der ID der bereits
+  gewählten Elternseite (nicht `0`, siehe AP-1.2, Vorgehen 3c). Wird sie
+  gewählt, hängt der Code eine **neue, wortgleiche Ebene** mit denselben
+  Kindern an, statt zu erkennen, dass keine tiefere Auswahl gewollt ist.
+- **B2:** Der in AP-1.2 beschriebene Node-Testharnisch für die
+  Kaskadenlogik wurde nie versioniert abgelegt und existiert nicht im
+  Repository — die Kaskade hat dadurch keine dauerhafte
+  Regressionsabdeckung.
+
+**Betroffene Dateien:**
+- `Plugins/CDB-Designer/assets/js/page-importer.js` (ändern)
+- `Plugins/CDB-Designer/tools/test-page-importer-kaskade.js` (neu anlegen)
+
+**Vorgehen:**
+1. In `kaskadeAuswahlGeaendert()`: Vor dem Anhängen einer neuen Ebene
+   zusätzlich abbrechen, wenn der gewählte Wert der ID entspricht, die die
+   Ebene bereits repräsentiert (Wert ihrer eigenen ersten Option „— diese
+   Seite als Elternseite —" bzw. für die erste Ebene weiterhin `0`) — nicht
+   nur, wenn er `0` ist. Das versteckte Feld `#cbd-import-parent` bleibt
+   dabei unverändert korrekt gesetzt.
+2. Neuen Node-Testharnisch `tools/test-page-importer-kaskade.js` nach dem
+   Vorbild von `tools/test-block-auswahl.js` anlegen (ohne jsdom: die
+   echten Funktionen wörtlich aus `page-importer.js` extrahiert, gegen
+   einen selbst geschriebenen, minimalen DOM-Stub ausgeführt). Mindestens
+   die in der AP-1.2-Übergabenotiz beschriebenen Fallgruppen nachbilden
+   (Ebene-1-Aufbau, Drill-down, Pruning bei höherer Wahl, Rücksprung auf
+   „oberste Ebene", Fehlerfall, Sperren, alle drei `kaskadeLaden()`-Pfade
+   inkl. REST-Pfad-Verifikation) **plus** einen neuen Fall, der genau B1
+   abdeckt: Wahl von „— diese Seite als Elternseite —" in einer
+   Zwischenebene darf **keine** weitere Ebene anhängen.
+3. `node tools/test-page-importer-kaskade.js` ausführen, bis alle Fälle
+   grün sind. Keine PHP-Änderung in diesem AP, daher `check-php74.php`
+   nicht erforderlich; ein JS-Syntax-Check (`new Function()` oder
+   äquivalent) genügt zusätzlich zum Testlauf selbst.
+4. Regressionslauf: `php tools/test-seitenbaum.php`,
+   `php tools/test-page-importer.php`, `node tools/test-block-auswahl.js`
+   erneut ausführen, Ergebnis dokumentieren.
+
+**Akzeptanzkriterien:**
+- [ ] Wahl von „— diese Seite als Elternseite —" in einer Zwischenebene
+      erzeugt keine weitere, identische Ebene mehr.
+- [ ] Alle übrigen Kaskadenverhalten (Drill-down, Pruning bei höherer Wahl,
+      Sperren, Fehlerfall, REST-Pfad) bleiben unverändert korrekt.
+- [ ] `tools/test-page-importer-kaskade.js` liegt versioniert im Repo,
+      enthält mindestens 26 Prüfungen (alle aus AP-1.2 beschriebenen Fälle
+      plus der neue B1-Fall), alle bestehen.
+- [ ] `tools/test-seitenbaum.php`, `tools/test-page-importer.php`,
+      `tools/test-block-auswahl.js` bleiben vollständig grün (keine
+      Regression).
+
+**Tests:**
+- `node tools/test-page-importer-kaskade.js` ist der Smoke-Test dieses APs.
+- Regressionslauf der drei genannten bestehenden Suiten (siehe Vorgehen 4).
+- Smoke-Test auf `fos.localhost:8080` (falls erreichbar): Rücksprung in
+  einer dreistufigen Kaskade auf „diese Seite als Elternseite" auf der
+  zweiten Ebene, prüfen, dass keine doppelte dritte Ebene erscheint.
+
+**Übergabenotiz:**
+(leer – wird vom ausführenden Agenten nach Abschluss ausgefüllt)
 
 ---
 
@@ -689,7 +848,7 @@ erlaubt) – KEINE Datei verändern.
 **Status:** ☐ offen
 **Umfang:** S
 **Modell:** sonnet
-**Abhängigkeiten:** AP-1.rev
+**Abhängigkeiten:** AP-1.rev, AP-1.fix1
 
 **Ziel & Kontext:**
 `CLAUDE.md` und `reference_file_map.md` (beide im Plugin-Root
@@ -747,8 +906,9 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.1 | REST-Route um Entwürfe-Parameter erweitern | opus | ☑ | – | TDD, 97+6 Prüfungen grün, check-php74.php grün |
 | AP-1.2 | Kaskadierende Auswahl in JS/PHP | opus | ☑ | AP-1.1 | 25 Verhaltenstests grün, Live-Browser-Test offen mangels Admin-Login |
 | AP-1.3 | Gestaltung der Kaskaden-Auswahlfelder | sonnet | ☑ | AP-1.2 | Klammernbalance geprüft, visueller Live-Test offen mangels Admin-Login |
-| AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1, AP-1.2, AP-1.3 | |
-| AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev | |
+| AP-1.rev | Review Phase 1 | opus | ☑ | AP-1.1, AP-1.2, AP-1.3 | Keine kritischen Befunde; B1 (mittel, Doppel-Ebene) und B2 (mittel, fehlender Testharnisch) → AP-1.fix1 |
+| AP-1.fix1 | Kaskade: Doppel-Ebene beheben, Testharnisch nachziehen | sonnet | ☐ | AP-1.2, AP-1.rev | Korrektur-AP aus Review-Befunden B1/B2 |
+| AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev, AP-1.fix1 | |
 
 ## 9. Testprotokoll
 
@@ -759,6 +919,8 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 | 2026-08-25 | AP-1.1 | `php tools/test-seitenbaum.php` (TDD: rot vor Implementierung bestätigt, dann grün), `php tools/check-php74.php` | Bestanden (103 Prüfungen gesamt, 0 Fehler; 569 Dateien PHP-7.4-kompatibel) | Direkte Testausführung |
 | 2026-08-25 | AP-1.2 | `php -l` (2 Dateien), `php tools/check-php74.php`, JS-Syntax-Check; eigener Node-Testharnisch (echte extrahierte Funktionen gegen selbstgeschriebenen DOM-Stub, 25 Prüfungen: Kaskadenaufbau, Drill-down, Pruning, Reset, Fehlerfall, Sperren, alle drei kaskadeLaden()-Pfade inkl. REST-Pfad-Verifikation) | Bestanden (25/25), Live-Browser-Test mangels Admin-Zugang offen | Direkte Code-Ausführung (Node) |
 | 2026-08-25 | AP-1.3 | CSS-Klammernbalance per Node-Skript | Bestanden (Endstand 0), visueller Live-Test bei 480px mangels Admin-Zugang offen | Direkte Prüfung |
+| 2026-08-25 | Phase 1 Integrationstest | `php tools/test-seitenbaum.php` (103 Prüfungen), `php tools/check-php74.php` (alle Plugin-Dateien), Node-Kaskadentest (25 Prüfungen), `php -l` auf allen drei geänderten PHP-Dateien | Alle bestanden, keine Regression | Vollständiger Regressionslauf |
+| 2026-08-25 | AP-1.rev | `php tools/test-seitenbaum.php` (103/103), `php tools/check-php74.php` (569 Dateien OK), zusätzlich `php -l` (3 Dateien), `php tools/test-page-importer.php` (34/34), `node tools/test-block-auswahl.js` (140/140), eigener Inline-Harnisch für Cache-Isolation/Rückwärtskompatibilität, `git diff`-Scope-Check | Bestanden, keine kritischen Befunde; B1/B2 (mittel) → AP-1.fix1 ergänzt, B3-B8 (gering) dokumentiert | Unabhängiger Review-Agent |
 
 ## 10. Dokumentation
 
