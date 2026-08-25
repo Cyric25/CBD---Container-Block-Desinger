@@ -1397,27 +1397,45 @@
     }
 
     /**
-     * Collect current CSS variable values from the page
+     * Collect current CSS variable values from the page.
+     *
+     * AP-1.fix1 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): PDFs sollen den
+     * Darkmode grundsaetzlich NICHT abbilden, unabhaengig davon, ob die Seite
+     * gerade im Hell- oder Dunkelmodus angezeigt wird - ein PDF ist ein
+     * eigenstaendiges Dokument, kein Theme-Snapshot. AP-1.2 hatte
+     * urspruenglich nur dafuer gesorgt, dass der Darkmode-Zustand *korrekt*
+     * uebernommen wird (dunkler Text auf dunklem Grund -> heller Text auf
+     * dunklem Grund) - das war nicht die gewuenschte Loesung. Fix: das
+     * data-theme-Attribut auf <html> wird waehrend des synchronen Auslesens
+     * kurzzeitig entfernt (erzwingt den Hellmodus-Wertesatz aus dem
+     * bestehenden :root-Block, inkl. etwaiger Customizer-Anpassungen) und
+     * direkt danach wiederhergestellt - kein sichtbarer Flackereffekt, da
+     * synchron und ohne Repaint zwischen den beiden Zeilen.
      */
     function collectCSSVariables() {
-        var root = getComputedStyle(document.documentElement);
-        return {
+        var htmlEl = document.documentElement;
+        var previousTheme = htmlEl.getAttribute('data-theme');
+        if (previousTheme === 'dark') {
+            htmlEl.removeAttribute('data-theme');
+        }
+
+        var root = getComputedStyle(htmlEl);
+        var result = {
             specialText: root.getPropertyValue('--color-special-text').trim() || '#71230a',
             uiSurface: root.getPropertyValue('--color-ui-surface').trim() || '#e24614',
             uiSurfaceDark: root.getPropertyValue('--color-ui-surface-dark').trim() || '#c93d12',
             uiSurfaceLight: root.getPropertyValue('--color-ui-surface-light').trim() || '#f5ede9',
             sidebarBorder: root.getPropertyValue('--color-sidebar-border').trim() || '#e0e0e0',
-            // AP-1.2 (PLAN-PDF-Export-und-Tafelmodus-Fixes.md): Die beiden
-            // Variablennamen waren vertauscht/falsch benannt (--color-primary-text
-            // statt --color-text-primary, --color-light-background statt
-            // --color-background-light) - existierten nie, der Fallback griff
-            // immer. Dadurch blieb der PDF-Text im Darkmode auf #333333 (dunkel)
-            // statt hell zu werden, waehrend --color-background korrekt dunkel
-            // wurde: dunkler Text auf dunklem Grund, praktisch unlesbar.
             primaryText: root.getPropertyValue('--color-text-primary').trim() || '#333333',
             background: root.getPropertyValue('--color-background').trim() || '#ffffff',
             lightBackground: root.getPropertyValue('--color-background-light').trim() || '#f8f9fa'
         };
+
+        if (previousTheme === 'dark') {
+            htmlEl.setAttribute('data-theme', previousTheme);
+        }
+
+        return result;
     }
 
     // =========================================================================

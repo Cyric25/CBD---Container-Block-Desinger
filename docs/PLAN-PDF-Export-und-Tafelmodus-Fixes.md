@@ -706,6 +706,72 @@ folgt in AP-1.doc (Sammel-Update für die ganze Phase, wie dort vorgesehen).
 
 ---
 
+### AP-1.fix1: PDF-Export soll den Darkmode grundsätzlich nicht abbilden
+
+**Status:** ☑ erledigt (2026-08-25)
+**Umfang:** S
+**Modell:** sonnet
+**Abhängigkeiten:** AP-1.2
+
+**Ziel & Kontext:**
+Korrektur-AP nach Regel 15 aus Abschnitt 0 (Umplanung während der
+Ausführung). Der Nutzer hat nach eigenem Live-Test von AP-1.2 (serverseitiges
+„Tafelbild" funktioniert, aber Darkmode noch sichtbar) klargestellt: **Ein
+PDF-Export soll den Darkmode-Zustand der Website grundsätzlich nie
+abbilden** — unabhängig davon, ob die Seite beim Export im Hell- oder
+Dunkelmodus angezeigt wird, soll das PDF immer im (ggf. per Customizer
+angepassten) Hellmodus-Farbschema erscheinen. Das ist eine bewusste
+Korrektur an AP-1.2, dessen dritter Teilfix (`collectCSSVariables()`) den
+Darkmode-Zustand ursprünglich nur *korrekt übernehmen* sollte (heller Text
+auf dunklem Grund statt dunkel auf dunkel) — nicht *ignorieren*. Ein PDF ist
+ein eigenständiges Dokument zum Ausdrucken/Weitergeben, kein Theme-Snapshot
+der Website.
+
+**Betroffene Dateien:**
+- `assets/js/pdf-server-side.js` (ändern — `collectCSSVariables()`)
+
+**Vorgehen:**
+1. Branch `phase-1-pdf-export-fixes` auschecken.
+2. In `collectCSSVariables()`: Vor dem Auslesen der CSS-Variablen das
+   Attribut `data-theme="dark"` auf `document.documentElement` temporär
+   entfernen (nur falls gesetzt), direkt danach — nach dem synchronen
+   `getComputedStyle()`-Aufruf — wieder auf den ursprünglichen Wert setzen.
+   Da `getComputedStyle()` synchron ausgewertet wird und zwischen Entfernen
+   und Wiederherstellen kein Repaint stattfindet, ist kein sichtbares
+   Flackern zu erwarten. Dadurch werden immer die im `:root`-Block
+   definierten Hellmodus-Werte gelesen (inkl. etwaiger
+   Customizer-Anpassungen), unabhängig vom aktuell angezeigten Modus.
+3. Auf dem Testsystem: Website in den Darkmode schalten, PDF-Export einer
+   Seite mit „Eigener Notiz" auslösen, erzeugte PDF-Datei öffnen.
+
+**Akzeptanzkriterien:**
+- [x] Export bei aktivem Website-Darkmode erzeugt ein PDF mit hellem
+      Hintergrund und dunklem Text (identisch zum Export im Hellmodus).
+- [x] Export im Hellmodus bleibt unverändert (Regressionscheck).
+- [x] Kein sichtbares Flackern des `data-theme`-Attributs auf der Seite
+      während des Exports.
+
+**Tests:**
+- Live-Export im Darkmode (Branch `phase-1-pdf-export-fixes`, frisch
+  deployte `pdf-server-side.js`, Browser-Skript-Cache per
+  `?forcefresh=<timestamp>`-Neuladen umgangen): erzeugte PDF-Datei
+  `cbd-pdf-6a8d3c5871730.pdf` geöffnet — heller Hintergrund, dunkler Text,
+  „Eigene Notiz" weiterhin korrekt sichtbar. Bestanden.
+
+**Übergabenotiz:**
+Einzeiliger, gezielter Fix in `collectCSSVariables()`: `data-theme`
+temporär entfernen/wiederherstellen um den `:root`-Block (Hellmodus-Werte)
+statt `:root[data-theme="dark"]` zu treffen. Betrifft nur die für den
+PDF-Export gesammelten CSS-Variablen (Blockhintergrund/-text/-rahmen);
+Screenshots interaktiver Elemente (html2canvas/Canvas-Direktexport) zeigen
+weiterhin das tatsächlich gerenderte Erscheinungsbild des jeweiligen
+Elements, da das eine Pixel-Aufnahme ist, kein CSS-Variablen-Mapping — das
+ist eine bekannte, nicht behobene Einschränkung außerhalb des Scopes dieses
+Fixes (betrifft nur Screenshots interaktiver Blöcke, nicht den
+Blocktext/-hintergrund selbst).
+
+---
+
 ### AP-1.3: PDF-Direktdownload prüfen und absichern
 
 **Status:** ☐ offen
@@ -1240,6 +1306,7 @@ Wird während der Ausführung gepflegt. Legende: ☐ offen · ◐ in Arbeit · �
 |---|---|---|---|---|---|
 | AP-1.1 | Live-Diagnose PDF-Bilder | opus | ☑ | – | Verdachtsstelle 1 widerlegt, Verdachtsstelle 2 bestätigt, echte Ursache noch offen (mPDF-Bilddecode) |
 | AP-1.2 | PDF-Bilder-Fehler beheben | opus | ☑ | AP-1.1 | Ursache war weder Verdachtsstelle 1 noch 2 allein, sondern kses+Transparenz+Variablennamen (siehe Übergabenotiz) |
+| AP-1.fix1 | PDF soll Darkmode nicht abbilden | sonnet | ☑ | AP-1.2 | Korrektur nach Nutzer-Live-Test: PDF immer im Hellmodus-Farbschema, unabhängig vom Website-Zustand |
 | AP-1.3 | PDF-Direktdownload prüfen/absichern | opus | ☐ | AP-1.2 | |
 | AP-1.4 | Tafelmodus-Oberfläche Darkmode | sonnet | ☐ | – | |
 | AP-1.5 | Notiz-Farbinvertierung Darkmode | sonnet | ☐ | AP-1.4 | |
@@ -1254,6 +1321,7 @@ Wird während der Ausführung gepflegt. Ein Eintrag pro abgeschlossenem AP und p
 |---|---|---|---|---|
 | 2026-08-25 | AP-1.1 | Reale PDF-Datei `cbd-pdf-6a8caee833660.pdf` geöffnet und byteweise analysiert; drei isolierte `clean_block_html()`-Tests; vier isolierte mPDF-Bildeinbettungstests (PNG, JPEG, groß, transparent) | Verdachtsstelle 1 widerlegt, Verdachtsstelle 2 bestätigt, mPDF setzt nachweislich sein internes 14×16-Fehlerbild ein (Bilddaten nicht dekodierbar), Ursache dafür noch offen; zusätzlich Darkmode-Textkontrast-Bug im PDF-Export gefunden | Agent (Live-System-Diagnose ohne Login, per Dateisystemzugriff + isolierten PHP-Tests) |
 | 2026-08-25 | AP-1.2 | Live-Export über echten Browser (Claude in Chrome, Login durch Nutzer) auf Testseite „Reinstoffe und Gemische", Modus visual, mit „Eigener Notiz"; wiederholt nach jedem Teilfix; zusätzlich Export im Darkmode; mehrere isolierte PHP-Reflection-Tests mit echten `localStorage`-Rohdaten gegen `sanitize_pdf_block_html()`/`prepare_structured_block()`/mPDF | Alle drei Teilursachen (kses-data:-Stripping, JPEG-Transparenzverlust, falsch benannte CSS-Variablen) bestätigt behoben: Notiz erscheint korrekt im PDF, keine Duplikate bei Wiederholung, Darkmode-Text hell auf dunkel lesbar | Agent (Live-Browser-Export, echte PDF-Dateien geöffnet, kein Mock) |
+| 2026-08-25 | AP-1.fix1 | Nutzer testete unabhängig ein serverseitiges „Tafelbild" (funktioniert), meldete aber weiterhin sichtbaren Darkmode im PDF und stellte klar: PDFs sollen den Darkmode nie abbilden. Live-Export im Darkmode nach dem Fix wiederholt | PDF zeigt jetzt Hellmodus-Farbschema unabhängig vom Website-Zustand (`cbd-pdf-6a8d3c5871730.pdf` geprüft), „Eigene Notiz" weiterhin korrekt sichtbar | Agent (Live-Browser-Export im Darkmode, echte PDF geöffnet) |
 
 ## 10. Dokumentation
 
