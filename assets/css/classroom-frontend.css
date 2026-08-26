@@ -860,3 +860,136 @@
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+
+/* =============================================
+   LOGIN-LISTE: KLAPPBARE BAUMSTRUKTUR (AP-1.2)
+   =============================================
+
+   renderClassroomContent() in assets/js/classroom-frontend.js baute die Liste
+   bis AP-1.2 flach: ein <div> je Seite, die Ebene nur als inline
+   margin-left: level*24px. Seither entsteht dort eine echte Verschachtelung
+   (<ul class="cbd-classroom-children"> im jeweiligen Elternknoten), damit sich
+   ein Kapitel samt Unterbaum mit einem Knopf zuklappen laesst.
+
+   Die Gruen- und Grautoene der bestehenden Regeln weiter oben stehen dort seit
+   3.0.0 als literale Werte. Neue Regeln duerfen das laut Projektkonvention
+   nicht mehr — deshalb steht jede Farbe hier als var(--x, #fallback). Der
+   Fallback ist jeweils der Wert, den die Zeile ohne die Variable haette, das
+   Aussehen aendert sich also nicht. --cbd-classroom-accent ist bewusst
+   nirgends definiert: Der Fallback #4caf50 ist die Bestandsfarbe dieser
+   Ansicht, die Variable nur der Haken, um sie kuenftig an einer Stelle
+   umzustellen. */
+
+.cbd-classroom-page-tree,
+.cbd-classroom-children {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* Ersetzt das frueher je Zeile inline gesetzte margin-left: level*24px.
+   Der Einzug haengt jetzt an der Verschachtelung und stimmt damit auch dann,
+   wenn eine Ebene zugeklappt ist. */
+.cbd-classroom-children {
+    margin-left: 24px;
+}
+
+/* Zugeklappt = Kind-Container ausgeblendet. Standard (ohne die Klasse
+   cbd-classroom-expanded am <li>) waere damit "zu"; das JavaScript vergibt die
+   Klasse deshalb beim Aufbau an jeden Knoten mit Kindern. */
+.cbd-classroom-page-item:not(.cbd-classroom-expanded) > .cbd-classroom-children {
+    display: none;
+}
+
+/* Das <li> ist ab AP-1.2 reine Struktur: Es umschliesst die Zeile UND deren
+   Kind-Container. Die Karten-Optik (Rahmen, Polster, Hintergrund, Hover) muss
+   deshalb auf .cbd-classroom-page-row wandern — auf dem <li> umrahmte die
+   Karte sonst den ganzen Unterbaum.
+
+   Die level-abhaengigen Farbbalken (.cbd-classroom-page-item.cbd-level-N,
+   Spezifitaet 0-2-0) ueberleben das border: none hier (0-1-0) absichtlich und
+   werden so vom Kaestchenrand zur senkrechten Ebenen-Linie des Unterbaums. */
+.cbd-classroom-page-item {
+    display: block;
+    margin-bottom: 0;
+    padding: 0 0 0 8px;
+    background: none;
+    border: none;
+    border-radius: 0;
+}
+
+/* Der Hover der alten Kachel wuerde jetzt den ganzen Unterbaum verschieben —
+   und weil :hover fuer alle Vorfahren gilt, saemtliche Elternknoten gleich
+   mit. Gleiche Spezifitaet wie die Ursprungsregel, aber spaeter in der Datei. */
+.cbd-classroom-page-item:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+/* Die eigentliche Zeile: uebernimmt die Karten-Optik der bisherigen
+   .cbd-classroom-page-item. gap statt Abstand am Knopf, damit Zeilen mit und
+   ohne Toggle gleich aussehen (siehe Platzhalter weiter unten). */
+.cbd-classroom-page-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    background: var(--color-background, #fff);
+    border: 2px solid var(--color-sidebar-border, #e0e0e0);
+    border-radius: 8px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.cbd-classroom-page-row:hover {
+    border-color: var(--cbd-classroom-accent, #4caf50);
+    box-shadow: 0 2px 8px rgba(76, 175, 80, 0.15);
+    transform: translateX(4px);
+}
+
+/* Zeilen ohne Kinder buendig zu den Zeilen mit Knopf halten: gleicher Platz,
+   nur leer. Ein echter, deaktivierter Knopf waere fuer Screenreader ein
+   bedienbares Element ohne Wirkung. */
+.cbd-classroom-page-item:not(.cbd-classroom-has-children) > .cbd-classroom-page-row::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 26px;
+}
+
+.cbd-classroom-toggle {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--color-text-muted, #666);
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.cbd-classroom-toggle:hover,
+.cbd-classroom-toggle:focus-visible {
+    background-color: var(--color-ui-surface-light, #f5ede9);
+    color: var(--color-ui-surface, #e24614);
+}
+
+/* Drehung wie beim Seitenbaum des Themes (.page-toggle/.toggle-icon):
+   ▸ zeigt zugeklappt nach rechts, aufgeklappt nach unten. Gedreht wird das
+   Icon, nicht der Knopf — sonst wanderte auch dessen Hover-Flaeche mit. */
+.cbd-classroom-toggle-icon {
+    display: inline-block;
+    line-height: 1;
+    transition: transform 0.3s ease;
+}
+
+.cbd-classroom-page-item.cbd-classroom-expanded > .cbd-classroom-page-row > .cbd-classroom-toggle .cbd-classroom-toggle-icon {
+    transform: rotate(90deg);
+}

@@ -274,49 +274,120 @@
 
             if (data.pages && data.pages.length > 0) {
                 window.cbdDebug && console.log('[CBD Classroom] Rendering', data.pages.length, 'items');
+
+                // Echte, verschachtelte Baumstruktur (AP-1.2).
+                // Verfahren adaptiert von injectClassroomSidebar() in
+                // classroom-page-filter.js: levelbasierter Stack aus <ul>-Containern.
+                // Die Daten kommen flach an (jede Seite mit einem level-Feld) und
+                // sind in Dokumentreihenfolge sortiert — ein Knoten gehoert also
+                // immer unter den zuletzt gesehenen Knoten der Ebene darueber.
+                var $rootUl     = $('<ul class="cbd-classroom-page-tree">');
+                var levelUls    = [$rootUl];
+                var levelLastLi = [null];
+
                 data.pages.forEach(function(item, index) {
                     window.cbdDebug && console.log('[CBD Classroom] Item', index, ':', item);
-                    if (item.type === 'page' && item.page) {
-                        var page = item.page;
-                        var level = page.level || 0;
+                    if (item.type !== 'page' || !item.page) {
+                        return;
+                    }
 
-                        window.cbdDebug && console.log('[CBD Classroom] Rendering page:', page.title, 'Level:', level);
+                    var page  = item.page;
+                    var level = page.level || 0;
 
-                        // Create page item with indentation based on level
-                        var $pageItem = $('<div class="cbd-classroom-page-item">');
-                        $pageItem.css('margin-left', (level * 24) + 'px');
+                    window.cbdDebug && console.log('[CBD Classroom] Rendering page:', page.title, 'Level:', level);
 
-                        // Add level class for styling
-                        $pageItem.addClass('cbd-level-' + level);
+                    // Stack anpassen, wenn die Ebene sinkt ...
+                    if (level < levelUls.length - 1) {
+                        levelUls.length    = level + 1;
+                        levelLastLi.length = level + 1;
+                    }
+                    // ... oder steigt: fehlende Kind-Container anlegen.
+                    while (levelUls.length <= level) {
+                        var $parentLi = levelLastLi[levelUls.length - 1];
+                        if (!$parentLi) {
+                            break; // keine Elternzeile vorhanden — Knoten bleibt auf der erreichten Ebene
+                        }
+                        var $sub = $('<ul class="cbd-classroom-children">');
+                        $parentLi.append($sub);
+                        levelUls.push($sub);
+                        levelLastLi.push(null);
+                    }
 
-                        if (page.url) {
-                            // Page has URL - clickable (treated page)
-                            var $pageLink = $('<a>')
-                                .attr('href', page.url)
-                                .addClass('cbd-classroom-page-link')
-                                .text(page.title);
+                    var tiefe     = Math.min(level, levelUls.length - 1);
+                    var $targetUl = levelUls[tiefe];
 
-                            var $badge = $('<span>')
-                                .addClass('cbd-treated-count-badge')
-                                .text(page.treated_count + ' behandelt');
+                    // Das <li> traegt Struktur und Zustand, die Zeile darin die Karten-Optik.
+                    var $pageItem = $('<li>')
+                        .addClass('cbd-classroom-page-item')
+                        .addClass('cbd-level-' + level);
 
-                            $pageItem.append($pageLink).append($badge);
-                        } else {
-                            // No URL - grayed out parent page
-                            var $pageTitle = $('<div class="cbd-classroom-page-grayed">')
-                                .text(page.title);
+                    // ACHTUNG: Das ID-Feld der AJAX-Antwort heisst page_id, NICHT id
+                    // (am echten Netzwerk-Response verifiziert, siehe AP-1.3b).
+                    if (page.page_id !== undefined && page.page_id !== null) {
+                        $pageItem.attr('data-page-id', String(page.page_id));
+                    }
 
-                            // For level 0 parents, make them look like headers
-                            if (level === 0) {
-                                $pageTitle.addClass('cbd-parent-header-grayed');
-                            }
+                    var $pageRow = $('<div class="cbd-classroom-page-row">');
 
-                            $pageItem.append($pageTitle);
+                    if (page.url) {
+                        // Page has URL - clickable (treated page)
+                        var $pageLink = $('<a>')
+                            .attr('href', page.url)
+                            .addClass('cbd-classroom-page-link')
+                            .text(page.title);
+
+                        var $badge = $('<span>')
+                            .addClass('cbd-treated-count-badge')
+                            .text(page.treated_count + ' behandelt');
+
+                        $pageRow.append($pageLink).append($badge);
+                    } else {
+                        // No URL - grayed out parent page
+                        var $pageTitle = $('<div class="cbd-classroom-page-grayed">')
+                            .text(page.title);
+
+                        // For level 0 parents, make them look like headers
+                        if (level === 0) {
+                            $pageTitle.addClass('cbd-parent-header-grayed');
                         }
 
-                        $pagesContainer.append($pageItem);
+                        $pageRow.append($pageTitle);
                     }
-                }.bind(this));
+
+                    $pageItem.append($pageRow);
+                    $targetUl.append($pageItem);
+                    levelLastLi[tiefe] = $pageItem;
+                });
+
+                // Toggle-Knoepfe fuer alle Knoten mit Kindern.
+                // Standardzustand: aufgeklappt (keine Verhaltensaenderung gegenueber
+                // der bisherigen, durchgehend sichtbaren Liste).
+                $rootUl.find('.cbd-classroom-page-item').each(function() {
+                    var $item = $(this);
+                    if ($item.children('.cbd-classroom-children').length === 0) {
+                        return;
+                    }
+                    $item.addClass('cbd-classroom-has-children cbd-classroom-expanded');
+                    $item.children('.cbd-classroom-page-row').prepend(
+                        $('<button type="button" class="cbd-classroom-toggle" aria-label="Unterseiten anzeigen/verbergen" aria-expanded="true">')
+                            .append('<span class="cbd-classroom-toggle-icon">▸</span>')
+                    );
+                });
+
+                $pagesContainer.append($rootUl);
+
+                // Event-Delegation am Container: der ueberlebt das .empty() oben,
+                // deshalb vorher denselben Namensraum abmelden — sonst haengen nach
+                // einem zweiten Rendern (Auto-Login, Token-Erneuerung) zwei Handler
+                // am selben Knopf und heben sich gegenseitig auf.
+                $pagesContainer.off('click.cbdClassroomToggle')
+                    .on('click.cbdClassroomToggle', '.cbd-classroom-toggle', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        var $item = $(this).closest('.cbd-classroom-page-item');
+                        $item.toggleClass('cbd-classroom-expanded');
+                        $(this).attr('aria-expanded', $item.hasClass('cbd-classroom-expanded') ? 'true' : 'false');
+                    });
             } else {
                 $pagesContainer.append('<p class="cbd-no-pages">Keine behandelten Blöcke vorhanden.</p>');
             }
