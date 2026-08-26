@@ -8,6 +8,25 @@
 (function($) {
     'use strict';
 
+    /**
+     * localStorage-Vertrag „Klassenmodus" (siehe PLAN-Inhaltsverzeichnisse.md,
+     * Abschnitt 4): Schlüssel 'cbd_classroom_toc_collapsed', JSON-Array von
+     * Seiten-IDs (als Strings) der zugeklappten Knoten. Identischer Code wie
+     * in classroom-frontend.js (AP-1.3a) — beide Dateien laufen nie
+     * gleichzeitig auf derselben Seite, eine gemeinsame Modul-Datei gibt es
+     * in diesem Plugin nicht (kein Build-Prozess).
+     */
+    function cbdKlassenverzeichnisGeleseneCollapsedIds() {
+        try {
+            var roh = localStorage.getItem('cbd_classroom_toc_collapsed');
+            var arr = roh ? JSON.parse(roh) : [];
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    }
+    function cbdKlassenverzeichnisSchreibeCollapsedIds(idsArray) {
+        try { localStorage.setItem('cbd_classroom_toc_collapsed', JSON.stringify(idsArray)); } catch (e) {}
+    }
+
     var ClassroomPageFilter = {
         classroomId: null,
         token: null,
@@ -517,7 +536,9 @@
                 var isActive  = false;
                 try { isActive = page.url && new URL(page.url).pathname === currentPath; } catch (e) {}
 
-                var $li = $('<li class="page-item">');
+                // Feldname ist page_id (nicht id) – siehe Antwort von
+                // cbd_student_get_data, gemessen im Live-Test von AP-1.3b.
+                var $li = $('<li class="page-item">').attr('data-page-id', String(page.page_id));
                 if (isActive) $li.addClass('current-page expanded');
 
                 if (page.url) {
@@ -538,10 +559,18 @@
                 levelLastLi[Math.min(level, levelLastLi.length - 1)] = $li;
             });
 
-            // Toggle-Buttons zu Einträgen mit Kindern hinzufügen
+            // Toggle-Buttons zu Einträgen mit Kindern hinzufügen.
+            // Standardzustand aufgeklappt – AUSSER die Seiten-ID steht in der
+            // gespeicherten Collapsed-Liste (localStorage, siehe Hilfsfunktionen
+            // oben).
+            var collapsedIds = cbdKlassenverzeichnisGeleseneCollapsedIds();
             $rootUl.find('.page-item').each(function() {
                 if ($(this).children('ul').length > 0) {
-                    $(this).addClass('has-children expanded');
+                    $(this).addClass('has-children');
+                    var pageId = String($(this).attr('data-page-id'));
+                    if (collapsedIds.indexOf(pageId) === -1) {
+                        $(this).addClass('expanded');
+                    }
                     $(this).prepend(
                         $('<button class="page-toggle" aria-label="Unterseiten anzeigen/verbergen">')
                             .append('<span class="toggle-icon">▸</span>')
@@ -557,7 +586,19 @@
                 e.stopPropagation();
                 var $item = $(this).closest('.page-item');
                 $item.toggleClass('expanded');
-                $(this).attr('aria-expanded', $item.hasClass('expanded'));
+                var nunExpanded = $item.hasClass('expanded');
+                $(this).attr('aria-expanded', nunExpanded);
+
+                // Collapsed-Liste (localStorage) synchron nachziehen.
+                var pageId = String($item.attr('data-page-id'));
+                var ids = cbdKlassenverzeichnisGeleseneCollapsedIds();
+                var pos = ids.indexOf(pageId);
+                if (nunExpanded) {
+                    if (pos !== -1) { ids.splice(pos, 1); }
+                } else {
+                    if (pos === -1) { ids.push(pageId); }
+                }
+                cbdKlassenverzeichnisSchreibeCollapsedIds(ids);
             });
         },
 
