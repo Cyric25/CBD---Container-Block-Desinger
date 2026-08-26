@@ -1053,6 +1053,87 @@ Container **anderer** Seiten fehlen naturgemäß.
 **Beim Prüfen mit `curl` daran denken:** Die REST-Schnittstelle verlangt zur
 Cookie-Anmeldung zusätzlich `X-WP-Nonce`; ohne den gilt die Anfrage als anonym.
 
+## Klassenmodus: Klappbare Inhaltsverzeichnisse (Phase 1 von `PLAN-Inhaltsverzeichnisse.md`, seit 2026-08-26)
+
+Zwei Ansichten zeigen im Klassenmodus dieselbe Seitenhierarchie: die
+**Login-Seitenliste** nach dem Klasseneinstieg (`[cbd_classroom]`-Shortcode,
+`renderClassroomContent()` in `assets/js/classroom-frontend.js`) und die
+**Klassen-Seitenleiste**, die beim Navigieren innerhalb der Klasse den
+Theme-Sidebar-Inhalt ersetzt (`injectClassroomSidebar()` in
+`assets/js/classroom-page-filter.js`). Dieses Vorhaben hat beide Ansichten im
+Darkmode lesbar gemacht (zuvor literale dunkle Textfarben ohne
+Darkmode-Anpassung in `assets/css/classroom-frontend.css`, AP-1.1), die
+Login-Liste von einer optisch eingerückten Flachliste auf eine echte,
+verschachtelte Baumstruktur mit Klapp-Buttons umgebaut (AP-1.2, adaptiert vom
+bereits vorhandenen Verfahren in `injectClassroomSidebar()`) und für beide
+Ansichten den Klappzustand dauerhaft gespeichert (AP-1.3a/AP-1.3b).
+
+### Der `localStorage`-Vertrag: `cbd_classroom_toc_collapsed`
+
+Analog zum bereits dokumentierten Filter `simple_clean_lehrerseite_freigeben`
+(Abschnitt „Klassen-Durchlass für gesperrte Seiten" oben) ist dieser
+Schlüssel eine feste, dokumentierte Schnittstelle — hier nicht zwischen
+Plugin und Theme, sondern zwischen den beiden genannten JavaScript-Dateien
+desselben Plugins:
+
+| Eigenschaft | Festlegung |
+|---|---|
+| Schlüssel | `localStorage['cbd_classroom_toc_collapsed']` |
+| Wert | JSON-Array von WordPress-Seiten-IDs **als Strings** (z. B. `["338","391"]`) — die vom Nutzer explizit **zugeklappten** Knoten |
+| Fehlt der Schlüssel, ist er leer oder ungültiges JSON | alles gilt als aufgeklappt (Standardzustand, keine Verhaltensänderung gegenüber dem Stand vor diesem Vorhaben) |
+| Gespeichert wird die Ausnahme, nicht die Regel | zugeklappte statt aufgeklappte Knoten — sonst wäre jede künftig neu in den Baum aufgenommene Seite standardmäßig zugeklappt |
+| Geteilt zwischen | `assets/js/classroom-frontend.js` (`renderClassroomContent()`) und `assets/js/classroom-page-filter.js` (`injectClassroomSidebar()`) |
+| Zugriffsfunktionen | `cbdKlassenverzeichnisGeleseneCollapsedIds()` (liest, `try/catch` um `JSON.parse`, Rückgabe immer ein Array) und `cbdKlassenverzeichnisSchreibeCollapsedIds(idsArray)` (schreibt, `try/catch` um `localStorage.setItem`) — **je eine eigene, wortgleiche Kopie** in der IIFE jeder der beiden Dateien, kein gemeinsames Modul (das Plugin hat keinen Build-Prozess für JavaScript) |
+| Laufen beide Dateien je gleichzeitig auf derselben Seite? | Nein — die Login-Seite (Klasseneinstieg per Shortcode) und normale Seiten innerhalb einer laufenden Klassensitzung (`?classroom=&token=`) sind unterschiedliche Seiten; die Namensgleichheit der beiden privaten Hilfsfunktionen ist deshalb unproblematisch |
+
+Damit bleibt ein zugeklapptes Kapitel über `location.reload()`/erneuten Login
+und über eine Navigation innerhalb der Klasse hinweg zugeklappt, und ein in
+der einen Ansicht zugeklapptes Kapitel erscheint auch in der anderen
+zugeklappt — beide Richtungen sind live gegeneinander geprüft
+(AP-1.rev-Integrationstest).
+
+**Das ID-Feld heißt `page.page_id`, nicht `page.id`.** Die AJAX-Antwort
+`cbd_student_get_data` liefert die Seiten-ID unter `page.page_id`; ein
+Zugriff auf das nicht existierende `page.id` hätte an jedem Knoten
+`data-page-id="undefined"` erzeugt und mehrere Kapitel einen gemeinsamen
+Klappzustand teilen lassen (Fund aus AP-1.3b, live am echten
+Netzwerk-Response verifiziert).
+
+### Bekannte, bewusst akzeptierte Einschränkungen
+
+Aus dem unabhängigen Review AP-1.rev (`PLAN-Inhaltsverzeichnisse.md`,
+Abschnitt 7 — kein kritischer oder mittlerer Befund, fünf geringe, kein
+Korrektur-AP nötig):
+
+1. **`classroom-frontend.css:24`** — `.cbd-classroom-wrapper h2` ist ein
+   toter Selektor: Der reale Wrapper der Shortcode-Ausgabe heißt
+   `.cbd-classroom-container` (`class-cbd-classroom.php:1125`), nicht
+   `.cbd-classroom-wrapper`. Die Überschrift „Klassen-Zugang" bleibt trotzdem
+   korrekt darkmode-fähig, weil sie `color` von `body` erbt
+   (`Theme/style.css`, `color: var(--color-text-primary, #333)`). Kein
+   sichtbares Symptom, gefunden in AP-1.1.
+2. **`classroom-page-filter.js`** — `String(page.page_id)` ist ungeschützt
+   gegen ein fehlendes Feld; fehlte es, entstünde `data-page-id="undefined"`
+   und mehrere Kapitel teilten sich einen Klappzustand. Aktuell nie
+   ausgelöst, da das Feld in der echten AJAX-Antwort immer vorhanden ist.
+3. **`classroom-page-filter.js`, Toggle-Vergabe** — ein zugeklappt startender
+   Knoten bekommt beim Aufbau kein explizites `aria-expanded="false"` (bleibt
+   `null`, statt es zu setzen); die Login-Liste (`classroom-frontend.js`)
+   macht das korrekt vor. Kein funktionaler Fehler, nur eine
+   Konsistenzlücke zwischen beiden Ansichten.
+4. **`classroom-frontend.css`, `.cbd-classroom-page-row:hover`** —
+   verwendet `rgba(76,175,80,.15)` hartcodiert statt über eine CSS-Variable;
+   formal kein Verstoß gegen die Hex-Wert-Konvention (kein Hex-Code), aus
+   Bestandscode übernommen.
+5. **`classroom-frontend.css`** — zwei sich widersprechende
+   `.cbd-classroom-children { margin-left }`-Regeln stehen in der Datei; die
+   spätere gewinnt, kein sichtbarer Fehler.
+
+Details je Befund und die vollständigen Übergabenotizen der Phase-1-APs:
+`PLAN-Inhaltsverzeichnisse.md`, Abschnitt 7. Datei-Referenzen:
+`reference_file_map.md`, Zeilen zu `classroom-frontend.css` und zu
+`classroom-frontend.js`/`classroom-page-filter.js`.
+
 ## Aktionsleiste: Sichtbarkeit, Verschachtelung, Behandelt-Dialog
 
 Die Leiste oben rechts im Container (`.cbd-action-buttons`) erscheint per
