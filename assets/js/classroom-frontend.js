@@ -7,6 +7,27 @@
 (function($) {
     'use strict';
 
+    // =============================================
+    // localStorage-Persistenz fuer den Klappzustand der Login-Liste (AP-1.3a).
+    // Vertrag "localStorage-Schema Klassenmodus" (PLAN-Inhaltsverzeichnisse.md,
+    // Abschnitt 4): Schluessel cbd_classroom_toc_collapsed, Wert = JSON-Array
+    // der zugeklappten Seiten-IDs als Strings. Dieselbe Datenform wie in
+    // classroom-page-filter.js (dort unabhaengig implementiert, AP-1.3b) --
+    // beide Dateien laufen nie gleichzeitig auf derselben Seite, deshalb ist
+    // eine eigene, private Kopie hier unproblematisch.
+    // =============================================
+
+    function cbdKlassenverzeichnisGeleseneCollapsedIds() {
+        try {
+            var roh = localStorage.getItem('cbd_classroom_toc_collapsed');
+            var arr = roh ? JSON.parse(roh) : [];
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    }
+    function cbdKlassenverzeichnisSchreibeCollapsedIds(idsArray) {
+        try { localStorage.setItem('cbd_classroom_toc_collapsed', JSON.stringify(idsArray)); } catch (e) {}
+    }
+
     var ClassroomFrontend = {
         classId: null,
         token: null,
@@ -360,16 +381,22 @@
                 });
 
                 // Toggle-Knoepfe fuer alle Knoten mit Kindern.
-                // Standardzustand: aufgeklappt (keine Verhaltensaenderung gegenueber
-                // der bisherigen, durchgehend sichtbaren Liste).
+                // Standardzustand: aufgeklappt -- ausser der Knoten wurde vom
+                // Nutzer zuvor zugeklappt und das steht im localStorage (AP-1.3a).
+                var eingeklappteIds = cbdKlassenverzeichnisGeleseneCollapsedIds();
                 $rootUl.find('.cbd-classroom-page-item').each(function() {
                     var $item = $(this);
                     if ($item.children('.cbd-classroom-children').length === 0) {
                         return;
                     }
-                    $item.addClass('cbd-classroom-has-children cbd-classroom-expanded');
+                    $item.addClass('cbd-classroom-has-children');
+                    var istZugeklappt = eingeklappteIds.indexOf(String($item.attr('data-page-id'))) !== -1;
+                    if (!istZugeklappt) {
+                        $item.addClass('cbd-classroom-expanded');
+                    }
                     $item.children('.cbd-classroom-page-row').prepend(
-                        $('<button type="button" class="cbd-classroom-toggle" aria-label="Unterseiten anzeigen/verbergen" aria-expanded="true">')
+                        $('<button type="button" class="cbd-classroom-toggle" aria-label="Unterseiten anzeigen/verbergen">')
+                            .attr('aria-expanded', istZugeklappt ? 'false' : 'true')
                             .append('<span class="cbd-classroom-toggle-icon">▸</span>')
                     );
                 });
@@ -386,7 +413,21 @@
                         e.stopPropagation();
                         var $item = $(this).closest('.cbd-classroom-page-item');
                         $item.toggleClass('cbd-classroom-expanded');
-                        $(this).attr('aria-expanded', $item.hasClass('cbd-classroom-expanded') ? 'true' : 'false');
+                        var istAufgeklappt = $item.hasClass('cbd-classroom-expanded');
+                        $(this).attr('aria-expanded', istAufgeklappt ? 'true' : 'false');
+
+                        // Klappzustand persistieren (AP-1.3a).
+                        var pageId = String($item.attr('data-page-id'));
+                        var collapsedIds = cbdKlassenverzeichnisGeleseneCollapsedIds();
+                        var idx = collapsedIds.indexOf(pageId);
+                        if (istAufgeklappt) {
+                            if (idx !== -1) {
+                                collapsedIds.splice(idx, 1);
+                            }
+                        } else if (idx === -1) {
+                            collapsedIds.push(pageId);
+                        }
+                        cbdKlassenverzeichnisSchreibeCollapsedIds(collapsedIds);
                     });
             } else {
                 $pagesContainer.append('<p class="cbd-no-pages">Keine behandelten Blöcke vorhanden.</p>');
