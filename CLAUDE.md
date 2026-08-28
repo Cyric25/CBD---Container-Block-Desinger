@@ -1134,6 +1134,65 @@ Details je Befund und die vollständigen Übergabenotizen der Phase-1-APs:
 `reference_file_map.md`, Zeilen zu `classroom-frontend.css` und zu
 `classroom-frontend.js`/`classroom-page-filter.js`.
 
+## Klassenmodus-Anmeldebaum: Theme-Akzentfarbe statt Grün (Phase 1 von `PLAN-Fragenwand.md`, seit 2026-08-28)
+
+Die Randlinien der Kapitelkarten und Gruppenköpfe im Klassenmodus-Anmeldebaum
+(`[cbd_classroom]`-Shortcode, `render_classroom_shortcode()` in
+`class-cbd-classroom.php`) waren bislang hartcodiert grün (`#4caf50` und
+Abstufungen). Seit diesem Vorhaben definiert `class-cbd-classroom.php` die
+neue private Methode `classroom_accent_inline_css()`, die
+`get_theme_mod('color_ui_surface', '#e24614')` liest und den Wert als
+CSS-Custom-Property `--cbd-classroom-accent` per
+`wp_add_inline_style('cbd-classroom-frontend', ...)` an allen drei
+bestehenden `wp_enqueue_style('cbd-classroom-frontend', ...)`-Stellen setzt
+(einmal in `render_classroom_shortcode()`, zweimal in
+`enqueue_frontend_assets()`) — dasselbe Muster, das im Projekt bereits an
+anderer Stelle etabliert ist (`Plugins/Eigene WP Blocks/CLAUDE.md`,
+Abschnitt „Buttons mit Theme-Farben", Muster A). In `classroom-frontend.css`
+sind genau sieben Randlinien-Fundstellen
+(`.cbd-classroom-parent-title`, `.cbd-classroom-parent-header`,
+`.cbd-classroom-page-item.cbd-level-0` bis `-5`,
+`.cbd-classroom-page-item:hover` — nur die `border-color`-Zeile, nicht
+`box-shadow`) von hartcodierten Grünwerten auf
+`var(--cbd-classroom-accent, #e24614)` umgestellt. Details: `PLAN-Fragenwand.md`,
+AP-1.1/AP-1.rev.
+
+### Bekannte, bewusst akzeptierte Einschränkungen
+
+Aus dem unabhängigen Review AP-1.rev (`PLAN-Fragenwand.md`, Abschnitt 7 —
+kein kritischer oder mittlerer Befund, sechs geringe, kein Korrektur-AP
+nötig):
+
+1. **`classroom-frontend.css:874-881`** — der Kommentar über der Sektion
+   „LOGIN-LISTE: KLAPPBARE BAUMSTRUKTUR" behauptet weiterhin fälschlich,
+   `--cbd-classroom-accent` sei „bewusst nirgends definiert". Das war bis
+   AP-1.1 korrekt, seither ist die Variable real gesetzt (siehe oben) — der
+   Kommentar ist noch nicht nachgezogen. Reine Kommentarpflege, kein
+   Funktionsrisiko.
+2. **`classroom-frontend.css:946`** (`.cbd-classroom-page-row:hover`) — der
+   Fallback bleibt `var(--cbd-classroom-accent, #4caf50)` statt `#e24614`;
+   laut Plan zulässig, da der Fallback nur greift, wenn das Inline-Style aus
+   Schritt 1 einmal fehlt.
+3. Auf einer `[cbd_classroom]`-Seite wird die Inline-Style-Zeile durch zwei
+   parallel laufende Enqueue-Zweige doppelt ausgegeben (zwei identische
+   `<style>`-Anweisungen statt einer) — kosmetisch, kein Fehlverhalten.
+4. `classroom_accent_inline_css()` sichert den Customizer-Farbwert mit
+   `esc_attr()` statt `sanitize_hex_color()` ab. Entspricht dem im Projekt
+   bereits dokumentierten Muster A (siehe oben); unkritisch, da der Wert aus
+   dem eigenen Customizer stammt, nicht aus Nutzereingabe.
+5. **`classroom-frontend.css:663`** (`.cbd-classroom-page-title`) und
+   **`:686`** (`.cbd-drawing-overlay`) tragen weiterhin grüne Rahmenregeln
+   (`#4caf50`) — waren nie Teil des AP-1.1-Scopes (siehe Nicht-Ziele in
+   `PLAN-Fragenwand.md`, Abschnitt 2), offener Punkt für ein künftiges AP.
+6. `CBD_VERSION` bleibt unverändert (`3.1.106`) — ein Versions-Bump für
+   Cache-Busting der geänderten CSS-Datei ist noch nicht erfolgt; sollte
+   spätestens beim finalen Plugin-ZIP-Bau berücksichtigt werden (siehe
+   `PLAN-Fragenwand.md`, AP-3.doc/AP-4.doc).
+
+Details und die vollständige Übergabenotiz: `PLAN-Fragenwand.md`, Abschnitt
+7, AP-1.1/AP-1.rev. Datei-Referenz: `reference_file_map.md`, Zeile zu
+`classroom-frontend.css`.
+
 ## Aktionsleiste: Sichtbarkeit, Verschachtelung, Behandelt-Dialog
 
 Die Leiste oben rechts im Container (`.cbd-action-buttons`) erscheint per
