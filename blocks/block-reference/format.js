@@ -576,7 +576,15 @@
 			// zusammenhaengenden Lauf desselben Format-Objekts ausgeweitet).
 			// Der Knopf bleibt in genau diesem Fall bedienbar - deaktiviert
 			// wird nur, wenn es wirklich nichts zu tun gibt.
-			disabled: leer && !istAktiv
+			//
+			// `isDisabled` zusaetzlich zu `disabled` (Fund beim Bauen von
+			// assets/js/fragenwand-format.js, PLAN-Fragenwand.md AP-3.1):
+			// Formate ohne eigenen `name`-Prop landen im Werkzeugleisten-
+			// Ueberlaufmenue "Mehr" unter `DropdownMenu`, und diese Komponente
+			// liest `isDisabled`, nicht `disabled` - ohne den zweiten Prop
+			// bliebe der Menueeintrag dort klickbar, obwohl deaktiviert.
+			disabled: leer && !istAktiv,
+			isDisabled: leer && !istAktiv
 		});
 
 		var dialog = null;
