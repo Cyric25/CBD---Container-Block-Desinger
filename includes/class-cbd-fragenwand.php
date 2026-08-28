@@ -21,6 +21,13 @@
  * andere mitziehen — sonst sähen Lehrperson und Klasse dieselbe Wand in
  * unterschiedlicher Reihenfolge.
  *
+ * SEIT AP-3.1 kommt eine dritte, mit der Datenschicht nicht verwandte Aufgabe
+ * dazu: `register_editor_format()` meldet auf `enqueue_block_editor_assets`
+ * das Textformat „Fragenwand-Verweis" (`assets/js/fragenwand-format.js`) an.
+ * Es steht hier und nicht in einer eigenen Klasse, weil der Plan die Fragenwand
+ * bewusst in EINER Klasse bündelt und der Editor-Teil nur aus einer
+ * Script-Registrierung besteht.
+ *
  * @package ContainerBlockDesigner
  * @since Vorhaben „Fragenwand", Phase 2 (AP-2.2/AP-2.3) — CBD_VERSION bei Anlage 3.1.106
  */
@@ -56,6 +63,20 @@ class CBD_Fragenwand {
 
     /** HTTP-Status jeder Ablehnung. */
     const REST_FEHLERSTATUS = 404;
+
+    /**
+     * Handle des Editor-Scripts für das Textformat „Fragenwand-Verweis".
+     *
+     * @since AP-3.1
+     */
+    const FORMAT_HANDLE = 'cbd-fragenwand-format';
+
+    /**
+     * Pfad des Format-Scripts, relativ zum Plugin-Verzeichnis.
+     *
+     * @since AP-3.1
+     */
+    const FORMAT_SCRIPT = 'assets/js/fragenwand-format.js';
 
     /**
      * Singleton instance
@@ -94,6 +115,81 @@ class CBD_Fragenwand {
         add_action('wp_ajax_cbd_fragenwand_delete_note', array($this, 'ajax_fragenwand_delete_note'));
 
         add_action('rest_api_init', array($this, 'register_rest_route'));
+
+        // AP-3.1: Das Textformat „Fragenwand-Verweis" im Block-Editor.
+        // `enqueue_block_editor_assets` feuert AUSSCHLIESSLICH im Editor —
+        // das Script gelangt damit nie ins Frontend.
+        add_action('enqueue_block_editor_assets', array($this, 'register_editor_format'));
+    }
+
+    // =========================================================================
+    // EDITOR: DAS TEXTFORMAT „FRAGENWAND-VERWEIS" (AP-3.1)
+    // =========================================================================
+
+    /**
+     * Das Format-Script anmelden und einreihen.
+     *
+     * ANMELDEN GENÜGT HIER NICHT — anders als beim Editor-Script eines Blocks:
+     * Jenes nennt `block.json` unter `editorScript`, WordPress reiht es
+     * deshalb selbst ein, sobald der Block im Editor gebraucht wird. Ein
+     * TEXTFORMAT hängt an keinem Block; niemand würde das Handle je
+     * einreihen. Deshalb beides in einem Schritt. (Vorbild:
+     * `CBD_Inline_Reference::register_format_script()`.)
+     *
+     * WARUM DIE ABHÄNGIGKEITEN VON HAND STEHEN: Das Plugin hat KEINEN
+     * Build-Schritt, also gibt es keine `index.asset.php`. Ohne die Liste
+     * registrierte WordPress das Script ohne Abhängigkeiten, und
+     * `wp.richText` wäre beim Ausführen womöglich noch nicht geladen.
+     * `wp-rich-text` muss ausdrücklich dabeistehen, auch wenn `wp-block-editor`
+     * es in der Praxis mitbringt — genau an dieser Auslassung hat das Plugin
+     * schon einmal gelitten (`class-cbd-block-reference.php:155-158`).
+     * Dasselbe gilt für `wp-data`: `fragenwand-format.js` ruft
+     * `wp.data.dispatch('core/notices')` auf, wenn auf der Markierung bereits
+     * ein `core/link` liegt. Auf die zufällige Mitlieferung durch
+     * `wp-block-editor` zu bauen ist genau die Fehlerfamilie, die der obige
+     * Kommentar beschreibt (Vorbild: AP-4.fix1 des Vorhabens
+     * „Inline-Blockreferenz").
+     *
+     * BEWUSST NICHT in der Liste: `wp-components` (kein Modal, kein Button —
+     * dieses Format hat keinen Auswahl-Dialog) und der Auswahlbaustein
+     * `cbd-block-auswahl` (es gibt genau EINE Fragenwand je Klasse, also
+     * nichts auszuwählen).
+     *
+     * @since AP-3.1
+     * @return void
+     */
+    public function register_editor_format() {
+        // Mehrfaches Einreihen ist harmlos, aber ein zweites
+        // `wp_register_script()` auf dasselbe Handle wäre wirkungslos und
+        // verschleierte einen Fehler — deshalb dieselbe Weiche wie im Vorbild.
+        if (wp_script_is(self::FORMAT_HANDLE, 'registered')) {
+            wp_enqueue_script(self::FORMAT_HANDLE);
+            return;
+        }
+
+        $pfad = CBD_PLUGIN_DIR . self::FORMAT_SCRIPT;
+
+        // Fehlt die Datei (unvollständiges Update), wird gar nichts
+        // registriert. Ein Handle ohne Datei ergäbe im Editor einen 404.
+        if (!file_exists($pfad)) {
+            return;
+        }
+
+        wp_register_script(
+            self::FORMAT_HANDLE,
+            CBD_PLUGIN_URL . self::FORMAT_SCRIPT,
+            array(
+                'wp-rich-text',    // registerFormatType, applyFormat, removeFormat
+                'wp-block-editor', // RichTextToolbarButton
+                'wp-element',      // createElement
+                'wp-i18n',         // __
+                'wp-data',         // wp.data.dispatch('core/notices') bei core/link-Konflikt
+            ),
+            defined('CBD_VERSION') ? CBD_VERSION : false,
+            true
+        );
+
+        wp_enqueue_script(self::FORMAT_HANDLE);
     }
 
     // =========================================================================
