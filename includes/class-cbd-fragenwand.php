@@ -15,7 +15,7 @@
  *   -> Datenbankoperation
  *
  * @package ContainerBlockDesigner
- * @since 3.1.107
+ * @since Vorhaben „Fragenwand", Phase 2 (AP-2.2) — CBD_VERSION bei Anlage 3.1.106
  */
 
 // Sicherheit: Direkten Zugriff verhindern
