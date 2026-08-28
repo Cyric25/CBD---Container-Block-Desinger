@@ -108,9 +108,24 @@ class CBD_Schema_Manager {
             KEY page_id (page_id)
         ) $charset_collate;";
 
+        $notes_table = $wpdb->prefix . 'cbd_notes';
+
+        $sql_notes = "CREATE TABLE IF NOT EXISTS $notes_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            class_id int(11) NOT NULL,
+            teacher_id bigint(20) unsigned NOT NULL,
+            text text NOT NULL,
+            ist_erledigt tinyint(1) DEFAULT 0,
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY class_id (class_id)
+        ) $charset_collate;";
+
         dbDelta($sql_classes);
         dbDelta($sql_class_pages);
         dbDelta($sql_drawings);
+        dbDelta($sql_notes);
 
         // Run migrations if needed
         self::run_migrations();
