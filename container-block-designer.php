@@ -137,6 +137,11 @@ class ContainerBlockDesigner {
 
         // Classroom System (Klassen-System) - optionales Feature
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-classroom.php';
+        // Fragenwand: klassenspezifische Notizen (Tabelle CBD_TABLE_NOTES).
+        // Nutzt Nonce und Zugriffsmuster des Klassenmodus, registriert aber
+        // eigene AJAX-Actions und instanziiert sich selbst (Singleton am
+        // Dateiende, wie class-cbd-classroom.php).
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-fragenwand.php';
         // Muss NACH class-cbd-classroom.php kommen: Der Durchlass ruft
         // CBD_Classroom::is_enabled() und ::behandelte_container().
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-classroom-gate.php';
