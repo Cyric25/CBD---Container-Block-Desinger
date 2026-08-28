@@ -166,7 +166,7 @@ class CBD_Fragenwand {
 
         $rows = $wpdb->get_results($wpdb->prepare(
             'SELECT id, `text`, ist_erledigt FROM ' . CBD_TABLE_NOTES .
-            ' WHERE class_id = %d ORDER BY ist_erledigt ASC, created_at ASC',
+            ' WHERE class_id = %d ORDER BY ist_erledigt ASC, created_at ASC, id ASC',
             $class_id
         ));
 
