@@ -1134,6 +1134,179 @@ Details je Befund und die vollständigen Übergabenotizen der Phase-1-APs:
 `reference_file_map.md`, Zeilen zu `classroom-frontend.css` und zu
 `classroom-frontend.js`/`classroom-page-filter.js`.
 
+## Fragenwand: Datenschicht (Phase 2 von `PLAN-Fragenwand.md`, seit 2026-08-28)
+
+Lehrpersonen sollen im Klassenmodus klassenweit offene Fragen sammeln und
+nach und nach abhaken können („Fragenwand" — ein Post-it-Brett je Klasse,
+ohne Bezug zu einzelnen Seiten oder Containern). Phase 2 des Vorhabens legt
+ausschließlich die **Datenschicht** (Tabelle, Lehrer-AJAX, Schüler-REST) —
+noch ohne Editor-Verweis und Frontend-Modal, die kommen in Phase 3/4
+desselben Plans.
+
+### Tabelle `wp_cbd_notes`
+
+Neue, eigenständige Tabelle (Konstante `CBD_TABLE_NOTES`, definiert in
+`container-block-designer.php` direkt nach `CBD_TABLE_DRAWINGS`), strukturell
+an `wp_cbd_drawings` angelehnt, aber **ohne** `page_id`/`container_id`-Bezug —
+die Fragenwand ist klassenweit, nicht seitenbezogen. Bewusst **keine** eigene
+Reihenfolge-Spalte: Es gibt genau eine Wand je Klasse, sortiert wird rein per
+Abfrage.
+
+| Spalte | Typ | Bedeutung |
+|---|---|---|
+| `id` | int, AUTO_INCREMENT | Primärschlüssel |
+| `class_id` | int | Klasse (`wp_cbd_classes.id`), indiziert |
+| `teacher_id` | bigint unsigned | Ersteller der Notiz |
+| `text` | text | Notiztext, max. 5000 Zeichen (serverseitig erzwungen, AP-2.fix1) |
+| `ist_erledigt` | tinyint(1) | 0 = offen, 1 = abgehakt |
+| `created_at` | datetime | `CURRENT_TIMESTAMP` (MySQL-eigene Zeit) |
+| `updated_at` | datetime | `ON UPDATE CURRENT_TIMESTAMP`, beim Ändern zusätzlich explizit über `current_time('mysql')` (WordPress-Zeitzone) gesetzt — siehe Einschränkung 2 unten |
+
+`CBD_Schema_Manager::DB_VERSION` wurde für diese Tabelle bewusst **nicht**
+erhöht: `create_tables()` läuft nur bei Aktivierung/Reparatur, ein reiner
+Versions-Bump hätte die Tabelle auf bereits aktualisierten Installationen
+nicht automatisch nachgezogen.
+
+### Zugriffsschicht: `CBD_Fragenwand` (`includes/class-cbd-fragenwand.php`)
+
+Singleton nach demselben Muster wie `CBD_Classroom` (Instanzierung am
+Dateiende). Zwei vollständig getrennte Lesewege für dieselbe Tabelle:
+
+| Weg | Wer | Wie | Methode |
+|---|---|---|---|
+| AJAX | angemeldete Lehrperson, `cbd_edit_blocks` | fünf `wp_ajax_cbd_fragenwand_*`-Actions, **kein** `nopriv`-Gegenstück | `ajax_fragenwand_get_notes()` u. a. |
+| REST | Schüler in laufender Klassensitzung | `GET cbd/v1/fragenwand`, `permission_callback` `'__return_true'` | `rest_get_notes_for_student()` |
+
+**Beide Lesewege sortieren identisch:** `ORDER BY ist_erledigt ASC,
+created_at ASC, id ASC` (offene zuerst, älteste zuerst; `id` als Tiebreaker
+gegen zwei in derselben Sekunde angelegte Notizen). Wer die Sortierung an
+einer Stelle ändert, muss die andere mitziehen — sonst sähen Lehrperson und
+Klasse dieselbe Wand in unterschiedlicher Reihenfolge.
+
+#### Die fünf Lehrer-AJAX-Actions
+
+| Action | Zweck |
+|---|---|
+| `cbd_fragenwand_get_notes` | alle Notizen einer Klasse lesen |
+| `cbd_fragenwand_add_note` | neue Notiz anlegen |
+| `cbd_fragenwand_toggle_note` | abhaken/zurücksetzen (Umschalter) |
+| `cbd_fragenwand_edit_note` | Text ändern |
+| `cbd_fragenwand_delete_note` | löschen |
+
+Guard-Kette in **jeder** der fünf Methoden, in dieser Reihenfolge (Vorbild
+`CBD_Classroom::ajax_save_drawing()`): `check_ajax_referer('cbd_classroom_nonce',
+'nonce')` → `current_user_can('cbd_edit_blocks')` → Parametervalidierung →
+Zugriffsprüfung auf die Klasse → Datenbankoperation. Nonce und Capability
+sind in `guard_lehrperson()` gebündelt.
+
+`can_access_class()` ist eine bewusste, wortgleiche Kopie der gleichnamigen
+`private`-Methode aus `CBD_Classroom` (Prüfung: Besitzer über
+`CBD_TABLE_CLASSES`/`teacher_id`, sonst Abonnent über Usermeta
+`cbd_subscribed_classes`) — die produktiv genutzte Bestandsklasse bleibt
+dafür unverändert (dieselbe Art bewusster kleiner Duplikation wie bei der
+dreifachen `stableId`-Extraktion, siehe dort).
+
+#### Sicherheitskern: `class_id` kommt bei Einzelnotizen NIE aus dem Request
+
+Für die drei Operationen auf einer einzelnen Notiz (abhaken, bearbeiten,
+löschen) ermittelt `require_note_access(int $note_id)` die zugehörige
+`class_id` **ausschließlich aus der Datenbankzeile der Notiz**, niemals aus
+`$_POST['class_id']`. Ein manipulierter `class_id`-Parameter kann die
+Berechtigungsprüfung also nicht gegen eine eigene Klasse laufen lassen,
+während `note_id` zu einer fremden Klasse gehört (Confused-Deputy-Schutz).
+Live gegengeprüft in AP-2.2 und unabhängig erneut in AP-2.rev (eigens
+angelegte Fremdklasse, gefälschter `class_id`-Parameter auf eine fremde
+Notiz — abgewiesen, Notiz unverändert).
+
+**Schreib-Rückgabewerte und Textlänge (AP-2.fix1, behobener Bug — kein
+offener Befund):** AP-2.rev fand live reproduzierbar, dass `add_note()` und
+die drei Einzelnotiz-Operationen die Rückgabewerte von
+`$wpdb->insert()`/`$wpdb->query()`/`$wpdb->delete()` nicht prüften — eine
+100.000-Zeichen-Notiz ließ den Insert unter `STRICT_TRANS_TABLES`
+fehlschlagen, der Endpunkt meldete trotzdem `{"success":true,"data":{"id":0}}`
+(eine „Phantom-Notiz", die auf einer späteren Phase-3-Oberfläche als
+gespeichert erschienen wäre, ohne in der Datenbank zu existieren). Behoben:
+`add_note()`/`edit_note()` lehnen Text über 5000 Zeichen (`mb_strlen()`) mit
+einer klaren Fehlermeldung ab, und alle vier schreibenden Methoden prüfen
+ihren `$wpdb`-Rückgabewert auf `false` und melden dann `success: false`
+statt einer unbedingten Erfolgsmeldung.
+
+### Schüler-Lesezugriff: `GET cbd/v1/fragenwand`
+
+Vorbild ist `CBD_Block_Content_API` (`cbd/v1/block-html`): eine öffentlich
+erreichbare Route mit `permission_callback => '__return_true'`, deren
+gesamte Autorisierung im Callback steckt, plus eine einzige, zeichengleiche
+Ablehnung für jeden Fehlschlag.
+
+**Die Kette, in dieser Reihenfolge — jeder Fehlschlag endet sofort in
+derselben Ablehnung:**
+
+1. `nocache_headers()` — immer und als Erstes, ohne Bedingung.
+2. `CBD_Classroom_Gate` und dessen Methode `sitzung()` müssen existieren.
+3. `CBD_Classroom_Gate::sitzung()` liefert eine gültige Sitzung. Die Methode
+   ist **parameterlos** und liest `?classroom=`/`?token=` selbst aus
+   `$_GET`; Rückgabe ist `array('class_id' => int, 'class_name' => string)`
+   oder **`null`** (nicht `false`) bei fehlender/ungültiger Sitzung.
+4. `class_id` aus der Sitzung ist `> 0`.
+
+Erfolgsantwort: `{"notes":[{"id":…, "text":…, "ist_erledigt":…}, …]}` — **nur
+diese drei Felder** je Notiz (Minimalprinzip, kein `class_id`/`teacher_id`/
+Zeitstempel). Jeder Fehlschlag: HTTP 404,
+`{"code":"cbd_fragenwand_not_available","message":"Die Fragenwand ist nicht
+verfügbar."}` — zeichengleich für jede Ursache (Klasse existiert nicht,
+Sitzung abgelaufen, Token gefälscht, `?classroom=` passt nicht zum Token).
+Unterschiedliche Antworten wären ein Werkzeug, um durch Durchprobieren
+Klassen-IDs oder Tokens zu erraten.
+
+**Anders als bei `cbd/v1/block-html` gibt es hier keine zweite,
+objektbezogene Freigabeprüfung:** Für die Fragenwand existiert kein
+Äquivalent zu einem „freigegebenen Container" — es gibt genau eine Wand je
+Klasse, und jede ihrer Notizen ist für deren Schüler bestimmt.
+
+Bewusst **ohne** `args`-Deklaration an der Route: Eine Typangabe
+(`'type' => 'integer'`) hätte bei `?classroom=abc` eine abweichende
+HTTP-400-Antwort (`rest_invalid_param`) erzeugt — genau die Unterscheidbarkeit,
+die die einheitliche 404 verhindern soll.
+
+### Ansatzpunkt für künftige Erweiterungen
+
+Eine spätere Erweiterung um **mehrere Fragenwände je Klasse** (explizit ein
+Nicht-Ziel dieses Vorhabens, siehe `PLAN-Fragenwand.md`, Abschnitt 2) müsste
+`wp_cbd_notes` um eine Wand-Kennung erweitern und beide Lesewege
+(`ajax_fragenwand_get_notes()`, `rest_get_notes_for_student()`) sowie die
+Zugriffsprüfung `require_note_access()` entsprechend anpassen — aktuell
+identifiziert `class_id` allein die gesamte Wand.
+
+### Bekannte, bewusst akzeptierte Einschränkungen
+
+Aus dem unabhängigen Review AP-2.rev (`PLAN-Fragenwand.md`, Abschnitt 7 —
+ein Befund Schweregrad mittel, sofort als AP-2.fix1 behoben, siehe oben;
+drei geringe Befunde, kein weiterer Korrektur-AP nötig):
+
+1. **`CREATE TABLE IF NOT EXISTS` in `class-schema-manager.php`** unterläuft
+   das Namensregex, mit dem `dbDelta()` eigentlich Existenz und
+   Spaltenänderungen erkennt. Bestandsmuster **aller vier**
+   Klassenmodus-Tabellen (`cbd_classes`, `cbd_class_pages`, `cbd_drawings`,
+   seit AP-2.1 auch `cbd_notes`) — nicht spezifisch für die neue Tabelle,
+   nicht in diesem Vorhaben entstanden.
+2. **Gemischte Zeitbasis:** `created_at` kommt aus MySQLs eigenem
+   `CURRENT_TIMESTAMP`, `updated_at` wird beim Ändern zusätzlich explizit
+   über `current_time('mysql')` (WordPress-Zeitzoneneinstellung) gesetzt.
+   Auf den meisten Installationen sind beide Uhren deckungsgleich, können
+   aber bei einer von UTC abweichenden WordPress-Zeitzone und einem
+   MySQL-Server in einer anderen Zeitzone driften.
+3. **`CBD_Fragenwand` registriert seine Hooks im Konstruktor unbedingt**,
+   während `CBD_Classroom` sie hinter `is_enabled()` legt (dem
+   Klassenmodus-Schalter). Bewusste Folgeentscheidung, kein Fehler — die
+   Fragenwand-Endpunkte existieren also auch bei abgeschaltetem
+   Klassenmodus. Sollte die Fragenwand künftig an denselben Schalter
+   gekoppelt werden, wäre das ein eigenes, separates AP.
+
+Details je Befund und die vollständigen Übergabenotizen der Phase-2-APs:
+`PLAN-Fragenwand.md`, Abschnitt 7 (AP-2.1 bis AP-2.fix1). Datei-Referenz:
+`reference_file_map.md`, Zeilen zu `class-cbd-fragenwand.php`,
+`container-block-designer.php` und `class-schema-manager.php`.
+
 ## Aktionsleiste: Sichtbarkeit, Verschachtelung, Behandelt-Dialog
 
 Die Leiste oben rechts im Container (`.cbd-action-buttons`) erscheint per
