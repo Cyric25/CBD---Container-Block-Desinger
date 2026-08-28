@@ -14,7 +14,7 @@ Datei-Map des Projekts; Theme und „Eigene WP Blocks" hatten längst eine.
 
 | Datei | Zweck | Wichtige Funktionen/Inhalte | Hängt ab von |
 |---|---|---|---|
-| `container-block-designer.php` | Hauptdatei, Singleton `ContainerBlockDesigner` | Konstanten (`CBD_VERSION`, `CBD_PLUGIN_DIR`, `CBD_TABLE_BLOCKS`), `load_dependencies()` mit allen `require_once`, `init()` auf `init` Priorität 0, `create_block_editor_role()` | `includes/*` |
+| `container-block-designer.php` | Hauptdatei, Singleton `ContainerBlockDesigner` | Konstanten (`CBD_VERSION`, `CBD_PLUGIN_DIR`, `CBD_TABLE_BLOCKS`, seit Vorhaben „Fragenwand" AP-2.1 zusätzlich `CBD_TABLE_NOTES`), `load_dependencies()` mit allen `require_once`, `init()` auf `init` Priorität 0, `create_block_editor_role()` | `includes/*` |
 | `composer.json` / `composer.lock` | Abhängigkeiten (mPDF, TCPDF-Rückfall, Dev: phpunit, wpcs) | – | – |
 | `create-plugin-zip.js` | Verteilungspaket bauen | erhöht die Version selbstständig, ruft vorher `tools/check-php74.php`, stellt **`composer dump-autoload --no-dev`** her und danach wieder den Dev-Autoloader. **Diesen Schritt nie entfernen** — ein Autoloader mit Dev-Paketen bindet phpunit ein und ergibt HTTP 500 auf der Zielinstallation. Schließt seit AP-1.fix3 zusätzlich `vendor/bin/` und `vendor/mpdf/mpdf/phpunit.xml` über ein eigenes `excludeExactPaths`-Array aus — **pfadgenau, nicht per Segmentname**, damit kein künftiger `bin`-Ordner außerhalb von `vendor/` versehentlich mitentfällt | `tools/check-php74.php` |
 | `syntax-check.js` | `php -l` über alle Plugin-Dateien | – | – |
@@ -58,7 +58,7 @@ Datei-Map des Projekts; Theme und „Eigene WP Blocks" hatten längst eine.
 
 | Datei | Zweck | Wichtige Funktionen/Inhalte | Hängt ab von |
 |---|---|---|---|
-| `class-schema-manager.php` | Schema und Migrationen | `DB_VERSION` (3.1.61), `CREATE TABLE` für `cbd_blocks` und `cbd_classes`, `run_migrations()`. **Legt `slug` NICHT an** und benennt eine vorgefundene `slug`-Spalte nach `name` um — während `CBD_Admin::handle_database_repair()` `slug` als Pflichtspalte führt. Bekannte Unstimmigkeit, siehe `docs/archiv/PLAN-Seitenimport.md`, AP-1.0.fix1 | – |
+| `class-schema-manager.php` | Schema und Migrationen | `DB_VERSION` (3.1.61, seit Vorhaben „Fragenwand" AP-2.1 bewusst NICHT erhöht), `CREATE TABLE` für `cbd_blocks`, `cbd_classes`, `cbd_class_pages`, `cbd_drawings` und seit AP-2.1 zusätzlich `cbd_notes` (klassenweite Fragenwand-Notizen, kein `page_id`/`container_id`-Bezug, Sortierung rein per Abfrage statt eigener Reihenfolge-Spalte), `run_migrations()`. **Legt `slug` NICHT an** und benennt eine vorgefundene `slug`-Spalte nach `name` um — während `CBD_Admin::handle_database_repair()` `slug` als Pflichtspalte führt. Bekannte Unstimmigkeit, siehe `docs/archiv/PLAN-Seitenimport.md`, AP-1.0.fix1 | – |
 
 ## Admin-Ansichten (`admin/`)
 
