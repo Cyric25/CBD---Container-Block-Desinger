@@ -244,15 +244,29 @@ class CBD_Fragenwand {
         if ('' === $text) {
             wp_send_json_error(array('message' => 'Text darf nicht leer sein.'));
         }
+        // AP-2.fix1 (Befund AP-2.rev, Schweregrad mittel): Ohne Längenbegrenzung
+        // konnte eine sehr lange Notiz je nach sql_mode entweder abgelehnt oder
+        // stillschweigend abgeschnitten werden. Eine feste Obergrenze verhindert
+        // beides und gibt eine klare Fehlermeldung statt eines DB-Fehlers.
+        if (mb_strlen($text) > 5000) {
+            wp_send_json_error(array('message' => 'Text ist zu lang (maximal 5000 Zeichen).'));
+        }
 
         global $wpdb;
 
-        $wpdb->insert(CBD_TABLE_NOTES, array(
+        $eingefuegt = $wpdb->insert(CBD_TABLE_NOTES, array(
             'class_id'     => $class_id,
             'teacher_id'   => get_current_user_id(),
             'text'         => $text,
             'ist_erledigt' => 0,
         ));
+
+        // AP-2.fix1: $wpdb->insert() liefert false bei einem DB-Fehler. Ohne
+        // diese Prüfung meldete der Endpunkt live nachgewiesen "success" mit
+        // "id":0, obwohl gar keine Zeile entstanden war (Phantom-Notiz).
+        if (false === $eingefuegt) {
+            wp_send_json_error(array('message' => 'Speichern fehlgeschlagen.'));
+        }
 
         wp_send_json_success(array('id' => (int) $wpdb->insert_id));
     }
@@ -277,10 +291,18 @@ class CBD_Fragenwand {
 
         global $wpdb;
 
-        $wpdb->query($wpdb->prepare(
+        $ergebnis = $wpdb->query($wpdb->prepare(
             'UPDATE ' . CBD_TABLE_NOTES . ' SET ist_erledigt = 1 - ist_erledigt, updated_at = %s WHERE id = %d',
             current_time('mysql'), $note_id
         ));
+
+        // AP-2.fix1: $wpdb->query() liefert false bei einem DB-Fehler
+        // (0 betroffene Zeilen ist dagegen kein Fehler, kann aber praktisch
+        // nicht auftreten, da require_note_access() die Existenz bereits
+        // geprüft hat).
+        if (false === $ergebnis) {
+            wp_send_json_error(array('message' => 'Speichern fehlgeschlagen.'));
+        }
 
         wp_send_json_success();
     }
@@ -303,13 +325,20 @@ class CBD_Fragenwand {
         if ('' === $text) {
             wp_send_json_error(array('message' => 'Text darf nicht leer sein.'));
         }
+        if (mb_strlen($text) > 5000) {
+            wp_send_json_error(array('message' => 'Text ist zu lang (maximal 5000 Zeichen).'));
+        }
 
         global $wpdb;
 
-        $wpdb->query($wpdb->prepare(
+        $ergebnis = $wpdb->query($wpdb->prepare(
             'UPDATE ' . CBD_TABLE_NOTES . ' SET `text` = %s, updated_at = %s WHERE id = %d',
             $text, current_time('mysql'), $note_id
         ));
+
+        if (false === $ergebnis) {
+            wp_send_json_error(array('message' => 'Speichern fehlgeschlagen.'));
+        }
 
         wp_send_json_success();
     }
@@ -330,7 +359,11 @@ class CBD_Fragenwand {
 
         global $wpdb;
 
-        $wpdb->delete(CBD_TABLE_NOTES, array('id' => $note_id));
+        $geloescht = $wpdb->delete(CBD_TABLE_NOTES, array('id' => $note_id));
+
+        if (false === $geloescht) {
+            wp_send_json_error(array('message' => 'Löschen fehlgeschlagen.'));
+        }
 
         wp_send_json_success();
     }
