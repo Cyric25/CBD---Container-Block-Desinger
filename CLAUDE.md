@@ -1366,6 +1366,132 @@ Details je Befund und die vollständigen Übergabenotizen der Phase-2-APs:
 `reference_file_map.md`, Zeilen zu `class-cbd-fragenwand.php`,
 `container-block-designer.php` und `class-schema-manager.php`.
 
+### Editor-Verweis, Modal, Klassenauswahl (Phase 3, seit 2026-08-28)
+
+Phase 3 desselben Vorhabens macht die Datenschicht oben bedienbar: ein
+Inline-Textformat im Editor, ein Frontend-Modal mit Lehrer-Klassenauswahl
+und Verwaltungscontrols, sowie eine Schüler-Leseansicht.
+
+**Editor-Seite (AP-3.1):** `assets/js/fragenwand-format.js` registriert das
+Inline-Textformat **`cbd/fragenwand-verweis`** (`registerFormatType`,
+`tagName: 'a'`, Klasse `cbd-fragenwand-verweis`). Anders als beim Vorbild
+`cbd/block-reference-inline` gibt es **kein Ziel auszuwählen** — nur eine
+Fragenwand je Klasse —, deshalb wendet der Werkzeugleisten-Knopf
+(`RichTextToolbarButton`) das Format direkt an bzw. entfernt es, ganz ohne
+Auswahl-Dialog. Gespeichert wird ausschließlich
+`<a class="cbd-fragenwand-verweis" href="#">Text</a>`, **kein**
+`data-target-*`-Attribut — es gibt nichts Zielabhängiges zu speichern, also
+auch keinen serverseitigen Auffrisch-Filter analog
+`CBD_Inline_Reference::inhalt_auffrischen()`. Registriert und eingereiht von
+`CBD_Fragenwand::register_editor_format()` auf `enqueue_block_editor_assets`.
+
+**Frontend-Seite (AP-3.2/AP-3.3):** `assets/js/fragenwand-frontend.js` fängt
+per delegiertem Klick-Listener auf `document` jeden Klick auf ein Element
+mit der Klasse **`cbd-fragenwand-verweis`** ab — unabhängig davon, ob es aus
+dem Inline-Format im `post_content` stammt oder (ab Phase 4) aus dem
+Theme-Inhaltsverzeichnis. `window.CBDFragenwand` öffnet dazu ein
+Overlay-Modal; für eine Lehrperson zeigt `lehrerFlow()` zuerst eine
+Klassenauswahl (eigene, neue Funktion `zeigeKlassenauswahl()` nach dem
+optischen Vorbild von `showClassSelector()` in `board-mode.js`, aber ohne
+dessen Option „Persönlich (lokal)" und **ohne** diese Datei zu ändern oder
+aufzurufen), danach die verwaltbare Fragenwand der gewählten Klasse
+(anlegen/abhaken/bearbeiten/löschen über die vier Lehrer-AJAX-Actions aus
+Phase 2). Für einen Schüler in laufender Klassensitzung öffnet derselbe
+Klick direkt die reine Leseansicht über `GET cbd/v1/fragenwand`.
+
+**Rollen-Erkennung, vom Container-Block-Gate entkoppelt (AP-3.fix1):** In
+AP-3.2/AP-3.3 erkannte `fragenwand-frontend.js` eine Lehrperson noch an
+`window.cbdClassroomData` — dieses Objekt gibt
+`CBD_Block_Registration::enqueue_block_assets()` aber **nur auf Seiten mit
+mindestens einem Container-Block** aus (`frontend_has_container_block()`).
+Eine Seite mit ausschließlich einem Fragenwand-Verweis (oder, ab Phase 4,
+dem bloßen Inhaltsverzeichnis-Eintrag) hat oft keinen Container-Block —
+eine eingeloggte Lehrperson fiel dort fälschlich in den Schülerpfad. Seit
+AP-3.fix1 hat `CBD_Fragenwand` eine **eigene, unabhängige** Lehrer-Erkennung:
+`enqueue_frontend_assets()` ergänzt `cbdFragenwandFrontend` für angemeldete
+Nutzer mit `cbd_edit_blocks` um drei zusätzliche Schlüssel —
+**`classes`** (aus `CBD_Classroom::get_teacher_classes()`, aufgerufen hinter
+`class_exists('CBD_Classroom')` **vor** `method_exists()`, damit
+`CBD_Fragenwand` unabhängig von `CBD_Classroom` bleibt und ein fehlendes
+`CBD_Classroom` nur ein leeres Array statt eines Fatal Errors ergibt),
+**`ajaxUrl`** und **`nonce`** (`cbd_classroom_nonce`, zeichengleich mit
+`class-cbd-block-registration.php`). Die bloße Existenz von
+`cbdFragenwandFrontend.classes` gilt als Lehrer-Signal, auch bei leerer
+Liste — eine Lehrperson ohne Klassen ist immer noch eine Lehrperson.
+`window.cbdClassroomData` bleibt dabei unverändert (Tafelmodus und
+„Behandelt"-Button hängen weiter daran) und dient in
+`fragenwand-frontend.js` nur noch als Rückfall.
+`class-cbd-block-registration.php` und `board-mode.js` blieben über die
+gesamte Phase 3 unverändert (per `git diff`/Blob-Hash-Vergleich bestätigt).
+
+**Editor-iFrame-Styling, eine Besonderheit (AP-3.4):** Der Block-Editor
+rendert seit WordPress 5.9 in einem eigenen `<iframe>` (`editor-canvas`).
+Ein gewöhnliches `wp_enqueue_style()` in `register_editor_format()` (für
+die minimale Editor-Kennzeichnung `assets/css/fragenwand-editor.css` —
+gepunktete Unterstreichung auf `a.cbd-fragenwand-verweis`, sonst wäre der
+Verweis im Editor nicht von normalem Text zu unterscheiden) **erreicht
+dieses iFrame nicht**. Der Fix ist eine zweite, neue Methode
+`inject_editor_style_into_iframe(array $settings): array` am Filter
+`block_editor_settings_all` — der offizielle WordPress-Weg, um
+`$settings['styles']` direkt mit Dateiinhalt zu füllen und so Editor-CSS
+tatsächlich ins iFrame zu bekommen. Das Frontend-CSS
+(`assets/css/fragenwand.css`, Post-it-Optik, Ausgrauen erledigter Notizen,
+Klassenauswahl-Dialog) wird davon unabhängig ganz gewöhnlich über
+`enqueue_frontend_assets()` eingereiht — dort reicht der normale Weg, weil
+das Frontend kein iFrame ist.
+
+#### Bekannte, bewusst akzeptierte Einschränkungen
+
+Aus dem unabhängigen Review AP-3.rev (`PLAN-Fragenwand.md`, Abschnitt 7 —
+kein kritischer Befund, ein Befund Schweregrad mittel [Prozesspunkt, siehe
+unten], sieben geringe, kein Korrektur-AP nötig):
+
+1. **`reference_file_map.md`** fehlten Zeilen für `fragenwand.css`/
+   `fragenwand-editor.css`, und die Zeile zu `class-cbd-fragenwand.php` war
+   nur auf dem Stand von AP-3.fix1 — mit AP-3.doc nachgezogen (dieser
+   Abschnitt und die genannte Datei sind das Ergebnis).
+2. `CBD_VERSION` blieb bis zum AP-3.doc-ZIP-Bau bei `3.1.106` — der
+   Cache-Busting-Versions-Bump für die neuen/geänderten Frontend-Assets
+   erfolgte planmäßig erst beim finalen Plugin-ZIP-Bau, nicht bei jedem
+   einzelnen AP.
+3. `inject_editor_style_into_iframe(array $settings): array` nutzt einen
+   strikten Typhint auf einem WordPress-Filter-Callback — funktioniert,
+   aber unüblich für dieses Projekt.
+4. Der Klassenauswahl-Dialog (`zeigeKlassenauswahl()`) hat **keine**
+   Fokusfalle/Fokusrückgabe wie das Hauptmodal (`window.CBDFragenwand.open()`)
+   — Tab kann den Dialog verlassen, der Fokus kehrt beim Schließen nicht
+   gezielt zum Auslöser zurück.
+5. Die Lehrer-Oberfläche (`TEXTE_VORGABE` in `fragenwand-frontend.js`, ab
+   „klassenwahlTitel") ist **nicht** übersetzbar — anders als die
+   Schüler-/Fehlertexte, die über `enqueue_frontend_assets()`/`wp_localize_script()`
+   und `__()` laufen.
+6. **Kein Duplikatswächter** für die Klassenzeichenkette
+   `cbd-fragenwand-verweis`, die inzwischen an vier wirksamen Stellen steht
+   (`fragenwand-format.js`, `fragenwand-frontend.js`, `fragenwand.css`,
+   `fragenwand-editor.css`). Phase 3 hat außerdem keinen eigenen
+   `tools/test-*`-Prüfharnisch (im Projekt kein Pflichtbestandteil, siehe
+   `PLAN-Fragenwand.md`, Abschnitt 3).
+7. **Prozessual (der einzige Befund mit Schweregrad mittel):** Ein separat
+   vom Nutzer angestoßener, inhaltlich unrelated Bugfix (Commit `ad066df`,
+   „Block-Verweis-Knopf im Überlaufmenü…") wurde direkt auf dem
+   Branch `phase-3-editor-verweis` committet. Er behebt in
+   `blocks/block-reference/format.js` denselben `isDisabled`-Fehler, den
+   `fragenwand-format.js` von Anfang an vermieden hatte (siehe Abschnitt
+   „Blockreferenz als Textformat und hierarchische Zielauswahl" weiter
+   unten für die inhaltliche Beschreibung dieses Fixes) — der Commit ist
+   **kein Teil des Fragenwand-Vorhabens**, bleibt aber laut
+   Orchestrator-Entscheidung auf dem Branch und wird beim Merge nach `main`
+   ausdrücklich als solcher vermerkt mitgenommen. Zusätzlich enthielt das
+   Theme-Repository zu diesem Zeitpunkt bereits AP-4.1, obwohl Phase 3 noch
+   nicht formal abgenommen war — unkritisch, da AP-4.1 keine Abhängigkeit
+   zu Phase 3 hat.
+
+Details je Befund und die vollständigen Übergabenotizen der Phase-3-APs:
+`PLAN-Fragenwand.md`, Abschnitt 7 (AP-3.1 bis AP-3.rev). Datei-Referenz:
+`reference_file_map.md`, Zeilen zu `class-cbd-fragenwand.php`,
+`fragenwand-format.js`, `fragenwand-frontend.js`, `fragenwand.css` und
+`fragenwand-editor.css`.
+
 ## Aktionsleiste: Sichtbarkeit, Verschachtelung, Behandelt-Dialog
 
 Die Leiste oben rechts im Container (`.cbd-action-buttons`) erscheint per
@@ -2316,6 +2442,23 @@ ein eingeschränktes `allowedFormats`-Array; `withoutInteractiveFormatting`
 filtert jedes Format heraus, dessen `tagName` in `interactiveContentTags`
 steht, und `a` gehört dazu. Das ist eine Eigenschaft von Gutenberg selbst,
 kein Befund dieses Vorhabens.
+
+### Randnotiz: `isDisabled` zusätzlich zu `disabled` am Werkzeugleisten-Knopf
+
+`RichTextToolbarButton` in `format.js` setzte ursprünglich nur `disabled`,
+nicht `isDisabled`. Ein Format ohne eigenen `name`-Prop landet im
+Werkzeugleisten-Überlaufmenü „Mehr" unter `DropdownMenu` — diese Komponente
+rendert die Fills nicht selbst, sondern reicht deren Props nur als
+`controls` weiter, und liest dabei `isDisabled`, nicht `disabled`. Ohne den
+zweiten Prop blieb der Menüeintrag dort bei leerer Markierung anklickbar,
+obwohl der Knopf in der normalen Werkzeugleiste korrekt deaktiviert
+erschien. Behoben (Commit `ad066df`, „Block-Verweis-Knopf im Überlaufmenü
+‚Mehr' bleibt nicht deaktiviert"): `disabled: leer && !istAktiv,
+isDisabled: leer && !istAktiv`. Gefunden beim Bau des unabhängigen Formats
+`cbd/fragenwand-verweis` (`PLAN-Fragenwand.md`, AP-3.1), das denselben
+Fehler zunächst reproduzierte, dort aber von Anfang an mit beiden Props
+vermieden wurde — der Fix hier ist ein separater, vom Nutzer angestoßener
+Bugfix am Bestandscode dieses Formats, kein Teil des Fragenwand-Vorhabens.
 
 ### Prüfharnische
 
