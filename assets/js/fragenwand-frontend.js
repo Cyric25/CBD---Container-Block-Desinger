@@ -23,14 +23,13 @@
  * Klassensitzung). Hier wird nur entschieden, WELCHER dieser beiden Wege
  * ueberhaupt versucht wird:
  *
- *   - `window.cbdClassroomData` vorhanden -> Lehrer-Modus. Das Objekt schreibt
- *     class-cbd-block-registration.php per Inline-Script im `wp_footer` nur
- *     fuer angemeldete Personen mit `cbd_edit_blocks` aus. Dann IMMER zuerst
- *     die Klassenauswahl - auch wenn zusaetzlich `?classroom=` in der Adresse
- *     steht: Eine Lehrperson, die eine Klassensitzung mitlaufen laesst, will
- *     nicht stillschweigend auf deren Wand festgelegt werden.
- *     Die Klassenauswahl selbst liefert AP-3.3 als `lehrerFlow` nach; bis
- *     dahin bleibt es bei einem Konsolenhinweis (siehe unten).
+ *   - `cbdFragenwandFrontend.classes` vorhanden -> Lehrer-Modus. Das Feld
+ *     setzt CBD_Fragenwand::enqueue_frontend_assets() nur fuer angemeldete
+ *     Personen mit `cbd_edit_blocks`. Dann IMMER zuerst die Klassenauswahl -
+ *     auch wenn zusaetzlich `?classroom=` in der Adresse steht: Eine
+ *     Lehrperson, die eine Klassensitzung mitlaufen laesst, will nicht
+ *     stillschweigend auf deren Wand festgelegt werden.
+ *     Die Klassenauswahl selbst liefert AP-3.3 als `lehrerFlow`.
  *   - sonst -> Schueler-/Besuchermodus. Die Klassen-ID wird hier NICHT
  *     ermittelt. Der Browser ruft `GET cbd/v1/fragenwand` mit der vorhandenen
  *     Abfragezeichenfolge auf; welche Klasse gemeint ist, liest
@@ -64,6 +63,27 @@
  *   3. `open()` nimmt ein drittes Argument `{verwaltbar: true}`. Damit werden
  *      die Haken bedienbar, jede Notiz bekommt „Bearbeiten"/„Loeschen", und
  *      unter der Liste steht ein Feld „Frage hinzufuegen".
+ *
+ * ---------------------------------------------------------------------------
+ * WAS AP-3.fix1 GEAENDERT HAT
+ * ---------------------------------------------------------------------------
+ *
+ * NUR DIE DATENQUELLE DES LEHRER-WEGS, kein sichtbares Verhalten. Bis dahin
+ * hingen Rollen-Erkennung, Klassenliste, AJAX-Adresse und Nonce an
+ * `window.cbdClassroomData`. Dieses Objekt schreibt
+ * class-cbd-block-registration.php aber NUR auf Seiten, die mindestens einen
+ * Container-Block enthalten (`frontend_has_container_block()`). Eine Seite mit
+ * ausschliesslich einem Fragenwand-Verweis im Fliesstext - ab Phase 4 auch der
+ * Eintrag im Inhaltsverzeichnis, der auf JEDER Seite erscheinen soll - hat
+ * oft keinen Container-Block; eine eingeloggte Lehrperson fiel dort in den
+ * Schuelerpfad und sah „Keine aktive Klassensitzung.".
+ *
+ * Alle vier Werte kommen jetzt aus `cbdFragenwandFrontend`, das
+ * `CBD_Fragenwand::enqueue_frontend_assets()` unbedingt auf jeder Seite
+ * ausgibt. `window.cbdClassroomData` bleibt unangetastet (Tafelmodus und der
+ * „Behandelt"-Knopf haengen weiter daran) und dient hier nur noch als
+ * Rueckfall fuer Adresse und Nonce, falls das neue Objekt sie einmal nicht
+ * mitbringt (etwa aus einem Seiten-Cache von vor diesem Stand).
  *
  * JEDE SCHREIBENDE AKTION LAEDT DIE LISTE DANACH NEU, statt das DOM selbst
  * fortzuschreiben: Die Reihenfolge (offene zuerst, aelteste zuerst) entsteht
@@ -328,19 +348,46 @@
 	 * Ist eine Lehrperson am Werk?
 	 *
 	 * Reiner Hinweis (siehe Kopfkommentar) - die Autorisierung liegt beim
-	 * Server. `window.cbdClassroomData` setzt
-	 * class-cbd-block-registration.php nur fuer Angemeldete mit
-	 * `cbd_edit_blocks` UND eingeschaltetem Klassensystem.
+	 * Server. Das Feld `classes` setzt
+	 * `CBD_Fragenwand::enqueue_frontend_assets()` nur fuer Angemeldete mit
+	 * `cbd_edit_blocks`.
 	 *
+	 * DIE BLOSSE EXISTENZ DES FELDES GENUEGT, seine Laenge zaehlt nicht: Eine
+	 * Lehrperson ohne Klassen ist immer noch eine Lehrperson und soll
+	 * „Keine Klassen vorhanden." zu sehen bekommen (`lehrerFlow()`), nicht
+	 * „Keine aktive Klassensitzung." aus dem Schuelerweg.
+	 *
+	 * Geprueft wird auf ein Array (`length` ist eine Zahl) statt nur auf
+	 * Wahrheitswert: Kaeme unter `classes` je etwas anderes an, waere ein
+	 * stiller Fehlschlag in `zeigeKlassenauswahl()` die Folge.
+	 *
+	 * @since AP-3.2, Datenquelle gewechselt in AP-3.fix1
 	 * @returns {boolean}
 	 */
 	function istLehrkraft() {
-		return 'undefined' !== typeof window.cbdClassroomData
-			&& !!window.cbdClassroomData;
+		var klassen = konfig().classes;
+		return !!klassen && 'number' === typeof klassen.length;
 	}
 
 	/**
-	 * Das Datenobjekt der Lehrperson.
+	 * Die Klassenliste der Lehrperson.
+	 *
+	 * @since AP-3.3, Datenquelle gewechselt in AP-3.fix1
+	 * @returns {Array}
+	 */
+	function klassenListe() {
+		var klassen = konfig().classes;
+		return (klassen && 'number' === typeof klassen.length) ? klassen : [];
+	}
+
+	/**
+	 * Das alte Lehrer-Datenobjekt - nur noch Rueckfall fuer Adresse und Nonce.
+	 *
+	 * Seit AP-3.fix1 liefert `cbdFragenwandFrontend` beides selbst. Gelesen
+	 * wird hier trotzdem weiter, falls eine Seite aus einem Cache von vor
+	 * diesem Stand stammt: Dort fehlen die neuen Schluessel, das
+	 * Inline-Script mit `window.cbdClassroomData` steht aber (auf Seiten mit
+	 * Container-Block) noch im Markup.
 	 *
 	 * @since AP-3.3
 	 * @returns {Object}
@@ -354,7 +401,7 @@
 	 * Eine Zahl aus einem Wert holen, der auch eine Zeichenkette sein kann.
 	 *
 	 * `wp_json_encode()` gibt die Spalten aus `$wpdb->get_results()` als
-	 * Zeichenketten aus - `window.cbdClassroomData.classes[i].id` ist also
+	 * Zeichenketten aus - `cbdFragenwandFrontend.classes[i].id` ist also
 	 * `"20"`, nicht `20`. Ohne diese Umwandlung stuende in `data-class-id`
 	 * zwar dasselbe, aber jeder Vergleich mit `===` liefe ins Leere.
 	 *
@@ -387,10 +434,12 @@
 	/**
 	 * Einen der fuenf Lehrer-AJAX-Endpunkte aus AP-2.2 aufrufen.
 	 *
-	 * Adresse und Nonce kommen aus `window.cbdClassroomData` - demselben
-	 * Objekt, an dem oben die Rollen-Erkennung haengt. Der Parametername
-	 * `nonce` ist Vorgabe: `check_ajax_referer('cbd_classroom_nonce', 'nonce')`
-	 * sucht genau darunter.
+	 * Adresse und Nonce kommen aus `cbdFragenwandFrontend` - demselben Objekt,
+	 * an dem seit AP-3.fix1 auch die Rollen-Erkennung haengt; nur wenn sie dort
+	 * fehlen, greift der Rueckfall auf `window.cbdClassroomData` (siehe
+	 * `klassenDaten()`). Der Parametername `nonce` ist Vorgabe:
+	 * `check_ajax_referer('cbd_classroom_nonce', 'nonce')` sucht genau darunter
+	 * - und der Nonce heisst auf beiden Wegen gleich, es ist derselbe.
 	 *
 	 * FEHLGESCHLAGENE NONCE-PRUEFUNGEN LANDEN IM FEHLERZWEIG, nicht im
 	 * Erfolgszweig: `check_ajax_referer()` beendet die Anfrage mit dem
@@ -405,8 +454,16 @@
 	 * @returns {void}
 	 */
 	function rufeAjax(action, felder, fertig, gescheitert) {
-		var daten = klassenDaten();
-		var url = ('string' === typeof daten.ajaxUrl) ? daten.ajaxUrl : '';
+		var eigen = konfig();
+		var alt = klassenDaten();
+
+		var url = ('string' === typeof eigen.ajaxUrl && '' !== eigen.ajaxUrl)
+			? eigen.ajaxUrl
+			: (('string' === typeof alt.ajaxUrl) ? alt.ajaxUrl : '');
+
+		var wort = ('string' === typeof eigen.nonce && '' !== eigen.nonce)
+			? eigen.nonce
+			: (alt.nonce || '');
 
 		if ('' === url
 			|| 'function' !== typeof window.fetch
@@ -418,7 +475,7 @@
 
 		var formular = new window.FormData();
 		formular.append('action', action);
-		formular.append('nonce', daten.nonce || '');
+		formular.append('nonce', wort);
 
 		for (var name in felder) {
 			if (Object.prototype.hasOwnProperty.call(felder, name)) {
@@ -1221,7 +1278,7 @@
 	 * @returns {void}
 	 */
 	function zeigeKlassenauswahl(callback) {
-		var klassen = klassenDaten().classes;
+		var klassen = klassenListe();
 
 		if (!klassen || !klassen.length) {
 			// Sollte `lehrerFlow()` bereits abgefangen haben - hier nur als
@@ -1357,9 +1414,9 @@
 			ausloeser = trigger;
 		}
 
-		var klassen = klassenDaten().classes;
+		var klassen = klassenListe();
 
-		if (!klassen || !klassen.length) {
+		if (!klassen.length) {
 			openMitMeldung(t('keineKlassen'), 'keine-klassen');
 			return;
 		}

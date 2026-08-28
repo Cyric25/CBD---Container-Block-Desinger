@@ -33,6 +33,13 @@
  * (`assets/js/fragenwand-frontend.js`) — unbedingt auf jeder Seite, weil der
  * Trigger ab Phase 4 auch außerhalb von `post_content` erscheinen kann.
  *
+ * SEIT AP-3.fix1 trägt dieselbe Methode zusätzlich die LEHRER-ERKENNUNG des
+ * Frontends: Für angemeldete Lehrpersonen mit `cbd_edit_blocks` kommen drei
+ * Schlüssel (`classes`, `ajaxUrl`, `nonce`) ins Datenobjekt. Vorher hing die
+ * Erkennung an `window.cbdClassroomData` — das nur auf Seiten MIT
+ * Container-Block ausgegeben wird. Begründung im Docblock von
+ * `lehrer_daten()`.
+ *
  * @package ContainerBlockDesigner
  * @since Vorhaben „Fragenwand", Phase 2 (AP-2.2/AP-2.3) — CBD_VERSION bei Anlage 3.1.106
  */
@@ -248,18 +255,20 @@ class CBD_Fragenwand {
      * Aufruf irgendwann auseinander. (Vorbild:
      * `CBD_Block_Reference::localize_view_script()`.)
      *
-     * KEIN NONCE: Der einzige Aufruf dieses Scripts geht an eine Route mit
-     * `permission_callback => '__return_true'`, deren gesamte Autorisierung
-     * an der Klassensitzung hängt (AP-2.3). Ein `wp_rest`-Nonce wäre für
-     * Schüler ohnehin wertlos (nicht angemeldet) und würde nur den Eindruck
-     * einer Absicherung erwecken, die er nicht leistet. Die Lehrer-Seite
-     * (AP-3.3) nutzt den bereits vorhandenen `cbd_classroom_nonce` aus
-     * `window.cbdClassroomData`.
+     * KEIN NONCE FÜR DEN SCHÜLER-WEG: Der REST-Aufruf dieses Scripts geht an
+     * eine Route mit `permission_callback => '__return_true'`, deren gesamte
+     * Autorisierung an der Klassensitzung hängt (AP-2.3). Ein `wp_rest`-Nonce
+     * wäre für Schüler ohnehin wertlos (nicht angemeldet) und würde nur den
+     * Eindruck einer Absicherung erwecken, die er nicht leistet.
+     *
+     * FÜR DEN LEHRER-WEG SCHON — und zwar seit AP-3.fix1 aus DIESEM Objekt,
+     * nicht mehr aus `window.cbdClassroomData`. Begründung im Docblock von
+     * `lehrer_daten()` weiter unten.
      *
      * KEIN CSS: `assets/css/fragenwand.css` entsteht erst in AP-3.4 und wird
      * dort eingereiht.
      *
-     * @since AP-3.2
+     * @since AP-3.2, erweitert in AP-3.fix1
      * @return void
      */
     public function enqueue_frontend_assets() {
@@ -278,7 +287,7 @@ class CBD_Fragenwand {
             true
         );
 
-        wp_localize_script(self::FRONTEND_HANDLE, self::FRONTEND_DATA_OBJECT, array(
+        $daten = array(
             'restUrl' => esc_url_raw(rest_url(self::REST_NAMESPACE . self::REST_ROUTE)),
             'texte'   => array(
                 'titel'        => __('Fragenwand', 'container-block-designer'),
@@ -293,7 +302,94 @@ class CBD_Fragenwand {
                 'fehler'       => __('Die Fragenwand konnte nicht geladen werden.', 'container-block-designer'),
                 'leer'         => __('Auf dieser Fragenwand steht noch nichts.', 'container-block-designer'),
             ),
-        ));
+        );
+
+        // AP-3.fix1: Nur für Lehrpersonen kommen drei weitere Schlüssel dazu.
+        // Für alle anderen fehlt `classes` vollständig — genau daran erkennt
+        // `fragenwand-frontend.js` den Schüler-/Besucherweg.
+        $daten = array_merge($daten, $this->lehrer_daten());
+
+        wp_localize_script(self::FRONTEND_HANDLE, self::FRONTEND_DATA_OBJECT, $daten);
+    }
+
+    /**
+     * Die Lehrer-Zusätze für das Frontend-Datenobjekt (leer für alle anderen).
+     *
+     * WARUM ES DIESE METHODE ÜBERHAUPT GIBT (AP-3.fix1). Bis AP-3.3 erkannte
+     * `fragenwand-frontend.js` eine Lehrperson an der bloßen Existenz von
+     * `window.cbdClassroomData`. Dieses Objekt schreibt aber
+     * `CBD_Block_Registration::enqueue_block_assets()` NUR auf Seiten, die
+     * mindestens einen Container-Block enthalten (`frontend_has_container_block()`).
+     * Eine Seite mit ausschließlich einem Fragenwand-Verweis im Fließtext —
+     * ab Phase 4 auch der Eintrag im Inhaltsverzeichnis des Themes, der auf
+     * JEDER Seite erscheinen soll — hat oft keinen Container-Block. Dort fiel
+     * eine eingeloggte Lehrperson in den Schülerpfad und sah „Keine aktive
+     * Klassensitzung." statt der Klassenauswahl.
+     *
+     * `class-cbd-block-registration.php` bleibt deshalb UNVERÄNDERT: Sein
+     * Gate ist für Tafelmodus und „Behandelt"-Knopf richtig — die ergeben nur
+     * auf Seiten mit Container-Blöcken Sinn. Die Fragenwand bekommt statt
+     * dessen hier eine EIGENE, zweite Datenquelle. `window.cbdClassroomData`
+     * wird weder entfernt noch verändert.
+     *
+     * DREI SCHLÜSSEL, NICHT EINER. Der Plan (AP-3.fix1, Schritt 1) nennt nur
+     * `classes`. `ajaxUrl` und `nonce` müssen aber mit, sonst wäre der Fix auf
+     * halbem Weg stehen geblieben: Die Klassenauswahl erschiene zwar, aber der
+     * anschließende AJAX-Aufruf `cbd_fragenwand_get_notes` läse Adresse und
+     * Nonce weiterhin aus `window.cbdClassroomData` — das auf genau diesen
+     * Seiten fehlt. Die Wand bliebe leer. Beide Werte sind zeichengleich mit
+     * denen aus `class-cbd-block-registration.php:665-666` (dieselbe
+     * `admin-ajax.php`, derselbe Nonce-Name `cbd_classroom_nonce`, den
+     * `guard_lehrperson()` erwartet); es entsteht also keine zweite,
+     * abweichende Fassung einer Regel, nur eine zweite Ausgabestelle.
+     *
+     * KEINE PRÜFUNG AUF `CBD_Classroom::is_enabled()`. `CBD_Fragenwand`
+     * registriert seine Hooks bewusst unbedingt, auch bei abgeschaltetem
+     * Klassenmodus (dokumentierte Entscheidung aus AP-2.rev, Einschränkung 3).
+     * Eine Prüfung hier machte die Lehrer-Erkennung von einem Schalter
+     * abhängig, den die Endpunkte selbst nicht kennen.
+     *
+     * @since AP-3.fix1
+     * @return array Leeres Array für alle, die keine Lehrperson sind.
+     */
+    private function lehrer_daten(): array {
+        if (!is_user_logged_in() || !current_user_can('cbd_edit_blocks')) {
+            return array();
+        }
+
+        return array(
+            // Die Klassenliste kommt aus der Bestandsklasse. REIHENFOLGE DER
+            // PRÜFUNGEN: `class_exists()` MUSS vor `method_exists()` und dem
+            // Aufruf stehen — `CBD_Fragenwand` soll unabhängig von
+            // `CBD_Classroom` existieren (Architekturentscheidung), ein
+            // fehlendes Gegenüber darf keinen Fatal Error ergeben, sondern nur
+            // eine leere Liste. `lehrerFlow()` zeigt dann „Keine Klassen
+            // vorhanden." — eine Lehrperson ohne Klassen ist immer noch eine
+            // Lehrperson, das Feld selbst ist das Signal.
+            'classes' => $this->teacher_classes(),
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce'   => wp_create_nonce('cbd_classroom_nonce'),
+        );
+    }
+
+    /**
+     * Die Klassen der angemeldeten Lehrperson — oder ein leeres Array.
+     *
+     * @since AP-3.fix1
+     * @return array
+     */
+    private function teacher_classes(): array {
+        if (!class_exists('CBD_Classroom') || !method_exists('CBD_Classroom', 'get_teacher_classes')) {
+            return array();
+        }
+
+        $klassen = CBD_Classroom::get_teacher_classes();
+
+        // `$wpdb->get_results()` kann bei einem Datenbankfehler `null`
+        // liefern. `wp_json_encode(null)` ergäbe im Browser `classes: null` —
+        // und damit ausgerechnet den Wert, den `istLehrkraft()` als „keine
+        // Lehrperson" liest.
+        return is_array($klassen) ? $klassen : array();
     }
 
     // =========================================================================
