@@ -91,6 +91,22 @@ class CBD_Fragenwand {
     const FORMAT_SCRIPT = 'assets/js/fragenwand-format.js';
 
     /**
+     * Handle des winzigen Editor-Stylesheets für den Verweis-Look
+     * (a.cbd-fragenwand-verweis) — NICHT dasselbe Stylesheet wie im
+     * Frontend, siehe Docblock von register_editor_format().
+     *
+     * @since AP-3.4
+     */
+    const EDITOR_STYLE_HANDLE = 'cbd-fragenwand-editor';
+
+    /**
+     * Pfad des Editor-Stylesheets, relativ zum Plugin-Verzeichnis.
+     *
+     * @since AP-3.4
+     */
+    const EDITOR_STYLE_FILE = 'assets/css/fragenwand-editor.css';
+
+    /**
      * Handle des Frontend-Scripts (Modal, Trigger, Datenabruf).
      *
      * @since AP-3.2
@@ -110,6 +126,21 @@ class CBD_Fragenwand {
      * @since AP-3.2
      */
     const FRONTEND_DATA_OBJECT = 'cbdFragenwandFrontend';
+
+    /**
+     * Handle des Frontend-Stylesheets (Post-it-Optik, Ausgrauen, Darkmode
+     * automatisch ueber Theme-Variablen).
+     *
+     * @since AP-3.4
+     */
+    const STYLE_HANDLE = 'cbd-fragenwand';
+
+    /**
+     * Pfad des Frontend-Stylesheets, relativ zum Plugin-Verzeichnis.
+     *
+     * @since AP-3.4
+     */
+    const STYLE_FILE = 'assets/css/fragenwand.css';
 
     /**
      * Singleton instance
@@ -154,6 +185,11 @@ class CBD_Fragenwand {
         // das Script gelangt damit nie ins Frontend.
         add_action('enqueue_block_editor_assets', array($this, 'register_editor_format'));
 
+        // AP-3.4: Editor-Optik in das iFrame der Editor-Leinwand einschleusen.
+        // `enqueue_block_editor_assets` allein genügt dafür NICHT — Begründung
+        // im Docblock von `inject_editor_style_into_iframe()`.
+        add_filter('block_editor_settings_all', array($this, 'inject_editor_style_into_iframe'));
+
         // AP-3.2: Das Gegenstück im Frontend — Modal, Trigger, Datenabruf.
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
     }
@@ -191,7 +227,26 @@ class CBD_Fragenwand {
      * `cbd-block-auswahl` (es gibt genau EINE Fragenwand je Klasse, also
      * nichts auszuwählen).
      *
-     * @since AP-3.1
+     * SEIT AP-3.4 reiht dieselbe Methode zusätzlich ein winziges eigenes
+     * Stylesheet ein (`assets/css/fragenwand-editor.css`) — ohne irgendeine
+     * Kennzeichnung wäre der eingefügte Verweis (`<a
+     * class="cbd-fragenwand-verweis" href="#">`) im Editor nicht von
+     * normalem Text zu unterscheiden. Bewusst NICHT dasselbe Stylesheet wie
+     * im Frontend (`assets/css/fragenwand.css`, siehe
+     * `enqueue_frontend_assets()`): Das Frontend-CSS ist auf das Modal
+     * zugeschnitten (Overlay, Post-it-Karten, Klassenauswahl) und wäre im
+     * Editor totes Gewicht.
+     *
+     * DAS EINREIHEN HIER GENÜGT ALLEIN NICHT: Es stylt nur das äußere
+     * Admin-Dokument, nicht das `<iframe>`, in dem der Block-Editor seit
+     * WordPress 5.9 den Beitragsinhalt rendert — und genau dort steht der
+     * Verweis. Die eigentliche, wirksame Einschleusung übernimmt
+     * `inject_editor_style_into_iframe()` über den Filter
+     * `block_editor_settings_all` (siehe dessen Docblock). Diese Methode
+     * bleibt trotzdem bestehen, falls dieselbe Klasse je an einer Stelle
+     * außerhalb des iFrames gebraucht wird.
+     *
+     * @since AP-3.1, Editor-Stylesheet ergänzt in AP-3.4
      * @return void
      */
     public function register_editor_format() {
@@ -200,32 +255,109 @@ class CBD_Fragenwand {
         // verschleierte einen Fehler — deshalb dieselbe Weiche wie im Vorbild.
         if (wp_script_is(self::FORMAT_HANDLE, 'registered')) {
             wp_enqueue_script(self::FORMAT_HANDLE);
+        } else {
+            $pfad = CBD_PLUGIN_DIR . self::FORMAT_SCRIPT;
+
+            // Fehlt die Datei (unvollständiges Update), wird gar nichts
+            // registriert. Ein Handle ohne Datei ergäbe im Editor einen 404.
+            if (file_exists($pfad)) {
+                wp_register_script(
+                    self::FORMAT_HANDLE,
+                    CBD_PLUGIN_URL . self::FORMAT_SCRIPT,
+                    array(
+                        'wp-rich-text',    // registerFormatType, applyFormat, removeFormat
+                        'wp-block-editor', // RichTextToolbarButton
+                        'wp-element',      // createElement
+                        'wp-i18n',         // __
+                        'wp-data',         // wp.data.dispatch('core/notices') bei core/link-Konflikt
+                    ),
+                    defined('CBD_VERSION') ? CBD_VERSION : false,
+                    true
+                );
+
+                wp_enqueue_script(self::FORMAT_HANDLE);
+            }
+        }
+
+        // AP-3.4: Editor-Stylesheet, unabhängig vom Script-Zweig oben
+        // eingereiht — ein fehlendes/bereits registriertes Format-Script
+        // soll die Optik-Kennzeichnung nicht mitreißen.
+        if (wp_style_is(self::EDITOR_STYLE_HANDLE, 'registered')) {
+            wp_enqueue_style(self::EDITOR_STYLE_HANDLE);
             return;
         }
 
-        $pfad = CBD_PLUGIN_DIR . self::FORMAT_SCRIPT;
+        $stil_pfad = CBD_PLUGIN_DIR . self::EDITOR_STYLE_FILE;
 
-        // Fehlt die Datei (unvollständiges Update), wird gar nichts
-        // registriert. Ein Handle ohne Datei ergäbe im Editor einen 404.
-        if (!file_exists($pfad)) {
+        if (!file_exists($stil_pfad)) {
             return;
         }
 
-        wp_register_script(
-            self::FORMAT_HANDLE,
-            CBD_PLUGIN_URL . self::FORMAT_SCRIPT,
-            array(
-                'wp-rich-text',    // registerFormatType, applyFormat, removeFormat
-                'wp-block-editor', // RichTextToolbarButton
-                'wp-element',      // createElement
-                'wp-i18n',         // __
-                'wp-data',         // wp.data.dispatch('core/notices') bei core/link-Konflikt
-            ),
-            defined('CBD_VERSION') ? CBD_VERSION : false,
-            true
+        wp_register_style(
+            self::EDITOR_STYLE_HANDLE,
+            CBD_PLUGIN_URL . self::EDITOR_STYLE_FILE,
+            array(),
+            defined('CBD_VERSION') ? CBD_VERSION : false
         );
 
-        wp_enqueue_script(self::FORMAT_HANDLE);
+        wp_enqueue_style(self::EDITOR_STYLE_HANDLE);
+    }
+
+    /**
+     * Die Editor-Optik zusätzlich in das iFrame der Editor-Leinwand einschleusen.
+     *
+     * WARUM `wp_enqueue_style()` IN `register_editor_format()` ALLEIN NICHT
+     * GENÜGT (live gefunden bei der AP-3.4-Prüfung, siehe Übergabenotiz):
+     * Seit WordPress 5.9 rendert der Block-Editor den Beitragsinhalt in einem
+     * eigenen `<iframe>` („editor-canvas"), damit die Bearbeitungsansicht das
+     * echte Frontend-CSS/Theme widerspiegelt. Ein per
+     * `enqueue_block_editor_assets` → `wp_enqueue_style()` eingereihtes
+     * Stylesheet landet nur im ÄUSSEREN Admin-Dokument, NICHT in diesem
+     * iFrame — Selektoren, die auf Inhalt IM Beitrag zielen (wie
+     * `a.cbd-fragenwand-verweis`), zeigen dort schlicht keine Wirkung. Live
+     * nachgemessen: Ohne diese Methode blieb der eingefügte Verweis im
+     * Editor optisch nicht von core/link (Wordpress-Standardblau, durchgezogene
+     * Unterstreichung) unterscheidbar — ein Verstoß gegen das
+     * AP-3.4-Akzeptanzkriterium.
+     *
+     * DER WEG, DEN WORDPRESS FÜR GENAU DIESEN FALL VORSIEHT: Der Filter
+     * `block_editor_settings_all` füllt `$settings['styles']` — ein Array,
+     * das der Editor SOWOHL in die äußere Admin-Seite ALS AUCH in das
+     * iFrame kopiert (siehe `@wordpress/block-editor`, `Iframe`-Komponente).
+     * Ein Eintrag mit dem Schlüssel `css` (statt `href`) bettet die
+     * Zeichenkette direkt als `<style>` ein — kein zweiter HTTP-Request,
+     * keine zusätzliche Handle-Verwaltung nötig für eine derart kleine Datei.
+     *
+     * Dieselbe kleine Datei wie in `register_editor_format()`
+     * (`assets/css/fragenwand-editor.css`) wird hier ein zweites Mal
+     * verwendet — nicht dupliziert, nur zusätzlich als Rohtext eingelesen.
+     * Fehlt die Datei, bleibt `$settings` unverändert (kein Fatal Error,
+     * nur weiterhin unauffälliger Editor-Link wie vor AP-3.4).
+     *
+     * @since AP-3.4
+     * @param array $settings Editor-Einstellungen aus `get_block_editor_settings()`.
+     * @return array
+     */
+    public function inject_editor_style_into_iframe(array $settings): array {
+        $pfad = CBD_PLUGIN_DIR . self::EDITOR_STYLE_FILE;
+
+        if (!file_exists($pfad)) {
+            return $settings;
+        }
+
+        $css = file_get_contents($pfad);
+
+        if (false === $css || '' === trim($css)) {
+            return $settings;
+        }
+
+        if (!isset($settings['styles']) || !is_array($settings['styles'])) {
+            $settings['styles'] = array();
+        }
+
+        $settings['styles'][] = array('css' => $css);
+
+        return $settings;
     }
 
     // =========================================================================
@@ -265,13 +397,28 @@ class CBD_Fragenwand {
      * nicht mehr aus `window.cbdClassroomData`. Begründung im Docblock von
      * `lehrer_daten()` weiter unten.
      *
-     * KEIN CSS: `assets/css/fragenwand.css` entsteht erst in AP-3.4 und wird
-     * dort eingereiht.
+     * SEIT AP-3.4 reiht dieselbe Methode zusätzlich `assets/css/fragenwand.css`
+     * ein (Post-it-Optik, Ausgrauen erledigter Notizen, automatische
+     * Darkmode-Fähigkeit über die projektweiten Theme-Variablen — kein
+     * eigener `[data-theme="dark"]`-Block nötig). Unbedingt, aus demselben
+     * Grund wie das Script oben: Der Trigger kann auch außerhalb von
+     * `post_content` erscheinen, eine Inhalts-Prüfung würde ihn verpassen.
      *
-     * @since AP-3.2, erweitert in AP-3.fix1
+     * @since AP-3.2, erweitert in AP-3.fix1 und AP-3.4
      * @return void
      */
     public function enqueue_frontend_assets() {
+        // AP-3.4: Stylesheet zuerst, unabhängig vom Script-Zweig unten —
+        // fehlt eine der beiden Dateien, soll das die andere nicht mitreißen.
+        if (file_exists(CBD_PLUGIN_DIR . self::STYLE_FILE)) {
+            wp_enqueue_style(
+                self::STYLE_HANDLE,
+                CBD_PLUGIN_URL . self::STYLE_FILE,
+                array(),
+                defined('CBD_VERSION') ? CBD_VERSION : false
+            );
+        }
+
         // Fehlt die Datei (unvollständiges Update), wird nichts eingereiht —
         // ein Handle ohne Datei ergäbe einen 404 im Seitenkopf. Dieselbe
         // Weiche wie in register_editor_format().

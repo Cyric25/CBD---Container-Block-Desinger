@@ -1,0 +1,26 @@
+/**
+ * Container Block Designer - Fragenwand-Verweis: Editor-Kennzeichnung (AP-3.4)
+ *
+ * Winzige Gegenstellen zu fragenwand.css: Diese Datei laedt AUSSCHLIESSLICH
+ * im Block-Editor (CBD_Fragenwand::register_editor_format(), gehaengt an
+ * enqueue_block_editor_assets), niemals im Frontend - dort wird stattdessen
+ * fragenwand.css geladen. Ohne irgendeine Kennzeichnung waere ein per
+ * assets/js/fragenwand-format.js eingefuegter Verweis (<a
+ * class="cbd-fragenwand-verweis" href="#">) im Editor nicht von normalem
+ * Text zu unterscheiden - anders als das Frontend zeigt der Editor keine
+ * eigene Verlinkungsfarbe fuer diese Klasse.
+ *
+ * Bewusst NICHT dieselbe Datei wie fragenwand.css: Das Frontend-CSS enthaelt
+ * modalspezifische Regeln (Overlay, Post-it-Karten, Klassenauswahl), die im
+ * Editor nichts zu suchen haben und dort nur totes Gewicht waeren.
+ *
+ * @package ContainerBlockDesigner
+ * @since Vorhaben "Fragenwand", Phase 3 (AP-3.4)
+ */
+
+a.cbd-fragenwand-verweis {
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 2px;
+    color: var(--color-ui-surface, #e24614);
+}
