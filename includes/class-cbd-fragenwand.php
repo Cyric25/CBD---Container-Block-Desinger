@@ -28,6 +28,11 @@
  * bewusst in EINER Klasse bündelt und der Editor-Teil nur aus einer
  * Script-Registrierung besteht.
  *
+ * SEIT AP-3.2 eine vierte: `enqueue_frontend_assets()` reiht auf
+ * `wp_enqueue_scripts` das Gegenstück im Frontend ein
+ * (`assets/js/fragenwand-frontend.js`) — unbedingt auf jeder Seite, weil der
+ * Trigger ab Phase 4 auch außerhalb von `post_content` erscheinen kann.
+ *
  * @package ContainerBlockDesigner
  * @since Vorhaben „Fragenwand", Phase 2 (AP-2.2/AP-2.3) — CBD_VERSION bei Anlage 3.1.106
  */
@@ -79,6 +84,27 @@ class CBD_Fragenwand {
     const FORMAT_SCRIPT = 'assets/js/fragenwand-format.js';
 
     /**
+     * Handle des Frontend-Scripts (Modal, Trigger, Datenabruf).
+     *
+     * @since AP-3.2
+     */
+    const FRONTEND_HANDLE = 'cbd-fragenwand-frontend';
+
+    /**
+     * Pfad des Frontend-Scripts, relativ zum Plugin-Verzeichnis.
+     *
+     * @since AP-3.2
+     */
+    const FRONTEND_SCRIPT = 'assets/js/fragenwand-frontend.js';
+
+    /**
+     * Name des per wp_localize_script() erzeugten Datenobjekts.
+     *
+     * @since AP-3.2
+     */
+    const FRONTEND_DATA_OBJECT = 'cbdFragenwandFrontend';
+
+    /**
      * Singleton instance
      *
      * @var CBD_Fragenwand|null
@@ -120,6 +146,9 @@ class CBD_Fragenwand {
         // `enqueue_block_editor_assets` feuert AUSSCHLIESSLICH im Editor —
         // das Script gelangt damit nie ins Frontend.
         add_action('enqueue_block_editor_assets', array($this, 'register_editor_format'));
+
+        // AP-3.2: Das Gegenstück im Frontend — Modal, Trigger, Datenabruf.
+        add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
     }
 
     // =========================================================================
@@ -190,6 +219,81 @@ class CBD_Fragenwand {
         );
 
         wp_enqueue_script(self::FORMAT_HANDLE);
+    }
+
+    // =========================================================================
+    // FRONTEND: MODAL, TRIGGER, DATENABRUF (AP-3.2)
+    // =========================================================================
+
+    /**
+     * Das Frontend-Script einreihen und mit den Serverdaten versorgen.
+     *
+     * EIGENER NAME, ABER GLEICHER WORTLAUT wie `CBD_Classroom::enqueue_frontend_assets()`
+     * — die beiden Klassen sind unabhängig, jede hängt ihre eigene Methode an
+     * `wp_enqueue_scripts`. Eine Verwechslung ist ausgeschlossen, weil nie eine
+     * Klasse die andere aufruft.
+     *
+     * UNBEDINGT AUF JEDER FRONTEND-SEITE, ohne `has_block()`- oder
+     * Inhalts-Prüfung: Der Trigger (`<a class="cbd-fragenwand-verweis">`) kann
+     * im `post_content` stehen — ab Phase 4 aber auch im Inhaltsverzeichnis des
+     * Themes, also in Markup, das gar nicht durch `post_content` läuft. Eine
+     * Inhalts-Prüfung verpasste genau diesen Fall (Architekturentscheidung in
+     * Abschnitt 4 des Plans). Die Datei ist klein und im Footer.
+     *
+     * DIE REST-ADRESSE KOMMT VON HIER, NIE AUS DEM JAVASCRIPT. Auf
+     * Installationen ohne hübsche Permalinks liefert `/wp-json/…` einen
+     * Apache-404; dort trägt nur `?rest_route=/cbd/v1/fragenwand`. Welche Form
+     * gilt, weiß allein `rest_url()`. Der Pfad wird aus den Konstanten des
+     * Endpunkts gebildet und nicht abgeschrieben — sonst laufen Route und
+     * Aufruf irgendwann auseinander. (Vorbild:
+     * `CBD_Block_Reference::localize_view_script()`.)
+     *
+     * KEIN NONCE: Der einzige Aufruf dieses Scripts geht an eine Route mit
+     * `permission_callback => '__return_true'`, deren gesamte Autorisierung
+     * an der Klassensitzung hängt (AP-2.3). Ein `wp_rest`-Nonce wäre für
+     * Schüler ohnehin wertlos (nicht angemeldet) und würde nur den Eindruck
+     * einer Absicherung erwecken, die er nicht leistet. Die Lehrer-Seite
+     * (AP-3.3) nutzt den bereits vorhandenen `cbd_classroom_nonce` aus
+     * `window.cbdClassroomData`.
+     *
+     * KEIN CSS: `assets/css/fragenwand.css` entsteht erst in AP-3.4 und wird
+     * dort eingereiht.
+     *
+     * @since AP-3.2
+     * @return void
+     */
+    public function enqueue_frontend_assets() {
+        // Fehlt die Datei (unvollständiges Update), wird nichts eingereiht —
+        // ein Handle ohne Datei ergäbe einen 404 im Seitenkopf. Dieselbe
+        // Weiche wie in register_editor_format().
+        if (!file_exists(CBD_PLUGIN_DIR . self::FRONTEND_SCRIPT)) {
+            return;
+        }
+
+        wp_enqueue_script(
+            self::FRONTEND_HANDLE,
+            CBD_PLUGIN_URL . self::FRONTEND_SCRIPT,
+            array(),
+            defined('CBD_VERSION') ? CBD_VERSION : false,
+            true
+        );
+
+        wp_localize_script(self::FRONTEND_HANDLE, self::FRONTEND_DATA_OBJECT, array(
+            'restUrl' => esc_url_raw(rest_url(self::REST_NAMESPACE . self::REST_ROUTE)),
+            'texte'   => array(
+                'titel'        => __('Fragenwand', 'container-block-designer'),
+                'schliessen'   => __('Schließen', 'container-block-designer'),
+                'laden'        => __('Fragenwand wird geladen …', 'container-block-designer'),
+                // ZEICHENGLEICH FÜR JEDEN FEHLSCHLAG DES ENDPUNKTS. Der
+                // REST-Endpunkt antwortet bewusst auf fehlende Sitzung,
+                // abgelaufenes Token und unpassendes `?classroom=` identisch
+                // (AP-2.3). Eine im Frontend feiner aufgeschlüsselte Meldung
+                // machte diese Absicht zunichte.
+                'keineSitzung' => __('Keine aktive Klassensitzung.', 'container-block-designer'),
+                'fehler'       => __('Die Fragenwand konnte nicht geladen werden.', 'container-block-designer'),
+                'leer'         => __('Auf dieser Fragenwand steht noch nichts.', 'container-block-designer'),
+            ),
+        ));
     }
 
     // =========================================================================
