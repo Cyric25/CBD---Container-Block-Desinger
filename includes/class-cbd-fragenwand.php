@@ -40,6 +40,18 @@
  * Container-Block ausgegeben wird. Begründung im Docblock von
  * `lehrer_daten()`.
  *
+ * SEIT AP-4.2 eine fünfte, mit den vorherigen vier nicht verwandte Aufgabe:
+ * `page_index_eintrag()` hängt sich am leeren Theme-Filter
+ * `simple_clean_page_index_zusatzeintraege`
+ * (`Theme/includes/page-index.php`, AP-4.1) ein und liefert im Klassenmodus
+ * (Plausibilitätsprüfung `?classroom=`, siehe deren Docblock) den
+ * Fragenwand-Button ganz oben im Theme-Inhaltsverzeichnis
+ * (`fos/inhaltsverzeichnis`). Der EINZIGE Theme-Kontakt dieses gesamten
+ * Vorhabens — in die andere Richtung als die drei bestehenden Nähten
+ * (`CBD_Classroom_Gate`, `CBD_Block_Content_API`, `CBD_Blocks_REST_API`),
+ * die jeweils eine Theme-Funktion AUFRUFEN: Hier bietet das Plugin selbst
+ * einen Filter an, den das Theme bedient.
+ *
  * @package ContainerBlockDesigner
  * @since Vorhaben „Fragenwand", Phase 2 (AP-2.2/AP-2.3) — CBD_VERSION bei Anlage 3.1.106
  */
@@ -192,6 +204,18 @@ class CBD_Fragenwand {
 
         // AP-3.2: Das Gegenstück im Frontend — Modal, Trigger, Datenabruf.
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
+
+        // AP-4.2: Der einzige Theme-Kontakt dieses Vorhabens. Das Theme
+        // definiert und ruft den Filter (`Theme/includes/page-index.php`,
+        // AP-4.1) unabhängig davon, ob dieses Plugin existiert — Standardwert
+        // dort ist der leere String. `add_filter()` selbst ist immer
+        // gefahrlos, auch wenn der zugehörige `apply_filters()`-Aufruf im
+        // Theme fehlt oder ein anderes Theme aktiv ist. KEIN
+        // `function_exists()`-Guard nötig für das Einhängen selbst — nur der
+        // AUFRUF einer Theme-Funktion durch das Plugin bräuchte das (siehe
+        // die drei bestehenden Beispiele dafür in `CBD_Classroom_Gate` und
+        // `CBD_Block_Content_API`), nicht das Anbieten eines eigenen Filters.
+        add_filter('simple_clean_page_index_zusatzeintraege', array($this, 'page_index_eintrag'));
     }
 
     // =========================================================================
@@ -537,6 +561,75 @@ class CBD_Fragenwand {
         // und damit ausgerechnet den Wert, den `istLehrkraft()` als „keine
         // Lehrperson" liest.
         return is_array($klassen) ? $klassen : array();
+    }
+
+    // =========================================================================
+    // THEME-INTEGRATION: INHALTSVERZEICHNIS-EINTRAG (AP-4.2)
+    // =========================================================================
+
+    /**
+     * Liefert den Fragenwand-Eintrag für das Theme-Inhaltsverzeichnis.
+     *
+     * Callback des Filters `simple_clean_page_index_zusatzeintraege`
+     * (`Theme/includes/page-index.php`, AP-4.1). Das Theme kennt den Zweck
+     * dieses Markups nicht — es wendet den Filter nur an und hängt einen
+     * nicht-leeren String-Rückgabewert ganz oben in die
+     * Inhaltsverzeichnis-Liste. Dieses Plugin ist die EINZIGE Stelle, die
+     * diesen Filter aktuell bedient.
+     *
+     * ERKENNUNG BEWUSST NUR ÜBER `?classroom=`, KEINE ECHTE
+     * SITZUNGSPRÜFUNG. Dieselbe schwache, rein clientseitig gedachte
+     * Plausibilitätsprüfung wie in `CBD_Classroom::enqueue_frontend_assets()`
+     * — ein positiver Treffer entscheidet nur, ob der Button überhaupt
+     * gerendert wird, NICHT, ob der Zugriff erlaubt ist. Die eigentliche
+     * Autorisierung passiert unverändert beim Klick, über denselben
+     * REST-Endpunkt `cbd/v1/fragenwand` (AP-2.3/`rest_get_notes_for_student()`),
+     * der die Sitzung serverseitig gegen den Transient
+     * `cbd_classroom_<token>` prüft. Ein gefälschter `?classroom=`-Wert ohne
+     * gültiges Token zeigt also höchstens einen Button, der beim Klick die
+     * einheitliche Ablehnung „Keine aktive Klassensitzung." liefert — kein
+     * Sicherheitsrisiko, nur ein optischer Fehlalarm, den es bewusst in Kauf
+     * zu nehmen gilt (Vorbild für dieselbe Abwägung: der Docblock von
+     * `CBD_Classroom::enqueue_frontend_assets()`, Zeile ~1180-1181).
+     *
+     * `<button>` STATT `<a>`: Anders als der Fließtext-Verweis aus AP-3.1
+     * (dort `<a href="#">` als strukturell sinnvoller Rückfall ohne
+     * JavaScript) hat dieser Eintrag im Inhaltsverzeichnis kein sinnvolles
+     * Sprungziel — ein `<button type="button">` macht ihn schon ohne
+     * JavaScript-Kontext als Aktion erkennbar, nicht als (kaputten) Link.
+     * Die Klick-Delegation aus AP-3.2 (`fragenwand-frontend.js`,
+     * `e.target.closest('.cbd-fragenwand-verweis')`) fängt Klicks auf DIESE
+     * Klasse unabhängig vom Tag-Namen ab — `closest()` funktioniert für
+     * `<button>` genauso wie für `<a>`, es entsteht also keine zweite
+     * Trigger-Erkennung.
+     *
+     * KEIN `function_exists()`-Guard nötig, um DIESEN Filter einzuhängen
+     * (siehe Docblock des Konstruktor-Aufrufs) — anders als die drei
+     * bestehenden Stellen, an denen dieses Plugin eine THEME-Funktion
+     * AUFRUFT (`CBD_Classroom_Gate`, `CBD_Block_Content_API`), bietet dieses
+     * Plugin hier selbst einen Filter an, den das Theme optional bedient.
+     *
+     * @since AP-4.2
+     * @param string $vorhandenes Bisheriger Filterwert (Standard `''`, oder
+     *                            Markup eines anderen, früher eingehängten
+     *                            Filters — wird unverändert angehängt, nicht
+     *                            ersetzt).
+     * @return string
+     */
+    public function page_index_eintrag($vorhandenes = '') {
+        $classroom_id = isset($_GET['classroom']) ? intval($_GET['classroom']) : 0;
+
+        if ($classroom_id <= 0) {
+            return $vorhandenes;
+        }
+
+        $markup = '<div class="page-index__zusatz page-index__zusatz--fragenwand">'
+            . '<button type="button" class="cbd-fragenwand-verweis page-index__fragenwand-link" href="#">'
+            . esc_html__('Fragenwand öffnen', 'container-block-designer')
+            . '</button>'
+            . '</div>';
+
+        return $vorhandenes . $markup;
     }
 
     // =========================================================================
