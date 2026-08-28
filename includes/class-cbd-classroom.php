@@ -1082,6 +1082,19 @@ class CBD_Classroom {
     // =========================================================================
 
     /**
+     * Inline-CSS, das die Theme-Akzentfarbe (UI-Oberflaechen-Farbe) als
+     * CSS-Custom-Property auf body setzt. Ersetzt den bislang nirgends
+     * gesetzten Fallback-Wert von --cbd-classroom-accent
+     * (classroom-frontend.css:946) durch einen echten Wert und speist
+     * zusaetzlich die Randlinien-Regeln, die seit AP-1.1
+     * var(--cbd-classroom-accent, #e24614) verwenden.
+     */
+    private function classroom_accent_inline_css(): string {
+        $farbe = get_theme_mod('color_ui_surface', '#e24614');
+        return 'body{--cbd-classroom-accent:' . esc_attr($farbe) . ';}';
+    }
+
+    /**
      * Render the [cbd_classroom] shortcode
      */
     public function render_classroom_shortcode($atts) {
@@ -1094,6 +1107,7 @@ class CBD_Classroom {
             array(),
             CBD_VERSION
         );
+        wp_add_inline_style('cbd-classroom-frontend', $this->classroom_accent_inline_css());
 
         wp_enqueue_script(
             'cbd-classroom-frontend',
@@ -1228,6 +1242,7 @@ class CBD_Classroom {
                 array(),
                 CBD_VERSION
             );
+            wp_add_inline_style('cbd-classroom-frontend', $this->classroom_accent_inline_css());
 
             return; // Don't load all the other assets
         }
@@ -1370,6 +1385,7 @@ class CBD_Classroom {
             array(),
             CBD_VERSION
         );
+        wp_add_inline_style('cbd-classroom-frontend', $this->classroom_accent_inline_css());
 
         // Classroom frontend JS
         wp_enqueue_script(
