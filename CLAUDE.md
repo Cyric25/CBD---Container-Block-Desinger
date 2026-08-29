@@ -1606,6 +1606,53 @@ sind. Details und die vollständigen Übergabenotizen:
 `reference_file_map.md`, Zeile zu `class-cbd-fragenwand.php` und
 `fragenwand.css`.
 
+#### Hotfix: derselbe Knopf in den zwei JS-gebauten Klassenlisten (2026-08-29)
+
+Der Eintrag oben hängt am Theme-Block `fos/inhaltsverzeichnis`. **Im
+Klassenmodus sehen Schüler diesen Block an zwei zentralen Stellen gar
+nicht** — beide Listen entstehen im Browser, nicht im PHP-Renderer, und der
+Filter `simple_clean_page_index_zusatzeintraege` läuft dort nie:
+
+1. die Seitenliste nach dem Login auf der `[cbd_classroom]`-Seite
+   (`renderClassroomContent()` in `assets/js/classroom-frontend.js`)
+2. die Klassen-Seitenleiste beim Navigieren innerhalb der Sitzung
+   (`injectClassroomSidebar()` in `assets/js/classroom-page-filter.js`)
+
+Beide setzen jetzt selbst denselben Knopf ganz oben in ihre Liste
+(`<button type="button" class="cbd-fragenwand-verweis
+page-index__fragenwand-link">`, umschlossen von `div.cbd-classroom-fragenwand
+.page-index__zusatz.page-index__zusatz--fragenwand`). **Keine zweite
+Klick-Logik:** Der delegierte Listener in `fragenwand-frontend.js` hängt an
+`document` und fängt jedes Element mit dieser Klasse ab, egal wer es erzeugt
+hat. Die Gestaltungsklassen sind absichtlich dieselben wie beim
+PHP-Eintrag — es gibt genau einen Satz Regeln dafür
+(`assets/css/fragenwand.css`, Abschnitt „INHALTSVERZEICHNIS-EINTRAG").
+
+**Der eine echte Unterschied — `data-classroom`/`data-token`:** Auf der
+`[cbd_classroom]`-Seite läuft die Anmeldung rein per AJAX, ohne Seitenwechsel.
+Die Adresszeile trägt danach **kein** `?classroom=&token=`; Klassen-ID und
+Token liegen nur in `ClassroomFrontend.classId`/`.token` (und im
+`localStorage` unter `cbd_classroom_class_id`/`cbd_classroom_token`). Der
+bisherige Schülerweg von `fragenwand-frontend.js` reichte
+`window.location.search` weiter und hätte dort eine Anfrage ohne
+Sitzungsangaben geschickt — Ergebnis wäre „Keine aktive Klassensitzung."
+trotz gültiger Sitzung gewesen. Deshalb schreibt `classroom-frontend.js` die
+beiden Werte als Datenattribute auf den Knopf, und `baueAbrufUrl(trigger)`
+liest über den neuen Helfer `sitzungAusTrigger()` **zuerst** dieses Paar;
+fehlt eines von beiden, gilt unverändert `window.location.search`
+(abwärtskompatibel — jeder bestehende Verweis verhält sich wie zuvor).
+
+`injectClassroomSidebar()` setzt die Attribute **bewusst nicht**: Diese Datei
+läuft ausschließlich auf Seiten mit `?classroom=&token=` in der Adresse
+(`init()` steigt ohne beide Parameter aus), also greift dort der Regelweg —
+und die Frage, welche Parameter eine Sitzung ausmachen, bleibt an genau einer
+Stelle beantwortet (`CBD_Classroom_Gate::sitzung()`).
+
+**Kein Sicherheitsunterschied:** Datenattribut wie URL-Parameter sind beides
+clientseitige Behauptungen. Die Sitzung prüft unverändert der Server gegen den
+Transient `cbd_classroom_<token>`; ein erfundenes Attributpaar endet in
+derselben einheitlichen 404 wie ein erfundener URL-Parameter.
+
 ## Datenbank reparieren: warum das Werkzeug fehlende Tabellen übersah (Hotfix 3.1.111)
 
 **Anlass:** Auf einer Produktivseite meldete
