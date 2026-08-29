@@ -1653,6 +1653,189 @@ clientseitige Behauptungen. Die Sitzung prüft unverändert der Server gegen den
 Transient `cbd_classroom_<token>`; ein erfundenes Attributpaar endet in
 derselben einheitlichen 404 wie ein erfundener URL-Parameter.
 
+### Schüler dürfen Fragen stellen — pro Klasse einstellbar (seit 3.1.113)
+
+Bis dahin war die Fragenwand für Schüler eine reine Leseansicht. Jetzt kann
+eine Lehrperson **je Klasse einzeln** freigeben, dass Schüler selbst Fragen
+darauf legen. Bewusst **kein globaler Schalter**: Ob eine Klasse so etwas
+verträgt, entscheidet die Lehrperson, die sie unterrichtet.
+
+**Nur Hinzufügen ist neu.** Abhaken, Bearbeiten und Löschen bleiben
+ausschließlich Lehrersache — auch für Fragen, die von Schülern kamen. Ein
+Schüler kann seine eigene Frage nachträglich weder ändern noch zurücknehmen,
+und das ist keine fehlende Funktion, sondern die direkte Folge der
+Anonymität: Es wird nirgends gespeichert, wer gefragt hat, es gibt also kein
+Merkmal, an dem sich „meine" Frage wiederfinden ließe.
+
+#### Zwei neue Spalten — und warum `dbDelta()` sie NICHT nachzieht
+
+| Spalte | Tabelle | Bedeutung |
+|---|---|---|
+| `schueler_fragen_erlaubt` | `wp_cbd_classes` | `tinyint(1)`, Vorgabe 0 — der Schalter je Klasse |
+| `ist_schueler_frage` | `wp_cbd_notes` | `tinyint(1)`, Vorgabe 0 — reines **Herkunfts**-Flag, KEINE Identität |
+
+Beide Tabellen existieren auf bestehenden Installationen längst. Es lag nahe,
+die Spalten einfach in die `CREATE TABLE`-Strings von
+`CBD_Schema_Manager::create_tables()` zu schreiben und darauf zu bauen, dass
+`dbDelta()` sie per `ALTER TABLE` nachträgt. **Das tut es nicht** — und der
+Grund ist genau die in AP-2.rev als Einschränkung 1 vermerkte Altlast:
+
+`create_tables()` benutzt für alle fünf Tabellen `CREATE TABLE IF NOT EXISTS`.
+`dbDelta()` liest den Tabellennamen für seine Vergleichslogik per regulärem
+Ausdruck aus dem SQL — und hält bei dieser Schreibweise **das Wort `IF` für
+den Tabellennamen**. Es sucht dann eine Tabelle namens `IF`, findet keine,
+hält die Anweisung für eine Neuanlage und vergleicht überhaupt keine Spalten.
+Die Tabelle existiert ja bereits (`IF NOT EXISTS` greift), also geschieht
+schlicht gar nichts: kein `ALTER TABLE`, kein Fehler, keine Warnung.
+
+**Live gemessen** (Testserver, MariaDB): Derselbe String mit den neuen Spalten
+
+```
+mit    „IF NOT EXISTS":  array('IF' => 'Created table IF')      → Spalten fehlen weiterhin
+ohne   „IF NOT EXISTS":  array('…cbd_notes.ist_schueler_frage'
+                               => 'Added column …')             → Spalte ist da
+```
+
+**Die `CREATE TABLE`-Strings wurden trotzdem NICHT umgestellt.** Das Muster
+ist Bestand aller fünf Tabellen; ein Umstellen hinge an dbDeltas Diff-Logik
+für gewachsene Produktivtabellen, mit dem Risiko ungewollter
+`ALTER TABLE`-Anweisungen auf Tabellen, die seit Jahren laufen. Stattdessen
+gibt es einen engen, prüfbaren Weg, der nur anfasst, was nachweislich fehlt:
+
+| Neu in `class-schema-manager.php` | Zweck |
+|---|---|
+| `get_required_columns()` | Die **eine** Liste nachgereichter Spalten (Tabelle → Spalte → Definition). Quelle für Reparatur *und* Anzeige — nicht zweimal gepflegt |
+| `ensure_columns()` | `SHOW COLUMNS … LIKE` je Spalte, sonst `ALTER TABLE … ADD COLUMN`. Idempotent; fehlende Tabellen werden übersprungen (dafür ist `create_tables()` zuständig). Aufgerufen am Ende von `create_tables()` |
+| `get_missing_columns()` | Nur für die Anzeige, ändert nichts |
+
+Die Spalten stehen **zusätzlich** in den `CREATE TABLE`-Strings — dort greifen
+sie bei Neuinstallationen sofort, wo dbDelta die Tabelle wirklich neu anlegt.
+
+**Beide Wege sind live geprüft:**
+1. **Automatisch:** neuer Zweig `version_compare($from_version, '3.1.113', '<')`
+   in `run_updates()` (`container-block-designer.php`) → `ensure_columns()`.
+   Läuft über `check_version_update()` beim ersten Seitenaufruf nach dem
+   Update. Getestet mit gelöschten Spalten und zurückgesetzter
+   `cbd_plugin_version` — beide Spalten waren danach da.
+2. **Von Hand:** *Container Designer → Datenbank reparieren* ruft
+   `ensure_columns()` **nach** `create_tables()` und meldet je Spalte, ob sie
+   ergänzt wurde. Die Statusanzeige führt fehlende Spalten jetzt als eigene
+   Kategorie neben den fehlenden Tabellen — vorher sah eine vorhandene
+   Tabelle mit fehlender Spalte dort vollständig grün aus.
+
+**Regel für künftige Spalten** (Ergänzung zur Tabellen-Regel weiter unten):
+Eine neue Spalte an einer **bereits ausgerollten** Tabelle gehört an drei
+Stellen — in den `CREATE TABLE`-String (für Neuinstallationen), in
+`get_required_columns()` (für Bestandsinstallationen) und in einen
+`run_updates()`-Zweig mit der Zielversion. Ein reines Erhöhen von `DB_VERSION`
+genügt nicht, und `dbDelta()` allein genügt erst recht nicht.
+
+#### Der Schreibweg: POST auf dieselbe Route
+
+`register_rest_route()` bekommt für `cbd/v1/fragenwand` jetzt ein **Array aus
+zwei Endpunkt-Definitionen** (GET und POST) statt einer einzelnen — eine
+zweite Route wäre eine zweite Adresse für dieselbe Sache, und
+`baueAbrufUrl()` im Frontend müsste zwei Basen kennen statt einer.
+
+Der POST-Callback `rest_add_note_from_student()` prüft in dieser Reihenfolge:
+
+1. `nocache_headers()`, immer und als Erstes.
+2. Gültige Klassensitzung über `CBD_Classroom_Gate::sitzung()`. Jeder
+   Fehlschlag endet in **derselben einheitlichen 404** wie beim Lesen
+   (`cbd_fragenwand_not_available`).
+3. Text: leer oder über 5000 Zeichen → **HTTP 400** mit sprechender Meldung.
+4. `schueler_fragen_erlaubt` der Sitzungs-Klasse → sonst **HTTP 403**
+   („Für diese Klasse ist das Stellen von Fragen nicht aktiviert.").
+5. `insert()` mit `teacher_id = 0` und `ist_schueler_frage = 1`,
+   Rückgabewert geprüft (Muster aus AP-2.fix1).
+
+**Warum Schritt 3 und 4 sprechen dürfen, Schritt 2 aber nicht:** Wer bis
+dahin gekommen ist, hat bereits eine gültige Sitzung *dieser* Klasse — „Text
+fehlt" oder „nicht aktiviert" verrät ihm nichts, was er nicht ohnehin wüsste.
+Die einheitliche 404 aus AP-2.3 soll das Durchprobieren fremder Klassen-IDs
+und Tokens verhindern; diese beiden Meldungen helfen dabei nicht.
+
+**Bewusst OHNE `args`-Deklaration**, aus demselben Grund wie beim GET: Eine
+Pflichtangabe an `text` erzeugte `rest_missing_callback_param` (HTTP 400),
+**bevor** der Callback die Sitzung geprüft hat — am Antwortunterschied ließe
+sich dann ablesen, dass die Route überhaupt etwas annimmt.
+
+**Die Falle, die dabei fast zugeschnappt wäre — kein `wp_unslash()` im
+REST-Weg.** `ajax_fragenwand_add_note()` ein paar Zeilen weiter oben *muss*
+`wp_unslash()` aufrufen: Es liest roh aus `$_POST`, das WordPress vorher
+maskiert. `WP_REST_Request` liefert dagegen bereits entmaskierte Werte
+(`WP_REST_Server::serve_request()` ruft selbst
+`set_body_params(wp_unslash($_POST))` auf, und ein JSON-Rumpf wird ohnehin nie
+maskiert). Ein zweites `wp_unslash()` hätte **echte Backslashes aus dem
+Fragetext gefressen** — aus `C:\Pfad` wäre `C:Pfad` geworden. Live
+gegengeprüft: Der eingereichte Text kommt mit Backslash und Apostroph
+unversehrt in der Datenbank an.
+
+#### Kennzeichnung: nicht nur Farbe
+
+Jede Notiz mit `ist_schueler_frage` bekommt in `baueNotiz()` die Klasse
+`cbd-fragenwand-notiz--schueler` **und** eine kleine Beschriftung
+„Schülerfrage" (`__herkunft`). Weil `baueNotiz()` von **beiden** Renderpfaden
+benutzt wird (Lehrer-Verwaltung und Schüler-Leseansicht), erscheint die
+Kennzeichnung ohne Zutun in beiden.
+
+**Warum eine Beschriftung zusätzlich zur Farbe** — zwei unabhängige Gründe:
+
+1. **Die Akzentfarbe ist frei einstellbar.** Wurzel-`CLAUDE.md`, Abschnitt
+   „Color Scheme": `--color-ui-surface` kommt aus dem Customizer. Auf der
+   Testinstallation stand dort **`#2196f3`, ein kräftiges Blau** statt des
+   dokumentierten Orange — jeder feste Blau-/Lilaton liegt dann nahe an den
+   Bedienelementen, also genau an dem, wovon die Herkunft sich abheben soll.
+   Kein fester Farbwert kann das für alle Installationen lösen.
+2. **Farbe allein trägt eine Information nicht** (WCAG 1.4.1). Wer Farben
+   schlecht unterscheidet, sähe sonst gar keinen Unterschied.
+
+Der Farbwert selbst ist die **einzige bewusste Ausnahme** von der Hausregel
+„nur Theme-Variablen" in `assets/css/fragenwand.css` und bringt den
+**einzigen eigenen `[data-theme="dark"]`-Block** dieser Datei mit:
+`--cbd-fragenwand-schueler` = `#5b6bbf` hell / `#9aa8e8` dunkel. Das Projekt
+hat keine passende Variable — `--color-ui-surface` ist die Farbe
+interaktiver Flächen (genau die Verwechslung, die zu vermeiden ist),
+`--color-success`/`--color-danger` tragen eine Wertung, die hier falsch wäre
+(eine Schülerfrage ist weder gut noch schlecht), und `--color-text-muted`
+wäre von `--color-border` kaum zu unterscheiden.
+
+**`--schueler` und `--erledigt` wirken gleichzeitig.** Eine Schülerfrage kann
+abgehakt sein. Kein Selektor fasst dieselbe Eigenschaft zweimal an:
+`--erledigt` regelt `opacity` und Textfarbe, `--schueler` den linken Rahmen —
+die Reihenfolge im Stylesheet entscheidet also nichts. Live in Hell- und
+Dunkelmodus gegengeprüft, mit beiden Klassen am selben `<li>`.
+
+#### Das Eingabefeld im Schülermodus
+
+`setzeListe()` hängt unter die Liste entweder `baueNeuBereich()` (Lehrer,
+seit AP-3.3) **oder** `baueSchuelerNeuBereich()` — nie beides. Die
+Schüler-Fassung ist bewusst eine eigene Funktion: anderer Absendeweg (REST
+statt admin-ajax, ohne Nonce, ohne `class_id`), anderer Text, und darunter
+ein Hinweis, den die Lehrer-Fassung nicht braucht („erscheint anonym …
+ändern oder zurücknehmen kannst du sie danach nicht mehr").
+
+`sendeSchuelerFrage()` baut die Adresse über **`baueAbrufUrl(schuelerAusloeser)`**
+— derselbe Helfer wie beim Lesen. Dadurch funktioniert sowohl der reguläre
+`?classroom=&token=`-Weg als auch der Datenattribut-Weg aus dem Hotfix
+„Fragenwand in Klassenlisten", ohne dass die Frage „welche Parameter machen
+eine Sitzung aus" ein zweites Mal beantwortet würde.
+
+**`schuelerFragenErlaubt` ist keine Berechtigung**, nur eine Anzeigefrage: Der
+Lese-Endpunkt liefert das Feld einmal je Antwort, das Frontend blendet daran
+sein Eingabefeld ein oder aus. Ein Browser, der es ignoriert und trotzdem
+sendet, wird in Schritt 4 der Kette oben abgewiesen — live gegengeprüft.
+
+#### Verwaltung
+
+`admin/classroom.php` hat eine neue Zeile „Fragenwand" mit der Checkbox
+`#cbd-class-schueler-fragen`. `classroom-admin.js` schickt den Wert in
+`saveClass()` **immer** als `'1'`/`'0'` mit — eine abgehakte Checkbox sendet
+von sich aus gar nichts, das Ausschalten käme sonst nie beim Server an.
+`ajax_save_class()` normalisiert auf 0/1 und speichert beim Anlegen wie beim
+Ändern; `ajax_get_classes()` liefert das Flag als echten Boolean zurück
+(`$wpdb` gibt alles als String, und `"0"` wäre in JavaScript wahr).
+
 ## Datenbank reparieren: warum das Werkzeug fehlende Tabellen übersah (Hotfix 3.1.111)
 
 **Anlass:** Auf einer Produktivseite meldete

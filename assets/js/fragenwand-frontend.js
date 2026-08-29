@@ -189,7 +189,17 @@
 		bearbeiten: 'Bearbeiten',
 		loeschen: 'Löschen',
 		speichern: 'Speichern',
-		schreibFehler: 'Die Änderung konnte nicht gespeichert werden.'
+		schreibFehler: 'Die Änderung konnte nicht gespeichert werden.',
+
+		// Ab hier: Vorhaben „Schueler-Fragen". Diese vier SCHICKT der Server
+		// mit (`enqueue_frontend_assets()`), sie sind also uebersetzbar - anders
+		// als die Lehrer-Schluessel darueber. Die Tabelle hier ist nur der
+		// Rueckfall fuer den Fall, dass `wp_localize_script()` nicht gelaufen ist.
+		schuelerFrage: 'Deine Frage …',
+		schuelerAbsenden: 'Frage stellen',
+		schuelerHinweis: 'Deine Frage erscheint anonym auf der Fragenwand. Ändern oder zurücknehmen kannst du sie danach nicht mehr.',
+		schuelerFehler: 'Die Frage konnte nicht gesendet werden.',
+		herkunftSchueler: 'Schülerfrage'
 	};
 
 	/** Was als fokussierbar gilt (Vorbild: blocks/block-reference/view.js). */
@@ -236,6 +246,38 @@
 
 	/** Sind die Verwaltungscontrols aktiv? @since AP-3.3 */
 	var verwaltbar = false;
+
+	/**
+	 * Darf der Schueler auf DIESER Wand selbst eine Frage einreichen?
+	 *
+	 * Kommt aus dem Antwortfeld `schuelerFragenErlaubt` des Lese-Endpunkts und
+	 * gilt nur, solange das Modal im SCHUELER-Modus offen ist (`verwaltbar`
+	 * false). Im Lehrer-Modus bleibt der Wert `false`: Dort gibt es das
+	 * Eingabefeld aus AP-3.3 schon, ein zweites waere doppelt.
+	 *
+	 * ES IST KEINE BERECHTIGUNG, nur eine Anzeigefrage. Ob eine Frage
+	 * tatsaechlich angenommen wird, entscheidet allein der Server in
+	 * `rest_add_note_from_student()` - dieselbe Pruefung laeuft dort bei jedem
+	 * Absenden erneut.
+	 *
+	 * @since Vorhaben „Schueler-Fragen"
+	 */
+	var schuelerDarfFragen = false;
+
+	/**
+	 * Der Ausloeser, mit dem die aktuell offene Schuelerwand geoeffnet wurde.
+	 *
+	 * Gebraucht, um beim Absenden DIESELBE Adresse zu bauen wie beim Lesen -
+	 * `baueAbrufUrl()` liest bei Bedarf `data-classroom`/`data-token` von ihm
+	 * (Hotfix „Fragenwand in Klassenlisten"). Ohne diesen Merker ginge das
+	 * Absenden auf der `[cbd_classroom]`-Seite ohne Sitzungsangaben raus.
+	 *
+	 * NICHT dasselbe wie `ausloeser`: Jener dient der Fokusrueckgabe und wird
+	 * beim Schliessen geleert, ist ausserdem auch im Lehrer-Modus gesetzt.
+	 *
+	 * @since Vorhaben „Schueler-Fragen"
+	 */
+	var schuelerAusloeser = null;
 
 	/** Das Overlay der Klassenauswahl, solange sie offen ist. @since AP-3.3 */
 	var wahlOverlay = null;
@@ -780,16 +822,30 @@
 	/**
 	 * Eine einzelne Notiz als Listeneintrag bauen.
 	 *
-	 * @param {Object}  notiz     {id, text, ist_erledigt}
+	 * DIESELBE FUNKTION FUER BEIDE RENDERPFADE - Lehrer-Verwaltungsansicht
+	 * (`nurLesend` false) und Schueler-Leseansicht (`nurLesend` true). Die
+	 * Herkunfts-Kennzeichnung `--schueler` haengt deshalb an genau einer Stelle
+	 * und erscheint automatisch in beiden Ansichten.
+	 *
+	 * @param {Object}  notiz     {id, text, ist_erledigt, ist_schueler_frage}
 	 * @param {boolean} nurLesend Checkbox deaktivieren?
 	 * @returns {Element}
 	 */
 	function baueNotiz(notiz, nurLesend) {
 		var erledigt = !!notiz.ist_erledigt;
+		// Vorhaben „Schueler-Fragen": reines Herkunfts-Flag. Beide Endpunkte
+		// liefern es als echten Boolean (PHP-seitig gewandelt); aeltere
+		// Antworten koennten "0"/"1" tragen, und "0" waere hier wahr.
+		var vonSchueler = !!notiz.ist_schueler_frage && '0' !== notiz.ist_schueler_frage;
 
 		var eintrag = document.createElement('li');
+		// ZWEI UNABHAENGIGE ZUSTAENDE, die sich NICHT ausschliessen: Eine
+		// Schueler-Frage kann abgehakt sein. Beide Klassen stehen deshalb
+		// nebeneinander, keine ersetzt die andere (die CSS-Seite haelt sich
+		// daran, siehe fragenwand.css, Abschnitt „HERKUNFT").
 		eintrag.className = M + '-notiz'
-			+ (erledigt ? ' ' + M + '-notiz--erledigt' : '');
+			+ (erledigt ? ' ' + M + '-notiz--erledigt' : '')
+			+ (vonSchueler ? ' ' + M + '-notiz--schueler' : '');
 		// Der Bezeichner steht am Listeneintrag, nicht an der Checkbox: Die
 		// Verwaltungscontrols aus AP-3.3 (bearbeiten, loeschen) haengen
 		// ebenfalls hier und finden ihre Notiz dann ueber denselben Knoten.
@@ -814,6 +870,28 @@
 		text.textContent = ('string' === typeof notiz.text) ? notiz.text : '';
 
 		beschriftung.appendChild(haken);
+
+		// NICHT NUR FARBE. Der farbige Rahmen aus dem CSS allein traegt die
+		// Kennzeichnung nicht zuverlaessig, aus zwei Gruenden:
+		//   1. Die Akzentfarbe des Themes ist ueber den Customizer frei
+		//      einstellbar (Wurzel-CLAUDE.md, „Color Scheme"). Auf einer
+		//      Installation mit blauem Akzent - live angetroffen:
+		//      --color-ui-surface = #2196f3 - liegt jeder feste Blau-/Lilaton
+		//      nahe an den Bedienelementen, also genau an dem, wovon die
+		//      Herkunft sich abheben soll. Ein zweites, nicht-farbliches
+		//      Merkmal ist davon unabhaengig.
+		//   2. Farbe allein ist als alleiniger Traeger einer Information
+		//      ohnehin nicht ausreichend (WCAG 1.4.1) - wer Farben schlecht
+		//      unterscheidet, saehe sonst gar keinen Unterschied.
+		// Die Beschriftung steht VOR dem Text, damit sie auch vorgelesen in
+		// der richtigen Reihenfolge kommt: „Schuelerfrage <Text>".
+		if (vonSchueler) {
+			var herkunft = document.createElement('span');
+			herkunft.className = M + '-notiz__herkunft';
+			herkunft.textContent = t('herkunftSchueler');
+			beschriftung.appendChild(herkunft);
+		}
+
 		beschriftung.appendChild(text);
 		eintrag.appendChild(beschriftung);
 
@@ -900,6 +978,79 @@
 	}
 
 	/**
+	 * Das Feld „Frage stellen" fuer den SCHUELER-Modus bauen.
+	 *
+	 * Bewusst eine eigene Funktion neben `baueNeuBereich()`, obwohl der Aufbau
+	 * aehnlich aussieht:
+	 *   1. Der Absendeweg ist ein voellig anderer - REST statt admin-ajax, ohne
+	 *      Nonce, ohne `class_id` (die kommt serverseitig aus der Sitzung).
+	 *   2. Der Text ist ein anderer („Frage stellen" statt „Frage hinzufuegen"),
+	 *      und darunter steht ein Hinweis, den die Lehrer-Fassung nicht braucht:
+	 *      dass die Frage anonym ist und nicht mehr zurueckgenommen werden kann.
+	 *   3. Die Zusatzklasse `--schueler` trennt beide optisch.
+	 * Eine gemeinsame Funktion mit Weichen waere an jeder dieser drei Stellen
+	 * eine Fallunterscheidung - drei Weichen sind mehr Aufwand als eine zweite,
+	 * kurze Funktion.
+	 *
+	 * KEINE VERWALTUNGSFUNKTION. Nur Absenden - kein Abhaken, kein Bearbeiten,
+	 * kein Loeschen. Das gilt auch fuer die eigene, gerade erst abgeschickte
+	 * Frage: Es wird nirgends gespeichert, wer sie gestellt hat, es gibt also
+	 * gar kein Merkmal, an dem „meine" Frage wiederzuerkennen waere.
+	 *
+	 * @since Vorhaben „Schueler-Fragen"
+	 * @returns {Element}
+	 */
+	function baueSchuelerNeuBereich() {
+		var bereich = document.createElement('div');
+		bereich.className = M + '-neu ' + M + '-neu--schueler';
+
+		var zeile = document.createElement('div');
+		zeile.className = M + '-neu__zeile';
+
+		var feld = document.createElement('input');
+		feld.type = 'text';
+		feld.className = M + '-neu__feld';
+		feld.placeholder = t('schuelerFrage');
+		feld.setAttribute('aria-label', t('schuelerFrage'));
+		// Dieselbe Grenze wie serverseitig (5000 Zeichen, AP-2.fix1). Das
+		// Attribut ist nur eine Bequemlichkeit - die Regel gilt auf dem Server,
+		// und die Fehlermeldung kommt von dort.
+		feld.setAttribute('maxlength', '5000');
+
+		var knopf = document.createElement('button');
+		knopf.type = 'button';
+		knopf.className = M + '-neu__knopf';
+		knopf.textContent = t('schuelerAbsenden');
+
+		function absenden() {
+			sendeSchuelerFrage(feld);
+		}
+
+		knopf.addEventListener('click', absenden);
+
+		// Enter im Feld soll dasselbe tun wie der Knopf. Das Feld steht in
+		// keinem <form>, es gibt also kein Absenden von selbst.
+		feld.addEventListener('keydown', function (event) {
+			if ('Enter' === event.key || 13 === event.keyCode) {
+				event.preventDefault();
+				absenden();
+			}
+		});
+
+		zeile.appendChild(feld);
+		zeile.appendChild(knopf);
+
+		var hinweis = document.createElement('p');
+		hinweis.className = M + '-neu__hinweis';
+		hinweis.textContent = t('schuelerHinweis');
+
+		bereich.appendChild(zeile);
+		bereich.appendChild(hinweis);
+
+		return bereich;
+	}
+
+	/**
 	 * Die Notizenliste in den Koerper schreiben.
 	 *
 	 * @param {Array}   notizen
@@ -933,6 +1084,13 @@
 
 		if (!nurLesend) {
 			koerper.appendChild(baueNeuBereich());
+		} else if (schuelerDarfFragen) {
+			// Vorhaben „Schueler-Fragen": derselbe Platz unter der Liste, aber
+			// die Schueler-Fassung - nur Absenden, keine Verwaltung. Die
+			// `else`-Kette ist wichtig: Im Lehrer-Modus soll KEIN zweites Feld
+			// erscheinen (`schuelerDarfFragen` bleibt dort ohnehin false, die
+			// Kette macht es zusaetzlich unmoeglich).
+			koerper.appendChild(baueSchuelerNeuBereich());
 		}
 
 		erfuelleFokusWunsch();
@@ -1041,10 +1199,16 @@
 	 *                              Schueler kennen ihre Klassen-ID nicht und
 	 *                              brauchen sie auch nicht - der Endpunkt
 	 *                              leitet sie aus der Sitzung ab.
-	 * @param {Array}       notizen  Eintraege {id, text, ist_erledigt}
+	 * @param {Array}       notizen  Eintraege {id, text, ist_erledigt,
+	 *                               ist_schueler_frage}
 	 * @param {Object}      [optionen] `{verwaltbar: true}` schaltet die
 	 *                      Verwaltungscontrols frei (AP-3.3). Vorgabe:
 	 *                      `{verwaltbar: false}` - reine Leseansicht.
+	 *                      `{schuelerDarfFragen: true}` blendet im Lesemodus das
+	 *                      Feld „Frage stellen" ein (Vorhaben
+	 *                      „Schueler-Fragen") - im Verwaltungsmodus wirkungslos.
+	 *                      `{trigger: Element}` merkt sich den Ausloeser, damit
+	 *                      das Absenden dieselbe Adresse baut wie das Lesen.
 	 * @returns {void}
 	 */
 	function open(classId, notizen, optionen) {
@@ -1062,6 +1226,16 @@
 
 		aktuelleKlasse = kannVerwalten ? klasse : null;
 		verwaltbar = kannVerwalten;
+
+		// Vorhaben „Schueler-Fragen": NUR im Lesemodus. Im Verwaltungsmodus hat
+		// die Lehrperson bereits ihr eigenes Feld aus AP-3.3; ein zweites waere
+		// doppelt und wuerde ausserdem ueber den REST-Weg statt ueber AJAX
+		// schreiben, also mit `teacher_id = 0` und als „Schueler-Frage"
+		// gekennzeichnet - genau falsch.
+		schuelerDarfFragen = !kannVerwalten && (true === optionen.schuelerDarfFragen);
+		schuelerAusloeser = schuelerDarfFragen
+			? (optionen.trigger || null)
+			: null;
 
 		if (dialog) {
 			// Ein Haken, den die Lehrperson auch bedienen darf, ist ein
@@ -1091,6 +1265,10 @@
 		// spaeter eintreffendes `ladeListeNeu()` in sie hineinzuschreiben.
 		aktuelleKlasse = null;
 		verwaltbar = false;
+		// Aus demselben Grund auch kein Schueler-Eingabefeld: In eine Meldung
+		// gehoert kein Formular, und `setzeMeldung()` baut ohnehin keins.
+		schuelerDarfFragen = false;
+		schuelerAusloeser = null;
 
 		if (dialog) {
 			dialog.setAttribute('data-modus', 'meldung');
@@ -1190,6 +1368,8 @@
 		// in ein Modal, das es nicht mehr gibt.
 		aktuelleKlasse = null;
 		verwaltbar = false;
+		schuelerDarfFragen = false;
+		schuelerAusloeser = null;
 		fokusWunsch = null;
 		schreibtGerade = false;
 
@@ -1273,13 +1453,126 @@
 				return;
 			}
 
-			open(null, (daten && daten.notes) ? daten.notes : []);
+			open(null, (daten && daten.notes) ? daten.notes : [], {
+				// Vorhaben „Schueler-Fragen": Das Feld kommt einmal je Antwort
+				// vom Lese-Endpunkt und gilt fuer die ganze Klasse. `true ===`
+				// statt `!!`: Ein alter Endpunkt ohne dieses Feld liefert
+				// `undefined` - dann bleibt das Eingabefeld aus, was der
+				// richtige Rueckfall ist.
+				schuelerDarfFragen: (true === (daten && daten.schuelerFragenErlaubt)),
+				trigger: trigger || null
+			});
 		})['catch'](function (fehler) {
 			if (meineNummer !== abrufZaehler) {
 				return;
 			}
 			warne('Der Abruf der Fragenwand ist fehlgeschlagen: ' + fehler);
 			openMitMeldung(t('fehler'), 'fehler');
+		});
+	}
+
+	/**
+	 * Eine Schuelerfrage an den REST-Endpunkt schicken und die Liste neu laden.
+	 *
+	 * EIGENER WEG, NICHT `legeNotizAn()`: Jene Funktion nutzt
+	 * `cbd_fragenwand_add_note` ueber admin-ajax.php mit Nonce und `class_id` -
+	 * beides hat ein Schueler nicht. Hier geht es per POST an dieselbe
+	 * REST-Route wie das Lesen; die Klasse leitet der Server aus der Sitzung ab.
+	 *
+	 * DIESELBE ADRESSE WIE BEIM LESEN, ueber `baueAbrufUrl(schuelerAusloeser)`.
+	 * Damit funktioniert sowohl der regulaere `?classroom=&token=`-Weg als auch
+	 * der Datenattribut-Weg des Hotfix „Fragenwand in Klassenlisten" - die
+	 * Frage, welche Parameter eine Sitzung ausmachen, bleibt an genau einer
+	 * Stelle beantwortet.
+	 *
+	 * EIN LEERER TEXT WIRD BEWUSST NICHT HIER ABGEFANGEN, sondern an den Server
+	 * geschickt - dieselbe Begruendung wie bei `legeNotizAn()`: Die Regel steht
+	 * serverseitig, und der Server antwortet mit genau diesem Satz.
+	 *
+	 * NACH ERFOLG WIRD DIE LISTE NEU GELADEN, nicht die Notiz eingehaengt: Die
+	 * Sortierung (`ORDER BY ist_erledigt, created_at, id`) entscheidet der
+	 * Server; eine hier angehaengte Zeile stuende womoeglich an der falschen
+	 * Stelle. `ladeSchuelerwand()` baut das Modal dabei komplett neu auf - das
+	 * Eingabefeld ist danach leer, ein ausdrueckliches Leeren waere doppelt.
+	 *
+	 * @since Vorhaben „Schueler-Fragen"
+	 * @param {Element} feld Das Eingabefeld - fuer Text, Sperre und Rueckgabe.
+	 * @returns {void}
+	 */
+	function sendeSchuelerFrage(feld) {
+		if (schreibtGerade || !feld) {
+			return;
+		}
+
+		var url = baueAbrufUrl(schuelerAusloeser);
+
+		if ('' === url || 'function' !== typeof window.fetch) {
+			warne('Die Frage kann nicht gesendet werden (restUrl oder fetch fehlt).');
+			setzeStatus(t('schuelerFehler'));
+			return;
+		}
+
+		var text = feld.value;
+
+		schreibtGerade = true;
+		setzeStatus('');
+		// Waehrend die Anfrage laeuft, bleibt das Feld gesperrt - sonst koennte
+		// ein zweites Enter dieselbe Frage ein zweites Mal abschicken.
+		feld.disabled = true;
+
+		var merkeAusloeser = schuelerAusloeser;
+
+		window.fetch(url, {
+			method: 'POST',
+			credentials: 'same-origin',
+			headers: {
+				'Content-Type': 'application/json',
+				Accept: 'application/json'
+			},
+			body: JSON.stringify({ text: text })
+		}).then(function (antwort) {
+			// `json()` auch im Fehlerfall: Der Endpunkt schickt bei 400/403
+			// eine sprechende Meldung mit, die die Statuszeile zeigen soll.
+			return antwort.json().then(function (daten) {
+				return { ok: antwort.ok, status: antwort.status, daten: daten };
+			})['catch'](function () {
+				return { ok: antwort.ok, status: antwort.status, daten: null };
+			});
+		}).then(function (ergebnis) {
+			schreibtGerade = false;
+
+			if (!ergebnis.ok) {
+				if (feld && feld.parentNode) {
+					feld.disabled = false;
+				}
+
+				// Die einheitliche 404 des Endpunkts bedeutet „keine gueltige
+				// Sitzung" - dafuer gibt es denselben Satz wie beim Lesen.
+				if (404 === ergebnis.status) {
+					setzeStatus(t('keineSitzung'));
+					return;
+				}
+
+				var meldung = (ergebnis.daten && 'string' === typeof ergebnis.daten.message)
+					? ergebnis.daten.message
+					: '';
+				setzeStatus(meldung || t('schuelerFehler'));
+				return;
+			}
+
+			// Erfolg: Liste neu laden. Der Ausloeser muss mit, sonst verloere
+			// der Neuaufbau auf der `[cbd_classroom]`-Seite die Sitzungsangaben
+			// aus den Datenattributen.
+			ladeSchuelerwand(merkeAusloeser);
+		})['catch'](function (fehler) {
+			schreibtGerade = false;
+
+			if (feld && feld.parentNode) {
+				feld.disabled = false;
+			}
+
+			warne('Das Senden der Frage ist fehlgeschlagen: ' + fehler);
+			setzeStatus(t('schuelerFehler'));
 		});
 	}
 

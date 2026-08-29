@@ -53,6 +53,18 @@ $classroom_enabled = get_option('cbd_classroom_enabled', false);
                         </td>
                     </tr>
                     <tr>
+                        <th><label for="cbd-class-schueler-fragen"><?php _e('Fragenwand', 'container-block-designer'); ?></label></th>
+                        <td>
+                            <label>
+                                <input type="checkbox" id="cbd-class-schueler-fragen">
+                                <?php _e('Schueler duerfen hier Fragen zur Fragenwand stellen', 'container-block-designer'); ?>
+                            </label>
+                            <p class="description">
+                                <?php _e('Eingereichte Fragen sind anonym - es wird nicht gespeichert, wer sie gestellt hat. Abhaken, Bearbeiten und Loeschen bleiben ausschliesslich der Lehrperson vorbehalten.', 'container-block-designer'); ?>
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
                         <th><label><?php _e('Zugeordnete Seiten', 'container-block-designer'); ?></label></th>
                         <td>
                             <div id="cbd-class-pages" class="cbd-class-pages">

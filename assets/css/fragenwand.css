@@ -178,6 +178,80 @@
     color: var(--color-text-muted, #666666);
 }
 
+/* =============================================
+   HERKUNFT: FRAGE KAM VON EINEM SCHUELER
+   (Vorhaben "Schueler-Fragen")
+   ============================================= */
+
+/* DIE EINE BEWUSSTE AUSNAHME VON DER REGEL "NUR THEME-VARIABLEN" (siehe
+   Dateikopf). Das Projekt hat KEINE passende Variable fuer diesen Zweck:
+   --color-ui-surface (Orange) ist die Farbe interaktiver Flaechen - genau
+   damit soll die Kennzeichnung NICHT verwechselt werden, sie ist eine
+   Herkunftsangabe und nichts zum Anklicken. --color-success (Gruen) und
+   --color-danger (Rot) tragen eine Wertung, die hier falsch waere: Eine
+   Schuelerfrage ist weder gut noch schlecht. --color-text-muted waere von
+   --color-border kaum zu unterscheiden und faele gar nicht auf.
+
+   Deshalb ein eigenes Paar Literale - ein gedecktes Indigo, weit genug vom
+   Marken-Orange entfernt, um auf den ersten Blick als etwas anderes zu lesen,
+   und dezent genug, um nicht als Warnung zu wirken. Weil es keine
+   Theme-Variable dafuer gibt, braucht diese Datei hier - und NUR hier - einen
+   eigenen Dunkelmodus-Block: Der helle Wert (#5b6bbf) ist auf #121212 zu
+   dunkel, der dunkle (#9aa8e8) auf Weiss zu blass. Kommt spaeter eine
+   projektweite Variable fuer neutrale Hinweisfarben dazu, gehoeren diese vier
+   Zeilen ersetzt. */
+:root {
+    --cbd-fragenwand-schueler: #5b6bbf;
+}
+
+:root[data-theme="dark"] {
+    --cbd-fragenwand-schueler: #9aa8e8;
+}
+
+/* NUR der linke Rahmen wird ersetzt, nicht `border` als Ganzes - sonst
+   verlieren die drei uebrigen Kanten ihre Theme-Farbe. Das padding-left faengt
+   die 3px auf, die der dickere Rahmen dem Inhalt wegnimmt; ohne das saessen
+   Schueler- und Lehrerfragen minimal versetzt untereinander. */
+.cbd-fragenwand-notiz--schueler {
+    border-left: 4px solid var(--cbd-fragenwand-schueler, #5b6bbf);
+    padding-left: 11px;
+}
+
+/* DAS ZWEITE, NICHT-FARBLICHE MERKMAL (siehe Begruendung in `baueNotiz()`):
+   Die Akzentfarbe des Themes ist ueber den Customizer frei einstellbar - auf
+   einer Installation mit blauem Akzent liegt jeder feste Blau-/Lilaton nahe an
+   den Bedienelementen. Und Farbe allein traegt eine Information ohnehin nicht
+   (WCAG 1.4.1). Deshalb steht an jeder Schuelerfrage zusaetzlich das Woertchen
+   „Schuelerfrage" - klein und ruhig, aber unabhaengig von jeder Farbwahl
+   lesbar. */
+.cbd-fragenwand-notiz__herkunft {
+    flex-shrink: 0;
+    align-self: flex-start;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    color: var(--cbd-fragenwand-schueler, #5b6bbf);
+    border: 1px solid var(--cbd-fragenwand-schueler, #5b6bbf);
+    border-radius: 4px;
+}
+
+/* BEIDE ZUSTAENDE GLEICHZEITIG. Eine Schuelerfrage kann abgehakt sein - dann
+   traegt das <li> beide Klassen. Sie heben sich nicht auf: --erledigt regelt
+   `opacity` und die Textfarbe, --schueler den linken Rahmen. Kein Selektor
+   fasst dieselbe Eigenschaft zweimal an, die Reihenfolge im Stylesheet
+   entscheidet also nichts. Der Rahmen wird durch die `opacity` des
+   Elternelements mit abgeblendet - das ist gewollt, eine erledigte Frage soll
+   als Ganzes zuruecktreten, ihre Herkunft aber weiterhin erkennbar bleiben.
+
+   BEWUSST KEINE zusaetzliche Flaechentoenung: Die einzige im Projekt
+   vorhandene helle Toenung ist --color-ui-surface-light, und die ist ein
+   helles Orange - sie brachte genau die Verwechslung mit interaktiven
+   Flaechen zurueck, die der eigene Farbwert oben vermeiden soll. Der Rahmen
+   allein traegt die Kennzeichnung, in beiden Modi. */
+
 .cbd-fragenwand-notiz__label {
     flex: 1 1 auto;
     display: flex;
@@ -363,6 +437,39 @@
 .cbd-fragenwand-neu__knopf:hover {
     background: var(--color-ui-surface-dark, #c93d12);
     border-color: var(--color-ui-surface-dark, #c93d12);
+}
+
+/* Waehrend eine Frage unterwegs ist, sperrt sendeSchuelerFrage() das Feld.
+   Ohne diese Regel saehe es dabei unveraendert bedienbar aus. */
+.cbd-fragenwand-neu__feld[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* ---------------------------------------------
+   "FRAGE STELLEN" - SCHUELERMODUS
+   (Vorhaben "Schueler-Fragen")
+
+   Anders aufgebaut als die Lehrer-Fassung darueber: Feld und Knopf liegen in
+   einer eigenen Zeile (__zeile), darunter steht ein Hinweissatz. Deshalb wird
+   `display: flex` am Container zurueckgenommen und wandert nach innen - sonst
+   saesse der Hinweis als dritte Spalte neben dem Knopf.
+   --------------------------------------------- */
+
+.cbd-fragenwand-neu--schueler {
+    display: block;
+}
+
+.cbd-fragenwand-neu__zeile {
+    display: flex;
+    gap: 8px;
+}
+
+.cbd-fragenwand-neu__hinweis {
+    margin: 8px 0 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--color-text-muted, #666666);
 }
 
 /* =============================================

@@ -230,6 +230,10 @@
             var classId = parseInt($('#cbd-class-id').val()) || 0;
             var name = $('#cbd-class-name').val().trim();
             var password = $('#cbd-class-password').val();
+            // Vorhaben „Schueler-Fragen": IMMER '1' oder '0' mitschicken, nie
+            // das Feld weglassen. Eine abgehakte Checkbox schickte von sich aus
+            // gar nichts - das Ausschalten kaeme dann nie beim Server an.
+            var schuelerFragen = $('#cbd-class-schueler-fragen').is(':checked') ? '1' : '0';
 
             if (!name) {
                 alert('Bitte geben Sie einen Klassennamen ein.');
@@ -259,7 +263,8 @@
                 class_id: classId,
                 name: name,
                 password: password,
-                page_ids: pageIds
+                page_ids: pageIds,
+                schueler_fragen_erlaubt: schuelerFragen
             }, function(response) {
                 $saveBtn.prop('disabled', false).text('Klasse speichern');
 
@@ -287,6 +292,11 @@
             $('#cbd-class-id').val(classId);
             $('#cbd-class-name').val(cls.name);
             $('#cbd-class-password').val(''); // Don't show password
+            // `!!` statt eines direkten val(): ajax_get_classes() liefert den
+            // Wert bereits als echten Boolean (PHP-seitig gewandelt), aeltere
+            // Antworten aus einem Cache koennten aber noch "0"/"1" tragen -
+            // und "0" waere in JavaScript wahr.
+            $('#cbd-class-schueler-fragen').prop('checked', !!cls.schueler_fragen_erlaubt && '0' !== cls.schueler_fragen_erlaubt);
             $('#cbd-password-hint').text('Leer lassen um das Passwort nicht zu aendern.');
             $('#cbd-form-title').text('Klasse bearbeiten');
             $('#cbd-cancel-edit').show();
@@ -351,6 +361,7 @@
             $('#cbd-class-id').val(0);
             $('#cbd-class-name').val('');
             $('#cbd-class-password').val('');
+            $('#cbd-class-schueler-fragen').prop('checked', false);
             $('#cbd-password-hint').text('Dieses Passwort benoetigen die Schueler zum Zugriff auf die Klasse.');
             $('#cbd-form-title').text('Neue Klasse erstellen');
             $('#cbd-cancel-edit').hide();

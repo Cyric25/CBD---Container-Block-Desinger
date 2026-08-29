@@ -472,6 +472,23 @@ class CBD_Fragenwand {
                 'keineSitzung' => __('Keine aktive Klassensitzung.', 'container-block-designer'),
                 'fehler'       => __('Die Fragenwand konnte nicht geladen werden.', 'container-block-designer'),
                 'leer'         => __('Auf dieser Fragenwand steht noch nichts.', 'container-block-designer'),
+
+                // Vorhaben „Schüler-Fragen": Beschriftung des Eingabefelds im
+                // SCHÜLER-Modus. Bewusst hier und nicht nur in der
+                // JS-Rückfalltabelle — anders als die Lehrer-Oberfläche (siehe
+                // Einschränkung 5 aus AP-3.rev) ist das eine Fläche, die
+                // Schüler sehen, und die soll übersetzbar sein.
+                'schuelerFrage'      => __('Deine Frage …', 'container-block-designer'),
+                'schuelerAbsenden'   => __('Frage stellen', 'container-block-designer'),
+                'schuelerHinweis'    => __('Deine Frage erscheint anonym auf der Fragenwand. Ändern oder zurücknehmen kannst du sie danach nicht mehr.', 'container-block-designer'),
+                'schuelerFehler'     => __('Die Frage konnte nicht gesendet werden.', 'container-block-designer'),
+
+                // Die nicht-farbliche Kennzeichnung an der Notiz selbst. Sie
+                // erscheint in BEIDEN Ansichten (Lehrer wie Schüler) und ist
+                // der Teil der Herkunftsangabe, der auch ohne
+                // Farbunterscheidung trägt — siehe Begründung in
+                // `baueNotiz()` in `fragenwand-frontend.js`.
+                'herkunftSchueler'   => __('Schülerfrage', 'container-block-designer'),
             ),
         );
 
@@ -735,7 +752,7 @@ class CBD_Fragenwand {
         global $wpdb;
 
         $rows = $wpdb->get_results($wpdb->prepare(
-            'SELECT id, `text`, ist_erledigt FROM ' . CBD_TABLE_NOTES .
+            'SELECT id, `text`, ist_erledigt, ist_schueler_frage FROM ' . CBD_TABLE_NOTES .
             ' WHERE class_id = %d ORDER BY ist_erledigt ASC, created_at ASC, id ASC',
             $class_id
         ));
@@ -748,9 +765,13 @@ class CBD_Fragenwand {
                 // Notiz wäre sonst im Frontend nicht von einer offenen zu
                 // unterscheiden.
                 $notes[] = array(
-                    'id'           => (int) $row->id,
-                    'text'         => (string) $row->text,
-                    'ist_erledigt' => (bool) intval($row->ist_erledigt),
+                    'id'                 => (int) $row->id,
+                    'text'               => (string) $row->text,
+                    'ist_erledigt'       => (bool) intval($row->ist_erledigt),
+                    // Vorhaben „Schüler-Fragen": reines HERKUNFTS-Flag für die
+                    // farbliche Kennzeichnung. Es sagt NICHT, WER gefragt hat —
+                    // das wird bewusst nirgends gespeichert.
+                    'ist_schueler_frage' => (bool) intval($row->ist_schueler_frage),
                 );
             }
         }
@@ -928,13 +949,37 @@ class CBD_Fragenwand {
      * @return void
      */
     public function register_rest_route() {
+        // ZWEI ENDPUNKT-DEFINITIONEN AUF DERSELBEN ROUTE, nicht zwei Routen:
+        // `register_rest_route()` nimmt ein Array von Definitionen entgegen und
+        // wählt anhand der HTTP-Methode aus. Der Schüler-Schreibweg
+        // (Vorhaben „Schüler-Fragen") ist inhaltlich dieselbe Fragenwand
+        // derselben Sitzung — eine zweite Route wäre eine zweite Adresse für
+        // dieselbe Sache, und `baueAbrufUrl()` im Frontend müsste dann zwei
+        // Basen kennen statt einer.
         register_rest_route(self::REST_NAMESPACE, self::REST_ROUTE, array(
-            'methods'  => 'GET',
-            'callback' => array($this, 'rest_get_notes_for_student'),
-            // Die gesamte Autorisierung steckt im Callback: Schüler sind nie
-            // angemeldet, ein Capability-Callback schlösse sie aus. Vorbild:
-            // CBD_Block_Content_API.
-            'permission_callback' => '__return_true',
+            array(
+                'methods'  => 'GET',
+                'callback' => array($this, 'rest_get_notes_for_student'),
+                // Die gesamte Autorisierung steckt im Callback: Schüler sind nie
+                // angemeldet, ein Capability-Callback schlösse sie aus. Vorbild:
+                // CBD_Block_Content_API.
+                'permission_callback' => '__return_true',
+            ),
+            array(
+                'methods'  => 'POST',
+                'callback' => array($this, 'rest_add_note_from_student'),
+                // Gleiche Begründung wie beim GET: Die Prüfkette steckt
+                // vollständig im Callback (Sitzung → Text → Klassenschalter).
+                'permission_callback' => '__return_true',
+                // BEWUSST OHNE `args`-Deklaration, aus demselben Grund wie oben:
+                // Eine Typ-/Pflichtangabe an `text` erzeugte eine abweichende
+                // HTTP-400-Antwort (`rest_missing_callback_param`), BEVOR der
+                // Callback die Sitzung geprüft hat. Wer keine gültige Sitzung
+                // hat, soll aber immer dieselbe 404 sehen — sonst ließe sich am
+                // Antwortunterschied ablesen, dass die Route überhaupt etwas
+                // annimmt. Die Prüfung des Textes passiert deshalb im Callback,
+                // NACH der Sitzungsprüfung.
+            ),
         ));
     }
 
@@ -1010,7 +1055,7 @@ class CBD_Fragenwand {
         global $wpdb;
 
         $rows = $wpdb->get_results($wpdb->prepare(
-            'SELECT id, `text`, ist_erledigt FROM ' . CBD_TABLE_NOTES .
+            'SELECT id, `text`, ist_erledigt, ist_schueler_frage FROM ' . CBD_TABLE_NOTES .
             ' WHERE class_id = %d ORDER BY ist_erledigt ASC, created_at ASC, id ASC',
             $class_id
         ));
@@ -1018,23 +1063,207 @@ class CBD_Fragenwand {
         $notes = array();
         if (is_array($rows)) {
             foreach ($rows as $row) {
-                // Minimalprinzip: NUR diese drei Felder. Kein `class_id`,
+                // Minimalprinzip: NUR diese vier Felder. Kein `class_id`,
                 // kein `teacher_id`, keine Zeitstempel — nichts davon braucht
                 // die Leseansicht, und jedes zusätzliche Feld wäre eine
                 // Auskunft, um die niemand gebeten hat.
+                //
+                // `ist_schueler_frage` ist seit dem Vorhaben „Schüler-Fragen"
+                // dabei und verrät nichts Zusätzliches über Personen: Es sagt
+                // nur, DASS die Frage von einem Schüler kam, nie von welchem —
+                // die Spalte enthält keine Identität, weil beim Einfügen keine
+                // gespeichert wird.
                 //
                 // Typen wie in ajax_fragenwand_get_notes(): $wpdb liefert
                 // alles als String, und ein String "0" ist in JavaScript
                 // truthy — eine offene Notiz erschiene sonst als abgehakt.
                 $notes[] = array(
-                    'id'           => (int) $row->id,
-                    'text'         => (string) $row->text,
-                    'ist_erledigt' => (bool) intval($row->ist_erledigt),
+                    'id'                 => (int) $row->id,
+                    'text'               => (string) $row->text,
+                    'ist_erledigt'       => (bool) intval($row->ist_erledigt),
+                    'ist_schueler_frage' => (bool) intval($row->ist_schueler_frage),
                 );
             }
         }
 
-        return rest_ensure_response(array('notes' => $notes));
+        // EINMALIG JE ANTWORT, nicht je Notiz: Der Schalter gilt für die ganze
+        // Klasse. Das Frontend blendet daran sein Eingabefeld ein oder aus.
+        // ES IST KEINE ZUGANGSPRÜFUNG — die steckt in
+        // `rest_add_note_from_student()` und läuft bei jedem Absenden erneut.
+        // Ein Browser, der dieses Feld ignoriert und trotzdem sendet, wird dort
+        // abgewiesen.
+        return rest_ensure_response(array(
+            'notes'                 => $notes,
+            'schuelerFragenErlaubt' => $this->schueler_fragen_erlaubt($class_id),
+        ));
+    }
+
+    /**
+     * Darf in dieser Klasse ein Schüler selbst Fragen einreichen?
+     *
+     * Liest ausschließlich `wp_cbd_classes.schueler_fragen_erlaubt`. Die
+     * `$class_id` MUSS aus einer geprüften Sitzung stammen, nie aus dem Request
+     * — beide Aufrufer halten sich daran (`rest_get_notes_for_student()` und
+     * `rest_add_note_from_student()` holen sie aus
+     * `CBD_Classroom_Gate::sitzung()`).
+     *
+     * Eine unbekannte Klasse, ein Datenbankfehler oder eine fehlende Spalte
+     * ergeben `false` — im Zweifel also „nicht erlaubt", nie „erlaubt".
+     *
+     * @since Vorhaben „Schüler-Fragen"
+     * @param int $class_id
+     * @return bool
+     */
+    private function schueler_fragen_erlaubt(int $class_id): bool {
+        global $wpdb;
+
+        if ($class_id <= 0) {
+            return false;
+        }
+
+        $wert = $wpdb->get_var($wpdb->prepare(
+            'SELECT schueler_fragen_erlaubt FROM ' . CBD_TABLE_CLASSES . ' WHERE id = %d',
+            $class_id
+        ));
+
+        return (bool) intval($wert);
+    }
+
+    /**
+     * POST /wp-json/cbd/v1/fragenwand?classroom=<id>&token=<token>
+     *
+     * Der EINZIGE Schreibweg für Schüler — und er kann ausschließlich
+     * HINZUFÜGEN. Abhaken, Bearbeiten und Löschen bleiben den fünf
+     * Lehrer-AJAX-Actions vorbehalten, auch für Fragen, die von Schülern kamen.
+     *
+     * ANONYM, UND ZWAR STRUKTURELL: Es wird nirgends festgehalten, welcher
+     * Schüler eine Frage gestellt hat — `teacher_id` bekommt 0, es gibt kein
+     * zweites Feld dafür, und die Sitzung selbst kennt nur die Klasse, keine
+     * Person. Genau deshalb kann ein Schüler seine eigene Frage später auch
+     * nicht wiederfinden, ändern oder zurücknehmen: Es gibt schlicht kein
+     * Merkmal, an dem „meine" Frage erkennbar wäre. Das ist Absicht, kein
+     * fehlendes Feature.
+     *
+     * DIE KETTE, IN DIESER REIHENFOLGE:
+     *
+     *   1. `nocache_headers()`, IMMER und als Erstes, ohne Bedingung — wie beim
+     *      Lese-Endpunkt.
+     *   2. Gate-Klasse vorhanden und gültige Klassensitzung. Jeder Fehlschlag
+     *      hier endet in DERSELBEN einheitlichen 404 wie beim Lesen
+     *      (`fragenwand_ablehnung()`): Wer keine Sitzung hat, darf am
+     *      Antwortverhalten nicht ablesen können, ob es die Klasse gibt.
+     *   3. Text lesen und prüfen (leer / über 5000 Zeichen).
+     *   4. Klassenschalter `schueler_fragen_erlaubt` prüfen.
+     *   5. Einfügen, Rückgabewert prüfen (Muster aus AP-2.fix1).
+     *
+     * WARUM SCHRITT 3 UND 4 SPRECHENDE FEHLER LIEFERN DÜRFEN, SCHRITT 2 ABER
+     * NICHT: Wer bis dahin gekommen ist, hat bereits eine gültige Sitzung
+     * DIESER Klasse — „Text fehlt" oder „für diese Klasse nicht aktiviert"
+     * verrät ihm also nichts, was er nicht ohnehin schon wüsste. Die
+     * einheitliche 404 aus AP-2.3 soll das Durchprobieren fremder Klassen-IDs
+     * und Tokens verhindern; diese beiden Meldungen helfen dabei nicht.
+     *
+     * SCHRITT 3 STEHT VOR SCHRITT 4, weil ein leerer Text auch dann ein
+     * Eingabefehler ist, wenn die Klasse den Schalter gesetzt hat — und die
+     * Reihenfolge so unabhängig davon bleibt, welche Klasse gerade dran ist.
+     *
+     * @since Vorhaben „Schüler-Fragen"
+     * @param WP_REST_Request $request Nur der Textkörper wird ausgewertet; die
+     *                                 Sitzung kommt aus dem Gate.
+     * @return WP_REST_Response|WP_Error
+     */
+    public function rest_add_note_from_student($request) {
+        // ---- (1) Kein Zwischenspeicher, in JEDEM Antwortpfad ----------------
+        nocache_headers();
+
+        // ---- (2) Gültige Klassensitzung -------------------------------------
+        if (!class_exists('CBD_Classroom_Gate')
+            || !method_exists('CBD_Classroom_Gate', 'sitzung')) {
+            return $this->fragenwand_ablehnung();
+        }
+
+        $sitzung = CBD_Classroom_Gate::sitzung();
+
+        if (!is_array($sitzung) || !isset($sitzung['class_id'])) {
+            return $this->fragenwand_ablehnung();
+        }
+
+        $class_id = intval($sitzung['class_id']);
+        if ($class_id <= 0) {
+            return $this->fragenwand_ablehnung();
+        }
+
+        // ---- (3) Text lesen und prüfen --------------------------------------
+        // BEWUSST OHNE `wp_unslash()` — anders als `ajax_fragenwand_add_note()`
+        // ein paar Zeilen weiter oben, und das ist kein Versehen: Jene Methode
+        // liest roh aus `$_POST`, das WordPress vor jedem Request maskiert
+        // (`wp_magic_quotes()`), dort MUSS die Maskierung weg. Hier kommt der
+        // Wert aus `WP_REST_Request`, und die REST-Schicht hat das bereits
+        // erledigt — `WP_REST_Server::serve_request()` ruft
+        // `set_body_params(wp_unslash($_POST))` auf, und ein JSON-Rumpf wird
+        // ohnehin nie maskiert. Ein zweites `wp_unslash()` würde deshalb
+        // ECHTE Backslashes aus dem Fragetext entfernen (aus „C:\Pfad" würde
+        // „C:Pfad").
+        //
+        // Die 5000-Zeichen-Grenze ist zeichengleich mit dem Lehrer-Weg
+        // (AP-2.fix1) — es gibt eine Regel für die Textlänge einer Notiz,
+        // nicht zwei.
+        $text = sanitize_textarea_field((string) $request->get_param('text'));
+
+        if ('' === $text) {
+            return new WP_Error(
+                'cbd_fragenwand_text_fehlt',
+                __('Text darf nicht leer sein.', 'container-block-designer'),
+                array('status' => 400)
+            );
+        }
+
+        if (mb_strlen($text) > 5000) {
+            return new WP_Error(
+                'cbd_fragenwand_text_zu_lang',
+                __('Text ist zu lang (maximal 5000 Zeichen).', 'container-block-designer'),
+                array('status' => 400)
+            );
+        }
+
+        // ---- (4) Ist der Schalter für DIESE Klasse gesetzt? -----------------
+        if (!$this->schueler_fragen_erlaubt($class_id)) {
+            return new WP_Error(
+                'cbd_fragenwand_nicht_aktiviert',
+                __('Für diese Klasse ist das Stellen von Fragen nicht aktiviert.', 'container-block-designer'),
+                array('status' => 403)
+            );
+        }
+
+        // ---- (5) Einfügen ---------------------------------------------------
+        global $wpdb;
+
+        $eingefuegt = $wpdb->insert(CBD_TABLE_NOTES, array(
+            'class_id'           => $class_id,
+            // 0, NICHT die ID irgendeines Nutzers: Es gibt hier keinen
+            // angemeldeten Nutzer, und es soll auch keiner hineingeschrieben
+            // werden. NULL wäre gleichwertig gemeint, die Spalte ist aber
+            // `NOT NULL` — 0 ist der Wert, den sie tragen kann und der „niemand"
+            // bedeutet.
+            'teacher_id'         => 0,
+            'text'               => $text,
+            'ist_erledigt'       => 0,
+            'ist_schueler_frage' => 1,
+        ));
+
+        // Muster aus AP-2.fix1: Ohne diese Prüfung meldete ein fehlgeschlagener
+        // Insert trotzdem Erfolg — mit „id": 0 (Phantom-Notiz).
+        if (false === $eingefuegt) {
+            return new WP_Error(
+                'cbd_fragenwand_speichern_fehlgeschlagen',
+                __('Speichern fehlgeschlagen.', 'container-block-designer'),
+                array('status' => 500)
+            );
+        }
+
+        // Nur die ID zurück — das Frontend lädt die Liste danach ohnehin neu
+        // und bekommt die Notiz dabei an ihrer sortierten Stelle.
+        return rest_ensure_response(array('id' => (int) $wpdb->insert_id));
     }
 
     /**
