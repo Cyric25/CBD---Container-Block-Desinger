@@ -46,6 +46,15 @@ class CBD_Classroom {
     const OPTION_ENABLED = 'cbd_classroom_enabled';
 
     /**
+     * Shortcode-Name der Klassenverwaltung fuer Lehrpersonen im Frontend.
+     *
+     * Gegenstueck zu 'cbd_classroom' (Schueler-Zugang). Der Name steht als
+     * Konstante da, weil er an drei Stellen gebraucht wird: add_shortcode(),
+     * has_shortcode() im Enqueue und shortcode_atts().
+     */
+    const SHORTCODE_LEHRER_KLASSEN = 'cbd_lehrer_klassen';
+
+    /**
      * Get singleton instance
      */
     public static function get_instance() {
@@ -61,6 +70,19 @@ class CBD_Classroom {
     private function __construct() {
         // Always register the settings hook (so the toggle is available)
         add_action('admin_init', array($this, 'register_settings'));
+
+        // Frontend-Klassenverwaltung fuer Lehrpersonen.
+        //
+        // BEWUSST VOR der is_enabled()-Weiche registriert — anders als
+        // [cbd_classroom] weiter unten. Grund: Dieser Shortcode steht auf einer
+        // ganz gewoehnlichen, veroeffentlichten Seite. Waere er nur bei
+        // eingeschaltetem Klassen-System registriert, erschiene nach dem
+        // Abschalten des Systems der rohe Text "[cbd_lehrer_klassen]" im
+        // Seiteninhalt. Die Render-Methode zeigt in dem Fall denselben Hinweis
+        // wie admin/classroom.php ("Klassen-System ist derzeit deaktiviert").
+        // Der Enqueue-Zweig prueft is_enabled() selbst und laedt dann nichts.
+        add_shortcode(self::SHORTCODE_LEHRER_KLASSEN, array($this, 'render_lehrer_klassen_shortcode'));
+        add_action('wp_enqueue_scripts', array($this, 'enqueue_lehrer_klassen_assets'));
 
         // Only register classroom functionality if enabled
         if (!self::is_enabled()) {
@@ -1195,6 +1217,410 @@ class CBD_Classroom {
         </div>
         <?php
         return ob_get_clean();
+    }
+
+    // =========================================================================
+    // SHORTCODE: Klassenverwaltung fuer Lehrpersonen im Frontend
+    // =========================================================================
+    //
+    // Dieselbe Verwaltung wie admin/classroom.php, aber auf einer ganz normalen
+    // WordPress-Seite statt im wp-admin. Es entsteht dabei KEINE neue
+    // Sicherheitsflaeche: Die Oberflaeche spricht ueber assets/js/classroom-admin.js
+    // exakt dieselben vier AJAX-Actions an (cbd_get_classes, cbd_save_class,
+    // cbd_delete_class, cbd_toggle_class_subscription), jede mit derselben
+    // Nonce-Pruefung (cbd_classroom_nonce) und derselben Capability-Pruefung
+    // (cbd_edit_blocks) wie bisher. Die ajax_*-Methoden oben sind unveraendert.
+    //
+    // WIEDERVERWENDUNG STATT ZWEITER FASSUNG: assets/js/classroom-admin.js wird
+    // hier unveraendert mitgeladen. Die Datei macht keine adminspezifischen
+    // Annahmen ausser drei Anknuepfungspunkten im Markup, die das Frontend-Markup
+    // deshalb bewusst zeichengleich mitbringt:
+    //   1. der Wrapper traegt die Klasse `cbd-classroom-admin` — daran erkennt
+    //      der $(document).ready()-Zweig am Dateiende, dass er starten soll;
+    //   2. im Wrapper steht ein <h1> — showNotice() haengt seine Meldung mit
+    //      $('.cbd-classroom-admin h1').after() dahinter; ohne <h1> verschwaende
+    //      jede Rueckmeldung ("gespeichert", "geloescht") stillschweigend;
+    //   3. alle Element-IDs und Klassennamen des Formulars und der Tabelle sind
+    //      dieselben wie in admin/classroom.php.
+    // Eine zweite, schlanke JS-Fassung haette rund 500 Zeilen Logik verdoppelt
+    // (Seitenzuordnung mit automatischen Unterseiten, Abonnieren, Bearbeiten) —
+    // im Projekt gilt dafuer die Regel, dass zwei Fassungen frueher oder spaeter
+    // auseinanderlaufen. Die verbleibenden WP-Admin-Klassennamen im Markup
+    // (`button`, `notice`, `wp-list-table`, `spinner`) haben im Frontend keine
+    // Gestaltung; die liefert assets/css/lehrer-klassen.css nach.
+    //
+    // BEKANNTE GRENZE: [cbd_lehrer_klassen] und [cbd_classroom] duerfen NICHT
+    // auf derselben Seite stehen — beide Oberflaechen benutzen die Element-ID
+    // `cbd-class-password` (hier das Klassenpasswort im Verwaltungsformular,
+    // dort das Passwortfeld des Schueler-Logins). Zwei Seiten, wie vorgesehen,
+    // sind unproblematisch.
+
+    /**
+     * Aktuelle Seiten-URL — Rueckkehrziel nach der Anmeldung.
+     *
+     * Der Host kommt bewusst NICHT aus $_SERVER['HTTP_HOST'] (vom Aufrufer
+     * frei setzbar), sondern aus home_url(); nur der Pfad stammt aus der
+     * Anfrage. So kann ein manipulierter Host-Header das Anmelde-Rueckziel
+     * nicht auf eine fremde Adresse umbiegen.
+     */
+    private function lehrer_klassen_seiten_url(): string {
+        $permalink = get_permalink();
+        if (is_string($permalink) && '' !== $permalink) {
+            return $permalink;
+        }
+
+        if (!empty($_SERVER['REQUEST_URI'])) {
+            $pfad = wp_unslash($_SERVER['REQUEST_URI']);
+            if (is_string($pfad) && '' !== $pfad) {
+                return home_url($pfad);
+            }
+        }
+
+        return home_url('/');
+    }
+
+    /**
+     * Hinweiskasten (deaktiviertes System, fehlende Berechtigung).
+     */
+    private function lehrer_klassen_hinweis(string $text): string {
+        return '<div class="cbd-lehrer-klassen cbd-lehrer-klassen--hinweis"><p>'
+            . esc_html($text) . '</p></div>';
+    }
+
+    /**
+     * Anmelde-Bereich fuer nicht angemeldete Besucher.
+     *
+     * WARUM EIN LINK AUF wp_login_url() UND KEIN EINGEBETTETES wp_login_form():
+     * wp_login_url() laeuft durch den Filter `login_url`, wp_login_form() nicht —
+     * dessen action-Attribut ist fest auf site_url('wp-login.php', 'login_post')
+     * verdrahtet. Auf Installationen, die die Anmeldeseite verschieben oder
+     * umbenennen (Sicherheits-Plugins), zeigt das eingebettete Formular also ins
+     * Leere. Dazu kommt: Zwei-Faktor-Abfragen, Fehlermeldungen bei falschem
+     * Passwort, "Passwort vergessen" und die Test-Cookie-Pruefung laufen alle
+     * auf der kanonischen Anmeldeseite; ein eingebettetes Formular schickt den
+     * Nutzer bei jedem dieser Faelle ohnehin dorthin, nur ohne Kontext.
+     * `redirect_to` bringt ihn danach hierher zurueck.
+     */
+    private function render_lehrer_klassen_login(): string {
+        $ziel = $this->lehrer_klassen_seiten_url();
+
+        $html  = '<div class="cbd-lehrer-klassen cbd-lehrer-klassen--login">';
+        $html .= '<h2 class="cbd-lehrer-klassen__titel">'
+            . esc_html__('Anmeldung erforderlich', 'container-block-designer') . '</h2>';
+        $html .= '<p>' . esc_html__('Diese Seite ist der Klassen-Verwaltung fuer Lehrpersonen vorbehalten. Nach der Anmeldung kehren Sie automatisch hierher zurueck.', 'container-block-designer') . '</p>';
+        $html .= '<p><a class="button button-primary cbd-lehrer-klassen__login-link" href="'
+            . esc_url(wp_login_url($ziel)) . '">'
+            . esc_html__('Zur Anmeldung', 'container-block-designer') . '</a></p>';
+        $html .= '</div>';
+
+        return $html;
+    }
+
+    /**
+     * Die Seitenliste der Zuordnung — als Daten, nicht als Markup.
+     *
+     * WARUM NICHT ALS <option>-MARKUP WIE IN admin/classroom.php: Dort steht die
+     * Liste im Adminbereich, hier im Seiteninhalt — und der laeuft durch
+     * `the_content`. Die Glossar-Autoverlinkung des Themes
+     * (`Theme/functions.php`, Filter auf `the_content`, Prioritaet 10000)
+     * zerlegt den Inhalt in Textstuecke und wendet auf jedes einen aus ALLEN
+     * Glossarbegriffen gebauten regulaeren Ausdruck an. Auf der
+     * Testinstallation (281 veroeffentlichte Seiten, 1155 Glossarbegriffe) sind
+     * das 281 zusaetzliche Textstuecke bei einem rund 800 kB grossen Muster —
+     * GEMESSEN: HTTP 500, „Maximum execution time of 30 seconds exceeded",
+     * jedes Mal reproduzierbar. Die Adminseite kann das nicht passieren, dort
+     * laeuft `the_content` nicht.
+     *
+     * Die Liste geht deshalb ueber `wp_localize_script()` in den Footer — also
+     * an `the_content` vorbei — und `assets/js/lehrer-klassen.js` baut daraus
+     * die `<option>`-Elemente, bevor `classroom-admin.js` startet. Nebeneffekt,
+     * der die Entscheidung stuetzt: Der Titel wird dort ueber `textContent`
+     * gesetzt, kann also gar kein Markup einschleusen.
+     *
+     * Ausserdem ohne die zwei Abfragen JE SEITE, die admin/classroom.php an
+     * dieser Stelle braucht (`get_pages(array('child_of' => …))` und
+     * `get_post_ancestors()`): Elternschaft und Tiefe werden einmal aus der
+     * bereits geladenen Liste abgeleitet.
+     *
+     * Feiner Unterschied dabei, bewusst hingenommen: Liegt eine veroeffentlichte
+     * Seite unter einem Entwurf, kennt diese Liste deren Elternkette nicht und
+     * rueckt die Seite eine Stufe weniger ein. Rein optisch — die Seiten-ID ist
+     * davon unberuehrt.
+     *
+     * @return array Liste aus array('id','parent','tiefe','titel','kinder')
+     */
+    private function lehrer_klassen_seitendaten(): array {
+        $pages = get_pages(array(
+            'sort_column'  => 'menu_order, post_title',
+            'post_status'  => 'publish',
+            'hierarchical' => true,
+        ));
+
+        if (!is_array($pages) || empty($pages)) {
+            return array();
+        }
+
+        $eltern     = array();
+        $hat_kinder = array();
+        foreach ($pages as $page) {
+            $eltern[(int) $page->ID] = (int) $page->post_parent;
+            if ((int) $page->post_parent > 0) {
+                $hat_kinder[(int) $page->post_parent] = true;
+            }
+        }
+
+        $daten = array();
+        foreach ($pages as $page) {
+            // Tiefe ueber die Elternkette. Die Bremse bei 20 schuetzt gegen
+            // verstuemmelte Daten (Zyklus in post_parent), sie ist keine
+            // fachliche Aussage — dasselbe Vorgehen wie in
+            // CBD_Blocks_REST_API::baue_seitenbaum().
+            $tiefe = 0;
+            $lauf  = (int) $page->post_parent;
+            while ($lauf > 0 && $tiefe < 20 && isset($eltern[$lauf])) {
+                $tiefe++;
+                $lauf = $eltern[$lauf];
+            }
+
+            $daten[] = array(
+                'id'     => (int) $page->ID,
+                'parent' => (int) $page->post_parent,
+                'tiefe'  => $tiefe,
+                'titel'  => (string) $page->post_title,
+                'kinder' => isset($hat_kinder[(int) $page->ID]),
+            );
+        }
+
+        return $daten;
+    }
+
+    /**
+     * Die eigentliche Verwaltungsoberflaeche.
+     *
+     * Markup-Zwilling von admin/classroom.php — jede Element-ID und jede von
+     * classroom-admin.js gelesene Klasse ist zeichengleich uebernommen. Wer dort
+     * eine ID aendert, muss hier mitziehen (und umgekehrt).
+     */
+    private function render_lehrer_klassen_verwaltung(): string {
+        ob_start();
+        ?>
+        <div class="cbd-lehrer-klassen cbd-classroom-admin">
+            <?php
+            // Das <h1> ist Pflicht, nicht Zierde: showNotice() in
+            // classroom-admin.js haengt seine Rueckmeldungen mit
+            // $('.cbd-classroom-admin h1').after() dahinter.
+            ?>
+            <h1 class="cbd-lehrer-klassen__titel"><?php esc_html_e('Klassen-Verwaltung', 'container-block-designer'); ?></h1>
+
+            <div class="cbd-classroom-wrapper">
+                <!-- Neue Klasse erstellen -->
+                <div class="cbd-classroom-form-section">
+                    <h2 id="cbd-form-title"><?php esc_html_e('Neue Klasse erstellen', 'container-block-designer'); ?></h2>
+                    <form id="cbd-class-form" class="cbd-class-form">
+                        <input type="hidden" id="cbd-class-id" value="0">
+                        <table class="form-table">
+                            <tr>
+                                <th><label for="cbd-class-name"><?php esc_html_e('Klassenname', 'container-block-designer'); ?></label></th>
+                                <td>
+                                    <input type="text" id="cbd-class-name" class="regular-text" required
+                                           placeholder="<?php esc_attr_e('z.B. 3a Chemie 2026', 'container-block-designer'); ?>">
+                                </td>
+                            </tr>
+                            <tr>
+                                <th><label for="cbd-class-password"><?php esc_html_e('Passwort', 'container-block-designer'); ?></label></th>
+                                <td>
+                                    <input type="text" id="cbd-class-password" class="regular-text"
+                                           placeholder="<?php esc_attr_e('Passwort fuer Schueler-Zugang', 'container-block-designer'); ?>">
+                                    <p class="description" id="cbd-password-hint">
+                                        <?php esc_html_e('Dieses Passwort benoetigen die Schueler zum Zugriff auf die Klasse.', 'container-block-designer'); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th><label for="cbd-class-schueler-fragen"><?php esc_html_e('Fragenwand', 'container-block-designer'); ?></label></th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" id="cbd-class-schueler-fragen">
+                                        <?php esc_html_e('Schueler duerfen hier Fragen zur Fragenwand stellen', 'container-block-designer'); ?>
+                                    </label>
+                                    <p class="description">
+                                        <?php esc_html_e('Eingereichte Fragen sind anonym - es wird nicht gespeichert, wer sie gestellt hat. Abhaken, Bearbeiten und Loeschen bleiben ausschliesslich der Lehrperson vorbehalten.', 'container-block-designer'); ?>
+                                    </p>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th><label><?php esc_html_e('Zugeordnete Seiten', 'container-block-designer'); ?></label></th>
+                                <td>
+                                    <div id="cbd-class-pages" class="cbd-class-pages">
+                                        <div class="cbd-page-selector">
+                                            <?php
+                                            // Nur der Platzhalter steht im Markup — die eigentliche
+                                            // Seitenliste ergaenzt assets/js/lehrer-klassen.js aus
+                                            // window.cbdLehrerKlassen.seiten. Begruendung:
+                                            // lehrer_klassen_seitendaten().
+                                            ?>
+                                            <select class="cbd-page-select">
+                                                <option value=""><?php esc_html_e('-- Seite waehlen --', 'container-block-designer'); ?></option>
+                                            </select>
+                                            <button type="button" class="button cbd-remove-page" title="<?php esc_attr_e('Entfernen', 'container-block-designer'); ?>">&times;</button>
+                                        </div>
+                                    </div>
+                                    <div class="cbd-page-actions">
+                                        <button type="button" id="cbd-add-page" class="button">
+                                            + <?php esc_html_e('Seite hinzufuegen', 'container-block-designer'); ?>
+                                        </button>
+                                        <button type="button" id="cbd-add-all-pages" class="button">
+                                            <?php esc_html_e('Alle Seiten auswaehlen', 'container-block-designer'); ?>
+                                        </button>
+                                        <label>
+                                            <input type="checkbox" id="cbd-include-children" checked>
+                                            <?php esc_html_e('Unterseiten automatisch einbeziehen', 'container-block-designer'); ?>
+                                        </label>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                        <p class="submit">
+                            <button type="submit" class="button button-primary" id="cbd-save-class">
+                                <?php esc_html_e('Klasse speichern', 'container-block-designer'); ?>
+                            </button>
+                            <button type="button" class="button" id="cbd-cancel-edit" style="display:none;">
+                                <?php esc_html_e('Abbrechen', 'container-block-designer'); ?>
+                            </button>
+                        </p>
+                    </form>
+                </div>
+
+                <!-- Klassen-Liste -->
+                <div class="cbd-classroom-list-section">
+                    <h2><?php esc_html_e('Alle Klassen', 'container-block-designer'); ?></h2>
+                    <p class="description"><?php esc_html_e('★ = Ihre eigene Klasse. Fremde Klassen können abonniert werden, um sie im Tafel-Modus zu nutzen.', 'container-block-designer'); ?></p>
+                    <div id="cbd-classes-loading" class="cbd-loading">
+                        <span class="spinner is-active"></span>
+                        <?php esc_html_e('Lade Klassen...', 'container-block-designer'); ?>
+                    </div>
+                    <table class="wp-list-table widefat fixed striped" id="cbd-classes-table" style="display:none;">
+                        <thead>
+                            <tr>
+                                <th class="column-name"><?php esc_html_e('Name', 'container-block-designer'); ?></th>
+                                <th class="column-owner"><?php esc_html_e('Ersteller', 'container-block-designer'); ?></th>
+                                <th class="column-pages"><?php esc_html_e('Seiten', 'container-block-designer'); ?></th>
+                                <th class="column-status"><?php esc_html_e('Status', 'container-block-designer'); ?></th>
+                                <th class="column-created"><?php esc_html_e('Erstellt', 'container-block-designer'); ?></th>
+                                <th class="column-actions"><?php esc_html_e('Aktionen', 'container-block-designer'); ?></th>
+                            </tr>
+                        </thead>
+                        <tbody id="cbd-classes-body">
+                        </tbody>
+                    </table>
+                    <p id="cbd-no-classes" style="display:none;">
+                        <?php esc_html_e('Noch keine Klassen vorhanden.', 'container-block-designer'); ?>
+                    </p>
+                </div>
+            </div>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Render the [cbd_lehrer_klassen] shortcode
+     *
+     * Drei Zustaende, in dieser Reihenfolge:
+     *   1. Klassen-System abgeschaltet  -> Hinweis (wie admin/classroom.php)
+     *   2. nicht angemeldet             -> Anmelde-Bereich
+     *   3. angemeldet ohne cbd_edit_blocks -> "Keine Berechtigung."
+     *   4. angemeldet mit cbd_edit_blocks   -> Verwaltungsoberflaeche
+     *
+     * Diese Pruefung entscheidet nur ueber die ANZEIGE. Die eigentliche
+     * Absicherung liegt unveraendert in den AJAX-Handlern (Nonce + Capability
+     * + Besitzpruefung je Klasse); ein Aufruf ohne Berechtigung waere dort
+     * genauso abgewiesen wie zuvor ueber die Adminseite.
+     */
+    public function render_lehrer_klassen_shortcode($atts) {
+        $atts = shortcode_atts(array(), $atts, self::SHORTCODE_LEHRER_KLASSEN);
+
+        if (!self::is_enabled()) {
+            return $this->lehrer_klassen_hinweis(
+                __('Das Klassen-System ist derzeit deaktiviert.', 'container-block-designer')
+            );
+        }
+
+        if (!is_user_logged_in()) {
+            return $this->render_lehrer_klassen_login();
+        }
+
+        if (!current_user_can('cbd_edit_blocks')) {
+            return $this->lehrer_klassen_hinweis(
+                __('Keine Berechtigung.', 'container-block-designer')
+            );
+        }
+
+        return $this->render_lehrer_klassen_verwaltung();
+    }
+
+    /**
+     * Assets der Frontend-Klassenverwaltung — nur auf Seiten mit dem Shortcode.
+     *
+     * Zwei Stufen, absichtlich getrennt:
+     *   - Das CSS wird geladen, sobald der Shortcode auf der Seite steht. Auch
+     *     der Hinweis- und der Anmeldekasten brauchen Gestaltung.
+     *   - Das JavaScript samt Nonce nur, wenn die Oberflaeche wirklich gerendert
+     *     wird. Ein Nonce fuer jemanden auszugeben, der die Endpunkte ohnehin
+     *     nicht benutzen darf, waere unnoetig.
+     */
+    public function enqueue_lehrer_klassen_assets() {
+        global $post;
+
+        if (!is_a($post, 'WP_Post')) {
+            return;
+        }
+
+        if (!has_shortcode($post->post_content, self::SHORTCODE_LEHRER_KLASSEN)) {
+            return;
+        }
+
+        wp_enqueue_style(
+            'cbd-lehrer-klassen',
+            CBD_PLUGIN_URL . 'assets/css/lehrer-klassen.css',
+            array(),
+            CBD_VERSION
+        );
+
+        if (!self::is_enabled() || !is_user_logged_in() || !current_user_can('cbd_edit_blocks')) {
+            return;
+        }
+
+        // Fuellt die Seitenauswahl aus localisierten Daten. Muss VOR
+        // classroom-admin.js laufen — dessen init() klont die fertige
+        // .cbd-page-selector-Zeile als Vorlage. Die Reihenfolge sichert die
+        // Abhaengigkeit unten, nicht die Aufrufreihenfolge hier.
+        wp_enqueue_script(
+            'cbd-lehrer-klassen',
+            CBD_PLUGIN_URL . 'assets/js/lehrer-klassen.js',
+            array(),
+            CBD_VERSION,
+            true
+        );
+
+        wp_localize_script('cbd-lehrer-klassen', 'cbdLehrerKlassen', array(
+            'seiten' => $this->lehrer_klassen_seitendaten(),
+        ));
+
+        // DIESELBE Datei wie im Admin, unveraendert. Handle-Namensgleichheit ist
+        // unkritisch: Admin und Frontend sind getrennte Anfragen.
+        wp_enqueue_script(
+            'cbd-classroom-admin',
+            CBD_PLUGIN_URL . 'assets/js/classroom-admin.js',
+            array('jquery', 'cbd-lehrer-klassen'),
+            CBD_VERSION,
+            true
+        );
+
+        wp_localize_script('cbd-classroom-admin', 'cbdClassroomAdmin', array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce'   => wp_create_nonce('cbd_classroom_nonce'),
+        ));
     }
 
     // =========================================================================
