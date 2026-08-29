@@ -1971,10 +1971,13 @@ Der Marker fehlt genau dann, wenn eine Seite **programmatisch ohne
 angemeldeten Benutzer** angelegt wurde: `simple_clean_update_glossar_candidates()`
 steigt bei `!current_user_can('edit_post', $post_id)` aus. Eine im wp-admin
 angelegte oder gespeicherte Seite ist davon nicht betroffen. Nach einem
-einmaligen Scan lud dieselbe Seite in 0,6 s vollständig. **Für den Betrieb
-heißt das:** Die Shortcode-Seite normal im Editor anlegen und speichern —
-nicht per Skript einfügen. Ein Korrekturvorschlag am Theme (Rückfall
-abschalten oder Muster stückeln) ist nicht Teil dieses Vorhabens.
+einmaligen Scan lud dieselbe Seite in 0,6 s vollständig.
+
+**Behoben im Theme** (nicht Teil dieses Vorhabens, aber am selben Fund
+motiviert): Der Rückfall über ALLE Begriffe wurde durch einen sofortigen,
+persistierten Nachhol-Scan ersetzt, und `preg_replace_callback()` verliert
+bei einem PCRE-Fehler keinen Text mehr. Details:
+`Theme/CLAUDE.md`, Abschnitt „Glossar-System".
 
 ### Gestaltung
 
