@@ -33,7 +33,8 @@ if (isset($_POST['cbd_run_migration']) && wp_verify_nonce($_POST['cbd_migration_
                 'cbd_blocks' => $wpdb->prefix . 'cbd_blocks',
                 'cbd_classes' => $wpdb->prefix . 'cbd_classes',
                 'cbd_class_pages' => $wpdb->prefix . 'cbd_class_pages',
-                'cbd_drawings' => $wpdb->prefix . 'cbd_drawings'
+                'cbd_drawings' => $wpdb->prefix . 'cbd_drawings',
+                'cbd_notes' => $wpdb->prefix . 'cbd_notes'
             );
 
             foreach ($tables_check as $name => $table) {
@@ -119,13 +120,21 @@ $columns = $wpdb->get_col("SHOW COLUMNS FROM $table_name");
 $is_default_exists = in_array('is_default', $columns);
 $db_version = get_option('cbd_db_version', '0');
 
-// Prüfe Klassen-Tabellen (Version 3.0.0)
+// Prüfe Zusatz-Tabellen (Klassen-System v3.0.0 + Fragenwand)
+//
+// cbd_notes GEHÖRT SEIT 3.1.111 IN DIESE LISTE. Vorher entschied
+// $needs_migration weiter unten nur über die drei Klassen-Tabellen — auf einer
+// Installation, auf der die alle existierten, wurde die Schaltfläche „Alle
+// Migrationen durchführen" gar nicht erst gerendert. Genau dort fehlte die mit
+// dem Vorhaben „Fragenwand" hinzugekommene Tabelle wp_cbd_notes, und es gab
+// keinen Weg, sie über die Oberfläche nachzulegen.
 $classroom_tables_exist = true;
 $classroom_tables_status = array();
 $classroom_tables = array(
     'cbd_classes' => $wpdb->prefix . 'cbd_classes',
     'cbd_class_pages' => $wpdb->prefix . 'cbd_class_pages',
-    'cbd_drawings' => $wpdb->prefix . 'cbd_drawings'
+    'cbd_drawings' => $wpdb->prefix . 'cbd_drawings',
+    'cbd_notes' => $wpdb->prefix . 'cbd_notes'
 );
 
 foreach ($classroom_tables as $name => $table) {
@@ -167,7 +176,7 @@ $needs_migration = !$is_default_exists || !$classroom_tables_exist || version_co
                 </td>
             </tr>
             <tr>
-                <th scope="row"><?php _e('Klassen-Tabellen (v3.0.0)', 'container-block-designer'); ?></th>
+                <th scope="row"><?php _e('Zusatz-Tabellen (Klassen-System, Fragenwand)', 'container-block-designer'); ?></th>
                 <td>
                     <?php foreach ($classroom_tables_status as $name => $exists): ?>
                         <?php if ($exists): ?>

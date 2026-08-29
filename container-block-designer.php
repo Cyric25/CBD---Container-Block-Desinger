@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://github.com/Cyric25/CBD---Container-Block-Desinger
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 3.1.110
+ * Version: 3.1.111
  * Author: Cyric25
  * Author URI: https://github.com/Cyric25
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '3.1.110');
+define('CBD_VERSION', '3.1.111');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -443,6 +443,30 @@ class ContainerBlockDesigner {
         if (version_compare($from_version, '3.1.61', '<')) {
             if (class_exists('CBD_Schema_Manager')) {
                 CBD_Schema_Manager::run_migrations();
+            }
+        }
+
+        // Updates für Version 3.1.111 - fehlende Tabellen nachziehen
+        //
+        // WARUM DAS NÖTIG IST: register_activation_hook() läuft nur beim
+        // echten Aktivieren eines Plugins, nicht bei einem reinen Datei-Update
+        // (ZIP hochladen). Und selbst beim Aktivieren greift der Hook in diesem
+        // Plugin nicht, weil er erst im Konstruktor der Hauptklasse gesetzt
+        // wird — und der läuft auf 'plugins_loaded', also NACH dem Zeitpunkt,
+        // zu dem activate_plugin() die Datei einbindet. Ergebnis: Die mit dem
+        // Vorhaben „Fragenwand" hinzugekommene Tabelle wp_cbd_notes fehlte auf
+        // aktualisierten Installationen vollständig, und das Anlegen einer
+        // Notiz meldete „Speichern fehlgeschlagen."
+        //
+        // Dieser Zweig ist der automatische Weg zurück: run_updates() läuft
+        // über check_version_update() beim ersten Seitenaufruf nach dem Update.
+        // create_tables() ist idempotent (CREATE TABLE IF NOT EXISTS + dbDelta)
+        // und legt jede fehlende Tabelle nach. Wer das nicht abwarten will oder
+        // eine Installation vor sich hat, deren cbd_plugin_version bereits auf
+        // dieser Version steht, nutzt Container Designer → Datenbank reparieren.
+        if (version_compare($from_version, '3.1.111', '<')) {
+            if (class_exists('CBD_Schema_Manager')) {
+                CBD_Schema_Manager::create_tables();
             }
         }
     }
