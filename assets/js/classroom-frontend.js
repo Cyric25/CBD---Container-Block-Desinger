@@ -290,6 +290,41 @@
             var $pagesContainer = $('#cbd-classroom-pages');
             $pagesContainer.empty();
 
+            // Fragenwand-Einstieg ganz oben (Hotfix „Fragenwand in
+            // Klassenlisten"). Diese Seite verwendet den Theme-Block
+            // fos/inhaltsverzeichnis NICHT — der PHP-Einhänger
+            // CBD_Fragenwand::page_index_eintrag() (AP-4.2) greift hier also
+            // nie, und ohne diesen Knopf gäbe es auf der Klassenzugangs-Seite
+            // überhaupt keinen Weg zur Fragenwand.
+            //
+            // Markup bewusst zeichengleich zum PHP-Vorbild: dieselbe
+            // Trigger-Klasse cbd-fragenwand-verweis (der delegierte
+            // Klick-Listener in assets/js/fragenwand-frontend.js fängt jedes
+            // Element damit ab, unabhängig vom Tag-Namen) und dieselben
+            // Gestaltungsklassen aus assets/css/fragenwand.css, Abschnitt
+            // „INHALTSVERZEICHNIS-EINTRAG".
+            //
+            // WARUM data-classroom/data-token, anders als im PHP-Vorbild:
+            // Der Login läuft hier rein per AJAX, ohne Seiten-Neuladen — die
+            // Adresszeile trägt danach KEIN ?classroom=&token=. Klassen-ID und
+            // Token stehen nur in diesem Objekt (und im localStorage). Ohne
+            // die beiden Attribute schickte fragenwand-frontend.js eine leere
+            // Abfragezeichenfolge an cbd/v1/fragenwand, und der Schüler sähe
+            // „Keine aktive Klassensitzung." trotz gültiger Sitzung. Die
+            // Attribute sind nur ein Transportweg, keine Berechtigung: Der
+            // Server prüft das Token unverändert gegen den Transient
+            // cbd_classroom_<token>.
+            if (this.classId && this.token) {
+                $pagesContainer.append(
+                    $('<div class="cbd-classroom-fragenwand page-index__zusatz page-index__zusatz--fragenwand">').append(
+                        $('<button type="button" class="cbd-fragenwand-verweis page-index__fragenwand-link">')
+                            .attr('data-classroom', String(this.classId))
+                            .attr('data-token', String(this.token))
+                            .text('Fragenwand öffnen')
+                    )
+                );
+            }
+
             window.cbdDebug && console.log('[CBD Classroom] Rendering content, pages:', data.pages);
             window.cbdDebug && console.log('[CBD Classroom] Pages length:', data.pages ? data.pages.length : 'undefined');
 

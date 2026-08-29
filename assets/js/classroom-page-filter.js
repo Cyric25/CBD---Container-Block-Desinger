@@ -508,6 +508,33 @@
                 $('<div class="sidebar-section-title">').text('📚 ' + (className || 'Klassen-Modus'))
             );
 
+            // Fragenwand-Einstieg ganz oben in der Liste (Hotfix „Fragenwand
+            // in Klassenlisten"). Diese Methode ersetzt den Inhalt der
+            // Theme-Seitenleiste vollständig; der PHP-Einhänger
+            // CBD_Fragenwand::page_index_eintrag() (AP-4.2) bedient nur den
+            // Block fos/inhaltsverzeichnis und greift hier nicht.
+            //
+            // Markup zeichengleich zum PHP-Vorbild: dieselbe Trigger-Klasse
+            // cbd-fragenwand-verweis (der delegierte Klick-Listener in
+            // assets/js/fragenwand-frontend.js hängt an document und fängt
+            // jedes Element damit ab) und dieselben Gestaltungsklassen aus
+            // assets/css/fragenwand.css, Abschnitt „INHALTSVERZEICHNIS-EINTRAG".
+            //
+            // BEWUSST OHNE data-classroom/data-token — anders als in
+            // classroom-frontend.js: Diese Datei läuft ausschließlich auf
+            // Seiten, deren Adresse ?classroom=&token= trägt (init() steigt
+            // ohne beide Parameter aus, siehe oben). Damit greift der
+            // Standardweg von fragenwand-frontend.js, das die
+            // Abfragezeichenfolge der Seite unverändert weiterreicht — und
+            // die Frage, welche Parameter eine Sitzung ausmachen, bleibt an
+            // genau einer Stelle beantwortet (CBD_Classroom_Gate::sitzung()).
+            $nav.append(
+                $('<div class="cbd-classroom-fragenwand page-index__zusatz page-index__zusatz--fragenwand">').append(
+                    $('<button type="button" class="cbd-fragenwand-verweis page-index__fragenwand-link">')
+                        .text('Fragenwand öffnen')
+                )
+            );
+
             // Hierarchischen Baum aufbauen
             var $rootUl     = $('<ul class="page-tree">');
             var levelUls    = [$rootUl];

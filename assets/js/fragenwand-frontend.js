@@ -92,6 +92,26 @@
  * zweites Mal zu schreiben. Neu geladen wird nur der Koerper des Dialogs, das
  * Overlay bleibt stehen (Vorgabe aus AP-3.3, Schritt 2).
  *
+ * ---------------------------------------------------------------------------
+ * WAS DER HOTFIX „FRAGENWAND IN KLASSENLISTEN" GEAENDERT HAT
+ * ---------------------------------------------------------------------------
+ *
+ * EINE EINZIGE, ABWAERTSKOMPATIBLE ERGAENZUNG AM SCHUELERWEG. Der Fragenwand-
+ * Einstieg stand bis dahin nur im Theme-Block `fos/inhaltsverzeichnis`
+ * (AP-4.2). Die `[cbd_classroom]`-Seite benutzt diesen Block aber gar nicht -
+ * sie baut ihre Seitenliste nach dem Login per JavaScript
+ * (`renderClassroomContent()` in assets/js/classroom-frontend.js), ebenso die
+ * Klassen-Seitenleiste auf gewoehnlichen Seiten (`injectClassroomSidebar()`
+ * in assets/js/classroom-page-filter.js). In beiden Listen fehlte der Knopf.
+ *
+ * Beide Stellen setzen jetzt selbst ein Element mit der Trigger-Klasse - der
+ * delegierte Listener hier fing es ohne jede Aenderung ab. Zu aendern war nur
+ * die ADRESSBILDUNG: Auf der `[cbd_classroom]`-Seite laeuft die Anmeldung
+ * rein per AJAX, `window.location.search` ist dort leer. Deshalb liest
+ * `baueAbrufUrl()` jetzt zuerst `data-classroom`/`data-token` am Ausloeser
+ * und faellt nur ohne dieses Paar auf die Abfragezeichenfolge der Seite
+ * zurueck (Details im Docblock von `sitzungAusTrigger()`).
+ *
  * @package ContainerBlockDesigner
  * @since Vorhaben „Fragenwand", Phase 3 (AP-3.2), erweitert in AP-3.3
  */
@@ -498,6 +518,49 @@
 	}
 
 	/**
+	 * Die Sitzungsangaben aus den Datenattributen eines Ausloesers lesen.
+	 *
+	 * NUR FUER AUSLOESER, DIE AUF EINER SEITE OHNE `?classroom=&token=`
+	 * STEHEN. Genau einer tut das: der Knopf, den `renderClassroomContent()`
+	 * in assets/js/classroom-frontend.js ganz oben in die Seitenliste der
+	 * `[cbd_classroom]`-Seite haengt (Hotfix „Fragenwand in Klassenlisten").
+	 * Dort meldet sich der Schueler rein per AJAX an - die Adresszeile bleibt
+	 * unveraendert, `window.location.search` ist leer, und der Standardweg
+	 * unten schickte eine Anfrage ohne Sitzungsangaben los. Ergebnis waere
+	 * „Keine aktive Klassensitzung." trotz gueltiger Sitzung.
+	 *
+	 * BEIDE ATTRIBUTE MUESSEN DA SEIN, sonst gilt der Ausloeser als
+	 * gewoehnlich: Eine halbe Angabe (`classroom` ohne `token`) waere
+	 * schlechter als gar keine - sie ueberschriebe die Abfragezeichenfolge
+	 * der Seite, die vielleicht vollstaendig ist.
+	 *
+	 * KEIN SICHERHEITSUNTERSCHIED zum Standardweg: Beides sind clientseitige
+	 * Behauptungen. Ob die Sitzung gilt, entscheidet unveraendert
+	 * `CBD_Classroom_Gate::sitzung()` serverseitig gegen den Transient
+	 * `cbd_classroom_<token>` (AP-2.3) - ein erfundenes Attributpaar endet in
+	 * derselben einheitlichen 404 wie ein erfundener URL-Parameter.
+	 *
+	 * @since Hotfix „Fragenwand in Klassenlisten"
+	 * @param {Element} trigger
+	 * @returns {string} Abfragezeichenfolge ohne `?`, leer wenn nichts dasteht
+	 */
+	function sitzungAusTrigger(trigger) {
+		if (!trigger || 'function' !== typeof trigger.getAttribute) {
+			return '';
+		}
+
+		var klasse = trigger.getAttribute('data-classroom');
+		var token = trigger.getAttribute('data-token');
+
+		if (!klasse || !token) {
+			return '';
+		}
+
+		return 'classroom=' + encodeURIComponent(klasse)
+			+ '&token=' + encodeURIComponent(token);
+	}
+
+	/**
 	 * Die Abruf-Adresse fuer den Schueler-Lesezugriff bauen.
 	 *
 	 * DIE BASIS KOMMT VOM SERVER, NIE AUS DIESEM SCRIPT. Auf Installationen
@@ -512,14 +575,21 @@
 	 * die Adresse, und `classroom`/`token` kaemen nie am Endpunkt an. Vorbild:
 	 * `mitParameter()` in blocks/block-reference/view.js.
 	 *
-	 * Weitergereicht wird `window.location.search` UNVERAENDERT, nicht nur
-	 * `classroom`/`token`: Welche Parameter die Sitzung ausmachen, entscheidet
+	 * DER REGELFALL BLEIBT UNVERAENDERT: `window.location.search` wird
+	 * WEITERGEREICHT WIE ES IST, nicht auf `classroom`/`token` reduziert.
+	 * Welche Parameter die Sitzung ausmachen, entscheidet
 	 * `CBD_Classroom_Gate::sitzung()`. Eine Auswahl hier waere eine zweite,
 	 * stillschweigend veraltende Fassung dieser Regel.
 	 *
+	 * DIE AUSNAHME (Hotfix „Fragenwand in Klassenlisten"): Traegt der
+	 * Ausloeser selbst `data-classroom` UND `data-token`, gewinnen diese
+	 * beiden - siehe `sitzungAusTrigger()`. Das betrifft ausschliesslich
+	 * Seiten, deren Adresse die Sitzung gar nicht kennt.
+	 *
+	 * @param {Element} [trigger] Der angeklickte Verweis, falls bekannt
 	 * @returns {string} leer, wenn keine Basis bekannt ist
 	 */
-	function baueAbrufUrl() {
+	function baueAbrufUrl(trigger) {
 		var k = konfig();
 		var basis = ('string' === typeof k.restUrl) ? k.restUrl : '';
 
@@ -527,10 +597,14 @@
 			return '';
 		}
 
-		var such = window.location.search || '';
+		var such = sitzungAusTrigger(trigger);
 
-		if ('?' === such.charAt(0)) {
-			such = such.substring(1);
+		if ('' === such) {
+			such = window.location.search || '';
+
+			if ('?' === such.charAt(0)) {
+				such = such.substring(1);
+			}
 		}
 
 		if ('' === such) {
@@ -1147,10 +1221,13 @@
 	 * Prueffeld fuer geratene Klassen-IDs) wird hier nicht unterlaufen: Auch
 	 * das Frontend zeigt fuer alle diese Faelle denselben Satz.
 	 *
+	 * @param {Element} [trigger] Der angeklickte Verweis - nur damit
+	 *                            `baueAbrufUrl()` seine Datenattribute lesen
+	 *                            kann (Hotfix „Fragenwand in Klassenlisten").
 	 * @returns {void}
 	 */
-	function ladeSchuelerwand() {
-		var url = baueAbrufUrl();
+	function ladeSchuelerwand(trigger) {
+		var url = baueAbrufUrl(trigger);
 
 		if ('' === url) {
 			warne('Es ist keine REST-Adresse bekannt (cbdFragenwandFrontend.restUrl fehlt).');
@@ -1807,7 +1884,10 @@
 			return;
 		}
 
-		ladeSchuelerwand();
+		// Der Ausloeser wird durchgereicht, weil er die Sitzungsangaben
+		// tragen KANN (Hotfix „Fragenwand in Klassenlisten") - auf Seiten mit
+		// `?classroom=&token=` in der Adresse aendert das nichts.
+		ladeSchuelerwand(trigger);
 	}
 
 	/**
