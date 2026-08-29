@@ -1492,6 +1492,115 @@ Details je Befund und die vollständigen Übergabenotizen der Phase-3-APs:
 `fragenwand-format.js`, `fragenwand-frontend.js`, `fragenwand.css` und
 `fragenwand-editor.css`.
 
+### Phase 4: Inhaltsverzeichnis-Integration
+
+Letzte Phase des Vorhabens (AP-4.1 im Theme-Repository, AP-4.2/AP-4.fix1
+hier): Im Klassenmodus erscheint zusätzlich ganz oben im
+Theme-Inhaltsverzeichnis (`fos/inhaltsverzeichnis`) ein anklickbarer
+Fragenwand-Einstieg, ohne dass das Theme irgendetwas über Klassenmodus oder
+Fragenwand wissen muss.
+
+#### Fünfte Naht zum Theme: Inhaltsverzeichnis-Eintrag
+
+Nach dem Menü-Slug `page-manager` (Abschnitt „Seiten aus Markdown erzeugen"
+im Wurzel-`CLAUDE.md`), dem Filter `simple_clean_lehrerseite_freigeben`
+(Abschnitt „Klassen-Durchlass für gesperrte Seiten"), dem LaTeX-Renderer
+`window.cbdRenderLatex` und der Seitenbaum-Route (Abschnitt „Vierte Naht
+zwischen den Komponenten") ist dieser Filter die **fünfte** Stelle, an der
+Theme und Plugin über eine Schnittstelle zusammenwirken — und die **erste**
+seit `simple_clean_lehrerseite_freigeben` mit derselben Richtung: Das Theme
+definiert und ruft den Filter, das Plugin hängt sich optional ein. Bei den
+übrigen drei Nähten (Klassen-Durchlass, Modal-Sichtbarkeitsprüfung,
+Seitenbaum-Route) ist es umgekehrt — dort ruft das Plugin aktiv eine
+Theme-Funktion auf.
+
+**Der Filter:** `Theme/includes/page-index.php`,
+`simple_clean_render_page_index()` — direkt nach `$inhalt = '';` und vor dem
+Suchfeld-Block —
+```php
+$zusatz_eintraege = apply_filters('simple_clean_page_index_zusatzeintraege', '');
+if (is_string($zusatz_eintraege) && '' !== $zusatz_eintraege) {
+    $inhalt .= $zusatz_eintraege;
+}
+```
+**Standardwert `''`.** Ohne eingehängten Filter (Plugin fehlt/deaktiviert,
+oder ein anderes Theme ist aktiv) bleibt der Wert unverändert leer — das
+Inhaltsverzeichnis rendert byteidentisch zum Zustand vor diesem Vorhaben,
+kein Fatal Error, keine PHP-Warnung. Die `is_string()`-Prüfung fängt auch
+einen fehlerhaft eingehängten Filter ab, der versehentlich etwas anderes als
+einen String zurückgibt.
+
+**Der Einhänger:** `CBD_Fragenwand::page_index_eintrag()` in
+`includes/class-cbd-fragenwand.php`, registriert im Konstruktor
+(`add_filter('simple_clean_page_index_zusatzeintraege', array($this,
+'page_index_eintrag'))`). Erkennung bewusst NUR über den URL-Parameter
+`?classroom=` — dieselbe schwache, rein clientseitig gedachte
+Plausibilitätsprüfung wie in `CBD_Classroom::enqueue_frontend_assets()`: Ein
+positiver Treffer entscheidet nur, ob der Button überhaupt gerendert wird,
+NICHT, ob der Zugriff erlaubt ist — die eigentliche Autorisierung passiert
+unverändert beim Klick, über denselben REST-Endpunkt `cbd/v1/fragenwand`
+(AP-2.3), der die Sitzung serverseitig gegen den Transient
+`cbd_classroom_<token>` prüft. Ein gefälschter `?classroom=`-Wert ohne
+gültiges Token zeigt also höchstens einen Button, der beim Klick die
+einheitliche Ablehnung „Keine aktive Klassensitzung." liefert — kein
+Sicherheitsrisiko, nur ein optischer Fehlalarm.
+
+**KEIN `function_exists()`-Guard nötig, um den Filter einzuhängen** — anders
+als bei den drei Theme-Funktionsaufrufen (dort böte ein fehlendes Theme
+keine Funktion zum Aufrufen), bietet hier das Plugin selbst den Filter an,
+den es einhängt; `add_filter()` ist immer sicher, auch ohne den
+zugehörigen `apply_filters()`-Aufruf im Theme.
+
+**Markup:** `<button type="button" class="cbd-fragenwand-verweis
+page-index__fragenwand-link">Fragenwand öffnen</button>`, umschlossen von
+`<div class="page-index__zusatz page-index__zusatz--fragenwand">`.
+`<button>` statt `<a>` (anders als der Fließtext-Verweis aus AP-3.1), weil
+dieser Eintrag kein sinnvolles Sprungziel ohne JavaScript hat — die
+Klick-Delegation aus AP-3.2 (`e.target.closest('.cbd-fragenwand-verweis')`)
+fängt Klicks auf diese Klasse unabhängig vom Tag-Namen ab, es entsteht also
+keine zweite Trigger-Erkennung. Ein Klick öffnet dieselbe Fragenwand
+(gleiche Klasse, gleiche Daten) wie ein Fließtext-Verweis auf derselben
+Seite. **AP-4.fix1** entfernte ein ursprünglich mitgeplantes, für `<button>`
+ungültiges `href="#"`-Attribut (Planfehler, kein Umsetzungsfehler) und
+ergänzte in `assets/css/fragenwand.css` (Abschnitt
+„INHALTSVERZEICHNIS-EINTRAG") die zuvor fehlende Gestaltung: Hintergrund
+`var(--color-ui-surface, #e24614)`, Text `var(--color-text-on-accent,
+#ffffff)`, `cursor: pointer`, abgerundete Ecken, Hover
+`var(--color-ui-surface-dark, #c93d12)`, `:focus-visible`-Kontur — vorher
+war der Button ein grauer Browser-Standard-Knopf, im Dunkelmodus ein heller
+Fremdkörper (AP-4.rev, Befund Schweregrad mittel).
+
+#### Bekannte, bewusst akzeptierte Einschränkungen (Phase 4)
+
+Aus dem unabhängigen Review AP-4.rev (`PLAN-Fragenwand.md`, Abschnitt 7 —
+kein kritischer Befund, ein Befund Schweregrad mittel [oben bereits als
+AP-4.fix1 behoben], vier geringe, kein weiteres Korrektur-AP nötig):
+
+1. `$vorhandenes . $markup` in `page_index_eintrag()` ohne Typprüfung des
+   vorherigen Filterwerts — theoretisch, solange dieses Plugin der einzige
+   Konsument des Filters ist.
+2. Vorbestehend, außerhalb dieses Vorhabens: Klassensitzungs-Tokens werden
+   wegen der DB-Kollation `utf8mb4_unicode_520_ci` case- und
+   whitespace-insensitiv abgeglichen (betrifft `cbd/v1/block-html`
+   identisch, kein Fragenwand-spezifischer Befund).
+3. Kein eigener `tools/test-*`-Prüfharnisch für Phase 4 (im Projekt kein
+   Pflichtbestandteil, siehe `PLAN-Fragenwand.md`, Abschnitt 3).
+4. Der Cross-Component-Test (deaktiviertes CDB-Designer-Plugin) und der
+   End-to-End-Durchlauf über alle vier Phasen bestätigten zusätzlich, dass
+   der in AP-1.1/AP-1.rev offen gelassene Dunkelmodus-Sichttest des
+   Klassenmodus-Anmeldebaums nachträglich bestanden ist — keine offene
+   Prüflücke mehr aus Phase 1.
+
+Der Cross-Component-Test selbst (deaktiviertes Plugin → Inhaltsverzeichnis
+byteidentisch, kein Fatal Error, `cbd/v1/fragenwand` liefert
+`rest_no_route`) sowie die abschließende Sicherheits-Stichprobe (15
+REST-Varianten, Confused-Deputy-Test) sind der eigentliche Nachweis, dass
+alle fünf Nähte des Gesamtprojekts unabhängig voneinander ausfallsicher
+sind. Details und die vollständigen Übergabenotizen:
+`PLAN-Fragenwand.md`, Abschnitt 7 (AP-4.1 bis AP-4.fix1). Datei-Referenz:
+`reference_file_map.md`, Zeile zu `class-cbd-fragenwand.php` und
+`fragenwand.css`.
+
 ## Aktionsleiste: Sichtbarkeit, Verschachtelung, Behandelt-Dialog
 
 Die Leiste oben rechts im Container (`.cbd-action-buttons`) erscheint per
