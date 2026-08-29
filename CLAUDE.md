@@ -1836,6 +1836,181 @@ von sich aus gar nichts, das Ausschalten käme sonst nie beim Server an.
 Ändern; `ajax_get_classes()` liefert das Flag als echten Boolean zurück
 (`$wpdb` gibt alles als String, und `"0"` wäre in JavaScript wahr).
 
+## Klassenverwaltung im Frontend: `[cbd_lehrer_klassen]` (seit 3.1.115)
+
+Lehrpersonen verwalten ihre Klassen bisher ausschließlich über
+`admin/classroom.php` im wp-admin. Der neue Shortcode legt dieselbe
+Verwaltung auf eine ganz gewöhnliche WordPress-Seite — nach demselben Muster,
+nach dem `[cbd_classroom]` schon länger die Schüler-Seite trägt: Ein Admin legt
+eine Seite an und schreibt den Shortcode hinein.
+
+| | |
+|---|---|
+| Shortcode | `[cbd_lehrer_klassen]` (Konstante `CBD_Classroom::SHORTCODE_LEHRER_KLASSEN`) |
+| Render-Methode | `CBD_Classroom::render_lehrer_klassen_shortcode()` |
+| Assets | `CBD_Classroom::enqueue_lehrer_klassen_assets()` auf `wp_enqueue_scripts` |
+| Neue Dateien | `assets/css/lehrer-klassen.css`, `assets/js/lehrer-klassen.js` |
+| Endpunkte | unverändert `cbd_get_classes`, `cbd_save_class`, `cbd_delete_class`, `cbd_toggle_class_subscription` |
+
+### Vier Zustände, in dieser Reihenfolge
+
+1. **Klassen-System abgeschaltet** → Hinweis „Das Klassen-System ist derzeit
+   deaktiviert." (wortgleich mit `admin/classroom.php`)
+2. **nicht angemeldet** → Anmelde-Bereich
+3. **angemeldet ohne `cbd_edit_blocks`** → „Keine Berechtigung."
+4. **angemeldet mit `cbd_edit_blocks`** → die Verwaltungsoberfläche
+
+**Diese Kette entscheidet nur über die Anzeige.** Die Absicherung liegt
+unverändert in den AJAX-Handlern: Nonce `cbd_classroom_nonce`, Capability
+`cbd_edit_blocks`, und beim Ändern zusätzlich `WHERE id = %d AND teacher_id =
+%d`. Es entsteht **keine neue Sicherheitsfläche** — dieselben Endpunkte, nur
+über eine andere Seite erreicht. Der Diff dieses Vorhabens ist rein additiv
+(426 Zeilen, keine gelöschte); `ajax_save_class()`, `ajax_get_classes()`,
+`ajax_delete_class()`, `ajax_toggle_class_subscription()`,
+`render_classroom_shortcode()`, `enqueue_frontend_assets()`,
+`can_access_class()` und `get_teacher_classes()` sind byteidentisch geblieben
+(per Hash-Vergleich gegen `HEAD` geprüft).
+
+**Der Shortcode wird bewusst VOR der `is_enabled()`-Weiche im Konstruktor
+registriert** — anders als `[cbd_classroom]`. Er steht auf einer
+veröffentlichten Seite; wäre er nur bei eingeschaltetem Klassen-System
+registriert, erschiene nach dem Abschalten der rohe Text
+`[cbd_lehrer_klassen]` im Seiteninhalt. Der Enqueue-Zweig prüft `is_enabled()`
+selbst und lädt dann nichts.
+
+### Anmeldung: Link auf `wp_login_url()`, kein eingebettetes `wp_login_form()`
+
+`wp_login_url($ziel)` läuft durch den Filter **`login_url`**;
+`wp_login_form()` nicht — dessen `action` steht fest auf
+`site_url('wp-login.php', 'login_post')`. Auf Installationen, die die
+Anmeldeseite verschieben oder umbenennen (Sicherheits-Plugins), zeigte ein
+eingebettetes Formular also ins Leere. Dazu kommt, dass
+Zwei-Faktor-Abfragen, Fehlermeldungen bei falschem Passwort, „Passwort
+vergessen" und die Test-Cookie-Prüfung ohnehin auf der kanonischen
+Anmeldeseite stattfinden. `redirect_to` bringt den Nutzer danach zurück.
+
+Das Rückkehrziel baut `lehrer_klassen_seiten_url()`: bevorzugt
+`get_permalink()`, ersatzweise `home_url($_SERVER['REQUEST_URI'])`. **Der Host
+kommt dabei nie aus `$_SERVER['HTTP_HOST']`** (vom Aufrufer frei setzbar),
+sondern aus `home_url()` — nur der Pfad stammt aus der Anfrage.
+
+### `classroom-admin.js` wird unverändert mitgeladen
+
+Die Frontend-Seite reiht **dieselbe Datei** ein wie der Adminbereich, ohne eine
+Zeile daran zu ändern. Eine zweite, schlanke Fassung hätte rund 500 Zeilen
+Logik verdoppelt (Seitenzuordnung mit automatischen Unterseiten, Abonnieren,
+Bearbeiten, Löschen) — im Projekt gilt dafür durchgehend die Regel, dass zwei
+Fassungen früher oder später auseinanderlaufen.
+
+Die Datei macht drei Annahmen über das Markup, die das Frontend-Markup deshalb
+zeichengleich mitbringt:
+
+1. **Der Wrapper trägt `cbd-classroom-admin`** — daran erkennt der
+   `$(document).ready()`-Zweig am Dateiende, dass er starten soll.
+2. **Im Wrapper steht ein `<h1>`** — `showNotice()` hängt seine Meldung mit
+   `$('.cbd-classroom-admin h1').after()` dahinter. Ohne `<h1>` verschwände
+   jede Rückmeldung („gespeichert", „gelöscht") stillschweigend.
+3. **Alle Element-IDs** des Formulars und der Tabelle sind dieselben wie in
+   `admin/classroom.php`. Wer dort eine ID ändert, muss hier mitziehen.
+
+Die verbleibenden WP-Admin-Klassennamen im Markup (`button`, `notice`,
+`wp-list-table`, `form-table`, `spinner`, `description`, `regular-text`) haben
+im Frontend keine Gestaltung — die liefert `assets/css/lehrer-klassen.css`
+nach. Deshalb existiert diese Datei überhaupt: Sie ist nicht bloß eine
+Frontend-Kopie von `classroom-admin.css`, sondern zusätzlich der Ersatz für
+das, was wp-admin sonst beisteuert.
+
+**Bekannte Grenze:** `[cbd_lehrer_klassen]` und `[cbd_classroom]` dürfen
+**nicht auf derselben Seite** stehen — beide benutzen die Element-ID
+`cbd-class-password` (hier das Klassenpasswort im Verwaltungsformular, dort das
+Passwortfeld des Schüler-Logins). Zwei getrennte Seiten, wie vorgesehen, sind
+unproblematisch.
+
+### Die Seitenliste steht NICHT im Seiteninhalt
+
+`admin/classroom.php` schreibt die rund 280 `<option>`-Elemente der
+Seitenzuordnung direkt ins Markup. Im Frontend geht das nicht: Der
+Shortcode-Rückgabewert läuft durch `the_content`, und dort hängt die
+**Glossar-Autoverlinkung des Themes** (`Theme/functions.php`,
+`simple_clean_glossar_auto_link_content_optimized`, Priorität 10000). Sie
+zerlegt den Inhalt in Textstücke und wendet auf jedes ein aus Glossarbegriffen
+gebautes Muster an — 280 Seitentitel sind 280 zusätzliche Textstücke.
+
+`lehrer_klassen_seitendaten()` liefert die Liste deshalb als Array, das
+`wp_localize_script()` als `window.cbdLehrerKlassen.seiten` in den Footer
+schreibt — an `the_content` vorbei. `assets/js/lehrer-klassen.js` baut daraus
+die `<option>`-Elemente, **bevor** `classroom-admin.js` startet (Reihenfolge
+über die Skript-Abhängigkeit `cbd-classroom-admin` → `cbd-lehrer-klassen`
+gesichert); dessen `init()` klont `.cbd-page-selector` als Vorlage und braucht
+die Optionen also bereits. Der Titel wird über `textContent` gesetzt und kann
+damit gar kein Markup einschleusen.
+
+Dieselbe Methode spart außerdem die **zwei Abfragen je Seite**, die
+`admin/classroom.php` an dieser Stelle braucht (`get_pages(['child_of' => …])`
+und `get_post_ancestors()`); Elternschaft und Tiefe entstehen einmal aus der
+bereits geladenen Liste. Bewusst hingenommener Unterschied: Liegt eine
+veröffentlichte Seite unter einem **Entwurf**, fehlt deren Elternkette in der
+Liste und die Seite rückt eine Stufe weniger ein — rein optisch.
+
+### Nebenbefund am Theme: nie gescannte Seiten verlieren ihren Text
+
+Beim Live-Test fiel eine **vorbestehende, nicht von diesem Vorhaben
+verursachte** Schwäche der Glossar-Autoverlinkung auf. Der Filter arbeitet mit
+einer je Seite gespeicherten Kandidatenliste (`_glossar_term_candidates`,
+Marker `_glossar_scan_version`, geschrieben von
+`simple_clean_update_glossar_candidates()` auf `save_post`). Fehlt der Marker,
+greift ein Rückfall über **alle** Glossarbegriffe.
+
+Auf der Testinstallation (1155 Begriffe) ist das daraus gebaute Muster rund
+800 kB groß. `preg_replace_callback()` bricht damit mit
+„Compilation failed: regular expression is too large" ab und liefert `null` —
+**der betroffene Textteil verschwindet ersatzlos**. Gemessen: HTTP 500 nach
+30 Sekunden, jede Beschriftung der Seite leer.
+
+Der Marker fehlt genau dann, wenn eine Seite **programmatisch ohne
+angemeldeten Benutzer** angelegt wurde: `simple_clean_update_glossar_candidates()`
+steigt bei `!current_user_can('edit_post', $post_id)` aus. Eine im wp-admin
+angelegte oder gespeicherte Seite ist davon nicht betroffen. Nach einem
+einmaligen Scan lud dieselbe Seite in 0,6 s vollständig. **Für den Betrieb
+heißt das:** Die Shortcode-Seite normal im Editor anlegen und speichern —
+nicht per Skript einfügen. Ein Korrekturvorschlag am Theme (Rückfall
+abschalten oder Muster stückeln) ist nicht Teil dieses Vorhabens.
+
+### Gestaltung
+
+`assets/css/lehrer-klassen.css` folgt den Hausregeln: ausschließlich
+`var(--x, #fallback)`, Dunkelmodus über `[data-theme="dark"]`, kein
+`@media (prefers-color-scheme: dark)`. Eigene Variablen gibt es nur für
+Zustandsfarben (`--cbd-lk-ok-*`, `--cbd-lk-warn-*`, `--cbd-lk-abo-*`,
+`--cbd-lk-eigen-bg`, `--cbd-lk-loeschen`) — dieselbe bewusste Ausnahme mit
+derselben Begründung wie `--cbd-fragenwand-schueler` in `fragenwand.css`:
+`--color-ui-surface` ist die Farbe interaktiver Flächen und trüge hier die
+falsche Bedeutung.
+
+Drei Stellen, die beim Bauen live nachgebessert werden mussten:
+
+1. **`min-width: 0` auf `.cbd-page-selector select`** — ohne das wächst ein
+   `<select>` nie unter die Breite seiner längsten Option; die Zeile ragte auf
+   schmalen Anzeigen aus dem Kasten und schnitt den Entfernen-Knopf ab.
+2. **`.cbd-page-tags` bekommt `max-height` + eigenen Bildlauf** — eine Klasse
+   kann siebzig Seiten tragen, die Zeile wuchs sonst über mehrere
+   Bildschirmhöhen.
+3. **Die Klassenliste stapelt auf schmalen Anzeigen NICHT.** Der erste Anlauf
+   setzte `tr`/`td` auf `display: block`; gemessen wurde dabei eine Zeilenhöhe
+   von rund 600 px, weil das Theme eigene Regeln für Tabellenzellen mitbringt,
+   die auf einer als Block gerenderten Zelle unerwartet greifen. Seither bleibt
+   es eine echte Tabelle mit `overflow-x: auto` am umgebenden Abschnitt —
+   vorhersehbar und von keiner fremden Regel abhängig.
+
+### Einrichtung durch den Website-Betrieb
+
+WordPress-Admin → **Seiten → Erstellen** → Titel z. B. „Klassenverwaltung" →
+einen Shortcode-Block einfügen und `[cbd_lehrer_klassen]` hineinschreiben →
+veröffentlichen. Fertig; die Seite darf ruhig im Menü stehen, denn ohne
+`cbd_edit_blocks` sieht niemand mehr als eine Anmeldeaufforderung bzw. „Keine
+Berechtigung.". Die Adminseite unter *Container Designer → Klassen* bleibt
+unverändert bestehen.
+
 ## Datenbank reparieren: warum das Werkzeug fehlende Tabellen übersah (Hotfix 3.1.111)
 
 **Anlass:** Auf einer Produktivseite meldete
