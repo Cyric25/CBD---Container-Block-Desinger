@@ -72,6 +72,7 @@ class CBD_Schema_Manager {
             password varchar(255) NOT NULL,
             teacher_id bigint(20) unsigned NOT NULL,
             status varchar(20) DEFAULT 'active',
+            schueler_fragen_erlaubt tinyint(1) DEFAULT 0,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -116,6 +117,7 @@ class CBD_Schema_Manager {
             teacher_id bigint(20) unsigned NOT NULL,
             text text NOT NULL,
             ist_erledigt tinyint(1) DEFAULT 0,
+            ist_schueler_frage tinyint(1) DEFAULT 0,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -127,13 +129,172 @@ class CBD_Schema_Manager {
         dbDelta($sql_drawings);
         dbDelta($sql_notes);
 
+        // NEUE SPALTEN AUF BESTEHENDEN TABELLEN NACHZIEHEN — dbDelta oben tut
+        // das NICHT. Begründung im Docblock von ensure_columns().
+        self::ensure_columns();
+
         // Run migrations if needed
         self::run_migrations();
-        
+
         // Update database version
         update_option(self::DB_VERSION_KEY, self::DB_VERSION);
     }
-    
+
+    /**
+     * Die Spalten, die auf bestehenden Installationen nachgereicht werden müssen.
+     *
+     * Schlüssel = vollständiger Tabellenname, Wert = Liste
+     * `Spaltenname => SQL-Definition (ohne Spaltennamen)`. Diese Liste ist die
+     * EINE Quelle für `ensure_columns()` (die Reparatur) und für die
+     * Statusanzeige auf „Datenbank reparieren"
+     * (`CBD_Admin::render_database_repair_page()`); eine zweite, dort gepflegte
+     * Fassung liefe unweigerlich auseinander.
+     *
+     * BEWUSST NICHT die vollständige Spaltenliste aller fünf Tabellen: Hier
+     * stehen nur die Spalten, die NACH dem ersten Ausrollen einer Tabelle
+     * hinzugekommen sind. Alles Übrige entsteht mit der Tabelle selbst und kann
+     * gar nicht fehlen. Wer künftig eine Spalte an eine bereits ausgerollte
+     * Tabelle hängt, trägt sie hier UND in den `CREATE TABLE`-String oben ein
+     * (dort für Neuinstallationen) — und ergänzt einen `run_updates()`-Zweig in
+     * `container-block-designer.php` mit der Zielversion.
+     *
+     * @since 3.1.113 (Vorhaben „Schüler-Fragen")
+     * @return array<string,array<string,string>>
+     */
+    public static function get_required_columns() {
+        global $wpdb;
+
+        return array(
+            $wpdb->prefix . 'cbd_classes' => array(
+                // Vorhaben „Schüler-Fragen": Pro Klasse einstellbar, ob Schüler
+                // selbst Fragen auf die Fragenwand legen dürfen.
+                'schueler_fragen_erlaubt' => "tinyint(1) DEFAULT 0",
+            ),
+            $wpdb->prefix . 'cbd_notes' => array(
+                // Reines HERKUNFTS-Flag für die farbliche Kennzeichnung — KEINE
+                // Identität. Es wird nicht gespeichert, WELCHER Schüler gefragt
+                // hat (Anonymitätszusage des Vorhabens).
+                'ist_schueler_frage' => "tinyint(1) DEFAULT 0",
+            ),
+        );
+    }
+
+    /**
+     * Fehlende Spalten auf bereits existierenden Tabellen nachtragen.
+     *
+     * WARUM DAS VON HAND NÖTIG IST — dbDelta zieht sie NICHT nach.
+     * `create_tables()` verwendet für alle fünf Tabellen die Form
+     * `CREATE TABLE IF NOT EXISTS <name> (…)`. dbDelta() liest den Tabellennamen
+     * für seine Vergleichslogik per regulärem Ausdruck aus dem SQL — und dieser
+     * Ausdruck greift bei jener Form daneben: Er hält das Wort `IF` für den
+     * Tabellennamen. dbDelta sucht dann eine Tabelle namens `IF`, findet keine,
+     * hält die Anweisung für eine Neuanlage und vergleicht überhaupt keine
+     * Spalten. Die Tabelle existiert ja bereits (`IF NOT EXISTS` greift), also
+     * geschieht schlicht gar nichts — kein `ALTER TABLE … ADD COLUMN`, kein
+     * Fehler, keine Warnung.
+     *
+     * EMPIRISCH BELEGT (Testserver, MariaDB, WordPress 6.x): Ein Aufruf von
+     * `dbDelta()` mit den beiden neuen Spalten in den bestehenden
+     * `CREATE TABLE IF NOT EXISTS`-Strings lieferte
+     * `array('IF' => 'Created table IF')` zurück und ließ beide Tabellen
+     * unverändert. Derselbe String OHNE `IF NOT EXISTS` lieferte
+     * `array('…cbd_notes.ist_schueler_frage' => 'Added column …')` und trug die
+     * Spalte tatsächlich ein.
+     *
+     * WARUM DIE `CREATE TABLE`-STRINGS TROTZDEM NICHT UMGESTELLT WURDEN: Das
+     * Muster ist Bestand ALLER fünf Tabellen und in CLAUDE.md seit AP-2.rev als
+     * bewusst akzeptierte Einschränkung vermerkt. Ein Umstellen aller fünf
+     * hinge an dbDeltas Diff-Logik für gewachsene Produktivtabellen — mit dem
+     * Risiko unerwünschter `ALTER TABLE`-Anweisungen auf Tabellen, die seit
+     * Jahren laufen. Dieser Weg hier ist eng, prüfbar und fasst nur an, was
+     * nachweislich fehlt.
+     *
+     * IDEMPOTENT: Jede Spalte wird einzeln per `SHOW COLUMNS … LIKE` geprüft;
+     * eine vorhandene Spalte wird nie angefasst. Fehlt die ganze Tabelle, wird
+     * sie übersprungen — dann ist `create_tables()` zuständig, und die Tabelle
+     * entsteht ohnehin gleich mit den neuen Spalten.
+     *
+     * @since 3.1.113 (Vorhaben „Schüler-Fragen")
+     * @return array Liste der tatsächlich ergänzten Spalten als
+     *               "tabelle.spalte" — leer, wenn nichts zu tun war.
+     */
+    public static function ensure_columns() {
+        global $wpdb;
+
+        $ergaenzt = array();
+
+        foreach (self::get_required_columns() as $table => $columns) {
+            // Fehlt die Tabelle ganz, ist create_tables() zuständig — sie legt
+            // sie samt der neuen Spalten an.
+            if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) !== $table) {
+                continue;
+            }
+
+            foreach ($columns as $column => $definition) {
+                $vorhanden = $wpdb->get_var($wpdb->prepare(
+                    "SHOW COLUMNS FROM `" . esc_sql($table) . "` LIKE %s",
+                    $column
+                ));
+
+                if (!empty($vorhanden)) {
+                    continue;
+                }
+
+                // Tabellen- und Spaltenname stammen ausschließlich aus
+                // get_required_columns() (eigene Konstanten/Literale), nie aus
+                // einer Anfrage. `esc_sql()` steht trotzdem da, weil eine
+                // ungeprüfte Zeichenkette in einer SQL-Anweisung im Plugin
+                // nirgends zum Muster werden soll — ein Bezeichner kann nicht
+                // über $wpdb->prepare() gebunden werden.
+                $ergebnis = $wpdb->query(
+                    "ALTER TABLE `" . esc_sql($table) . "` "
+                    . "ADD COLUMN `" . esc_sql($column) . "` " . $definition
+                );
+
+                if (false !== $ergebnis) {
+                    $ergaenzt[] = $table . '.' . $column;
+                }
+            }
+        }
+
+        return $ergaenzt;
+    }
+
+    /**
+     * Welche der benötigten Spalten fehlen aktuell?
+     *
+     * Nur für die Anzeige auf „Datenbank reparieren" gedacht — sie ändert
+     * nichts. Fehlende Tabellen werden übersprungen; deren Fehlen meldet die
+     * Seite bereits über `CBD_Admin::table_exists()`.
+     *
+     * @since 3.1.113 (Vorhaben „Schüler-Fragen")
+     * @return array Liste als "tabelle.spalte"
+     */
+    public static function get_missing_columns() {
+        global $wpdb;
+
+        $fehlend = array();
+
+        foreach (self::get_required_columns() as $table => $columns) {
+            if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) !== $table) {
+                continue;
+            }
+
+            foreach ($columns as $column => $definition) {
+                $vorhanden = $wpdb->get_var($wpdb->prepare(
+                    "SHOW COLUMNS FROM `" . esc_sql($table) . "` LIKE %s",
+                    $column
+                ));
+
+                if (empty($vorhanden)) {
+                    $fehlend[] = $table . '.' . $column;
+                }
+            }
+        }
+
+        return $fehlend;
+    }
+
     /**
      * Run database migrations
      */

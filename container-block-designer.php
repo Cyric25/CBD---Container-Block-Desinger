@@ -3,7 +3,7 @@
  * Plugin Name: Container Block Designer
  * Plugin URI: https://github.com/Cyric25/CBD---Container-Block-Desinger
  * Description: Erstellen und verwalten Sie anpassbare Container-Blöcke für den WordPress Block-Editor
- * Version: 3.1.112
+ * Version: 3.1.113
  * Author: Cyric25
  * Author URI: https://github.com/Cyric25
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Plugin-Konstanten definieren
-define('CBD_VERSION', '3.1.112');
+define('CBD_VERSION', '3.1.113');
 define('CBD_PLUGIN_FILE', __FILE__);
 define('CBD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('CBD_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -467,6 +467,36 @@ class ContainerBlockDesigner {
         if (version_compare($from_version, '3.1.111', '<')) {
             if (class_exists('CBD_Schema_Manager')) {
                 CBD_Schema_Manager::create_tables();
+            }
+        }
+
+        // Updates für Version 3.1.113 - fehlende SPALTEN nachziehen
+        // (Vorhaben „Schüler-Fragen": wp_cbd_classes.schueler_fragen_erlaubt
+        // und wp_cbd_notes.ist_schueler_frage)
+        //
+        // WARUM DAS EIN EIGENER ZWEIG IST UND NICHT create_tables() GENÜGT HÄTTE:
+        // Beide Tabellen existieren auf bestehenden Installationen bereits, nur
+        // ohne die neuen Spalten. Es lag nahe, die Spalten einfach in die
+        // `CREATE TABLE IF NOT EXISTS`-Strings des Schema-Managers zu schreiben
+        // und darauf zu bauen, dass dbDelta() sie per ALTER TABLE nachträgt.
+        // TUT ES NICHT — auf dem Testserver nachgemessen: dbDelta liest den
+        // Tabellennamen per Regex aus dem SQL und hält bei dieser Schreibweise
+        // das Wort `IF` für den Tabellennamen. Es sucht dann eine Tabelle „IF",
+        // findet keine, hält die Anweisung für eine Neuanlage und vergleicht
+        // überhaupt keine Spalten (Rückgabe: array('IF' => 'Created table IF')).
+        // Die Tabelle existiert ja schon, also passiert schlicht nichts — kein
+        // ALTER TABLE, kein Fehler, keine Warnung.
+        //
+        // Deshalb trägt CBD_Schema_Manager::ensure_columns() die Spalten
+        // ausdrücklich nach (SHOW COLUMNS je Spalte, dann ALTER TABLE ADD
+        // COLUMN). Die Methode ist idempotent; für Neuinstallationen stehen die
+        // Spalten zusätzlich in den CREATE-TABLE-Strings, dort greifen sie
+        // sofort. Wer nicht auf den nächsten Seitenaufruf warten will, nutzt
+        // Container Designer → Datenbank reparieren (ruft denselben Weg).
+        if (version_compare($from_version, '3.1.113', '<')) {
+            if (class_exists('CBD_Schema_Manager')
+                && method_exists('CBD_Schema_Manager', 'ensure_columns')) {
+                CBD_Schema_Manager::ensure_columns();
             }
         }
     }

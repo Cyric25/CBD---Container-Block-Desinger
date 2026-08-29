@@ -2091,6 +2091,20 @@ class CBD_Admin {
             }
         }
 
+        // Nachgereichte SPALTEN auf bestehenden Tabellen — eine eigene Kategorie
+        // neben den fehlenden Tabellen. Eine vorhandene Tabelle mit fehlender
+        // Spalte sah auf dieser Seite bis 3.1.112 vollständig grün aus, obwohl
+        // z. B. das Speichern einer Klasse daran scheiterte. Grund: dbDelta
+        // trägt neue Spalten NICHT nach (siehe Docblock von
+        // CBD_Schema_Manager::ensure_columns()), es braucht also eine eigene
+        // Prüfung. Die Liste kommt aus dem Schema-Manager, nicht von hier — sie
+        // soll nicht in zwei Fassungen existieren.
+        $missing_plugin_columns = array();
+        if (class_exists('CBD_Schema_Manager')
+            && method_exists('CBD_Schema_Manager', 'get_missing_columns')) {
+            $missing_plugin_columns = CBD_Schema_Manager::get_missing_columns();
+        }
+
         ?>
         <div class="wrap">
             <h1><?php _e('Datenbank reparieren', 'container-block-designer'); ?></h1>
@@ -2125,6 +2139,18 @@ class CBD_Admin {
                             <?php endforeach; ?>
                         </td>
                     </tr>
+                    <tr>
+                        <td><strong><?php _e('Nachgereichte Spalten:', 'container-block-designer'); ?></strong></td>
+                        <td>
+                            <?php if (empty($missing_plugin_columns)): ?>
+                                <span style="color: green;">✅ <?php _e('vollständig', 'container-block-designer'); ?></span>
+                            <?php else: ?>
+                                <?php foreach ($missing_plugin_columns as $fehlende_spalte): ?>
+                                    <span style="color: red;">❌ <?php echo esc_html($fehlende_spalte); ?></span><br>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
                 </table>
 
                 <?php
@@ -2132,7 +2158,7 @@ class CBD_Admin {
                 $required_columns = array('title', 'slug', 'styles', 'features', 'status', 'is_default');
                 $missing_columns = array_diff($required_columns, $columns);
 
-                if (!empty($missing_columns) || !$table_exists || !empty($missing_tables)): ?>
+                if (!empty($missing_columns) || !$table_exists || !empty($missing_tables) || !empty($missing_plugin_columns)): ?>
                 <div class="notice notice-warning">
                     <p><strong><?php _e('Probleme erkannt:', 'container-block-designer'); ?></strong></p>
                     <?php if (!$table_exists): ?>
@@ -2143,6 +2169,9 @@ class CBD_Admin {
                     <?php endif; ?>
                     <?php if (!empty($missing_tables)): ?>
                         <p>❌ <?php printf(__('Fehlende Tabellen: %s', 'container-block-designer'), esc_html(implode(', ', $missing_tables))); ?></p>
+                    <?php endif; ?>
+                    <?php if (!empty($missing_plugin_columns)): ?>
+                        <p>❌ <?php printf(__('Fehlende Spalten in bestehenden Tabellen: %s', 'container-block-designer'), esc_html(implode(', ', $missing_plugin_columns))); ?></p>
                     <?php endif; ?>
                 </div>
                 <?php else: ?>
@@ -2605,6 +2634,49 @@ class CBD_Admin {
                     );
                 } else {
                     $messages[] = __('Alle Plugin-Tabellen sind vorhanden.', 'container-block-designer');
+                }
+
+                // -----------------------------------------------------------------
+                // Fehlende SPALTEN auf bestehenden Tabellen nachtragen
+                //
+                // create_tables() oben deckt das NICHT mit ab: Es benutzt für
+                // alle Tabellen `CREATE TABLE IF NOT EXISTS`, und dbDelta hält
+                // bei dieser Schreibweise das Wort `IF` für den Tabellennamen.
+                // Es findet damit keine bestehende Tabelle zum Vergleichen und
+                // erzeugt NIE ein `ALTER TABLE … ADD COLUMN` (auf dem
+                // Testserver nachgemessen — Rückgabe war
+                // array('IF' => 'Created table IF'), die Spalten fehlten
+                // danach unverändert). Eine vorhandene Tabelle mit fehlender
+                // Spalte wäre also über die Reparatur nicht heilbar gewesen.
+                //
+                // ensure_columns() ist idempotent und fasst nur an, was
+                // nachweislich fehlt. Der Aufruf steht bewusst NACH
+                // create_tables(): Eine gerade erst angelegte Tabelle bringt die
+                // Spalten schon mit, dann ist hier nichts mehr zu tun.
+                // -----------------------------------------------------------------
+                if (method_exists('CBD_Schema_Manager', 'ensure_columns')) {
+                    $spalten_ergaenzt = CBD_Schema_Manager::ensure_columns();
+
+                    if (!empty($spalten_ergaenzt)) {
+                        $messages[] = sprintf(
+                            __('Fehlende Spalten wurden ergänzt: %s', 'container-block-designer'),
+                            implode(', ', $spalten_ergaenzt)
+                        );
+                    }
+
+                    if (method_exists('CBD_Schema_Manager', 'get_missing_columns')) {
+                        $spalten_offen = CBD_Schema_Manager::get_missing_columns();
+
+                        if (!empty($spalten_offen)) {
+                            $errors[] = sprintf(
+                                __('Spalten fehlen weiterhin: %1$s (%2$s)', 'container-block-designer'),
+                                implode(', ', $spalten_offen),
+                                $wpdb->last_error
+                            );
+                        } elseif (empty($spalten_ergaenzt)) {
+                            $messages[] = __('Alle benötigten Spalten sind vorhanden.', 'container-block-designer');
+                        }
+                    }
                 }
 
                 $messages[] = sprintf(

@@ -220,6 +220,15 @@ class CBD_Classroom {
         $password = $_POST['password'] ?? '';
         $page_ids = array_map('intval', (array) ($_POST['page_ids'] ?? array()));
 
+        // Vorhaben „Schüler-Fragen": Pro Klasse einstellbar, ob Schüler selbst
+        // Fragen auf die Fragenwand legen dürfen. IMMER auf 0/1 normalisiert —
+        // das Feld kommt als Zeichenkette an, und ein "0" wäre in einer
+        // ungeprüften Prüfung wahr. Ein FEHLENDES Feld bedeutet ausdrücklich
+        // "aus": Eine abgehakte Checkbox schickt gar nichts mit, ein Ausschalten
+        // muss aber ankommen.
+        $schueler_fragen_erlaubt = !empty($_POST['schueler_fragen_erlaubt'])
+            && '0' !== (string) $_POST['schueler_fragen_erlaubt'] ? 1 : 0;
+
         if (empty($name)) {
             wp_send_json_error(array('message' => 'Klassenname ist erforderlich.'));
         }
@@ -228,6 +237,7 @@ class CBD_Classroom {
             // Update existing class
             $update_data = array(
                 'name' => $name,
+                'schueler_fragen_erlaubt' => $schueler_fragen_erlaubt,
                 'updated_at' => current_time('mysql')
             );
 
@@ -247,7 +257,8 @@ class CBD_Classroom {
                 'name' => $name,
                 'password' => wp_hash_password($password),
                 'teacher_id' => get_current_user_id(),
-                'status' => 'active'
+                'status' => 'active',
+                'schueler_fragen_erlaubt' => $schueler_fragen_erlaubt
             ));
             $class_id = $wpdb->insert_id;
         }
@@ -336,6 +347,7 @@ class CBD_Classroom {
         // Alle Klassen laden (nicht nur eigene)
         $classes = $wpdb->get_results(
             "SELECT c.id, c.name, c.status, c.teacher_id, c.created_at, c.updated_at,
+                    c.schueler_fragen_erlaubt,
                     u.display_name AS teacher_name
              FROM " . CBD_TABLE_CLASSES . " c
              LEFT JOIN {$wpdb->users} u ON c.teacher_id = u.ID
@@ -343,6 +355,11 @@ class CBD_Classroom {
         );
 
         foreach ($classes as &$class) {
+            // $wpdb liefert alles als Zeichenkette; ein "0" ist in JavaScript
+            // wahr. Ohne diese Wandlung stünde die Checkbox in der Verwaltung
+            // bei JEDER Klasse auf „an".
+            $class->schueler_fragen_erlaubt = (bool) intval($class->schueler_fragen_erlaubt);
+
             $class->is_owner    = ((int) $class->teacher_id === $teacher_id);
             $class->is_subscribed = $class->is_owner || in_array((int) $class->id, $subscribed_ids, true);
             $class->can_delete  = $class->is_owner || $is_admin;
