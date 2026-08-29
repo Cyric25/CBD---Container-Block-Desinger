@@ -398,7 +398,7 @@ die Registry) und `stable_id_factory` (nur für Tests).
 | Unbekannter Design-Slug → „ohne Container" | Ein Container mit unbekanntem Slug rendert im Frontend „Block nicht gefunden" |
 | Erste H1-Überschrift entfällt, wenn sie dem Seitentitel gleicht | Sonst stünde der Titel doppelt auf der Seite |
 | `stableId` wird selbst vergeben | Fehlt sie, ergänzt der Editor sie beim Öffnen und markiert die Seite sofort als geändert |
-| Der Bezeichner wird aus der Spalte **`name`** gelesen | `slug` ist auf Altbeständen nur eine Kopie davon und fehlt frisch angelegten Tabellen ganz (siehe `CBD_Admin::handle_database_repair()`, Zeile 2469) |
+| Der Bezeichner wird aus der Spalte **`name`** gelesen | `slug` ist auf Altbeständen nur eine Kopie davon und fehlt frisch angelegten Tabellen ganz (siehe `CBD_Admin::handle_database_repair()`, Abschnitt „Datenbank reparieren") |
 
 **Zeilenumbrüche — der Unterschied, der leicht übersehen wird.** Der
 JavaScript-Serializer setzt je einen Umbruch nach dem öffnenden und vor dem
@@ -1226,6 +1226,11 @@ erhöht: `create_tables()` läuft nur bei Aktivierung/Reparatur, ein reiner
 Versions-Bump hätte die Tabelle auf bereits aktualisierten Installationen
 nicht automatisch nachgezogen.
 
+**Genau diese Annahme hat sich als zu optimistisch erwiesen — siehe den
+Abschnitt „Datenbank reparieren" weiter unten.** Auf einer Produktivseite
+fehlte `wp_cbd_notes` nach dem Update vollständig, und weder das Reaktivieren
+des Plugins noch das vorhandene Reparatur-Werkzeug half.
+
 ### Zugriffsschicht: `CBD_Fragenwand` (`includes/class-cbd-fragenwand.php`)
 
 Singleton nach demselben Muster wie `CBD_Classroom` (Instanzierung am
@@ -1600,6 +1605,80 @@ sind. Details und die vollständigen Übergabenotizen:
 `PLAN-Fragenwand.md`, Abschnitt 7 (AP-4.1 bis AP-4.fix1). Datei-Referenz:
 `reference_file_map.md`, Zeile zu `class-cbd-fragenwand.php` und
 `fragenwand.css`.
+
+## Datenbank reparieren: warum das Werkzeug fehlende Tabellen übersah (Hotfix 3.1.111)
+
+**Anlass:** Auf einer Produktivseite meldete
+`CBD_Fragenwand::ajax_fragenwand_add_note()` „Speichern fehlgeschlagen." Der
+`$wpdb->insert()` scheiterte, weil `wp_cbd_notes` dort gar nicht existierte
+(`Table '…cbd_notes' doesn't exist`). Weder ein Deaktivieren/Reaktivieren des
+Plugins noch das vorhandene Reparatur-Werkzeug half. Lokal auf dem Testserver
+vollständig nachgestellt.
+
+### Drei Ursachen, die zusammenwirkten
+
+1. **`handle_database_repair()` kannte nur `wp_cbd_blocks`.**
+   Container Designer → *Datenbank reparieren* prüfte und reparierte
+   ausschließlich diese eine Tabelle (fehlende Spalten, Standardwerte) und rief
+   `CBD_Schema_Manager::create_tables()` **nie** auf. Alle übrigen Tabellen des
+   Plugins — `cbd_classes`, `cbd_class_pages`, `cbd_drawings` und seit dem
+   Vorhaben „Fragenwand" `cbd_notes` — entstehen aber ausschließlich dort.
+2. **Die Schaltfläche „Alle Migrationen durchführen" wurde gar nicht
+   gerendert.** In `admin/settings.php` entschied `$needs_migration` über die
+   Spalte `is_default`, über die **drei** Klassen-Tabellen und über
+   `cbd_db_version < 3.0.0`. Auf der betroffenen Installation traf nichts
+   davon zu — obwohl `cbd_notes` fehlte. Der einzige Weg, der
+   `create_tables()` erreicht hätte, war damit unsichtbar.
+3. **`register_activation_hook()` greift in diesem Plugin nie.** Er wird in
+   `ContainerBlockDesigner::init_hooks()` gesetzt, und die Hauptklasse wird
+   erst auf **`plugins_loaded`** instanziiert (Dateiende von
+   `container-block-designer.php`). `activate_plugin()` bindet die Plugindatei
+   aber erst **nach** diesem Hook ein — der Callback ist zum Zeitpunkt von
+   `do_action("activate_{$plugin}")` also nirgends registriert.
+   **Live gemessen:** `has_action('activate_container-block-designer/…')` ist
+   vor *und* nach `activate_plugin()` `false`, `cbd_plugin_activated` wird nie
+   gesetzt, und die Tabelle entsteht nicht. Das erklärt, warum auch das
+   Reaktivieren nichts brachte — und, allgemeiner, warum `activate()` samt
+   `create_default_blocks()`, `create_upload_directory()` und
+   `create_block_editor_role()` in Wahrheit nie läuft.
+
+**Punkt 3 ist bewusst NICHT durch ein Verschieben des
+`register_activation_hook()` behoben worden.** Würde `activate()` wieder
+laufen, liefe auch `create_default_blocks()` — und das legt auf jeder
+Installation ohne die Blöcke `basic-container`, `card-container` und
+`hero-section` (also auf jeder mit eigenen Designs, wie der betroffenen) drei
+fremde Container-Designs an. Für einen Hotfix eine zu große Nebenwirkung; ein
+eigenes AP wäre nötig, das `activate()` vorher idempotent macht.
+
+### Was der Hotfix stattdessen tut
+
+| Stelle | Änderung |
+|---|---|
+| `includes/class-cbd-admin.php`, `handle_database_repair()` | ruft nach der Blocktabellen-Reparatur `CBD_Schema_Manager::create_tables()` auf und meldet je Tabelle, ob sie neu angelegt wurde. Zwei neue private Statics — `get_plugin_tables()` (alle fünf Tabellen aus den Plugin-Konstanten) und `table_exists()` (`SHOW TABLES LIKE` über `$wpdb->prepare()`) |
+| `includes/class-cbd-admin.php`, `render_database_repair_page()` | zeigt den Status **aller** Plugin-Tabellen und listet fehlende unter „Probleme erkannt"; POST-Zweig zusätzlich hinter `current_user_can('manage_options')` |
+| `admin/settings.php` | `cbd_notes` steht jetzt in `$classroom_tables` und in `$tables_check`. Damit wird `$needs_migration` wahr, sobald die Tabelle fehlt, und die Schaltfläche erscheint wieder |
+| `container-block-designer.php`, `run_updates()` | neuer Zweig `version_compare($from_version, '3.1.111', '<')` → `create_tables()`. Das ist der **automatische** Weg: `check_version_update()` läuft beim ersten Seitenaufruf nach dem Update |
+
+**Der Reparaturlauf lässt `cbd_db_version` nicht mehr auf `2.9.0` stehen.**
+Die Rückstellung auf `2.9.0` bleibt — sie ist der Auslöser, der
+`run_migrations()` alle (idempotenten) Migrationen erneut durchlaufen lässt —,
+aber das direkt danach aufgerufene `create_tables()` setzt die Version wieder
+auf `CBD_Schema_Manager::DB_VERSION`. Bis 3.1.110 blieb sie auf `2.9.0`
+zurückgesetzt; das ist in älteren Notizen (u. a.
+`docs/archiv/PLAN-Seitenimport.md`) noch so beschrieben.
+
+**Regel für künftige Tabellen:** Eine neue Tabelle gehört an **drei** Stellen
+eingetragen — `CBD_Schema_Manager::create_tables()`, `CBD_Admin::get_plugin_tables()`
+und `$classroom_tables` in `admin/settings.php` — plus ein `run_updates()`-Zweig
+mit der Zielversion, damit bestehende Installationen sie ohne Handgriff
+bekommen. Ein reines Erhöhen von `DB_VERSION` genügt nicht: `run_migrations()`
+legt keine Tabellen an.
+
+### Anleitung für den Website-Betrieb
+
+WordPress-Admin → **Container Designer → Datenbank reparieren** → Schaltfläche
+**„🔧 Datenbank jetzt reparieren"**. Die Seite listet darüber alle
+Plugin-Tabellen mit ✅/❌; nach der Reparatur muss `cbd_notes` grün sein.
 
 ## Aktionsleiste: Sichtbarkeit, Verschachtelung, Behandelt-Dialog
 

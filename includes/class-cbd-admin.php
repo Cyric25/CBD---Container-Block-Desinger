@@ -2012,9 +2012,61 @@ class CBD_Admin {
         return (string)$input;
     }
 
+    /**
+     * Alle Tabellen, die zum Plugin gehören.
+     *
+     * Schlüssel = Kurzname für die Anzeige, Wert = vollständiger Tabellenname.
+     * Die Liste ist die Grundlage sowohl für die Statusanzeige der Seite
+     * „Datenbank reparieren" als auch für die Prüfung in
+     * handle_database_repair(). Sie wird bewusst aus den Plugin-Konstanten
+     * gebildet (mit Rückfall auf das $wpdb-Präfix), damit sie nicht neben
+     * container-block-designer.php auseinanderlaufen kann.
+     *
+     * WICHTIG: Kommt künftig eine Tabelle hinzu, gehört sie hierher UND in
+     * CBD_Schema_Manager::create_tables(). Genau dieses Nachziehen fehlte bei
+     * CBD_TABLE_NOTES (Fragenwand) und hat auf einer Produktivinstallation zu
+     * „Speichern fehlgeschlagen." beim Anlegen einer Notiz geführt.
+     *
+     * @since 3.1.111
+     * @return array<string,string>
+     */
+    private static function get_plugin_tables() {
+        global $wpdb;
+
+        return array(
+            'cbd_blocks'      => defined('CBD_TABLE_BLOCKS') ? CBD_TABLE_BLOCKS : $wpdb->prefix . 'cbd_blocks',
+            'cbd_classes'     => defined('CBD_TABLE_CLASSES') ? CBD_TABLE_CLASSES : $wpdb->prefix . 'cbd_classes',
+            'cbd_class_pages' => defined('CBD_TABLE_CLASS_PAGES') ? CBD_TABLE_CLASS_PAGES : $wpdb->prefix . 'cbd_class_pages',
+            'cbd_drawings'    => defined('CBD_TABLE_DRAWINGS') ? CBD_TABLE_DRAWINGS : $wpdb->prefix . 'cbd_drawings',
+            'cbd_notes'       => defined('CBD_TABLE_NOTES') ? CBD_TABLE_NOTES : $wpdb->prefix . 'cbd_notes',
+        );
+    }
+
+    /**
+     * Existiert eine Tabelle?
+     *
+     * `SHOW TABLES LIKE` bekommt den Namen über $wpdb->prepare() als Wert
+     * übergeben — der Tabellenname stammt zwar aus eigenen Konstanten, aber
+     * eine ungeprüfte Zeichenkette in einer SQL-Anweisung soll im Plugin
+     * nirgends zum Muster werden.
+     *
+     * @since 3.1.111
+     * @param string $table Vollständiger Tabellenname.
+     * @return bool
+     */
+    private static function table_exists($table) {
+        global $wpdb;
+
+        return $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) === $table;
+    }
+
     public function render_database_repair_page() {
         // Verarbeite POST-Anfragen
-        if (isset($_POST['repair_database']) && wp_verify_nonce($_POST['cbd_repair_nonce'], 'cbd_repair_database')) {
+        // Capability zusätzlich zur Menü-Registrierung ('manage_options'):
+        // Nonce UND Fähigkeit, wie überall sonst im Plugin.
+        if (isset($_POST['repair_database'])
+            && current_user_can('manage_options')
+            && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['cbd_repair_nonce'] ?? '')), 'cbd_repair_database')) {
             $this->handle_database_repair();
         }
 
@@ -2025,6 +2077,19 @@ class CBD_Admin {
         $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") === $table_name;
         $columns = $table_exists ? $wpdb->get_col("SHOW COLUMNS FROM $table_name") : array();
         $block_count = $table_exists ? $wpdb->get_var("SELECT COUNT(*) FROM $table_name") : 0;
+
+        // Status ALLER Plugin-Tabellen — nicht nur cbd_blocks. Ohne diese
+        // Zeilen war eine fehlende Tabelle (z. B. cbd_notes) auf dieser Seite
+        // unsichtbar und die Reparatur wirkte wirkungslos.
+        $tables_status = array();
+        $missing_tables = array();
+        foreach (self::get_plugin_tables() as $label => $table) {
+            $exists = self::table_exists($table);
+            $tables_status[$label] = $exists;
+            if (!$exists) {
+                $missing_tables[] = $label;
+            }
+        }
 
         ?>
         <div class="wrap">
@@ -2048,6 +2113,18 @@ class CBD_Admin {
                         <td><?php echo $block_count; ?></td>
                     </tr>
                     <?php endif; ?>
+                    <tr>
+                        <td><strong><?php _e('Alle Plugin-Tabellen:', 'container-block-designer'); ?></strong></td>
+                        <td>
+                            <?php foreach ($tables_status as $label => $exists): ?>
+                                <?php if ($exists): ?>
+                                    <span style="color: green;">✅ <?php echo esc_html($label); ?></span><br>
+                                <?php else: ?>
+                                    <span style="color: red;">❌ <?php echo esc_html($label); ?></span><br>
+                                <?php endif; ?>
+                            <?php endforeach; ?>
+                        </td>
+                    </tr>
                 </table>
 
                 <?php
@@ -2055,7 +2132,7 @@ class CBD_Admin {
                 $required_columns = array('title', 'slug', 'styles', 'features', 'status', 'is_default');
                 $missing_columns = array_diff($required_columns, $columns);
 
-                if (!empty($missing_columns) || !$table_exists): ?>
+                if (!empty($missing_columns) || !$table_exists || !empty($missing_tables)): ?>
                 <div class="notice notice-warning">
                     <p><strong><?php _e('Probleme erkannt:', 'container-block-designer'); ?></strong></p>
                     <?php if (!$table_exists): ?>
@@ -2063,6 +2140,9 @@ class CBD_Admin {
                     <?php endif; ?>
                     <?php if (!empty($missing_columns)): ?>
                         <p>❌ <?php printf(__('Fehlende Spalten: %s', 'container-block-designer'), implode(', ', $missing_columns)); ?></p>
+                    <?php endif; ?>
+                    <?php if (!empty($missing_tables)): ?>
+                        <p>❌ <?php printf(__('Fehlende Tabellen: %s', 'container-block-designer'), esc_html(implode(', ', $missing_tables))); ?></p>
                     <?php endif; ?>
                 </div>
                 <?php else: ?>
@@ -2072,7 +2152,7 @@ class CBD_Admin {
                 <?php endif; ?>
 
                 <h3><?php _e('Datenbank reparieren', 'container-block-designer'); ?></h3>
-                <p><?php _e('Diese Aktion wird die Datenbank-Struktur reparieren und fehlende Spalten hinzufügen.', 'container-block-designer'); ?></p>
+                <p><?php _e('Diese Aktion repariert die Datenbank-Struktur, fügt fehlende Spalten hinzu und legt fehlende Tabellen an (Klassen-System und Fragenwand eingeschlossen).', 'container-block-designer'); ?></p>
 
                 <form method="post" action="">
                     <?php wp_nonce_field('cbd_repair_database', 'cbd_repair_nonce'); ?>
@@ -2469,9 +2549,71 @@ class CBD_Admin {
             $wpdb->query("UPDATE $table_name SET slug = name WHERE slug = '' OR slug IS NULL");
             $messages[] = __('Standard-Werte wurden gesetzt.', 'container-block-designer');
 
-            // Setze DB-Version auf 2.9.0
+            // Setze die DB-Version zurück auf 2.9.0, damit der Schema-Manager
+            // im nächsten Schritt alle Migrationen ab 2.9.0 erneut durchläuft
+            // (alle sind idempotent). create_tables() setzt die Version danach
+            // wieder auf CBD_Schema_Manager::DB_VERSION — sie bleibt also NICHT
+            // auf 2.9.0 stehen, anders als bis Version 3.1.110.
             update_option('cbd_db_version', '2.9.0');
-            $messages[] = __('Datenbank-Version auf 2.9.0 aktualisiert.', 'container-block-designer');
+
+            // -----------------------------------------------------------------
+            // Fehlende Tabellen anlegen (Klassen-System UND Fragenwand)
+            //
+            // WARUM DIESER SCHRITT HIER STEHT: Bis 3.1.110 hat diese Reparatur
+            // ausschließlich wp_cbd_blocks angefasst. Jede weitere Tabelle des
+            // Plugins entsteht ausschließlich in
+            // CBD_Schema_Manager::create_tables() — und die lief bis dahin nur
+            // beim Aktivieren des Plugins. Ein reines Datei-Update (ZIP
+            // hochladen) löst keinen Aktivierungs-Hook aus; die mit dem
+            // Vorhaben „Fragenwand" hinzugekommene Tabelle wp_cbd_notes fehlte
+            // auf einer aktualisierten Produktivinstallation deshalb ganz, und
+            // ajax_fragenwand_add_note() meldete „Speichern fehlgeschlagen."
+            //
+            // create_tables() ist idempotent (CREATE TABLE IF NOT EXISTS +
+            // dbDelta) und deckt automatisch auch jede künftig hinzukommende
+            // Tabelle ab — deshalb ein Aufruf der einen zuständigen Methode
+            // statt einer zweiten, hier gepflegten CREATE-TABLE-Liste.
+            // -----------------------------------------------------------------
+            $plugin_tables = self::get_plugin_tables();
+            $existed_before = array();
+            foreach ($plugin_tables as $label => $table) {
+                $existed_before[$label] = self::table_exists($table);
+            }
+
+            if (class_exists('CBD_Schema_Manager')) {
+                CBD_Schema_Manager::create_tables();
+
+                $created = array();
+                foreach ($plugin_tables as $label => $table) {
+                    if (self::table_exists($table)) {
+                        if (!$existed_before[$label]) {
+                            $created[] = $label;
+                        }
+                    } else {
+                        $errors[] = sprintf(
+                            __('Tabelle "%1$s" fehlt weiterhin: %2$s', 'container-block-designer'),
+                            $label,
+                            $wpdb->last_error
+                        );
+                    }
+                }
+
+                if (!empty($created)) {
+                    $messages[] = sprintf(
+                        __('Fehlende Tabellen wurden angelegt: %s', 'container-block-designer'),
+                        implode(', ', $created)
+                    );
+                } else {
+                    $messages[] = __('Alle Plugin-Tabellen sind vorhanden.', 'container-block-designer');
+                }
+
+                $messages[] = sprintf(
+                    __('Datenbank-Version: %s', 'container-block-designer'),
+                    get_option('cbd_db_version', '0')
+                );
+            } else {
+                $errors[] = __('CBD_Schema_Manager ist nicht verfügbar – fehlende Tabellen konnten nicht angelegt werden.', 'container-block-designer');
+            }
 
             // Erstelle Standard-Blocks falls keine vorhanden
             $block_count = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
@@ -2481,6 +2623,11 @@ class CBD_Admin {
             }
 
         } catch (Exception $e) {
+            $errors[] = sprintf(__('Fehler bei der Reparatur: %s', 'container-block-designer'), $e->getMessage());
+        } catch (Error $e) {
+            // Ein Fatal-Error im Schema-Manager soll die Reparaturseite nicht
+            // mit einem weißen Bildschirm beenden — dieselbe Doppel-Catch-Kette
+            // wie in container-block-designer.php::init().
             $errors[] = sprintf(__('Fehler bei der Reparatur: %s', 'container-block-designer'), $e->getMessage());
         }
 
