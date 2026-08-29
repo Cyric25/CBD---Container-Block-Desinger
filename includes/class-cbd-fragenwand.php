@@ -624,7 +624,7 @@ class CBD_Fragenwand {
         }
 
         $markup = '<div class="page-index__zusatz page-index__zusatz--fragenwand">'
-            . '<button type="button" class="cbd-fragenwand-verweis page-index__fragenwand-link" href="#">'
+            . '<button type="button" class="cbd-fragenwand-verweis page-index__fragenwand-link">'
             . esc_html__('Fragenwand öffnen', 'container-block-designer')
             . '</button>'
             . '</div>';

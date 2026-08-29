@@ -484,6 +484,46 @@
 }
 
 /* =============================================
+   INHALTSVERZEICHNIS-EINTRAG (Theme-Filter, AP-4.2/AP-4.fix1)
+
+   Klassennamen kommen aus page_index_eintrag() in class-cbd-fragenwand.php,
+   nicht aus assets/js/fragenwand-frontend.js wie der Rest dieser Datei -
+   siehe Docblock oben ("Struktur (die Klassennamen sind der Vertrag mit
+   AP-3.4)"). Der Button wird ganz oben im Theme-Block fos/inhaltsverzeichnis
+   ausgegeben (Theme/includes/page-index.php) und hatte bis AP-4.fix1
+   ueberhaupt kein eigenes CSS - reiner Browser-Standard-Knopf, im Darkmode
+   ein heller Fremdkoerper (AP-4.rev, Befund Schweregrad mittel).
+   ============================================= */
+
+.page-index__zusatz--fragenwand {
+    margin-bottom: 16px;
+}
+
+.page-index__fragenwand-link {
+    display: block;
+    width: 100%;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    border: none;
+    border-radius: 8px;
+    background: var(--color-ui-surface, #e24614);
+    color: var(--color-text-on-accent, #ffffff);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.page-index__fragenwand-link:hover {
+    background: var(--color-ui-surface-dark, #c93d12);
+}
+
+.page-index__fragenwand-link:focus-visible {
+    outline: 2px solid var(--color-ui-surface, #e24614);
+    outline-offset: 2px;
+}
+
+/* =============================================
    KLEINE VIEWPORTS
    ============================================= */
 
