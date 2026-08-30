@@ -175,6 +175,7 @@ listet nur `admin`, `assets`, `blocks`, `includes`, `vendor`, `languages`).
 | `AENDERUNGEN-UND-UPLOAD.md` | Gesamtübersicht plus Upload- und Recovery-Anleitung |
 | `PLAN-Seitenimport.md` | Projektplan „Seitenimport + Sammelaktionen" mit Statustabelle und Testprotokoll |
 | `ERWEITERUNGSANALYSE-Seitenimport.md` | Analyse, die zum Plan führte (Abschnitt 3.2 enthält eine Korrektur) |
+| `messung-klassenpuls.md` | Lastmessbericht `cbd/v1/klassenpuls` (AP-1.7, `PLAN-Klassenmodus-Live.md`, Website-Ordner): Einzel-/Vergleichsmessung gegen eine gewöhnliche Seite, Sättigungskurve über fünf Parallelitätsstufen (gültige und ungültige Sitzung, Knick bei 25 Gleichzeitigen), Gleichschritt-Prüfung über eine Nachbildung des `klassenpuls.js`-Ablaufplans (echte Browser-Tabs in der verfügbaren Automatisierung nicht durchführbar, da `document.hidden` dort dauerhaft `true` bleibt — Details im Bericht) |
 | `pruefung-produktiv.js` | Konsolenskript: liest WordPress-Version, Tabellenspalten und Designs der Produktivinstallation |
 | `pruefung-blockmarkup.js` | Konsolenskript: liest das Blockmarkup einer Seite über `getEditedPostContent()` — für das Neuerheben der Fixture nach einem Update |
 | `archiv/` | historische Status-Notizen, nicht gepflegt |
