@@ -3668,16 +3668,20 @@ AP-1.rev, Schritt 4.
 
 Der Takt selbst kommt **ausschließlich** aus dem Feld `takt` der
 Serverantwort, nie aus einer Konstante im Browser — ändert der Betrieb die
-Option, folgt der Browser beim nächsten Durchlauf. Ein Takt von 0 hält den
-Taktgeber endgültig an.
+Option, folgt der Browser beim nächsten Durchlauf. Antwortet der Server mit
+`takt: 0`, ruft der Taktgeber `halte()` auf (Pause, **kein** endgültiger
+Stopp wie bei `abgelaufen`) — in der Praxis reiht `enqueue_frontend_assets()`
+das Skript bei Takt 0 aber ohnehin gar nicht erst ein (siehe unten), dieser
+Pfad greift also nur, wenn der Betrieb den Takt **während** einer laufenden
+Sitzung auf 0 setzt.
 
 ### Die Notbremse: Option `cbd_klassenpuls_takt`
 
 Sekunden, `0` = **abgeschaltet**, Vorgabe 10, Grenzen 5…300. Der
 Website-Betrieb kann den Takt drosseln oder die Live-Funktion vollständig
 abschalten, **ohne Code zu ändern**. Bei 0 wird `klassenpuls.js` auf
-**keiner** Seite mehr eingereiht (`class-cbd-classroom.php,
-enqueue_frontend_assets()`, beide Zweige: normale Seite mit `?classroom=`
+**keiner** Seite mehr eingereiht (`class-cbd-classroom.php`,
+`enqueue_frontend_assets()`, beide Zweige: normale Seite mit `?classroom=`
 und Shortcode-Seite `[cbd_classroom]`) — der Klassenmodus verhält sich dann
 byteidentisch wie vor diesem Vorhaben.
 
