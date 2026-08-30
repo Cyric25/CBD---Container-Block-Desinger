@@ -52,6 +52,62 @@
 
             window.cbdDebug && console.log('CBD Classroom Page Filter: Initializing for page', this.pageId, 'classroom', this.classroomId);
             this.loadClassroomData();
+            this.verdrahteKlassenpuls();
+        },
+
+        /**
+         * Den Taktgeber `window.cbdKlassenpuls` anzapfen (AP-2.1).
+         *
+         * Der Taktgeber ist OPTIONAL: Steht die Option `cbd_klassenpuls_takt`
+         * auf 0, reiht `CBD_Classroom::enqueue_frontend_assets()` die Datei
+         * `assets/js/klassenpuls.js` gar nicht erst ein — `window.cbdKlassenpuls`
+         * existiert dann nicht und diese Methode steigt still aus. Der Filter
+         * verhält sich in diesem Fall exakt wie vor diesem Arbeitspaket.
+         *
+         * Reihenfolge mit Absicht: erst `setzeSeite()`, dann `setzeSitzung()`.
+         * `setzeSitzung()` startet den Taktgeber sofort (`starte()` ruft
+         * synchron `frageAb()`); wäre die Seite da noch nicht gesetzt, ginge
+         * die allererste Abfrage ohne `page_id` hinaus und der Server lieferte
+         * die Signaturen `seite`/`tafel` erst beim zweiten Durchlauf. Der
+         * Vertrag von `setzeSeite()` erlaubt den Aufruf vor `setzeSitzung()`
+         * ausdrücklich (die Seitenbindung überlebt das Setzen der Sitzung).
+         */
+        verdrahteKlassenpuls: function() {
+            if (!window.cbdKlassenpuls) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Kein Taktgeber vorhanden (cbd_klassenpuls_takt = 0?) – keine Live-Aktualisierung.');
+                return;
+            }
+
+            var self = this;
+
+            window.cbdKlassenpuls.setzeSeite(this.pageId);
+            window.cbdKlassenpuls.setzeSitzung(this.classroomId, this.token);
+
+            // Auf einer serverseitig reduzierten Seite liegt das HTML der noch
+            // nicht freigegebenen Container GAR NICHT im DOM – ein Einblenden
+            // wäre wirkungslos. Dort löst Phase 3 des Vorhabens ein gezieltes
+            // Neuladen aus; hier wird deshalb bewusst KEIN 'seite'-Rückruf
+            // registriert.
+            if (this.istReduzierteSeite()) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Reduzierte Seite – kein seite-Rückruf (Phase 3 übernimmt).');
+            } else {
+                window.cbdKlassenpuls.abonniere('seite', function() {
+                    self.aktualisiere();
+                });
+            }
+
+            window.cbdKlassenpuls.abonniere('abgelaufen', function() {
+                self.showError('Die Klassensitzung ist abgelaufen. Bitte erneut anmelden.');
+            });
+        },
+
+        /**
+         * Läuft diese Seite serverseitig reduziert?
+         * Der Wert kommt aus CBD_Classroom::enqueue_frontend_assets().
+         */
+        istReduzierteSeite: function() {
+            return (typeof cbdClassroomPageData !== 'undefined')
+                && !!cbdClassroomPageData.reduziert;
         },
 
         /**
@@ -67,7 +123,8 @@
             }, function(response) {
                 if (response.success) {
                     window.cbdDebug && console.log('CBD Classroom Page Filter: Received data', response.data);
-                    self.filterContainers(response.data);
+                    self.einmaligAufbauen(response.data);
+                    self.filterContainers(response.data, true);
                 } else {
                     console.error('CBD Classroom Page Filter: Error loading data', response.data.message);
                     // Show error to user
@@ -80,21 +137,78 @@
         },
 
         /**
-         * Filter containers based on classroom data
+         * Klassendaten erneut holen und den Filter wiederholen (AP-2.1).
+         *
+         * Wird ausschließlich vom 'seite'-Rückruf des Taktgebers gerufen, also
+         * nur dann, wenn sich die Freigabe-Signatur tatsächlich geändert hat.
+         * Ruft WEDER `einmaligAufbauen()` NOCH `filterContainers(data, true)` –
+         * die Navigationsleiste, die Link-Umleitung und die Warnung über
+         * fehlende markierte Blöcke gehören zum Erstaufbau und dürfen sich
+         * nicht wiederholen.
+         *
+         * Ein fehlgeschlagener Nachschlag bleibt bewusst STILL: Er ist kein
+         * Grund, dem lesenden Schüler eine Fehlermeldung vor die Nase zu
+         * setzen. Der nächste Takt versucht es ohnehin wieder.
          */
-        filterContainers: function(data) {
-            var treatedContainers = data.treated_containers || [];
-            var drawings = data.drawings || {};
+        aktualisiere: function() {
+            var self = this;
 
-            window.cbdDebug && console.log('CBD Classroom Page Filter: Treated containers:', treatedContainers);
-            window.cbdDebug && console.log('CBD Classroom Page Filter: Drawings:', Object.keys(drawings));
+            $.post(cbdClassroomPageData.ajaxUrl, {
+                action: 'cbd_get_page_classroom_data',
+                token: this.token,
+                page_id: this.pageId
+            }, function(response) {
+                if (response && response.success) {
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Aktualisierung erhalten', response.data);
+                    self.filterContainers(response.data);
+                } else {
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Aktualisierung ohne Erfolg – still ignoriert.');
+                }
+            }).fail(function(xhr, status, error) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Aktualisierung fehlgeschlagen – still ignoriert.', error);
+            });
+        },
 
-            // Navigationsleiste (mit "Verlassen"-Button) IMMER zuerst einfügen –
-            // unabhängig davon, ob die Seite Container-Blöcke hat. Sonst säße der
-            // Schüler auf container-losen Seiten in der Klasse fest (kein Ausgang).
+        /**
+         * Alles, was GENAU EINMAL geschehen darf (AP-2.1).
+         *
+         * Navigationsleiste (mit "Verlassen"-Button) IMMER einfügen –
+         * unabhängig davon, ob die Seite Container-Blöcke hat. Sonst säße der
+         * Schüler auf container-losen Seiten in der Klasse fest (kein Ausgang).
+         *
+         * Wird ausschließlich aus `loadClassroomData()` gerufen, NIE aus
+         * `aktualisiere()`. Andernfalls entstünde bei jeder Live-Aktualisierung
+         * eine weitere Navigationsleiste bzw. ein weiterer Klick-Abfänger.
+         */
+        einmaligAufbauen: function(data) {
             this.className = data.class_name;
             this.injectClassroomNavBar(data.class_name);
             this.interceptLinks();
+        },
+
+        /**
+         * Filter containers based on classroom data.
+         *
+         * Seit AP-2.1 beliebig oft aufrufbar: Die Methode enthält nur noch den
+         * wiederholbaren Teil (Schleife über die Container). Der einmalige Teil
+         * steht in `einmaligAufbauen()`.
+         *
+         * @param {Object}  data          Antwort von cbd_get_page_classroom_data.
+         * @param {boolean} istErstaufbau Nur beim ersten Durchlauf true. Steuert
+         *                                die einmalige Warnung über fehlende
+         *                                markierte Blöcke und verhindert, dass
+         *                                der Erstaufbau als „neu freigegeben"
+         *                                gilt.
+         */
+        filterContainers: function(data, istErstaufbau) {
+            var self = this;
+            var treatedContainers = data.treated_containers || [];
+            var drawings = data.drawings || {};
+
+            istErstaufbau = !!istErstaufbau;
+
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Treated containers:', treatedContainers);
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Drawings:', Object.keys(drawings));
 
             // Find all container blocks on the page
             // Try multiple selectors to catch all containers
@@ -124,10 +238,12 @@
             // keinen Sinn: Dort steht ohnehin nur, was freigegeben ist, und
             // freigegebene Container anderer Seiten fehlen naturgemäß. Der
             // Wert kommt aus CBD_Classroom::enqueue_frontend_assets().
-            var istReduziert = (typeof cbdClassroomPageData !== 'undefined')
-                && !!cbdClassroomPageData.reduziert;
+            var istReduziert = this.istReduzierteSeite();
 
-            if (missingContainers.length > 0 && !istReduziert) {
+            // Seit AP-2.1 NUR beim Erstaufbau: Bei jeder Live-Aktualisierung
+            // würde sich dieselbe Warnung sonst endlos wiederholen. Der
+            // istReduziert-Vorbehalt bleibt davon unberührt bestehen.
+            if (istErstaufbau && missingContainers.length > 0 && !istReduziert) {
                 console.warn('CBD Classroom Page Filter: WARNING - ' + missingContainers.length + ' treated containers from DB not found in DOM (page was likely edited):', missingContainers);
 
                 // Show warning but DON'T auto-cleanup - teacher might want to re-mark the blocks
@@ -136,7 +252,7 @@
                     'Die Markierungen bleiben in der Datenbank gespeichert, werden aber auf dieser Seite nicht angezeigt.');
 
                 // DON'T call cleanupInvalidContainers() - markings should persist
-            } else if (missingContainers.length > 0) {
+            } else if (istErstaufbau && missingContainers.length > 0) {
                 window.cbdDebug && console.log('CBD Classroom Page Filter: ' + missingContainers.length +
                     ' markierte Container fehlen im DOM - auf einer reduzierten Seite erwartet, keine Warnung.');
             }
@@ -154,20 +270,42 @@
             }
 
             // Hide all containers by default, then show only treated ones that exist in DOM
+            //
+            // Seit AP-2.1 wird der ZUSTANDSWECHSEL erkannt, statt blind zu
+            // setzen: Nur ein Container, der vorher versteckt war und jetzt
+            // sichtbar wird, gilt als „neu freigegeben". Beim Erstaufbau sind
+            // alle Container ohnehin sichtbar – dort entsteht deshalb kein
+            // einziger Wechsel auf „sichtbar" und das Verhalten bleibt
+            // unverändert.
+            var neuSichtbarAnzahl = 0;
+
             $containers.each(function() {
                 var $container = $(this);
                 var stableId = $container.attr('data-stable-id');
+                var sollSichtbar = !!stableId && validTreatedContainers.indexOf(stableId) !== -1;
+                var istSichtbar = $container.is(':visible');
 
                 window.cbdDebug && console.log('CBD Classroom Page Filter: Processing container', stableId);
 
-                if (!stableId || validTreatedContainers.indexOf(stableId) === -1) {
+                if (!sollSichtbar) {
                     // Container is NOT treated OR doesn't exist in DB -> hide it
-                    $container.hide();
-                    window.cbdDebug && console.log('CBD Classroom Page Filter: Hiding non-treated container', stableId);
+                    if (istSichtbar) {
+                        $container.hide();
+                        window.cbdDebug && console.log('CBD Classroom Page Filter: Hiding non-treated container', stableId);
+                    }
                 } else {
                     // Container IS treated AND exists in DOM -> show it and add drawings/badges
-                    $container.show();
-                    window.cbdDebug && console.log('CBD Classroom Page Filter: Showing treated container', stableId);
+                    if (!istSichtbar) {
+                        $container.show();
+                        neuSichtbarAnzahl++;
+                        window.cbdDebug && console.log('CBD Classroom Page Filter: Showing treated container', stableId);
+
+                        // Der Hinweis „neu freigegeben" gilt nur für echte
+                        // Live-Freigaben, nicht für den Erstaufbau.
+                        if (!istErstaufbau) {
+                            self.markiereNeuFreigegeben($container);
+                        }
+                    }
 
                     // Add drawing and badge if available
                     if (drawings[stableId]) {
@@ -268,8 +406,52 @@
                 }
             });
 
-            // Nav-Leiste + Link-Interception erfolgen bereits am Anfang von
-            // filterContainers (siehe oben) – hier nicht erneut aufrufen.
+            // Nav-Leiste + Link-Interception stehen seit AP-2.1 in
+            // einmaligAufbauen() – hier bewusst nicht aufrufen.
+
+            // Nachrüst-Haken (AP-2.1): Ein Container, der versteckt im DOM lag,
+            // wurde von der Nummerierung nicht mitgezählt (sie zählt nur
+            // sichtbare Container) und seine Formeln konnten im versteckten
+            // Zustand nicht korrekt vermessen werden. Beides wird nachgeholt,
+            // sobald wirklich etwas neu sichtbar geworden ist.
+            //
+            // Beide typeof-Prüfungen sind PFLICHT: block-numbering.js und
+            // latex-renderer.js werden nur eingereiht, wenn die jeweilige
+            // Funktion auf der Seite überhaupt gebraucht wird.
+            if (!istErstaufbau && neuSichtbarAnzahl > 0) {
+                if (typeof window.CBDRenumberBlocks === 'function') {
+                    window.CBDRenumberBlocks();
+                }
+                if (typeof window.cbdRenderLatex === 'function') {
+                    window.cbdRenderLatex(document);
+                }
+            }
+        },
+
+        /**
+         * Einen gerade live freigegebenen Container für 8 Sekunden markieren.
+         *
+         * Die Gestaltung der Klasse `cbd-neu-freigegeben` liefert AP-2.3.
+         *
+         * BEWUSST OHNE `scrollIntoView()` und ohne Fokuswechsel: Der Schüler
+         * liest gerade – seine Scrollposition darf sich durch eine Freigabe
+         * nicht verändern.
+         */
+        markiereNeuFreigegeben: function($container) {
+            var laufenderZeitgeber = $container.data('cbdNeuFreigegebenZeitgeber');
+
+            // Wird derselbe Container innerhalb der acht Sekunden erneut
+            // freigegeben, beginnt die Frist von vorn statt sich zu stapeln.
+            if (laufenderZeitgeber) {
+                window.clearTimeout(laufenderZeitgeber);
+            }
+
+            $container.addClass('cbd-neu-freigegeben');
+
+            $container.data('cbdNeuFreigegebenZeitgeber', window.setTimeout(function() {
+                $container.removeClass('cbd-neu-freigegeben');
+                $container.removeData('cbdNeuFreigegebenZeitgeber');
+            }, 8000));
         },
 
         /**
@@ -422,6 +604,9 @@
                 .append($content);
 
             // Klick außerhalb schließt mobiles Menü
+            // (siehe interceptLinks(): eigener Namensraum, vor dem Binden
+            // abgeworfen, damit kein zweiter Handler entstehen kann)
+            $(document).off('click.cbdClassroomNav');
             $(document).on('click.cbdClassroomNav', function(e) {
                 if (!$header.is(e.target) && $header.has(e.target).length === 0) {
                     $nav.removeClass('active');
@@ -637,6 +822,14 @@
             var classroomId = this.classroomId;
             var token = this.token;
             var siteHostname = window.location.hostname;
+
+            // Gürtel und Hosenträger (AP-2.1): Diese Methode wird seit AP-2.1
+            // ausschließlich aus einmaligAufbauen() gerufen, läuft also nur
+            // einmal. Der Abwurf des eigenen Namensraums stellt aber sicher,
+            // dass auch ein versehentlicher zweiter Aufruf keinen zweiten
+            // Klick-Abfänger hinterlässt (jeder Klick würde sonst mehrfach
+            // umgeleitet).
+            $(document).off('click.cbdClassroomLinks');
 
             $(document).on('click.cbdClassroomLinks', 'a[href]', function(e) {
                 var href = $(this).attr('href');
