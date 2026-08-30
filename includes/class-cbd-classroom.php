@@ -1656,6 +1656,25 @@ class CBD_Classroom {
                 true
             );
 
+            // Klassenpuls (AP-1.5): Taktgeber fuer die Live-Aktualisierung im
+            // Klassenmodus (Phase 1 - noch abonniert niemand, siehe
+            // PLAN-Klassenmodus-Live.md). Kein jQuery: das Skript nutzt
+            // ausschliesslich fetch(). Bei Takt 0 wird gar nicht erst
+            // eingereiht, damit der Zustand byteidentisch zu vorher bleibt.
+            if (class_exists('CBD_Klassenpuls') && CBD_Klassenpuls::takt() > 0) {
+                wp_enqueue_script(
+                    'cbd-klassenpuls',
+                    CBD_PLUGIN_URL . 'assets/js/klassenpuls.js',
+                    array(),
+                    CBD_VERSION,
+                    true
+                );
+                wp_localize_script('cbd-klassenpuls', 'cbdKlassenpulsDaten', array(
+                    'restUrl' => rest_url('cbd/v1/klassenpuls'),
+                    'takt'    => CBD_Klassenpuls::takt(),
+                ));
+            }
+
             // Localize with page data
             // `reduziert` sagt dem Browser, dass der Server den Inhalt bereits
             // gefiltert hat (gesperrte Seite, nicht angemeldet — siehe
@@ -1848,6 +1867,25 @@ class CBD_Classroom {
                 'pageId' => get_the_ID()
             )
         );
+
+        // Klassenpuls (AP-1.5): derselbe Taktgeber wie auf der normalen
+        // Klassenseite (siehe oben, Zweig fuer ?classroom=). Auf dieser
+        // Shortcode-Seite gibt es keine page_id, daher liefert die Route
+        // hier keine Felder 'seite'/'tafel'. Kein jQuery: fetch() genuegt.
+        // Bei Takt 0 wird gar nicht erst eingereiht.
+        if (class_exists('CBD_Klassenpuls') && CBD_Klassenpuls::takt() > 0) {
+            wp_enqueue_script(
+                'cbd-klassenpuls',
+                CBD_PLUGIN_URL . 'assets/js/klassenpuls.js',
+                array(),
+                CBD_VERSION,
+                true
+            );
+            wp_localize_script('cbd-klassenpuls', 'cbdKlassenpulsDaten', array(
+                'restUrl' => rest_url('cbd/v1/klassenpuls'),
+                'takt'    => CBD_Klassenpuls::takt(),
+            ));
+        }
     }
 
     /**

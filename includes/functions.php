@@ -91,6 +91,41 @@ if (!function_exists('cbd_sanitize_icon_scale')) {
 }
 
 /**
+ * Abfragetakt des Klassenpulses (Sekunden) auf den erlaubten Bereich bringen.
+ *
+ * Nach dem Vorbild von cbd_sanitize_icon_scale() direkt oben: Speicherseite
+ * (admin/settings.php) und Frontend-Auslieferung (CBD_Klassenpuls::takt(),
+ * AP-1.3) sollen denselben Wert auslegen, deshalb existiert dafür genau eine
+ * Funktion statt zweier möglicherweise auseinanderlaufender Kopien.
+ *
+ * Regeln (siehe PLAN-Klassenmodus-Live.md, AP-1.6): nicht numerisch -> 10;
+ * numerisch <= 0 -> 0 (Klassenpuls abgeschaltet); sonst geklemmt auf 5…300.
+ *
+ * @param mixed $wert
+ * @return int
+ */
+if (!function_exists('cbd_sanitize_klassenpuls_takt')) {
+    function cbd_sanitize_klassenpuls_takt($wert) {
+        // Komma als Dezimaltrenner ist in deutschsprachiger Eingabe normal;
+        // (int) "1,5" wäre sonst 1 statt 15 bzw. der Wert würde stillschweigend
+        // auf das Minimum fallen.
+        $value = str_replace(',', '.', trim((string) wp_unslash($wert)));
+
+        if ('' === $value || !is_numeric($value)) {
+            return 10;
+        }
+
+        $value = (int) round((float) $value);
+
+        if ($value <= 0) {
+            return 0;
+        }
+
+        return max(5, min(300, $value));
+    }
+}
+
+/**
  * Gespeicherter Prozentwert.
  *
  * @return int
