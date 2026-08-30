@@ -993,3 +993,128 @@
 .cbd-classroom-page-item.cbd-classroom-expanded > .cbd-classroom-page-row > .cbd-classroom-toggle .cbd-classroom-toggle-icon {
     transform: rotate(90deg);
 }
+
+/* === HINWEIS „NEU FREIGEGEBEN" (PLAN-Klassenmodus-Live.md, AP-2.3) === */
+
+/* AP-2.1 (entsteht parallel in classroom-page-filter.js, hier NICHT
+   angefasst) setzt fuer 8 Sekunden die Klasse `cbd-neu-freigegeben` auf
+   `.cbd-container` (den aeusseren, sonst unsichtbaren Block-Wrapper aus
+   cbd-frontend-clean.css), sobald ein Container live erscheint. Geprueft
+   wurde hier bewusst OHNE jenen Code -- die Klasse wird von Hand in der
+   Konsole gesetzt (Tests dieses APs).
+
+   Bewusst outline statt border: ein border haette die Box-Groesse von
+   .cbd-container veraendert und Fliesstext haette umbrechen koennen.
+   outline liegt ausserhalb des Boxmodells und laesst Breite/Hoehe
+   unangetastet (per getBoundingClientRect() vor/nach dem Setzen der Klasse
+   nachgewiesen, siehe Uebergabenotiz).
+
+   Farbe ausschliesslich ueber --cbd-classroom-accent (gesetzt von
+   CBD_Classroom::classroom_accent_inline_css(), gekoppelt an
+   get_theme_mod('color_ui_surface', '#e24614')), Rueckfallwert #e24614 --
+   dasselbe Muster wie in der restlichen Datei (siehe z. B.
+   .cbd-classroom-header weiter oben).
+
+   WICHTIG -- Spezifitaets-/!important-Kollision mit cbd-frontend-clean.css,
+   die beim Bauen dieser Regel live geprueft wurde: .cbd-container setzt dort
+   GLEICH ZWEIMAL (dortige Zeilen ~34-56 und ~640-646) sowohl
+   "outline: none !important;" als auch "box-shadow: none !important;", und
+   an einer dritten Stelle (~58-71) "background: none !important;" auch fuer
+   .cbd-container::before. Alle drei haben Spezifitaet (0,1,0) bzw. fuer
+   ::before (0,1,1). Ein einfaches ".cbd-neu-freigegeben { outline: ...; }"
+   ohne !important haette gegen diese Regeln immer verloren (eine normale
+   Deklaration verliert gegen jede !important-Deklaration, unabhaengig von
+   der Spezifitaet); selbst MIT !important waere bei gleicher Spezifitaet nur
+   noch die Reihenfolge der beiden <link>-Tags im Seitenkopf entscheidend
+   gewesen -- ein Zufall, von dem eine Live-Markierung nicht abhaengen darf.
+   Deshalb hier durchgehend der zusammengesetzte Selektor
+   ".cbd-container.cbd-neu-freigegeben" (Spezifitaet (0,2,0) bzw. fuer
+   ::before (0,2,1)) -- das gewinnt gegen (0,1,0)/(0,1,1) immer, unabhaengig
+   von der Ladereihenfolge -- plus !important auf genau den drei
+   kollidierenden Eigenschaften (outline, box-shadow, background der Fahne).
+   Alle uebrigen Eigenschaften unten (content, position, top/right, padding,
+   Schrift, pointer-events, z-index, transform, opacity) sind von keiner
+   bestehenden !important-Regel betroffen und stehen deshalb bewusst ohne
+   !important.
+
+   position: relative wird hier bewusst NICHT gesetzt: .cbd-container traegt
+   es bereits im Bestand (cbd-frontend-clean.css, dortige Zeilen ~35 und
+   ~664) -- vor dem Schreiben dieser Regel im Bestand geprueft. Ein erneutes
+   Setzen haette keinen zusaetzlichen Effekt, aber die falsche Vermutung
+   genaehrt, es sei hier neu eingefuehrt worden. */
+.cbd-container.cbd-neu-freigegeben {
+    outline: 2px solid var(--cbd-classroom-accent, #e24614) !important;
+    outline-offset: 3px;
+    box-shadow: 0 0 18px 4px color-mix(in srgb, var(--cbd-classroom-accent, #e24614) 45%, transparent) !important;
+}
+
+/* transition steht bewusst auf der Basisklasse .cbd-container, nicht (nur)
+   auf .cbd-container.cbd-neu-freigegeben: Beim Entfernen einer Klasse richtet
+   sich eine CSS-Transition nach den transition-*-Eigenschaften des
+   Zielzustands NACH der Aenderung. Staende die Deklaration nur auf der
+   zusammengesetzten Klasse, liefe das Einblenden weich, das Auslaufen nach
+   den 8 Sekunden (AP-2.1 entfernt dann die Klasse wieder) aber abrupt --
+   der Zielzustand ".cbd-container" ohne die Klasse haette dann keine
+   transition mehr deklariert. Fuer jeden Container, der diese Klasse nie
+   traegt, ist die Zeile wirkungslos: outline-color/box-shadow aendern sich
+   dort nie, also gibt es nichts zu animieren. */
+.cbd-container {
+    transition: outline-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+/* Die Fahne oben rechts, leicht ueber den oberen Rand ueberstehend (wie ein
+   Eck-Etikett) -- .cbd-container ist "overflow: visible !important" (siehe
+   cbd-frontend-clean.css), das Ueberstehen wird also nicht abgeschnitten.
+   pointer-events: none, damit sie nie einen Klick auf ein darunterliegendes
+   Element (z. B. den Aufklapp-Knopf oder das Kopfzeilen-Icon) abfaengt. */
+.cbd-container.cbd-neu-freigegeben::before {
+    content: "Neu freigegeben";
+    position: absolute;
+    top: -10px;
+    right: 14px;
+    z-index: 2;
+    padding: 3px 10px;
+    border-radius: 4px;
+    background: var(--cbd-classroom-accent, #e24614) !important;
+    color: var(--color-text-on-accent, #ffffff);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: cbd-neu-freigegeben-einblenden 0.4s ease;
+}
+
+@keyframes cbd-neu-freigegeben-einblenden {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Barrierefreiheit: Bewegung abschalten, Rahmen und Fahne bleiben stehen. */
+@media (prefers-reduced-motion: reduce) {
+    .cbd-container {
+        transition: none;
+    }
+
+    .cbd-container.cbd-neu-freigegeben::before {
+        animation: none;
+    }
+}
+
+/* Darkmode ueber [data-theme="dark"] auf <html> (Projektkonvention, siehe
+   Root-CLAUDE.md, Abschnitt "Color Scheme", und Plugins/CDB-Designer/CLAUDE.md,
+   Abschnitt "Darkmode"), NIE ueber @media (prefers-color-scheme: dark) --
+   dieselbe Schreibweise wie z. B. in assets/css/lehrer-klassen.css
+   ([data-theme="dark"] .cbd-lehrer-klassen). Nur der Schein wird verstaerkt
+   (hoehere Deckkraft), Rahmenfarbe und Fahne bleiben unveraendert -- beide
+   haben auf dunklem Grund bereits ausreichend Kontrast. */
+[data-theme="dark"] .cbd-container.cbd-neu-freigegeben {
+    box-shadow: 0 0 22px 6px color-mix(in srgb, var(--cbd-classroom-accent, #e24614) 65%, transparent) !important;
+}

@@ -52,6 +52,72 @@
 
             window.cbdDebug && console.log('CBD Classroom Page Filter: Initializing for page', this.pageId, 'classroom', this.classroomId);
             this.loadClassroomData();
+            this.verdrahteKlassenpuls();
+        },
+
+        /**
+         * Den Taktgeber `window.cbdKlassenpuls` anzapfen (AP-2.1).
+         *
+         * Der Taktgeber ist OPTIONAL: Steht die Option `cbd_klassenpuls_takt`
+         * auf 0, reiht `CBD_Classroom::enqueue_frontend_assets()` die Datei
+         * `assets/js/klassenpuls.js` gar nicht erst ein — `window.cbdKlassenpuls`
+         * existiert dann nicht und diese Methode steigt still aus. Der Filter
+         * verhält sich in diesem Fall exakt wie vor diesem Arbeitspaket.
+         *
+         * Reihenfolge mit Absicht: erst `setzeSeite()`, dann `setzeSitzung()`.
+         * `setzeSitzung()` startet den Taktgeber sofort (`starte()` ruft
+         * synchron `frageAb()`); wäre die Seite da noch nicht gesetzt, ginge
+         * die allererste Abfrage ohne `page_id` hinaus und der Server lieferte
+         * die Signaturen `seite`/`tafel` erst beim zweiten Durchlauf. Der
+         * Vertrag von `setzeSeite()` erlaubt den Aufruf vor `setzeSitzung()`
+         * ausdrücklich (die Seitenbindung überlebt das Setzen der Sitzung).
+         */
+        verdrahteKlassenpuls: function() {
+            if (!window.cbdKlassenpuls) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Kein Taktgeber vorhanden (cbd_klassenpuls_takt = 0?) – keine Live-Aktualisierung.');
+                return;
+            }
+
+            var self = this;
+
+            window.cbdKlassenpuls.setzeSeite(this.pageId);
+            window.cbdKlassenpuls.setzeSitzung(this.classroomId, this.token);
+
+            // Auf einer serverseitig reduzierten Seite liegt das HTML der noch
+            // nicht freigegebenen Container GAR NICHT im DOM – ein Einblenden
+            // wäre wirkungslos. Dort löst Phase 3 des Vorhabens ein gezieltes
+            // Neuladen aus; hier wird deshalb bewusst KEIN 'seite'-Rückruf
+            // registriert.
+            if (this.istReduzierteSeite()) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Reduzierte Seite – kein seite-Rückruf (Phase 3 übernimmt).');
+            } else {
+                window.cbdKlassenpuls.abonniere('seite', function() {
+                    self.aktualisiere();
+                });
+
+                // Tafelbilder aktualisieren sich unabhängig von Freigaben
+                // (AP-2.2): Die Signatur 'tafel' bewegt sich bei JEDEM
+                // Schreibvorgang an wp_cbd_drawings, nicht nur bei
+                // Freigabe/Rücknahme. Auf reduzierten Seiten bewusst NICHT
+                // registriert, aus demselben Grund wie beim 'seite'-Zweig
+                // oben – Phase 3 deckt diese Ansicht gesondert ab.
+                window.cbdKlassenpuls.abonniere('tafel', function() {
+                    self.aktualisiereTafelbilder();
+                });
+            }
+
+            window.cbdKlassenpuls.abonniere('abgelaufen', function() {
+                self.showError('Die Klassensitzung ist abgelaufen. Bitte erneut anmelden.');
+            });
+        },
+
+        /**
+         * Läuft diese Seite serverseitig reduziert?
+         * Der Wert kommt aus CBD_Classroom::enqueue_frontend_assets().
+         */
+        istReduzierteSeite: function() {
+            return (typeof cbdClassroomPageData !== 'undefined')
+                && !!cbdClassroomPageData.reduziert;
         },
 
         /**
@@ -67,7 +133,8 @@
             }, function(response) {
                 if (response.success) {
                     window.cbdDebug && console.log('CBD Classroom Page Filter: Received data', response.data);
-                    self.filterContainers(response.data);
+                    self.einmaligAufbauen(response.data);
+                    self.filterContainers(response.data, true);
                 } else {
                     console.error('CBD Classroom Page Filter: Error loading data', response.data.message);
                     // Show error to user
@@ -80,21 +147,149 @@
         },
 
         /**
-         * Filter containers based on classroom data
+         * Klassendaten erneut holen und den Filter wiederholen (AP-2.1).
+         *
+         * Wird ausschließlich vom 'seite'-Rückruf des Taktgebers gerufen, also
+         * nur dann, wenn sich die Freigabe-Signatur tatsächlich geändert hat.
+         * Ruft WEDER `einmaligAufbauen()` NOCH `filterContainers(data, true)` –
+         * die Navigationsleiste, die Link-Umleitung und die Warnung über
+         * fehlende markierte Blöcke gehören zum Erstaufbau und dürfen sich
+         * nicht wiederholen.
+         *
+         * Ein fehlgeschlagener Nachschlag bleibt bewusst STILL: Er ist kein
+         * Grund, dem lesenden Schüler eine Fehlermeldung vor die Nase zu
+         * setzen. Der nächste Takt versucht es ohnehin wieder.
          */
-        filterContainers: function(data) {
-            var treatedContainers = data.treated_containers || [];
-            var drawings = data.drawings || {};
+        aktualisiere: function() {
+            var self = this;
 
-            window.cbdDebug && console.log('CBD Classroom Page Filter: Treated containers:', treatedContainers);
-            window.cbdDebug && console.log('CBD Classroom Page Filter: Drawings:', Object.keys(drawings));
+            $.post(cbdClassroomPageData.ajaxUrl, {
+                action: 'cbd_get_page_classroom_data',
+                token: this.token,
+                page_id: this.pageId
+            }, function(response) {
+                if (response && response.success) {
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Aktualisierung erhalten', response.data);
+                    self.filterContainers(response.data);
+                } else {
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Aktualisierung ohne Erfolg – still ignoriert.');
+                }
+            }).fail(function(xhr, status, error) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Aktualisierung fehlgeschlagen – still ignoriert.', error);
+            });
+        },
 
-            // Navigationsleiste (mit "Verlassen"-Button) IMMER zuerst einfügen –
-            // unabhängig davon, ob die Seite Container-Blöcke hat. Sonst säße der
-            // Schüler auf container-losen Seiten in der Klasse fest (kein Ausgang).
+        /**
+         * Tafelbilder aktualisieren, unabhängig von Freigaben (AP-2.2).
+         *
+         * Wird ausschließlich vom 'tafel'-Rückruf des Taktgebers gerufen –
+         * also nur, wenn sich die Tafelbild-Signatur tatsächlich geändert
+         * hat (irgendein Schreibvorgang an wp_cbd_drawings, nicht
+         * notwendigerweise eine Freigabe). Ruft NICHT filterContainers():
+         * Sichtbarkeit der Container ändert sich hier nicht, nur ihre
+         * Tafelbild-Abschnitte.
+         *
+         * Geht alle aktuell SICHTBAREN Container durch (nur freigegebene
+         * Container zeigen je einen Tafelbild-Abschnitt) und überlässt
+         * baueTafelbild() die Entscheidung, ob aufgebaut, aktualisiert,
+         * unverändert gelassen oder entfernt wird – auch wenn für einen
+         * Container gar keine Zeichnungsdaten (mehr) vorliegen
+         * (drawings[stableId] dann undefined).
+         *
+         * Ein fehlgeschlagener Nachschlag bleibt bewusst STILL, aus
+         * demselben Grund wie bei aktualisiere().
+         */
+        aktualisiereTafelbilder: function() {
+            var self = this;
+
+            $.post(cbdClassroomPageData.ajaxUrl, {
+                action: 'cbd_get_page_classroom_data',
+                token: this.token,
+                page_id: this.pageId
+            }, function(response) {
+                if (!response || !response.success) {
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Tafelbild-Aktualisierung ohne Erfolg – still ignoriert.');
+                    return;
+                }
+
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Tafelbild-Aktualisierung erhalten', response.data);
+
+                var drawings = response.data.drawings || {};
+
+                $('[data-wp-interactive="container-block-designer"], [data-stable-id^="cbd-"]').each(function() {
+                    var $container = $(this);
+                    var stableId = $container.attr('data-stable-id');
+
+                    // WARUM NICHT `$container.is(':visible')` (dieselbe Falle
+                    // wie Befund B1 aus AP-2.rev, dort in filterContainers()
+                    // behoben durch AP-2.fix1 – hier dieselbe Technik an der
+                    // zweiten Fundstelle, AP-2.fix2): `:visible` prueft die
+                    // gesamte VORFAHRENKETTE, nicht nur diesen Container. Ein
+                    // freigegebener Container in einem zugeklappten Elternteil
+                    // (`.cbd-container.cbd-collapsed .cbd-container-content
+                    // { display: none }`, ebenso Accordion-Panels) galt dadurch
+                    // als „nicht sichtbar" und wurde bei einer Tafelbild-
+                    // Aenderung UEBERSPRUNGEN – dauerhaft, denn dieser Zweig
+                    // laeuft nur bei einer Signaturaenderung, die dann bereits
+                    // vorbei ist. Der Schueler sah ein veraltetes Tafelbild,
+                    // sobald er den Elternteil spaeter aufklappte.
+                    //
+                    // Gefragt wird deshalb der EIGENE Zustand des Elements:
+                    // Dieser Filter versteckt ausschliesslich per
+                    // `$container.hide()`, und das setzt `style="display: none"`
+                    // am Element selbst. Ein Container in einem zugeklappten
+                    // Elternteil ist damit wieder ein ganz normaler Fall.
+                    if (!stableId || $container[0].style.display === 'none') {
+                        return;
+                    }
+
+                    self.baueTafelbild($container, drawings[stableId]);
+                });
+            }).fail(function(xhr, status, error) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Tafelbild-Aktualisierung fehlgeschlagen – still ignoriert.', error);
+            });
+        },
+
+        /**
+         * Alles, was GENAU EINMAL geschehen darf (AP-2.1).
+         *
+         * Navigationsleiste (mit "Verlassen"-Button) IMMER einfügen –
+         * unabhängig davon, ob die Seite Container-Blöcke hat. Sonst säße der
+         * Schüler auf container-losen Seiten in der Klasse fest (kein Ausgang).
+         *
+         * Wird ausschließlich aus `loadClassroomData()` gerufen, NIE aus
+         * `aktualisiere()`. Andernfalls entstünde bei jeder Live-Aktualisierung
+         * eine weitere Navigationsleiste bzw. ein weiterer Klick-Abfänger.
+         */
+        einmaligAufbauen: function(data) {
             this.className = data.class_name;
             this.injectClassroomNavBar(data.class_name);
             this.interceptLinks();
+        },
+
+        /**
+         * Filter containers based on classroom data.
+         *
+         * Seit AP-2.1 beliebig oft aufrufbar: Die Methode enthält nur noch den
+         * wiederholbaren Teil (Schleife über die Container). Der einmalige Teil
+         * steht in `einmaligAufbauen()`.
+         *
+         * @param {Object}  data          Antwort von cbd_get_page_classroom_data.
+         * @param {boolean} istErstaufbau Nur beim ersten Durchlauf true. Steuert
+         *                                die einmalige Warnung über fehlende
+         *                                markierte Blöcke und verhindert, dass
+         *                                der Erstaufbau als „neu freigegeben"
+         *                                gilt.
+         */
+        filterContainers: function(data, istErstaufbau) {
+            var self = this;
+            var treatedContainers = data.treated_containers || [];
+            var drawings = data.drawings || {};
+
+            istErstaufbau = !!istErstaufbau;
+
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Treated containers:', treatedContainers);
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Drawings:', Object.keys(drawings));
 
             // Find all container blocks on the page
             // Try multiple selectors to catch all containers
@@ -124,10 +319,12 @@
             // keinen Sinn: Dort steht ohnehin nur, was freigegeben ist, und
             // freigegebene Container anderer Seiten fehlen naturgemäß. Der
             // Wert kommt aus CBD_Classroom::enqueue_frontend_assets().
-            var istReduziert = (typeof cbdClassroomPageData !== 'undefined')
-                && !!cbdClassroomPageData.reduziert;
+            var istReduziert = this.istReduzierteSeite();
 
-            if (missingContainers.length > 0 && !istReduziert) {
+            // Seit AP-2.1 NUR beim Erstaufbau: Bei jeder Live-Aktualisierung
+            // würde sich dieselbe Warnung sonst endlos wiederholen. Der
+            // istReduziert-Vorbehalt bleibt davon unberührt bestehen.
+            if (istErstaufbau && missingContainers.length > 0 && !istReduziert) {
                 console.warn('CBD Classroom Page Filter: WARNING - ' + missingContainers.length + ' treated containers from DB not found in DOM (page was likely edited):', missingContainers);
 
                 // Show warning but DON'T auto-cleanup - teacher might want to re-mark the blocks
@@ -136,7 +333,7 @@
                     'Die Markierungen bleiben in der Datenbank gespeichert, werden aber auf dieser Seite nicht angezeigt.');
 
                 // DON'T call cleanupInvalidContainers() - markings should persist
-            } else if (missingContainers.length > 0) {
+            } else if (istErstaufbau && missingContainers.length > 0) {
                 window.cbdDebug && console.log('CBD Classroom Page Filter: ' + missingContainers.length +
                     ' markierte Container fehlen im DOM - auf einer reduzierten Seite erwartet, keine Warnung.');
             }
@@ -154,20 +351,78 @@
             }
 
             // Hide all containers by default, then show only treated ones that exist in DOM
+            //
+            // Seit AP-2.1 wird der ZUSTANDSWECHSEL erkannt, statt blind zu
+            // setzen: Nur ein Container, der vorher von DIESEM Filter versteckt
+            // war und jetzt sichtbar wird, gilt als „neu freigegeben".
+            //
+            // WARUM NICHT `$container.is(':visible')` (Befund B1 aus AP-2.rev,
+            // behoben in AP-2.fix1) — bitte nicht zurückstellen:
+            // `:visible` ist falsch, sobald ein VORFAHRE versteckt ist, und auf
+            // dieser Website versteckt der Server ohne jedes JavaScript:
+            //   • `.cbd-container.cbd-collapsed .cbd-container-content
+            //      { display: none }` (cbd-frontend-clean.css) – die Klasse
+            //      `cbd-collapsed` setzt bereits der PHP-Renderer, wenn das
+            //      Design „standardmäßig zugeklappt" trägt. Container INNERHALB
+            //      eines zugeklappten Containers sind damit von Anfang an
+            //      `:visible === false`;
+            //   • dasselbe gilt für Container in einem Panel des Blocks
+            //      `modular-blocks/accordion`.
+            // Ein nicht freigegebener Container in einem zugeklappten Elternteil
+            // galt dadurch als „ohnehin unsichtbar", bekam kein `.hide()` – und
+            // erschien, sobald der Schüler den Elternteil aufklappte. Gemessen
+            // auf Seite 1618/Klasse 15: 6 zugeklappte Container, 5 davon ohne
+            // eigenes `display:none`, dazu vier falsche „Neu freigegeben"-
+            // Hinweise bei jedem Puls.
+            //
+            // Gefragt wird deshalb der EIGENE Zustand des Elements: Dieser
+            // Filter versteckt ausschliesslich per `$container.hide()`, und das
+            // setzt `style="display: none"` am Element selbst. Ein Container in
+            // einem zugeklappten Elternteil ist damit wieder ein ganz normaler
+            // Fall. Nebenwirkung, die erwünscht ist: kein erzwungener
+            // Layout-Durchlauf mehr pro Container (`:visible` liest Geometrie).
+            var neuSichtbarAnzahl = 0;
+
             $containers.each(function() {
                 var $container = $(this);
                 var stableId = $container.attr('data-stable-id');
+                var sollSichtbar = !!stableId && validTreatedContainers.indexOf(stableId) !== -1;
+                var istVersteckt = $container[0].style.display === 'none';
 
                 window.cbdDebug && console.log('CBD Classroom Page Filter: Processing container', stableId);
 
-                if (!stableId || validTreatedContainers.indexOf(stableId) === -1) {
+                if (!sollSichtbar) {
                     // Container is NOT treated OR doesn't exist in DB -> hide it
-                    $container.hide();
-                    window.cbdDebug && console.log('CBD Classroom Page Filter: Hiding non-treated container', stableId);
+                    if (!istVersteckt) {
+                        $container.hide();
+
+                        // Behandelt-Kennzeichnung mit abräumen (Befund B4 aus
+                        // AP-2.rev, behoben in AP-2.fix1): Das Abzeichen wurde
+                        // beim Einblenden gesetzt, aber nie wieder entfernt.
+                        // Nimmt die Lehrperson eine Freigabe zurück und erteilt
+                        // sie später erneut, hinge sonst ein veraltetes
+                        // „✓ Behandelt" am Container. `children()` statt
+                        // `find()`: das eigene Abzeichen ist ein direktes Kind –
+                        // Abzeichen VERSCHACHTELTER Container gehören denen und
+                        // dürfen hier nicht mit verschwinden.
+                        $container.children('.cbd-behandelt-badge').remove();
+                        $container.removeClass('cbd-is-behandelt');
+
+                        window.cbdDebug && console.log('CBD Classroom Page Filter: Hiding non-treated container', stableId);
+                    }
                 } else {
                     // Container IS treated AND exists in DOM -> show it and add drawings/badges
-                    $container.show();
-                    window.cbdDebug && console.log('CBD Classroom Page Filter: Showing treated container', stableId);
+                    if (istVersteckt) {
+                        $container.show();
+                        neuSichtbarAnzahl++;
+                        window.cbdDebug && console.log('CBD Classroom Page Filter: Showing treated container', stableId);
+
+                        // Der Hinweis „neu freigegeben" gilt nur für echte
+                        // Live-Freigaben, nicht für den Erstaufbau.
+                        if (!istErstaufbau) {
+                            self.markiereNeuFreigegeben($container);
+                        }
+                    }
 
                     // Add drawing and badge if available
                     if (drawings[stableId]) {
@@ -183,93 +438,243 @@
                         }
 
                         // Add collapsible drawing section with optional page navigation
-                        // Nur anzeigen wenn mindestens eine Seite echte Zeichnungsdaten hat
-                        var hasPages = drawing.pages && Object.keys(drawing.pages).some(function(idx) {
-                            return drawing.pages[idx] && drawing.pages[idx].drawing_data;
-                        });
-                        var hasLegacy = !hasPages && drawing.drawing_data;
-
-                        if (hasPages || hasLegacy) {
-                            var $content = $container.find('.cbd-container-content').first();
-                            if ($content.length > 0 && $content.find('.cbd-class-drawing-section').length === 0) {
-                                var $section = $('<div class="cbd-drawing-section cbd-class-drawing-section">');
-                                var $toggle = $('<button class="cbd-drawing-toggle">📋 Tafelbild anzeigen</button>');
-                                var $drawingOverlay = $('<div class="cbd-drawing-overlay" style="display: none;">');
-
-                                if (hasPages) {
-                                    // Multi-page: IIFE für saubere Closure-Isolation
-                                    // Nur Seiten mit tatsächlichen Zeichnungsdaten berücksichtigen
-                                    var pageIndices = Object.keys(drawing.pages).map(Number).sort(function(a, b) { return a - b; }).filter(function(idx) {
-                                        return drawing.pages[idx] && drawing.pages[idx].drawing_data;
-                                    });
-                                    var totalDrawingPages = pageIndices.length;
-
-                                    var $img = $('<img>').attr('alt', 'Tafel-Zeichnung').css('max-width', '100%');
-
-                                    if (totalDrawingPages > 1) {
-                                        var $pageNav = $('<div class="cbd-drawing-page-nav">');
-                                        var $pagePrev = $('<button class="cbd-drawing-page-prev" disabled>◀</button>');
-                                        var $pageIndicator = $('<span class="cbd-drawing-page-indicator">1 / ' + totalDrawingPages + '</span>');
-                                        var $pageNext = $('<button class="cbd-drawing-page-next">▶</button>');
-                                        $pageNav.append($pagePrev, $pageIndicator, $pageNext);
-                                        $drawingOverlay.append($pageNav);
-
-                                        // IIFE: alle Variablen als Parameter übergeben → kein var-Hoisting-Problem
-                                        (function($imgEl, $prev, $next, $ind, pages, indices, total) {
-                                            var current = 0;
-
-                                            function showPage(idx) {
-                                                if (idx < 0 || idx >= total) return;
-                                                current = idx;
-                                                var pd = pages[indices[idx]];
-                                                $imgEl.attr('src', pd && pd.drawing_data ? pd.drawing_data : '');
-                                                $prev.prop('disabled', idx <= 0);
-                                                $next.prop('disabled', idx >= total - 1);
-                                                $ind.text((idx + 1) + ' / ' + total);
-                                            }
-
-                                            $prev.on('click', function(e) { e.stopPropagation(); showPage(current - 1); });
-                                            $next.on('click', function(e) { e.stopPropagation(); showPage(current + 1); });
-
-                                            showPage(0);
-                                        })($img, $pagePrev, $pageNext, $pageIndicator, drawing.pages, pageIndices, totalDrawingPages);
-                                    } else {
-                                        // Einzelne Seite: nur Bild anzeigen
-                                        var pd0 = drawing.pages[pageIndices[0]];
-                                        $img.attr('src', pd0 && pd0.drawing_data ? pd0.drawing_data : '');
-                                    }
-
-                                    $drawingOverlay.append($img);
-                                } else {
-                                    // Legacy: einzelne Zeichnung
-                                    $drawingOverlay.append(
-                                        $('<img>').attr({
-                                            'src': drawing.drawing_data || '',
-                                            'alt': 'Tafel-Zeichnung'
-                                        }).css('max-width', '100%')
-                                    );
-                                }
-
-                                $section.append($toggle, $drawingOverlay);
-                                $content.append($section);
-
-                                $toggle.on('click', function(e) {
-                                    e.preventDefault();
-                                    var willBeVisible = !$drawingOverlay.is(':visible');
-                                    $drawingOverlay.slideToggle(300);
-                                    $toggle.text(willBeVisible ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen');
-                                    $toggle.toggleClass('cbd-drawing-toggle-active', willBeVisible);
-                                });
-
-                                window.cbdDebug && console.log('CBD Classroom Page Filter: Added drawing section to', stableId);
-                            }
-                        }
+                        // Seit AP-2.2 in eine eigene Methode ausgelagert, die
+                        // auch ein bereits vorhandenes Tafelbild aktualisieren
+                        // kann (siehe baueTafelbild() weiter unten).
+                        self.baueTafelbild($container, drawing);
                     }
                 }
             });
 
-            // Nav-Leiste + Link-Interception erfolgen bereits am Anfang von
-            // filterContainers (siehe oben) – hier nicht erneut aufrufen.
+            // Nav-Leiste + Link-Interception stehen seit AP-2.1 in
+            // einmaligAufbauen() – hier bewusst nicht aufrufen.
+
+            // Nachrüst-Haken (AP-2.1), Kommentar richtiggestellt in AP-2.fix1
+            // (Befund B3 aus AP-2.rev):
+            //
+            // `cbdRenderLatex()` ist der eigentliche Grund für diesen Block. Ein
+            // Container, der versteckt im DOM lag, konnte seine Formeln nicht
+            // korrekt vermessen lassen – KaTeX hätte in einem
+            // `display:none`-Teilbaum die falsche Ersatzschrift erwischt.
+            // `whenFontsReady()` im Renderer macht den Aufruf hier berechtigt.
+            //
+            // `CBDRenumberBlocks()` steht daneben aus ANDEREM Grund, als der
+            // ursprüngliche Kommentar behauptete: Er sagte, die Nummerierung
+            // zähle nur sichtbare Container. Das ist widerlegt —
+            // `renumberBlocks()` in assets/js/block-numbering.js filtert
+            // ausschliesslich auf oberste Ebene
+            // (`container.parentElement.closest('.cbd-container')`),
+            // Sichtbarkeit kommt dort gar nicht vor. Der Aufruf ist damit im
+            // Regelfall wirkungslos, aber idempotent und schadlos; er bleibt als
+            // Absicherung stehen, falls sich die Nummerierung künftig doch am
+            // Anzeigezustand orientiert.
+            //
+            // Beide typeof-Prüfungen sind PFLICHT: block-numbering.js und
+            // latex-renderer.js werden nur eingereiht, wenn die jeweilige
+            // Funktion auf der Seite überhaupt gebraucht wird.
+            if (!istErstaufbau && neuSichtbarAnzahl > 0) {
+                if (typeof window.CBDRenumberBlocks === 'function') {
+                    window.CBDRenumberBlocks();
+                }
+                if (typeof window.cbdRenderLatex === 'function') {
+                    window.cbdRenderLatex(document);
+                }
+            }
+        },
+
+        /**
+         * Einen gerade live freigegebenen Container für 8 Sekunden markieren.
+         *
+         * Die Gestaltung der Klasse `cbd-neu-freigegeben` liefert AP-2.3.
+         *
+         * BEWUSST OHNE `scrollIntoView()` und ohne Fokuswechsel: Der Schüler
+         * liest gerade – seine Scrollposition darf sich durch eine Freigabe
+         * nicht verändern.
+         */
+        markiereNeuFreigegeben: function($container) {
+            var laufenderZeitgeber = $container.data('cbdNeuFreigegebenZeitgeber');
+
+            // Wird derselbe Container innerhalb der acht Sekunden erneut
+            // freigegeben, beginnt die Frist von vorn statt sich zu stapeln.
+            if (laufenderZeitgeber) {
+                window.clearTimeout(laufenderZeitgeber);
+            }
+
+            $container.addClass('cbd-neu-freigegeben');
+
+            $container.data('cbdNeuFreigegebenZeitgeber', window.setTimeout(function() {
+                $container.removeClass('cbd-neu-freigegeben');
+                $container.removeData('cbdNeuFreigegebenZeitgeber');
+            }, 8000));
+        },
+
+        /**
+         * Tafelbild-Abschnitt eines Containers aufbauen bzw. aktualisieren
+         * (AP-2.2). Aus filterContainers() herausgezogen — der Erstaufbau
+         * erzeugt weiterhin BYTEIDENTISCHES Markup zum Stand vor diesem
+         * Arbeitspaket, das Herausziehen selbst ändert daran nichts.
+         *
+         * Vor AP-2.2 wurde ein bereits vorhandener Abschnitt übersprungen
+         * (`$content.find('.cbd-class-drawing-section').length === 0`) —
+         * ein geändertes Tafelbild wurde dadurch nie erneuert. Seit AP-2.2
+         * wird ein vorhandener Abschnitt bei geänderten Zeichnungsdaten
+         * entfernt und neu aufgebaut, bzw. bei fehlenden Zeichnungsdaten
+         * ganz entfernt (Aufruf aus aktualisiereTafelbilder(), wenn eine
+         * Zeichnung gelöscht wurde).
+         *
+         * Zwei Vorkehrungen gegen ein störendes Nachladen:
+         * - Kennung (Länge der drawing_data-Zeichenkette je Tafelseite, mit
+         *   '|' verbunden) in $container.data('cbd-tafel-kennung').
+         *   Unverändert gegenüber dem letzten Aufbau -> nichts tun, das DOM
+         *   bleibt unangetastet (kein Flackern, keine neue Bildanfrage).
+         * - War die Überlagerung aufgeklappt, bleibt sie es nach dem
+         *   Neuaufbau (Knopftext und Klasse werden mit wiederhergestellt).
+         *
+         * jQuery .data() erzeugt dabei KEIN data-*-Attribut im Markup —
+         * die Kennung wirkt sich also nicht auf einen outerHTML-Vergleich
+         * des Erstaufbaus aus.
+         *
+         * @param {jQuery}      $container Der Container (trägt data-stable-id).
+         * @param {Object|undefined} drawing Eintrag aus data.drawings[stableId],
+         *                                   oder undefined, wenn für diesen
+         *                                   Container keine Zeichnungszeile
+         *                                   (mehr) existiert.
+         */
+        baueTafelbild: function($container, drawing) {
+            var $content = $container.find('.cbd-container-content').first();
+            if ($content.length === 0) {
+                return;
+            }
+
+            var $bestehendeSektion = $content.find('.cbd-class-drawing-section');
+
+            // Nur anzeigen wenn mindestens eine Seite echte Zeichnungsdaten hat
+            var hasPages = !!drawing && drawing.pages && Object.keys(drawing.pages).some(function(idx) {
+                return drawing.pages[idx] && drawing.pages[idx].drawing_data;
+            });
+            var hasLegacy = !!drawing && !hasPages && drawing.drawing_data;
+
+            if (!hasPages && !hasLegacy) {
+                // Keine (mehr vorhandenen) Zeichnungsdaten: einen
+                // bestehenden Abschnitt entfernen, sonst nichts tun.
+                if ($bestehendeSektion.length > 0) {
+                    $bestehendeSektion.remove();
+                    $container.removeData('cbd-tafel-kennung');
+                }
+                return;
+            }
+
+            // Kennung der Zeichnungsdaten bilden (AP-2.2): Länge je Seite,
+            // mit '|' verbunden. Unverändert gegenüber dem letzten Aufbau
+            // -> nichts tun, sonst würde das Bild bei jedem Puls-Durchlauf
+            // neu geladen (Flackern), obwohl sich nichts geändert hat.
+            var kennungTeile = [];
+            if (hasPages) {
+                var kennungIndices = Object.keys(drawing.pages).map(Number).sort(function(a, b) { return a - b; }).filter(function(idx) {
+                    return drawing.pages[idx] && drawing.pages[idx].drawing_data;
+                });
+                kennungIndices.forEach(function(idx) {
+                    kennungTeile.push(String(drawing.pages[idx].drawing_data.length));
+                });
+            } else {
+                kennungTeile.push(String((drawing.drawing_data || '').length));
+            }
+            var neueKennung = kennungTeile.join('|');
+
+            if ($bestehendeSektion.length > 0 && $container.data('cbd-tafel-kennung') === neueKennung) {
+                return; // unverändert – Abschnitt bleibt unangetastet
+            }
+
+            // War die Überlagerung aufgeklappt, bleibt sie es nach dem
+            // Neuaufbau — sonst klappte dem Schüler das gerade betrachtete
+            // Tafelbild bei jeder Aktualisierung zu.
+            var warAufgeklappt = false;
+            if ($bestehendeSektion.length > 0) {
+                warAufgeklappt = $bestehendeSektion.find('.cbd-drawing-overlay').is(':visible');
+                $bestehendeSektion.remove();
+            }
+
+            var $section = $('<div class="cbd-drawing-section cbd-class-drawing-section">');
+            var $toggle = $('<button class="cbd-drawing-toggle">📋 Tafelbild anzeigen</button>');
+            var $drawingOverlay = $('<div class="cbd-drawing-overlay" style="display: none;">');
+
+            if (hasPages) {
+                // Multi-page: IIFE für saubere Closure-Isolation
+                // Nur Seiten mit tatsächlichen Zeichnungsdaten berücksichtigen
+                var pageIndices = Object.keys(drawing.pages).map(Number).sort(function(a, b) { return a - b; }).filter(function(idx) {
+                    return drawing.pages[idx] && drawing.pages[idx].drawing_data;
+                });
+                var totalDrawingPages = pageIndices.length;
+
+                var $img = $('<img>').attr('alt', 'Tafel-Zeichnung').css('max-width', '100%');
+
+                if (totalDrawingPages > 1) {
+                    var $pageNav = $('<div class="cbd-drawing-page-nav">');
+                    var $pagePrev = $('<button class="cbd-drawing-page-prev" disabled>◀</button>');
+                    var $pageIndicator = $('<span class="cbd-drawing-page-indicator">1 / ' + totalDrawingPages + '</span>');
+                    var $pageNext = $('<button class="cbd-drawing-page-next">▶</button>');
+                    $pageNav.append($pagePrev, $pageIndicator, $pageNext);
+                    $drawingOverlay.append($pageNav);
+
+                    // IIFE: alle Variablen als Parameter übergeben → kein var-Hoisting-Problem
+                    (function($imgEl, $prev, $next, $ind, pages, indices, total) {
+                        var current = 0;
+
+                        function showPage(idx) {
+                            if (idx < 0 || idx >= total) return;
+                            current = idx;
+                            var pd = pages[indices[idx]];
+                            $imgEl.attr('src', pd && pd.drawing_data ? pd.drawing_data : '');
+                            $prev.prop('disabled', idx <= 0);
+                            $next.prop('disabled', idx >= total - 1);
+                            $ind.text((idx + 1) + ' / ' + total);
+                        }
+
+                        $prev.on('click', function(e) { e.stopPropagation(); showPage(current - 1); });
+                        $next.on('click', function(e) { e.stopPropagation(); showPage(current + 1); });
+
+                        showPage(0);
+                    })($img, $pagePrev, $pageNext, $pageIndicator, drawing.pages, pageIndices, totalDrawingPages);
+                } else {
+                    // Einzelne Seite: nur Bild anzeigen
+                    var pd0 = drawing.pages[pageIndices[0]];
+                    $img.attr('src', pd0 && pd0.drawing_data ? pd0.drawing_data : '');
+                }
+
+                $drawingOverlay.append($img);
+            } else {
+                // Legacy: einzelne Zeichnung
+                $drawingOverlay.append(
+                    $('<img>').attr({
+                        'src': drawing.drawing_data || '',
+                        'alt': 'Tafel-Zeichnung'
+                    }).css('max-width', '100%')
+                );
+            }
+
+            $section.append($toggle, $drawingOverlay);
+            $content.append($section);
+
+            $toggle.on('click', function(e) {
+                e.preventDefault();
+                var willBeVisible = !$drawingOverlay.is(':visible');
+                $drawingOverlay.slideToggle(300);
+                $toggle.text(willBeVisible ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen');
+                $toggle.toggleClass('cbd-drawing-toggle-active', willBeVisible);
+            });
+
+            if (warAufgeklappt) {
+                // Kein slideToggle() hier: Dies ist eine automatische
+                // Aktualisierung, keine Nutzerhandlung — eine Animation
+                // wäre eine unerwartete Bewegung mitten im Lesen.
+                $drawingOverlay.show();
+                $toggle.text('📋 Tafelbild verbergen');
+                $toggle.addClass('cbd-drawing-toggle-active');
+            }
+
+            $container.data('cbd-tafel-kennung', neueKennung);
+
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Tafelbild-Abschnitt aufgebaut/aktualisiert für', $container.attr('data-stable-id'));
         },
 
         /**
@@ -422,6 +827,9 @@
                 .append($content);
 
             // Klick außerhalb schließt mobiles Menü
+            // (siehe interceptLinks(): eigener Namensraum, vor dem Binden
+            // abgeworfen, damit kein zweiter Handler entstehen kann)
+            $(document).off('click.cbdClassroomNav');
             $(document).on('click.cbdClassroomNav', function(e) {
                 if (!$header.is(e.target) && $header.has(e.target).length === 0) {
                     $nav.removeClass('active');
@@ -637,6 +1045,14 @@
             var classroomId = this.classroomId;
             var token = this.token;
             var siteHostname = window.location.hostname;
+
+            // Gürtel und Hosenträger (AP-2.1): Diese Methode wird seit AP-2.1
+            // ausschließlich aus einmaligAufbauen() gerufen, läuft also nur
+            // einmal. Der Abwurf des eigenen Namensraums stellt aber sicher,
+            // dass auch ein versehentlicher zweiter Aufruf keinen zweiten
+            // Klick-Abfänger hinterlässt (jeder Klick würde sonst mehrfach
+            // umgeleitet).
+            $(document).off('click.cbdClassroomLinks');
 
             $(document).on('click.cbdClassroomLinks', 'a[href]', function(e) {
                 var href = $(this).attr('href');
