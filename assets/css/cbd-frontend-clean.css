@@ -1196,7 +1196,7 @@
 
 /* Automatisches Ausblenden der Aktionsleiste (AP-1, PLAN-Aktionsleiste-Autoausblenden.md)
    Die Klasse .cbd-actions-verborgen wird per JavaScript am .cbd-container
-   gesetzt, rund eine Sekunde nachdem die Leiste erschienen ist
+   gesetzt, rund zwei Sekunden nachdem die Leiste erschienen ist
    (assets/js/interactivity-store.js und assets/js/interactivity-fallback.js
    setzen sie gleichermassen - je nach Installation laedt nur eines der
    beiden Skripte). Zweck: Auf Tablets haftet :hover nach dem Antippen: ohne

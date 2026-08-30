@@ -810,6 +810,35 @@ Farbe. Bei einem Verlaufshintergrund löscht das die Verlaufsschichten und der
 Knopf wird beim Überfahren flach — deshalb tauscht der Hover jetzt den ganzen
 Verlauf aus statt nur die Farbe.
 
+**Geometrie des FAB ist mit dem Theme abgestimmt (seit v3.1.117):** Unter 992px
+zeigt das Theme seinen Navigationsknopf (`.sidebar-toggle-btn`) als schwebende
+Kachel unten **links**, der PDF-Knopf sitzt unten **rechts**. Vorher standen die
+beiden auf unterschiedlicher Höhe (30px hier gegen 20px bzw. 15px dort) und
+hatten unterschiedliche Form (Kachel gegen Pille); das Paar wirkte auf dem Handy
+unabsichtlich schief. Jetzt teilen sie vier Werte:
+
+| Wert | |
+|---|---|
+| Größe | 52px × 52px |
+| Eckenradius | 12px |
+| Abstand unten | 20px |
+| Abstand zum seitlichen Rand | 20px |
+
+**Diese vier Werte stehen doppelt** — hier in `floating-pdf-button.js` und im
+Theme in `style.css` im Block `@media (max-width: 992px)`. Wer einen ändert, muss
+die andere Stelle nachziehen; an beiden Stellen steht ein Kommentar mit demselben
+Hinweis. Eine gemeinsame CSS-Variable geht nicht: hier wird per jQuery `.css()`
+**inline** gestylt, und Theme und Plugin sind getrennt versionierte Pakete — das
+Plugin kann ohne dieses Theme laufen. Genau deshalb ist die Abstimmung eine
+reine Absprache, kein technischer Zwang: läuft das Plugin unter einem anderen
+Theme, sieht der PDF-Knopf trotzdem unverändert aus.
+
+Der FAB hat dabei feste `width`/`height` statt `padding` + `minWidth` bekommen.
+Vorher ergab sich seine Breite aus `minWidth: 60px` gegen den Textinhalt und die
+Höhe aus 2×15px `padding` plus Zeilenhöhe — rund 60×46px, also weder quadratisch
+noch von außen vorhersagbar. Ohne feste Maße lässt sich „gleich groß wie der
+Navigationsknopf“ nicht zusichern.
+
 Die weiße `.cbd-pdf-go`-Schaltfläche in der Werkzeugleiste bleibt bewusst flach:
 sie ist ein Umkehr-Knopf auf farbigem Grund und würde mit dem orangen
 Kachel-Look in der Leiste verschwinden.
@@ -2092,10 +2121,21 @@ Plugin-Tabellen mit ✅/❌; nach der Reparatur muss `cbd_notes` grün sein.
 
 Die Leiste oben rechts im Container (`.cbd-action-buttons`) erscheint per
 `:hover`, `:focus-within` oder `.cbd-selected` und blendet sich seit 3.1.94
-nach einer Sekunde von selbst wieder aus (`cbd-actions-verborgen`, gesetzt in
+von selbst wieder aus (`cbd-actions-verborgen`, gesetzt in
 `assets/js/interactivity-store.js` **und** `interactivity-fallback.js` — je
 Installation läuft nur eines der beiden). Anlass war das haftende `:hover` auf
 Tablets. Plan: `docs/archiv/PLAN-Aktionsleiste-Autoausblenden.md`.
+
+**Verzögerung: 2000 ms seit 3.1.117** (vorher 1000 ms). Eine Sekunde war beim
+Zielen auf einen Knopf zu knapp, vor allem auf dem Handy. Der Wert steht als
+`CBD_AKTIONSLEISTE_VERZOEGERUNG` **doppelt** — in `interactivity-store.js` und
+in `interactivity-fallback.js`. Je Installation läuft nur eines der beiden
+Skripte, ein Auseinanderlaufen der Werte fällt also nicht durch einen Test auf,
+sondern nur auf der jeweils anderen Hälfte der Installationen. Wer den Wert
+ändert, muss beide Stellen anfassen; die Kommentare dort sagen dasselbe.
+Der Prosa-Kommentar in `cbd-frontend-clean.css` nennt die Dauer ebenfalls und
+will mitgezogen werden — er steuert nichts, das Ausblenden hängt allein am
+Zeitgeber im JavaScript.
 
 **Das gerenderte Markup trägt `.cbd-container` zweimal je Block** — einmal am
 interaktiven Wurzelelement (`#cbd-container-N`, darin

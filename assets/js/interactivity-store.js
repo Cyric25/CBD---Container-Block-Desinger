@@ -54,8 +54,14 @@ const cbdIstAppleGeraet = istAppleGeraet();
  * PLAN-Aktionsleiste-Autoausblenden.md). Eine benannte Konstante statt einer
  * nackten Zahl, damit der Wert nicht gegenüber der gleichlautenden Konstante
  * in interactivity-fallback.js auseinanderläuft.
+ *
+ * Seit 3.1.117 zwei Sekunden statt einer. Eine Sekunde war beim Zielen auf
+ * einen Knopf zu knapp, vor allem auf dem Handy (Rückmeldung 2026-08-30).
+ * Wer den Wert ändert, muss die gleichnamige Konstante in
+ * interactivity-fallback.js mitändern - je Installation läuft nur eines der
+ * beiden Skripte, ein Auseinanderlaufen fällt deshalb nicht auf.
  */
-const CBD_AKTIONSLEISTE_VERZOEGERUNG = 1000;
+const CBD_AKTIONSLEISTE_VERZOEGERUNG = 2000;
 
 // Zeitgeber je Container, nicht in einer einzelnen Modulvariable - sonst
 // löschte ein zweiter Container auf derselben Seite den Zeitgeber des ersten.
@@ -108,7 +114,7 @@ function initAktionsleisteAutoAusblenden(container) {
 				// Nicht abbrechen, sondern erneut anlaufen lassen: Ein blosses
 				// return loeschte den Zeitgeber, und die Leiste bliebe dauerhaft
 				// stehen, falls das zugehoerige mouseleave bzw. focusout einmal
-				// ausbleibt. So blendet sie spaetestens eine Sekunde nach dem
+				// ausbleibt. So blendet sie spaetestens zwei Sekunden nach dem
 				// Ende von Fokus oder Zeigerkontakt aus.
 				zeitgeberStarten();
 				return;

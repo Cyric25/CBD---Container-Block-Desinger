@@ -52,7 +52,7 @@
      * gleichnamigen Konstante in interactivity-store.js, damit der Wert
      * nicht auseinanderläuft.
      */
-    var CBD_AKTIONSLEISTE_VERZOEGERUNG = 1000;
+    var CBD_AKTIONSLEISTE_VERZOEGERUNG = 2000;
 
     // Zeitgeber je Container, nicht in einer einzelnen Modulvariable - sonst
     // löschte ein zweiter Container auf derselben Seite den Zeitgeber des
@@ -107,7 +107,7 @@
                     // blosses return loeschte den Zeitgeber, und die Leiste
                     // bliebe dauerhaft stehen, falls das zugehoerige mouseleave
                     // bzw. focusout einmal ausbleibt. So blendet sie spaetestens
-                    // eine Sekunde nach dem Ende von Fokus oder Zeigerkontakt aus.
+                    // zwei Sekunden nach dem Ende von Fokus oder Zeigerkontakt aus.
                     zeitgeberStarten();
                     return;
                 }

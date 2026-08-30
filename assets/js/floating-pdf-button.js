@@ -79,8 +79,24 @@
         var $pdfButton = $('<div id="cbd-pdf-export-fab">PDF</div>');
         $pdfButton.css({
             position: 'fixed',
-            bottom: '30px',
-            right: '30px',
+            // Geometrie ABGESTIMMT auf den Navigationsknopf des Themes
+            // (.sidebar-toggle-btn, Theme/style.css im Block
+            // @media (max-width: 992px)). Beide sitzen auf dem Handy
+            // gleichzeitig am unteren Rand — Navigation links, PDF rechts.
+            // Vorher standen sie auf unterschiedlicher Hoehe (hier 30px,
+            // dort 20px bzw. 15px) und hatten unterschiedliche Form
+            // (hier Kachel, dort Pille); das Paar wirkte unabsichtlich
+            // schief (gemeldet 2026-08-30 vom Handy).
+            //
+            // Diese vier Werte muessen mit dem Theme uebereinstimmen. Wer
+            // einen aendert, muss die andere Stelle nachziehen:
+            //   Groesse 52px x 52px, Eckenradius 12px,
+            //   Abstand unten 20px, Abstand Rand 20px
+            // Eine gemeinsame CSS-Variable ist nicht moeglich: hier wird
+            // inline per jQuery .css() gestylt, und Theme und Plugin sind
+            // getrennt versionierte Pakete.
+            bottom: '20px',
+            right: '20px',
             zIndex: '999999',
             // backgroundImage statt background: die Kurzschreibweise wuerde
             // bei einem ungueltigen Verlauf (Browser ohne color-mix()) auch
@@ -91,13 +107,22 @@
             color: colorOnAccent,
             textShadow: '0 1px 2px rgba(0,0,0,.35)',
             borderRadius: '12px',
-            padding: '15px',
+            // Feste Kachel statt padding + minWidth: nur so ist die Groesse
+            // wirklich identisch mit der des Navigationsknopfes. Vorher ergab
+            // sich die Breite aus minWidth 60px gegen den Textinhalt und die
+            // Hoehe aus 2x15px padding plus Zeilenhoehe — rund 60x46px, also
+            // weder quadratisch noch von aussen vorhersagbar.
+            width: '52px',
+            height: '52px',
+            padding: '0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             cursor: 'pointer',
             boxShadow: plasticShadowStack,
             fontSize: '14px',
             fontWeight: 'bold',
             textAlign: 'center',
-            minWidth: '60px',
             transition: 'transform 0.2s ease, box-shadow 0.2s ease'
         });
         $pdfButton.attr('title', 'Container-Bl\u00f6cke als PDF exportieren');
