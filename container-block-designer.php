@@ -137,6 +137,10 @@ class ContainerBlockDesigner {
 
         // Classroom System (Klassen-System) - optionales Feature
         require_once CBD_PLUGIN_DIR . 'includes/class-cbd-classroom.php';
+        // Klassenpuls: liefert Signaturen für die Live-Aktualisierung im
+        // Klassenmodus (Phase 1). Reine Statik, kein Singleton - registriert
+        // sich erst über CBD_Klassenpuls::init() unten.
+        require_once CBD_PLUGIN_DIR . 'includes/class-cbd-klassenpuls.php';
         // Fragenwand: klassenspezifische Notizen (Tabelle CBD_TABLE_NOTES).
         // Nutzt Nonce und Zugriffsmuster des Klassenmodus, registriert aber
         // eigene AJAX-Actions und instanziiert sich selbst (Singleton am
@@ -308,6 +312,14 @@ class ContainerBlockDesigner {
             // REST: einzelner Block als HTML für das Referenz-Modal
             if (class_exists('CBD_Block_Content_API')) {
                 CBD_Block_Content_API::init();
+            }
+
+            // REST: Klassenpuls - Signaturen für die Live-Aktualisierung im
+            // Klassenmodus (Phase 1, AP-1.5). Registriert nur die Route;
+            // ob der Taktgeber im Browser überhaupt startet, entscheidet
+            // CBD_Klassenpuls::takt() über CBD_Classroom::enqueue_frontend_assets().
+            if (class_exists('CBD_Klassenpuls')) {
+                CBD_Klassenpuls::init();
             }
 
             // Inline-Verweis (Textformat): Serverseite
