@@ -94,6 +94,16 @@
                 window.cbdKlassenpuls.abonniere('seite', function() {
                     self.aktualisiere();
                 });
+
+                // Tafelbilder aktualisieren sich unabhängig von Freigaben
+                // (AP-2.2): Die Signatur 'tafel' bewegt sich bei JEDEM
+                // Schreibvorgang an wp_cbd_drawings, nicht nur bei
+                // Freigabe/Rücknahme. Auf reduzierten Seiten bewusst NICHT
+                // registriert, aus demselben Grund wie beim 'seite'-Zweig
+                // oben – Phase 3 deckt diese Ansicht gesondert ab.
+                window.cbdKlassenpuls.abonniere('tafel', function() {
+                    self.aktualisiereTafelbilder();
+                });
             }
 
             window.cbdKlassenpuls.abonniere('abgelaufen', function() {
@@ -166,6 +176,60 @@
                 }
             }).fail(function(xhr, status, error) {
                 window.cbdDebug && console.log('CBD Classroom Page Filter: Aktualisierung fehlgeschlagen – still ignoriert.', error);
+            });
+        },
+
+        /**
+         * Tafelbilder aktualisieren, unabhängig von Freigaben (AP-2.2).
+         *
+         * Wird ausschließlich vom 'tafel'-Rückruf des Taktgebers gerufen –
+         * also nur, wenn sich die Tafelbild-Signatur tatsächlich geändert
+         * hat (irgendein Schreibvorgang an wp_cbd_drawings, nicht
+         * notwendigerweise eine Freigabe). Ruft NICHT filterContainers():
+         * Sichtbarkeit der Container ändert sich hier nicht, nur ihre
+         * Tafelbild-Abschnitte.
+         *
+         * Geht alle aktuell SICHTBAREN Container durch (nur freigegebene
+         * Container zeigen je einen Tafelbild-Abschnitt) und überlässt
+         * baueTafelbild() die Entscheidung, ob aufgebaut, aktualisiert,
+         * unverändert gelassen oder entfernt wird – auch wenn für einen
+         * Container gar keine Zeichnungsdaten (mehr) vorliegen
+         * (drawings[stableId] dann undefined).
+         *
+         * Ein fehlgeschlagener Nachschlag bleibt bewusst STILL, aus
+         * demselben Grund wie bei aktualisiere().
+         */
+        aktualisiereTafelbilder: function() {
+            var self = this;
+
+            $.post(cbdClassroomPageData.ajaxUrl, {
+                action: 'cbd_get_page_classroom_data',
+                token: this.token,
+                page_id: this.pageId
+            }, function(response) {
+                if (!response || !response.success) {
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Tafelbild-Aktualisierung ohne Erfolg – still ignoriert.');
+                    return;
+                }
+
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Tafelbild-Aktualisierung erhalten', response.data);
+
+                var drawings = response.data.drawings || {};
+
+                $('[data-wp-interactive="container-block-designer"], [data-stable-id^="cbd-"]').each(function() {
+                    var $container = $(this);
+                    var stableId = $container.attr('data-stable-id');
+
+                    // Nur freigegebene, also sichtbare Container tragen
+                    // einen Tafelbild-Abschnitt.
+                    if (!stableId || !$container.is(':visible')) {
+                        return;
+                    }
+
+                    self.baueTafelbild($container, drawings[stableId]);
+                });
+            }).fail(function(xhr, status, error) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Tafelbild-Aktualisierung fehlgeschlagen – still ignoriert.', error);
             });
         },
 
@@ -321,87 +385,10 @@
                         }
 
                         // Add collapsible drawing section with optional page navigation
-                        // Nur anzeigen wenn mindestens eine Seite echte Zeichnungsdaten hat
-                        var hasPages = drawing.pages && Object.keys(drawing.pages).some(function(idx) {
-                            return drawing.pages[idx] && drawing.pages[idx].drawing_data;
-                        });
-                        var hasLegacy = !hasPages && drawing.drawing_data;
-
-                        if (hasPages || hasLegacy) {
-                            var $content = $container.find('.cbd-container-content').first();
-                            if ($content.length > 0 && $content.find('.cbd-class-drawing-section').length === 0) {
-                                var $section = $('<div class="cbd-drawing-section cbd-class-drawing-section">');
-                                var $toggle = $('<button class="cbd-drawing-toggle">📋 Tafelbild anzeigen</button>');
-                                var $drawingOverlay = $('<div class="cbd-drawing-overlay" style="display: none;">');
-
-                                if (hasPages) {
-                                    // Multi-page: IIFE für saubere Closure-Isolation
-                                    // Nur Seiten mit tatsächlichen Zeichnungsdaten berücksichtigen
-                                    var pageIndices = Object.keys(drawing.pages).map(Number).sort(function(a, b) { return a - b; }).filter(function(idx) {
-                                        return drawing.pages[idx] && drawing.pages[idx].drawing_data;
-                                    });
-                                    var totalDrawingPages = pageIndices.length;
-
-                                    var $img = $('<img>').attr('alt', 'Tafel-Zeichnung').css('max-width', '100%');
-
-                                    if (totalDrawingPages > 1) {
-                                        var $pageNav = $('<div class="cbd-drawing-page-nav">');
-                                        var $pagePrev = $('<button class="cbd-drawing-page-prev" disabled>◀</button>');
-                                        var $pageIndicator = $('<span class="cbd-drawing-page-indicator">1 / ' + totalDrawingPages + '</span>');
-                                        var $pageNext = $('<button class="cbd-drawing-page-next">▶</button>');
-                                        $pageNav.append($pagePrev, $pageIndicator, $pageNext);
-                                        $drawingOverlay.append($pageNav);
-
-                                        // IIFE: alle Variablen als Parameter übergeben → kein var-Hoisting-Problem
-                                        (function($imgEl, $prev, $next, $ind, pages, indices, total) {
-                                            var current = 0;
-
-                                            function showPage(idx) {
-                                                if (idx < 0 || idx >= total) return;
-                                                current = idx;
-                                                var pd = pages[indices[idx]];
-                                                $imgEl.attr('src', pd && pd.drawing_data ? pd.drawing_data : '');
-                                                $prev.prop('disabled', idx <= 0);
-                                                $next.prop('disabled', idx >= total - 1);
-                                                $ind.text((idx + 1) + ' / ' + total);
-                                            }
-
-                                            $prev.on('click', function(e) { e.stopPropagation(); showPage(current - 1); });
-                                            $next.on('click', function(e) { e.stopPropagation(); showPage(current + 1); });
-
-                                            showPage(0);
-                                        })($img, $pagePrev, $pageNext, $pageIndicator, drawing.pages, pageIndices, totalDrawingPages);
-                                    } else {
-                                        // Einzelne Seite: nur Bild anzeigen
-                                        var pd0 = drawing.pages[pageIndices[0]];
-                                        $img.attr('src', pd0 && pd0.drawing_data ? pd0.drawing_data : '');
-                                    }
-
-                                    $drawingOverlay.append($img);
-                                } else {
-                                    // Legacy: einzelne Zeichnung
-                                    $drawingOverlay.append(
-                                        $('<img>').attr({
-                                            'src': drawing.drawing_data || '',
-                                            'alt': 'Tafel-Zeichnung'
-                                        }).css('max-width', '100%')
-                                    );
-                                }
-
-                                $section.append($toggle, $drawingOverlay);
-                                $content.append($section);
-
-                                $toggle.on('click', function(e) {
-                                    e.preventDefault();
-                                    var willBeVisible = !$drawingOverlay.is(':visible');
-                                    $drawingOverlay.slideToggle(300);
-                                    $toggle.text(willBeVisible ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen');
-                                    $toggle.toggleClass('cbd-drawing-toggle-active', willBeVisible);
-                                });
-
-                                window.cbdDebug && console.log('CBD Classroom Page Filter: Added drawing section to', stableId);
-                            }
-                        }
+                        // Seit AP-2.2 in eine eigene Methode ausgelagert, die
+                        // auch ein bereits vorhandenes Tafelbild aktualisieren
+                        // kann (siehe baueTafelbild() weiter unten).
+                        self.baueTafelbild($container, drawing);
                     }
                 }
             });
@@ -452,6 +439,175 @@
                 $container.removeClass('cbd-neu-freigegeben');
                 $container.removeData('cbdNeuFreigegebenZeitgeber');
             }, 8000));
+        },
+
+        /**
+         * Tafelbild-Abschnitt eines Containers aufbauen bzw. aktualisieren
+         * (AP-2.2). Aus filterContainers() herausgezogen — der Erstaufbau
+         * erzeugt weiterhin BYTEIDENTISCHES Markup zum Stand vor diesem
+         * Arbeitspaket, das Herausziehen selbst ändert daran nichts.
+         *
+         * Vor AP-2.2 wurde ein bereits vorhandener Abschnitt übersprungen
+         * (`$content.find('.cbd-class-drawing-section').length === 0`) —
+         * ein geändertes Tafelbild wurde dadurch nie erneuert. Seit AP-2.2
+         * wird ein vorhandener Abschnitt bei geänderten Zeichnungsdaten
+         * entfernt und neu aufgebaut, bzw. bei fehlenden Zeichnungsdaten
+         * ganz entfernt (Aufruf aus aktualisiereTafelbilder(), wenn eine
+         * Zeichnung gelöscht wurde).
+         *
+         * Zwei Vorkehrungen gegen ein störendes Nachladen:
+         * - Kennung (Länge der drawing_data-Zeichenkette je Tafelseite, mit
+         *   '|' verbunden) in $container.data('cbd-tafel-kennung').
+         *   Unverändert gegenüber dem letzten Aufbau -> nichts tun, das DOM
+         *   bleibt unangetastet (kein Flackern, keine neue Bildanfrage).
+         * - War die Überlagerung aufgeklappt, bleibt sie es nach dem
+         *   Neuaufbau (Knopftext und Klasse werden mit wiederhergestellt).
+         *
+         * jQuery .data() erzeugt dabei KEIN data-*-Attribut im Markup —
+         * die Kennung wirkt sich also nicht auf einen outerHTML-Vergleich
+         * des Erstaufbaus aus.
+         *
+         * @param {jQuery}      $container Der Container (trägt data-stable-id).
+         * @param {Object|undefined} drawing Eintrag aus data.drawings[stableId],
+         *                                   oder undefined, wenn für diesen
+         *                                   Container keine Zeichnungszeile
+         *                                   (mehr) existiert.
+         */
+        baueTafelbild: function($container, drawing) {
+            var $content = $container.find('.cbd-container-content').first();
+            if ($content.length === 0) {
+                return;
+            }
+
+            var $bestehendeSektion = $content.find('.cbd-class-drawing-section');
+
+            // Nur anzeigen wenn mindestens eine Seite echte Zeichnungsdaten hat
+            var hasPages = !!drawing && drawing.pages && Object.keys(drawing.pages).some(function(idx) {
+                return drawing.pages[idx] && drawing.pages[idx].drawing_data;
+            });
+            var hasLegacy = !!drawing && !hasPages && drawing.drawing_data;
+
+            if (!hasPages && !hasLegacy) {
+                // Keine (mehr vorhandenen) Zeichnungsdaten: einen
+                // bestehenden Abschnitt entfernen, sonst nichts tun.
+                if ($bestehendeSektion.length > 0) {
+                    $bestehendeSektion.remove();
+                    $container.removeData('cbd-tafel-kennung');
+                }
+                return;
+            }
+
+            // Kennung der Zeichnungsdaten bilden (AP-2.2): Länge je Seite,
+            // mit '|' verbunden. Unverändert gegenüber dem letzten Aufbau
+            // -> nichts tun, sonst würde das Bild bei jedem Puls-Durchlauf
+            // neu geladen (Flackern), obwohl sich nichts geändert hat.
+            var kennungTeile = [];
+            if (hasPages) {
+                var kennungIndices = Object.keys(drawing.pages).map(Number).sort(function(a, b) { return a - b; }).filter(function(idx) {
+                    return drawing.pages[idx] && drawing.pages[idx].drawing_data;
+                });
+                kennungIndices.forEach(function(idx) {
+                    kennungTeile.push(String(drawing.pages[idx].drawing_data.length));
+                });
+            } else {
+                kennungTeile.push(String((drawing.drawing_data || '').length));
+            }
+            var neueKennung = kennungTeile.join('|');
+
+            if ($bestehendeSektion.length > 0 && $container.data('cbd-tafel-kennung') === neueKennung) {
+                return; // unverändert – Abschnitt bleibt unangetastet
+            }
+
+            // War die Überlagerung aufgeklappt, bleibt sie es nach dem
+            // Neuaufbau — sonst klappte dem Schüler das gerade betrachtete
+            // Tafelbild bei jeder Aktualisierung zu.
+            var warAufgeklappt = false;
+            if ($bestehendeSektion.length > 0) {
+                warAufgeklappt = $bestehendeSektion.find('.cbd-drawing-overlay').is(':visible');
+                $bestehendeSektion.remove();
+            }
+
+            var $section = $('<div class="cbd-drawing-section cbd-class-drawing-section">');
+            var $toggle = $('<button class="cbd-drawing-toggle">📋 Tafelbild anzeigen</button>');
+            var $drawingOverlay = $('<div class="cbd-drawing-overlay" style="display: none;">');
+
+            if (hasPages) {
+                // Multi-page: IIFE für saubere Closure-Isolation
+                // Nur Seiten mit tatsächlichen Zeichnungsdaten berücksichtigen
+                var pageIndices = Object.keys(drawing.pages).map(Number).sort(function(a, b) { return a - b; }).filter(function(idx) {
+                    return drawing.pages[idx] && drawing.pages[idx].drawing_data;
+                });
+                var totalDrawingPages = pageIndices.length;
+
+                var $img = $('<img>').attr('alt', 'Tafel-Zeichnung').css('max-width', '100%');
+
+                if (totalDrawingPages > 1) {
+                    var $pageNav = $('<div class="cbd-drawing-page-nav">');
+                    var $pagePrev = $('<button class="cbd-drawing-page-prev" disabled>◀</button>');
+                    var $pageIndicator = $('<span class="cbd-drawing-page-indicator">1 / ' + totalDrawingPages + '</span>');
+                    var $pageNext = $('<button class="cbd-drawing-page-next">▶</button>');
+                    $pageNav.append($pagePrev, $pageIndicator, $pageNext);
+                    $drawingOverlay.append($pageNav);
+
+                    // IIFE: alle Variablen als Parameter übergeben → kein var-Hoisting-Problem
+                    (function($imgEl, $prev, $next, $ind, pages, indices, total) {
+                        var current = 0;
+
+                        function showPage(idx) {
+                            if (idx < 0 || idx >= total) return;
+                            current = idx;
+                            var pd = pages[indices[idx]];
+                            $imgEl.attr('src', pd && pd.drawing_data ? pd.drawing_data : '');
+                            $prev.prop('disabled', idx <= 0);
+                            $next.prop('disabled', idx >= total - 1);
+                            $ind.text((idx + 1) + ' / ' + total);
+                        }
+
+                        $prev.on('click', function(e) { e.stopPropagation(); showPage(current - 1); });
+                        $next.on('click', function(e) { e.stopPropagation(); showPage(current + 1); });
+
+                        showPage(0);
+                    })($img, $pagePrev, $pageNext, $pageIndicator, drawing.pages, pageIndices, totalDrawingPages);
+                } else {
+                    // Einzelne Seite: nur Bild anzeigen
+                    var pd0 = drawing.pages[pageIndices[0]];
+                    $img.attr('src', pd0 && pd0.drawing_data ? pd0.drawing_data : '');
+                }
+
+                $drawingOverlay.append($img);
+            } else {
+                // Legacy: einzelne Zeichnung
+                $drawingOverlay.append(
+                    $('<img>').attr({
+                        'src': drawing.drawing_data || '',
+                        'alt': 'Tafel-Zeichnung'
+                    }).css('max-width', '100%')
+                );
+            }
+
+            $section.append($toggle, $drawingOverlay);
+            $content.append($section);
+
+            $toggle.on('click', function(e) {
+                e.preventDefault();
+                var willBeVisible = !$drawingOverlay.is(':visible');
+                $drawingOverlay.slideToggle(300);
+                $toggle.text(willBeVisible ? '📋 Tafelbild verbergen' : '📋 Tafelbild anzeigen');
+                $toggle.toggleClass('cbd-drawing-toggle-active', willBeVisible);
+            });
+
+            if (warAufgeklappt) {
+                // Kein slideToggle() hier: Dies ist eine automatische
+                // Aktualisierung, keine Nutzerhandlung — eine Animation
+                // wäre eine unerwartete Bewegung mitten im Lesen.
+                $drawingOverlay.show();
+                $toggle.text('📋 Tafelbild verbergen');
+                $toggle.addClass('cbd-drawing-toggle-active');
+            }
+
+            $container.data('cbd-tafel-kennung', neueKennung);
+
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Tafelbild-Abschnitt aufgebaut/aktualisiert für', $container.attr('data-stable-id'));
         },
 
         /**
