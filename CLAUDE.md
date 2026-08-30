@@ -3449,6 +3449,380 @@ gefunden.
    (`collectCSSVariables()` liest `data-theme="dark"` temporär ab). Details:
    `docs/PLAN-PDF-Export-und-Tafelmodus-Fixes.md`, AP-1.1/AP-1.2/AP-1.fix1.
 
+## Klassenmodus: Live-Aktualisierung (Phase 1 von `PLAN-Klassenmodus-Live.md`, seit 2026-08-30)
+
+Gibt eine Lehrperson im Klassenmodus einen Container-Block frei, sieht der
+Schüler das heute erst nach einem Neuladen der Seite. Dieses Vorhaben lässt
+Freigaben, Rücknahmen, Tafelbilder und die Fragenwand binnen rund zehn
+Sekunden von selbst erscheinen — ohne Neuladen von Hand, auf allen drei
+Schüleransichten (normale Seiten mit `?classroom=`, serverseitig reduzierte
+Lösungsseiten, die Klassen-Seitenliste `[cbd_classroom]`).
+
+**Phase 1 (dieser Abschnitt) baut ausschließlich die Infrastruktur — Route
+und clientseitiger Taktgeber — und schließt bewusst KEINEN Abonnenten an.**
+Nach Phase 1 läuft der Taktgeber mit, aber `setzeSitzung()` ruft niemand auf;
+der Klassenmodus verhält sich für den Schüler byteidentisch wie zuvor
+(strukturell belegt: 0 gelöschte Zeilen in jeder Produktivdatei, kein
+Aufrufer von `setzeSitzung()` im Repo). Phasen 2–4 hängen
+`classroom-page-filter.js`, `classroom-frontend.js` und
+`fragenwand-frontend.js` daran — eigene Abschnitte folgen, sobald diese
+Phasen abgeschlossen sind. Analyse-Vorlauf:
+`docs/ERWEITERUNGSANALYSE-Klassenmodus-Live.md`.
+
+### Warum zweistufig, und warum kein Push
+
+Stufe 1 fragt die neue Route `cbd/v1/klassenpuls` im eingestellten Takt
+(Vorgabe 10 s) ab und bekommt **ausschließlich vier kurze Signaturen plus den
+Takt** zurück — eine Handvoll Byte, drei bis vier indexgestützte SQL-Aggregate.
+Ändert sich eine Signatur, holt Stufe 2 die eigentlichen Daten über die
+**bestehenden** Endpunkte (`cbd_get_page_classroom_data`,
+`cbd_student_get_data`, `GET cbd/v1/fragenwand`) — nie über den Puls selbst.
+Damit entsteht keine zweite Fassung der Datenlogik und keine neue
+Autorisierungskette.
+
+**Kein echtes Push, aus zwei konkreten Gründen (Abschnitt 4 des Plans):**
+
+- **Server-Sent Events** binden pro offener Verbindung dauerhaft einen
+  PHP-Prozess. Auf Shared Hosting bedeuten 25 gleichzeitige Schüler 25
+  dauerhaft blockierte Worker — bei begrenztem Prozess-Limit ein Weg, die
+  Website für alle anderen Besucher lahmzulegen.
+- **WordPress Heartbeat** hängt an `admin-ajax.php` und an angemeldete
+  Nutzer. Schüler im Klassenmodus melden sich nie an (sie kommen über das
+  Klassenpasswort) — Heartbeat erreicht sie architektonisch gar nicht.
+
+**Ein Taktgeber je Browser-Tab statt eines `setInterval` je Feature:** Alle
+späteren Verbraucher hängen sich über `window.cbdKlassenpuls.abonniere()` an
+denselben Takt. Die Serverlast hängt dadurch an der **Zahl der Schüler**,
+nicht an der Zahl der Live-Funktionen — drei unabhängige Taktgeber hätten die
+Last verdreifacht.
+
+### Die Route `cbd/v1/klassenpuls`
+
+```
+GET /wp-json/cbd/v1/klassenpuls?classroom=<id>&token=<t>[&page_id=<id>]
+```
+
+Datei `includes/class-cbd-klassenpuls.php`, Klasse `CBD_Klassenpuls` — nur
+statische Methoden, kein Singleton, keine Instanziierung. Wie
+`cbd/v1/block-html` und `cbd/v1/fragenwand` läuft die Route mit
+`permission_callback => '__return_true'`: Schüler sind nie angemeldet, ein
+Capability-Callback schlösse genau die Zielgruppe aus. **Die gesamte
+Autorisierung steckt im Callback** `liefere_puls()`.
+
+**Erfolgsantwort, HTTP 200:**
+
+```json
+{ "klasse": "a1b2c3d4e5f6", "fragenwand": "0f1e2d3c4b5a",
+  "seite": "9988776655ff", "tafel": "1122334455aa", "takt": 10 }
+```
+
+- `klasse` und `fragenwand` sind immer da. `seite` und `tafel` **nur**, wenn
+  `page_id > 0` übergeben wurde.
+- `takt` ist immer da, **auch als `0`**. Ein abgeschalteter Puls (Option auf
+  0) ist keine Ablehnung, sondern eine gültige Antwort — sonst verwürfe der
+  Taktgeber (siehe unten) die Sitzung fälschlich als abgelaufen.
+- Alle vier Signaturen sind genau 12 Zeichen aus `[0-9a-f]`
+  (`CBD_Klassenpuls::baue_signatur()`, `substr(md5(implode('|', $werte)), 0,
+  12)`, `null` → `''`, Reihenfolge zählt). Es werden **niemals Inhalte**
+  zurückgegeben — keine Texte, Titel oder Container-Kennungen, nur Zahlen und
+  Prüfsummen.
+
+**Jede Ablehnung, HTTP 404, zeichengleich für jeden Fehlschlag:**
+
+```json
+{ "code": "cbd_puls_not_available", "message": "Der Klassenpuls ist nicht verfügbar." }
+```
+
+Als `WP_REST_Response` (nicht `WP_Error`), damit die Antwort byteidentisch zu
+`CBD_Block_Content_API::ablehnen()` ausfällt. `class_id` stammt
+**ausschließlich** aus `CBD_Classroom_Gate::sitzung()` — der einzigen
+Token-Deutung im Plugin — niemals aus `?classroom=`. `page_id` ist der
+einzige Request-Wert, den der Callback selbst liest (`is_scalar()` +
+`absint()`); er engt die Abfrage nur zusätzlich ein und ist keine
+Sicherheitsgrenze, die zieht ausschließlich die geprüfte `class_id`.
+
+**`classroom`, `token` und `page_id` sind als `args` mit `required => false`
+deklariert — absichtlich, nicht `required => true`.** Mit `required => true`
+würde WordPress bei fehlender Angabe **vor** dem Callback (und damit vor
+`nocache_headers()`) mit HTTP 400 `rest_missing_callback_param` antworten
+und dabei in `data.params` die **Namen** der fehlenden Parameter verraten —
+das bräche die zeichengleiche Ablehnung.
+
+**Korrigierte Faktenlage (Review-Befund B2 aus AP-1.rev — die ursprüngliche
+Übergabenotiz von AP-1.3 enthielt hierzu zwei nicht belegte Behauptungen, die
+NICHT in diese Dokumentation übernommen wurden):**
+
+- Es gibt keinen Eingabefall, in dem die Route unterscheidbar antwortet.
+  Insbesondere liefert `?classroom=abc` (Text statt Zahl) **trotz**
+  `'type' => 'integer'` **keine** HTTP-400-Antwort, sondern dieselbe 404. Der
+  Grund: WordPress wertet `type` nur aus, wenn ein `validate_callback`
+  gesetzt ist (`WP_REST_Request::has_valid_params()`); den Vorgabewert
+  `rest_validate_request_arg` setzt ausschließlich
+  `rest_get_endpoint_args_for_schema()` für **schema-erzeugte**
+  Controller-Argumente — handgeschriebene `args` wie hier bekommen ihn nicht.
+  Der `sanitize_callback` (`absint`) läuft trotzdem und bereinigt still.
+- **Die Ablehnung ist ausnahmslos zeichengleich, über 19 vom Review geprüfte
+  Eingabefälle byteidentisch in Rumpf und Kopf** — darunter fehlende, leere,
+  nichtnumerische und Array-Parameter, Überlauf-Werte, `POST` statt `GET`
+  sowie der eigentlich kritische Fall „gültiges Token, `?classroom=` einer
+  **anderen** Klasse". Sieben dieser Fälle wurden zusätzlich per md5-Vergleich
+  von Rumpf **und** Antwortkopf bestätigt.
+- Die einzige gefundene Ausnahme ist **kein** Route-Fehler, sondern ein
+  Bestandsverhalten der Sitzungsprüfung selbst — siehe B4 unten.
+
+### Zwei Signaturen aus einer Abfrage — und warum kein `GROUP_CONCAT`
+
+Eine einzige `$wpdb->prepare()`-Abfrage auf `CBD_TABLE_DRAWINGS`
+(`WHERE class_id = %d AND page_id = %d`) liefert **zwei getrennte**
+Signaturen:
+
+| Feld | Formel | Bewegt sich, wenn … |
+|---|---|---|
+| `seite` | `baue_signatur([COUNT(*), SUM(is_behandelt), SUM(id*is_behandelt)])` | ein Container freigegeben oder zurückgenommen wird |
+| `tafel` | `baue_signatur([MAX(updated_at)])` | irgendein Tafelbild der Seite geschrieben wird (auch ein einzelner Strich) |
+
+Die Trennung ist der Kern des Entwurfs: Zusammengefasst würde jeder einzelne
+Strich der Lehrperson dieselbe Reaktion auslösen wie eine Freigabe — auf
+reduzierten Seiten (Phase 3) hieße das ein Neuladen bei jedem Pinselstrich.
+
+**Bewusst KEIN `GROUP_CONCAT` — und das darf niemand „vereinfachen":** Eine
+Signatur über die verkettete Liste aller freigegebenen Container-Kennungen
+wäre naheliegend, aber `group_concat_max_len` (MySQL-Vorgabe 1024 Byte)
+schneidet ab etwa **44 Containern je Seite** die Zeichenkette **still** ab.
+Die Signatur friert danach ein, und jede weitere Freigabe wird verschluckt,
+ohne dass irgendwo ein Fehler auftaucht. Stattdessen wird ausschließlich mit
+`COUNT()`/`SUM()`/`MAX()` über feste Spalten summiert — diese Aggregate
+haben keine Längengrenze.
+
+`SUM(id * is_behandelt)` ist eine Prüfsumme über die **Menge** der
+freigegebenen Zeilen: Jeder einzelne Umschalter verändert sie zwangsläufig.
+Zusammen mit `COUNT(*)` und `SUM(is_behandelt)` ist eine Kollision praktisch
+ausgeschlossen (siehe „Bekannte Einschränkungen" unten).
+
+Die Signaturen `klasse` (zwei weitere Abfragen auf `CBD_TABLE_DRAWINGS` und
+`CBD_TABLE_CLASS_PAGES`) und `fragenwand` (`CBD_TABLE_NOTES`, fällt bei
+fehlender Tabelle — alte Installation ohne Fragenwand — auf eine feste,
+unveränderliche Signatur zurück statt eine Abfrage gegen eine nicht
+existierende Tabelle abzusetzen) folgen demselben Muster: reine
+Zahlenaggregate, keine Verkettung, keine Inhalte.
+
+### Der Vertrag `window.cbdKlassenpuls`
+
+Datei `assets/js/klassenpuls.js` — reines ES5 in einer IIFE, Hausstil
+`var`/`function`, kein Build-Schritt, kein jQuery (`fetch()` genügt), keine
+externe Bibliothek, kein `import`/`export`. **Sieben Methodennamen, ein
+Vertrag, den vier spätere Arbeitspakete (AP-2.1, AP-3.1, AP-4.1, AP-4.2)
+zeichengenau nutzen — nicht umbenennen:**
+
+```js
+window.cbdKlassenpuls = {
+    setzeSitzung: function (classroomId, token) {},
+    setzeSeite:   function (pageId) {},
+    abonniere:    function (name, rueckruf) {},   // gibt Abmeldefunktion zurück
+    starte:       function () {},
+    halte:        function () {},
+    sofort:       function () {},                 // eine Abfrage jetzt
+    laeuft:       function () {}                  // bool
+};
+```
+
+`name` in `abonniere()` ist einer von **vier Signaturnamen der Serverantwort**
+(`seite`, `tafel`, `klasse`, `fragenwand`) **plus dem künstlichen fünften
+Namen `abgelaufen`** für den Sonderfall einer ungültigen Sitzung. Der Rückruf
+wird mit `(neueSignatur, alteSignatur)` aufgerufen, bei `abgelaufen` mit
+`(null, null)`.
+
+**Die erste Antwort löst keinen Rückruf aus.** Sie legt nur die
+Ausgangssignaturen fest (`erstanfrageErledigt`); erst eine davon
+**abweichende** Folgeantwort benachrichtigt Abonnenten. Ohne diese Regel
+würde direkt nach dem Seitenaufbau alles unnötig neu geladen — der
+Verbraucher hat seinen Erstzustand ja gerade selbst über den normalen
+Seitenaufbau hergestellt.
+
+**Abgelaufene Sitzung:** Antwortet der Server mit HTTP 404, stellt sich der
+Taktgeber **endgültig** ein, ruft `abgelaufen`-Abonnenten **genau einmal**
+auf und startet **kein** Weiterprobieren — ein Schüler mit ungültigem Token
+darf nicht im Sekundentakt anklopfen.
+
+**Rückzug bei Netzfehlern:** ab dem dritten Fehlschlag in Folge das
+Intervall verdoppeln, gedeckelt bei 120 s, nach einer erfolgreichen Antwort
+zurück auf den Servertakt. **Page Visibility:** bei `document.hidden` keine
+Abfrage; beim Zurückwechseln sofort eine.
+
+**Seit AP-1.fix1: ±25 % Streuung auf das Abfrageintervall im
+Normalbetrieb.** `aktuellesIntervallMs()` liefert dort
+`basis * (0,75 + Math.random() * 0,5)` (Konstanten `STREUUNG_MIN_FAKTOR` =
+0,75, `STREUUNG_SPANNE_FAKTOR` = 0,5), danach geklemmt auf mindestens
+`INTERVALL_MIN_MS` = 5000 ms. Die Streuung wird **bei jeder Planung neu
+gezogen**, nicht einmalig je Tab, und gilt **ausschließlich** für den
+fehlerfreien Normalbetrieb — sie wird **nicht** zusätzlich auf die bereits
+verdoppelnden Rückzugsstufen aufaddiert (dort verdoppelt sich das Intervall
+ohnehin schon). Grund: Öffnet eine ganze Klasse gemeinsam zu Stundenbeginn
+die Seite, blieben alle Abfrageschleifen ohne Streuung dauerhaft in einem
+engen Zeitband synchron (gemessen in AP-1.7: 0,5–0,65 s über 58 Runden und
+zehn Minuten, das Band wurde **nicht** breiter). Mit ±25 % Streuung verteilen
+sich dieselben Anfragen über rund 5 Sekunden statt über 0,6 Sekunden. Details
+und der Wirkungsnachweis am ausgelieferten Code (drei reale Folgeabstände:
+8838/8998/9990 ms): `docs/messung-klassenpuls.md`, Abschnitt 5, sowie
+AP-1.rev, Schritt 4.
+
+Der Takt selbst kommt **ausschließlich** aus dem Feld `takt` der
+Serverantwort, nie aus einer Konstante im Browser — ändert der Betrieb die
+Option, folgt der Browser beim nächsten Durchlauf. Ein Takt von 0 hält den
+Taktgeber endgültig an.
+
+### Die Notbremse: Option `cbd_klassenpuls_takt`
+
+Sekunden, `0` = **abgeschaltet**, Vorgabe 10, Grenzen 5…300. Der
+Website-Betrieb kann den Takt drosseln oder die Live-Funktion vollständig
+abschalten, **ohne Code zu ändern**. Bei 0 wird `klassenpuls.js` auf
+**keiner** Seite mehr eingereiht (`class-cbd-classroom.php,
+enqueue_frontend_assets()`, beide Zweige: normale Seite mit `?classroom=`
+und Shortcode-Seite `[cbd_classroom]`) — der Klassenmodus verhält sich dann
+byteidentisch wie vor diesem Vorhaben.
+
+Feld „Live-Aktualisierung (Sekunden)" in `admin/settings.php`, direkt unter
+dem Klassenmodus-Schalter. Zwei Stellen legen dieselben Grenzen fest — **das
+ist Absicht, muss aber von Hand synchron gehalten werden**:
+
+- **Schreibseite:** `cbd_sanitize_klassenpuls_takt($wert): int` in
+  `includes/functions.php`, nach dem Vorbild von `cbd_sanitize_icon_scale()`.
+  Bereinigt beim Speichern (nicht numerisch → 10, `<= 0` → 0, sonst geklemmt
+  auf 5…300).
+- **Leseseite:** `CBD_Klassenpuls::takt()` in
+  `includes/class-cbd-klassenpuls.php` — **die einzige Stelle, die die
+  gespeicherte Option zur Laufzeit auslegt.** AP-1.5/AP-1.6 rufen ausdrücklich
+  diese Methode auf, statt die Grenzen (5/300/0) selbst zu wiederholen.
+
+Ändert sich künftig eine der Zahlen 5, 10 oder 300, **muss sie in beiden
+Funktionen zugleich geändert werden** — sie sind zwei unabhängige
+Implementierungen derselben Regel, kein gemeinsamer Code. Ein Auseinanderlaufen
+bliebe zwar folgenlos (`takt()` klemmt beim Lesen ohnehin nach), sollte aber
+nicht als Einladung verstanden werden, die Doppelung zu vergrößern.
+
+### Prüfharnisch
+
+`php tools/test-klassenpuls.php` — 22 Prüfungen ohne WordPress, entstanden
+nach TDD (roter Commit `6f8006d` vor grünem `57160f8`), Aufbau nach dem
+Vorbild von `tools/test-classroom-gate.php`. Vier Gruppen:
+
+- **A** (5) — `baue_signatur()`, rein ohne Datenbank: Stabilität,
+  Kollisionsfreiheit, 12-stelliges Hex-Format, `null`/`''` gleichwertig,
+  Reihenfolge zählt.
+- **B** (7) — `takt()`: Vorgabe 10, numerische Strings, `0` = abgeschaltet,
+  Klemmung auf 5…300, ungültige Werte → Vorgabe, negative Werte → 0.
+- **C** (4) — Konstanten und `register_routes()`: genau eine `GET`-Route mit
+  `permission_callback === '__return_true'`.
+- **D** (6) — **sechs textbasierte Wächter gegen eine zweite Token-Deutung**,
+  dieselbe Technik wie in `tools/test-block-content-api.php`: Die Datei
+  enthält **kein** `get_transient`, **keine** Zeichenfolge `cbd_classroom_`,
+  **wohl aber** `CBD_Classroom_Gate::sitzung`, **wohl aber**
+  `nocache_headers`, **kein** `GROUP_CONCAT`, **wohl aber**
+  `$wpdb->prepare`. Diese sechs Prüfungen setzen zusätzlich `file_exists()`
+  voraus, damit eine fehlende Datei alle sechs sauber rot meldet statt einen
+  Teil zufällig grün durchzulassen.
+
+Läuft komplett ohne WordPress-Bootstrap (CLI-Stubs, kein `wp-load.php`,
+keine Datenbankverbindung).
+
+### Messwerte (`docs/messung-klassenpuls.md`, AP-1.7)
+
+**Der Vorgabetakt von 10 s trägt den realen Betriebsfall (ein bis drei
+Klassen, 5–15 Anfragen/s) klar: Die Sättigungskurve knickt erst bei 25
+gleichzeitigen Anfragen (Spitze ~50 Anfr./s), danach folgt Staukollaps, aber
+auf **keiner** der fünf gemessenen Parallelitätsstufen ein einziger
+Fehlschlag — 0 von insgesamt 1910 Lastanfragen.** Der Puls selbst ist rund
+3,7× schneller und rund 2400× kleiner als ein gewöhnlicher Seitenaufruf mit
+demselben Werkzeug (Antwortgrößen 63–109 Byte).
+
+**Gleichschritt tritt real auf:** Fünf gemeinsam gestartete Abfrageschleifen
+blieben über 58 Runden und zehn Minuten in einem 0,5–0,65 s breiten
+Zeitband, das sich **nicht** von selbst auflöste — das war der direkte
+Auslöser für `AP-1.fix1` (die ±25-%-Streuung oben). Vorbehalt aus dem
+Bericht: Der Testserver ist ein lokaler Windows-Rechner ohne Fremdlast und
+mit warmem OPcache — die **Form** der Kurve überträgt sich auf All-Inkl
+voraussichtlich, die **absoluten Zahlen** nicht.
+
+### Bekannte, bewusst akzeptierte Einschränkungen
+
+- **Prüfsummen-Kollision in `SUM(id * is_behandelt)`** (Risikoregister,
+  Abschnitt 5 des Plans): zusammen mit `COUNT(*)` und `SUM(is_behandelt)`
+  praktisch ausgeschlossen. Die Fehlerrichtung ist harmlos: Im
+  schlimmsten Fall erscheint eine Änderung erst beim nächsten Umschalten,
+  nie wird zu viel gezeigt.
+- **Der `is_scalar()`-Wächter in `liefere_puls()`
+  (`includes/class-cbd-klassenpuls.php:224–229`) greift in der Praxis nie**
+  — der deklarierte `sanitize_callback => 'absint'` läuft bereits vor dem
+  Callback und macht aus `?page_id[]=1` längst die Zahl `1`, bevor
+  `get_param()` überhaupt gelesen wird. Der Code-Kommentar an dieser Stelle
+  behauptet das Gegenteil („ohne die Hülle stünde eine PHP-Warnung im
+  Fehlerlog") — das ist **irreführend**, aber sicherheitlich folgenlos: Der
+  Wächter bleibt als Verteidigung in der Tiefe sinnvoll, nur die Begründung
+  im Kommentar stimmt nicht (Review-Befund B1).
+- **`cbd/v1/block-html` bricht seine eigene Zusage (Bestand, nicht Teil
+  dieses Vorhabens):** Der Kopfkommentar dieses älteren Endpunkts beansprucht
+  Zeichengleichheit von Ablehnung und Nichtexistenz, antwortet bei fehlenden
+  Parametern aber tatsächlich mit HTTP 400 `rest_missing_callback_param` und
+  nennt in `data.params` die Parameternamen. **Nicht in diesem Vorhaben
+  behoben** — eine Änderung an `class-cbd-block-content-api.php` läge
+  außerhalb der Nicht-Ziele dieses Plans (Review-Befund B3). Zur Einordnung:
+  `cbd/v1/klassenpuls` ist damit der **erste** Endpunkt des Plugins, der die
+  Zeichengleichheits-Regel lückenlos einhält — sollte `block-html` künftig
+  nachgezogen werden, ist `class-cbd-klassenpuls.php` die Vorlage.
+- **Sitzungstoken werden groß-/kleinschreibungsunabhängig verglichen
+  (Bestand, `includes/class-cbd-classroom-gate.php:117`):**
+  `get_transient('cbd_classroom_' . $token)` geht über die Spalte
+  `option_name`, die eine `_ci`-Kollation trägt — der Vergleich ist also
+  **nicht** zeichengenau. Bei der aktuellen Tokenlänge (64 Zeichen aus
+  `wp_generate_password(64, false)`) praktisch folgenlos (Entropie fällt von
+  rund 381 auf rund 331 Bit, kein ausnutzbares Risiko), aber der Klassenpuls
+  löst diese Prüfung erstmals im Zehn-Sekunden-Takt aus einem nicht
+  angemeldeten Kontext aus (Review-Befund B4). Würde die Tokenlänge künftig
+  gesenkt, wird dieser Punkt relevant.
+- **Jeder Pulsaufruf löst einen vollständigen WordPress-Bootstrap aus** und
+  schreibt bei aktivem `WP_DEBUG_LOG` rund 34 Boot-Protokollzeilen ins
+  `debug.log` (Registrierung der Container-Blöcke, „Eigene WP Blocks" etc.,
+  keine Warnungen/Notices). Bei 25 Schülern im 10-Sekunden-Takt wären das
+  rund 7.600 Logzeilen je Minute — `WP_DEBUG_LOG` muss auf einer
+  Produktivinstallation deshalb **aus** bleiben (Review-Befund B9).
+- **Beim Mindesttakt 5 s ist die ±25-%-Streuung einseitig geklemmt:**
+  `basis * (0,75 + Zufall·0,5)` ergibt bei `basis = 5000` gleichverteilt
+  3750–6250 ms; alles darunter wird auf 5000 ms angehoben. Rechnerisch landet
+  dadurch etwa die Hälfte aller Planungen exakt auf 5000 ms — ausgerechnet
+  bei der Einstellung mit der höchsten Last fällt ein Teil der
+  Entzerrungswirkung wieder weg. Beim Vorgabetakt 10 s tritt der Effekt nicht
+  auf (die Untergrenze wird dort nie erreicht, am echten Server bestätigt:
+  8838/8998/9990 ms). Plankonform (AP-1.fix1 verlangt genau diese Klemmung);
+  eine spätere, klemmungsfreie Formel wäre `basis * (1 + Zufall·0,5)`
+  (Review-Befund B10).
+- **Docblock-Version `@since 3.1.118` in `class-cbd-klassenpuls.php`, obwohl
+  `CBD_VERSION` zum Zeitpunkt der Erstellung noch `3.1.117` war (Review-Befund
+  B6) — bewusst NICHT geändert.** Der Versions-Bump für dieses Vorhaben ist
+  erst in `AP-4.doc` vorgesehen; `@since` benennt vorausschauend die Version,
+  unter der der Code erscheinen wird, sobald der Bump läuft. Ob dieses Muster
+  im Projekt tatsächlich Bestand hat, wurde anhand der Git-Historie geprüft,
+  nicht nur vermutet: `includes/class-cbd-classroom-gate.php` trug bei seiner
+  Anlage (Commit `b965437`) bereits `@since 3.1.87`, während `CBD_VERSION` in
+  genau diesem Commit noch `3.1.86` war — derselbe Ein-Versions-Vorgriff wie
+  hier, nie korrigiert. **Es gibt aber ein neueres, gegenläufiges Präjudiz:**
+  Commit `fce32b1` („AP-2.2: @since-Angabe in class-cbd-fragenwand.php
+  praezisiert", 2026-08-28) hat eine identisch geratene Versionsnummer
+  (`3.1.107` statt der tatsächlichen `3.1.106` bei Anlage) ausdrücklich
+  **zurückgenommen** und durch die Vorhaben-/AP-Bezeichnung ersetzt, mit der
+  Begründung „der Bump geschieht erst beim nächsten ZIP-Bau" — das Projekt
+  hat das Vorausraten einer Versionsnummer also bereits einmal bewusst als
+  unzuverlässig verworfen, nur zwei Tage vor diesem Vorhaben. Die
+  Konsequenz: `3.1.118` **kann**, muss aber **nicht** die tatsächliche
+  Bump-Version werden (davor können weitere Vorhaben landen). Da eine
+  Korrektur `includes/class-cbd-klassenpuls.php` selbst ändern müsste und
+  diese Datei außerhalb der „Betroffene Dateien" dieses Arbeitspakets liegt,
+  bleibt der Docblock unverändert; **wer `AP-4.doc` (den Versions-Bump)
+  ausführt, sollte prüfen, ob `CBD_VERSION` dann tatsächlich `3.1.118`
+  erreicht** — trifft es zu, ist der Befund gegenstandslos; trifft es nicht
+  zu, sollte der Docblock nach dem Muster von `fce32b1` auf die
+  Vorhaben-/AP-Bezeichnung umgestellt werden. `CBD_VERSION` selbst wird durch
+  diese Dokumentation **nicht** angefasst.
+
 ## Debugging-Konventionen
 
 - **PHP:** Informations-Logs laufen über klasseneigene `debug_log()`-Helper
