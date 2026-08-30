@@ -336,30 +336,66 @@
             // Hide all containers by default, then show only treated ones that exist in DOM
             //
             // Seit AP-2.1 wird der ZUSTANDSWECHSEL erkannt, statt blind zu
-            // setzen: Nur ein Container, der vorher versteckt war und jetzt
-            // sichtbar wird, gilt als „neu freigegeben". Beim Erstaufbau sind
-            // alle Container ohnehin sichtbar – dort entsteht deshalb kein
-            // einziger Wechsel auf „sichtbar" und das Verhalten bleibt
-            // unverändert.
+            // setzen: Nur ein Container, der vorher von DIESEM Filter versteckt
+            // war und jetzt sichtbar wird, gilt als „neu freigegeben".
+            //
+            // WARUM NICHT `$container.is(':visible')` (Befund B1 aus AP-2.rev,
+            // behoben in AP-2.fix1) — bitte nicht zurückstellen:
+            // `:visible` ist falsch, sobald ein VORFAHRE versteckt ist, und auf
+            // dieser Website versteckt der Server ohne jedes JavaScript:
+            //   • `.cbd-container.cbd-collapsed .cbd-container-content
+            //      { display: none }` (cbd-frontend-clean.css) – die Klasse
+            //      `cbd-collapsed` setzt bereits der PHP-Renderer, wenn das
+            //      Design „standardmäßig zugeklappt" trägt. Container INNERHALB
+            //      eines zugeklappten Containers sind damit von Anfang an
+            //      `:visible === false`;
+            //   • dasselbe gilt für Container in einem Panel des Blocks
+            //      `modular-blocks/accordion`.
+            // Ein nicht freigegebener Container in einem zugeklappten Elternteil
+            // galt dadurch als „ohnehin unsichtbar", bekam kein `.hide()` – und
+            // erschien, sobald der Schüler den Elternteil aufklappte. Gemessen
+            // auf Seite 1618/Klasse 15: 6 zugeklappte Container, 5 davon ohne
+            // eigenes `display:none`, dazu vier falsche „Neu freigegeben"-
+            // Hinweise bei jedem Puls.
+            //
+            // Gefragt wird deshalb der EIGENE Zustand des Elements: Dieser
+            // Filter versteckt ausschliesslich per `$container.hide()`, und das
+            // setzt `style="display: none"` am Element selbst. Ein Container in
+            // einem zugeklappten Elternteil ist damit wieder ein ganz normaler
+            // Fall. Nebenwirkung, die erwünscht ist: kein erzwungener
+            // Layout-Durchlauf mehr pro Container (`:visible` liest Geometrie).
             var neuSichtbarAnzahl = 0;
 
             $containers.each(function() {
                 var $container = $(this);
                 var stableId = $container.attr('data-stable-id');
                 var sollSichtbar = !!stableId && validTreatedContainers.indexOf(stableId) !== -1;
-                var istSichtbar = $container.is(':visible');
+                var istVersteckt = $container[0].style.display === 'none';
 
                 window.cbdDebug && console.log('CBD Classroom Page Filter: Processing container', stableId);
 
                 if (!sollSichtbar) {
                     // Container is NOT treated OR doesn't exist in DB -> hide it
-                    if (istSichtbar) {
+                    if (!istVersteckt) {
                         $container.hide();
+
+                        // Behandelt-Kennzeichnung mit abräumen (Befund B4 aus
+                        // AP-2.rev, behoben in AP-2.fix1): Das Abzeichen wurde
+                        // beim Einblenden gesetzt, aber nie wieder entfernt.
+                        // Nimmt die Lehrperson eine Freigabe zurück und erteilt
+                        // sie später erneut, hinge sonst ein veraltetes
+                        // „✓ Behandelt" am Container. `children()` statt
+                        // `find()`: das eigene Abzeichen ist ein direktes Kind –
+                        // Abzeichen VERSCHACHTELTER Container gehören denen und
+                        // dürfen hier nicht mit verschwinden.
+                        $container.children('.cbd-behandelt-badge').remove();
+                        $container.removeClass('cbd-is-behandelt');
+
                         window.cbdDebug && console.log('CBD Classroom Page Filter: Hiding non-treated container', stableId);
                     }
                 } else {
                     // Container IS treated AND exists in DOM -> show it and add drawings/badges
-                    if (!istSichtbar) {
+                    if (istVersteckt) {
                         $container.show();
                         neuSichtbarAnzahl++;
                         window.cbdDebug && console.log('CBD Classroom Page Filter: Showing treated container', stableId);
@@ -396,11 +432,25 @@
             // Nav-Leiste + Link-Interception stehen seit AP-2.1 in
             // einmaligAufbauen() – hier bewusst nicht aufrufen.
 
-            // Nachrüst-Haken (AP-2.1): Ein Container, der versteckt im DOM lag,
-            // wurde von der Nummerierung nicht mitgezählt (sie zählt nur
-            // sichtbare Container) und seine Formeln konnten im versteckten
-            // Zustand nicht korrekt vermessen werden. Beides wird nachgeholt,
-            // sobald wirklich etwas neu sichtbar geworden ist.
+            // Nachrüst-Haken (AP-2.1), Kommentar richtiggestellt in AP-2.fix1
+            // (Befund B3 aus AP-2.rev):
+            //
+            // `cbdRenderLatex()` ist der eigentliche Grund für diesen Block. Ein
+            // Container, der versteckt im DOM lag, konnte seine Formeln nicht
+            // korrekt vermessen lassen – KaTeX hätte in einem
+            // `display:none`-Teilbaum die falsche Ersatzschrift erwischt.
+            // `whenFontsReady()` im Renderer macht den Aufruf hier berechtigt.
+            //
+            // `CBDRenumberBlocks()` steht daneben aus ANDEREM Grund, als der
+            // ursprüngliche Kommentar behauptete: Er sagte, die Nummerierung
+            // zähle nur sichtbare Container. Das ist widerlegt —
+            // `renumberBlocks()` in assets/js/block-numbering.js filtert
+            // ausschliesslich auf oberste Ebene
+            // (`container.parentElement.closest('.cbd-container')`),
+            // Sichtbarkeit kommt dort gar nicht vor. Der Aufruf ist damit im
+            // Regelfall wirkungslos, aber idempotent und schadlos; er bleibt als
+            // Absicherung stehen, falls sich die Nummerierung künftig doch am
+            // Anzeigezustand orientiert.
             //
             // Beide typeof-Prüfungen sind PFLICHT: block-numbering.js und
             // latex-renderer.js werden nur eingereiht, wenn die jeweilige
