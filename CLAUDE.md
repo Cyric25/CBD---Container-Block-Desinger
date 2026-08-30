@@ -3463,11 +3463,11 @@ und clientseitiger Taktgeber — und schließt bewusst KEINEN Abonnenten an.**
 Nach Phase 1 läuft der Taktgeber mit, aber `setzeSitzung()` ruft niemand auf;
 der Klassenmodus verhält sich für den Schüler byteidentisch wie zuvor
 (strukturell belegt: 0 gelöschte Zeilen in jeder Produktivdatei, kein
-Aufrufer von `setzeSitzung()` im Repo). Phasen 2–4 hängen
-`classroom-page-filter.js`, `classroom-frontend.js` und
-`fragenwand-frontend.js` daran — eigene Abschnitte folgen, sobald diese
-Phasen abgeschlossen sind. Analyse-Vorlauf:
-`docs/ERWEITERUNGSANALYSE-Klassenmodus-Live.md`.
+Aufrufer von `setzeSitzung()` im Repo). **Phase 2 (Unterabschnitt weiter
+unten in diesem Kapitel) hat `classroom-page-filter.js` daran gehängt**;
+Phasen 3–4 hängen `classroom-frontend.js` und `fragenwand-frontend.js` an —
+eigene Abschnitte folgen, sobald diese Phasen abgeschlossen sind.
+Analyse-Vorlauf: `docs/ERWEITERUNGSANALYSE-Klassenmodus-Live.md`.
 
 ### Warum zweistufig, und warum kein Push
 
@@ -3826,6 +3826,293 @@ voraussichtlich, die **absoluten Zahlen** nicht.
   zu, sollte der Docblock nach dem Muster von `fce32b1` auf die
   Vorhaben-/AP-Bezeichnung umgestellt werden. `CBD_VERSION` selbst wird durch
   diese Dokumentation **nicht** angefasst.
+
+### Phase 2: Normale Seiten (`assets/js/classroom-page-filter.js`, `assets/css/classroom-frontend.css`, AP-2.1–AP-2.fix2, seit 2026-08-31)
+
+Auf einer normalen Seite mit `?classroom=` liegt das HTML **aller**
+Container bereits fertig hydratisiert im DOM — nicht freigegebene sind nur
+per `$container.hide()` versteckt. Phase 2 macht genau diesen Filter
+(`assets/js/classroom-page-filter.js`) wiederholbar aufrufbar und hängt ihn
+an `window.cbdKlassenpuls` (Phase 1): Eine Freigabe erscheint, eine
+Rücknahme verschwindet, ein geändertes Tafelbild aktualisiert sich — alles
+per `.show()`/`.hide()` bzw. gezieltem DOM-Umbau. Reduzierte Lösungsseiten
+(`cbdClassroomPageData.reduziert === true`) bleiben bewusst außen vor — das
+übernimmt Phase 3.
+
+#### Warnung: `jQuery.is(':visible')` prüft die Vorfahrenkette — hier zweimal zum Fehler geworden
+
+**Das ist die wichtigste Lehre dieser Phase, keine Randnotiz:** `:visible`
+ist nur dann wahr, wenn das Element **und alle seine Vorfahren** dargestellt
+werden. Diese Website versteckt aber an zwei Stellen serverseitig, ganz ohne
+JavaScript:
+
+- `.cbd-container.cbd-collapsed .cbd-container-content { display: none }`
+  (`assets/css/cbd-frontend-clean.css:389`) — die Klasse `cbd-collapsed`
+  setzt bereits der PHP-Renderer, wenn ein Container-Design standardmäßig
+  zugeklappt ist;
+- dieselbe Wirkung haben Panels des Blocks `modular-blocks/accordion`
+  („Eigene WP Blocks").
+
+Ein verschachtelter Container in einem solchen zugeklappten oder
+Accordion-Elternteil ist damit **von Anfang an** `:visible === false` —
+unabhängig davon, ob er selbst freigegeben ist. Wer daraus „also ist er
+ohnehin schon im Zielzustand" schließt, irrt: Er wurde nie von *diesem
+Filter* versteckt.
+
+**Diese Falle ist in Phase 2 an genau zwei Stellen aufgetreten**, weil beide
+denselben (falschen) Test benutzten, um einen Zustandswechsel zu erkennen:
+
+1. `filterContainers()` — AP-2.1 stellte hier auf „nur `.hide()`/`.show()`,
+   wenn sich der Sichtbarkeitszustand ändert" um und prüfte dafür
+   `$container.is(':visible')`. Auf Seite 1618/Klasse 15 (unangetasteter
+   Bestandsinhalt) waren dadurch **5 verschachtelte Container ohne eigenes
+   `display:none`** — darunter ein nicht freigegebener, der beim Aufklappen
+   des Elternteils sichtbar geworden wäre — und **4 falsche
+   „Neu freigegeben"-Hinweise bei jedem Puls mit Signaturänderung**. Behoben
+   in **AP-2.fix1** (Befund B1 aus AP-2.rev).
+2. `aktualisiereTafelbilder()` — AP-2.2 übernahm denselben `:visible`-Test,
+   um zu entscheiden, welche Container ein Tafelbild-Update bekommen. Ein
+   geändertes Tafelbild an einem freigegebenen, aber in einem zugeklappten
+   Elternteil liegenden Container wurde dadurch **dauerhaft übersprungen**
+   (der Rückruf läuft nur bei einer Signaturänderung, die dann bereits
+   vorbei ist). Behoben in **AP-2.fix2**.
+
+**Beide Male dieselbe Lösung:** nicht die Vorfahrenkette fragen, sondern den
+**eigenen** Zustand des Elements — der Filter versteckt ausschließlich per
+`$container.hide()`, was `style="display: none"` **am Element selbst**
+setzt:
+
+```js
+var istVersteckt = $container[0].style.display === 'none';
+```
+
+**Wer diesen Code weiterentwickelt und wieder auf `:visible` umstellt, baut
+denselben Fehler erneut ein** — und diesmal war die Folge kein bloß
+kosmetischer Fehler: An der ersten Fundstelle wurde dadurch Schülern nicht
+freigegebener Inhalt sichtbar, sobald sie einen zugeklappten, freigegebenen
+Container aufklappten.
+
+#### Die Zweiteilung von `filterContainers()`
+
+Vor Phase 2 lief `filterContainers()` genau einmal, direkt nach dem
+Seitenaufbau. Damit der Filter beliebig oft aufrufbar wird, ohne bei jeder
+Aktualisierung Dinge zu verdoppeln, die nur einmal entstehen dürfen, ist er
+in zwei Methoden geteilt:
+
+- **`einmaligAufbauen(data)`** — `this.className`, `injectClassroomNavBar()`
+  (Navigationsleiste samt „Verlassen"-Knopf) und `interceptLinks()`
+  (Umleitung interner Links). Wird **ausschließlich** aus
+  `loadClassroomData()` gerufen, beim allerersten Seitenaufbau.
+- **`filterContainers(data, istErstaufbau)`** — der beliebig oft aufrufbare
+  Rest: Container einsammeln, mit den freigegebenen abgleichen, je
+  Container `.show()`/`.hide()` anhand des erkannten Zustandswechsels.
+  `aktualisiere()` (der Rückruf des `'seite'`-Abonnements) ruft nur noch
+  diesen Teil auf, **ohne** `istErstaufbau` und **ohne**
+  `einmaligAufbauen()`.
+
+**Wer hier etwas Einmaliges in die wiederholbare Hälfte verschiebt, erzeugt
+doppelte Navigationsleisten** (bzw. doppelt gebundene Klick-Handler auf
+`document`) — genau der Fehler, den dieser Umbau vermeiden sollte.
+Zusätzlich zur reinen Aufrufweg-Trennung werfen die beiden `document`-
+Handler aus `interceptLinks()` und `injectClassroomNavBar()` vor dem Binden
+ihren eigenen jQuery-Namensraum ab (`click.cbdClassroomLinks` /
+`click.cbdClassroomNav`) — Gürtel und Hosenträger, falls `einmaligAufbauen()`
+doch einmal versehentlich zweimal gerufen wird. Die Warnung über nicht
+gefundene markierte Blöcke (`showWarning()`) erscheint ebenfalls nur beim
+Erstaufbau (`istErstaufbau`), sonst würde sie sich bei jeder Aktualisierung
+wiederholen.
+
+#### Warum auf normalen Seiten nichts nachgeladen wird
+
+Anders als auf reduzierten Seiten (Phase 3) steht das HTML **jedes**
+Containers bereits beim Seitenaufbau im DOM, ganz normal hydratisiert —
+Aufklappen, Kopieren, Screenshot und PDF funktionieren an einem gerade
+eingeblendeten Container ohne Weiteres, weil er nie entfernt war. Eine
+Live-Aktualisierung muss deshalb nichts vom Server nachladen und nichts neu
+ins DOM einfügen (mit der Ausnahme des Tafelbild-Abschnitts, siehe unten,
+der ohnehin vom Filter selbst gebaut wird) — `.show()`/`.hide()` genügt.
+Das ist genau der Grund, warum dieser Fall risikoarm ist (siehe Abschnitt 4
+des Plans).
+
+#### Die beiden Nachrüst-Haken
+
+Nach einem Durchlauf, bei dem mindestens ein Container **live** (nicht beim
+Erstaufbau) neu sichtbar wurde, ruft `filterContainers()` zwei bereits
+vorhandene globale Funktionen auf — beide **zwingend** hinter `typeof`, weil
+die jeweilige Datei nur eingereiht wird, wenn ihre Funktion auf der Seite
+überhaupt gebraucht wird:
+
+```js
+if (typeof window.CBDRenumberBlocks === 'function') { window.CBDRenumberBlocks(); }
+if (typeof window.cbdRenderLatex === 'function') { window.cbdRenderLatex(document); }
+```
+
+- **`window.cbdRenderLatex(document)`** (`assets/js/latex-renderer.js`) ist
+  der eigentliche Grund für diesen Block: Ein Container, der beim
+  Seitenaufbau noch versteckt war, konnte seine Formeln nicht korrekt
+  vermessen lassen — KaTeX hätte in einem `display:none`-Teilbaum die
+  falsche Ersatzschrift erwischt. Weil `whenFontsReady()` den Erstlauf des
+  Renderers asynchron macht, ist ein Wettlauf mit der AJAX-Antwort möglich;
+  dank der Markierung `data-cbd-latex-rendered="1"` ist der Aufruf
+  idempotent und im Normalfall ein billiges No-Op.
+- **`window.CBDRenumberBlocks()`** (`assets/js/block-numbering.js`) ist aus
+  einem anderen Grund als ursprünglich angenommen dabei: Der Code-Kommentar
+  behauptete zunächst, `renumberBlocks()` zähle nur sichtbare Container —
+  **das ist falsch** (AP-2.rev, richtiggestellt in AP-2.fix1).
+  `renumberBlocks()` filtert **ausschließlich** auf oberste Ebene
+  (`container.parentElement.closest('.cbd-container')`); Sichtbarkeit kommt
+  dort gar nicht vor. Der Aufruf ist damit im Regelfall wirkungslos, aber
+  idempotent und schadlos, und bleibt als Absicherung stehen, falls die
+  Nummerierung künftig doch am Anzeigezustand orientiert würde. **Nicht
+  anfassen:** Der Klassenmodus zeigt dem Schüler dadurch Lücken in den
+  Blocknummern (z. B. 2, 5, 6, 9 statt 1, 2, 3, 4) — vorbestehend, von
+  Phase 2 weder verursacht noch verschlimmert. Eine Umstellung auf
+  sichtbarkeitsabhängige Nummerierung hätte den unerwünschten Nebeneffekt,
+  dass sich Blocknummern beim Schüler **live verschieben**, während die
+  Lehrperson mündlich eine Nummer nennt.
+
+#### Der Tafelbild-Ersetzungspfad
+
+Vor AP-2.2 wurde ein bereits vorhandener Tafelbild-Abschnitt
+(`.cbd-class-drawing-section`) beim erneuten Durchlauf **übersprungen**
+(`$content.find('.cbd-class-drawing-section').length === 0`) — ein
+geändertes Tafelbild kam nie an. `baueTafelbild($container, drawing)` kehrt
+das um: Ein vorhandener Abschnitt wird **entfernt und neu aufgebaut**, statt
+übersprungen zu werden; ohne (mehr vorhandene) Zeichnungsdaten wird er ganz
+entfernt. Zwei Vorkehrungen gegen störendes Nachladen:
+
+- **`$container.data('cbd-tafel-kennung')`** — eine kurze Kennung aus der
+  Länge der `drawing_data`-Zeichenkette je Tafelseite, mit `|` verbunden.
+  Stimmt sie mit dem letzten Aufbau überein, bleibt der Abschnitt
+  **komplett unangetastet** (kein Entfernen, kein Neuaufbau, keine neue
+  Bildanfrage) — sonst würde ein unverändertes Bild bei jedem Puls-Durchlauf
+  flackern. jQuery `.data()` schreibt dabei **kein** `data-*`-Attribut ins
+  Markup, beeinflusst also keinen `outerHTML`-Vergleich.
+- **Der Aufklappzustand bleibt erhalten:** Vor dem Entfernen eines
+  bestehenden Abschnitts wird gemerkt, ob `.cbd-drawing-overlay` sichtbar
+  war; nach dem Neuaufbau wird dieser Zustand **ohne** Animation
+  wiederhergestellt (eine automatische Aktualisierung ist keine
+  Nutzerhandlung — eine Bewegung mitten im Lesen wäre unerwartet).
+  Andernfalls klappte dem Schüler das gerade betrachtete Tafelbild bei jeder
+  Aktualisierung zu. Die Seitennavigation bei mehrseitigen Tafelbildern
+  setzt dabei bewusst auf Seite 1 zurück, bleibt aber voll bedienbar.
+
+Der Erstaufbau erzeugt dabei nachweislich **byteidentisches** Markup zum
+Stand vor AP-2.2 (per `outerHTML`-Prüfsumme über 155 214 Zeichen bestätigt)
+— das Herausziehen in eine eigene Methode war ein reines Verschieben.
+
+#### Die Klasse `cbd-neu-freigegeben`
+
+Wird von `markiereNeuFreigegeben($container)` in
+`assets/js/classroom-page-filter.js` für **8 Sekunden** gesetzt, sobald ein
+Container **live** (nicht beim Erstaufbau) neu sichtbar wird, und danach per
+`setTimeout` wieder entfernt. Ein erneutes Freigeben desselben Containers
+innerhalb der 8 Sekunden setzt die Frist zurück, statt sich zu stapeln.
+**Kein** `scrollIntoView`, **kein** Fokuswechsel — die Leseposition des
+Schülers darf sich dabei nicht verändern.
+
+Gestaltet in `assets/css/classroom-frontend.css`, Abschnitt
+„HINWEIS „NEU FREIGEGEBEN"" (AP-2.3): ein deutlicher `outline` plus weicher
+`box-shadow`-Schein, beide aus `var(--cbd-classroom-accent, #e24614)`, dazu
+eine Fahne „Neu freigegeben" (`::before`, `pointer-events: none`).
+**Bewusst `outline` statt `border`** — ein `border` verschöbe die
+Container-Geometrie und ließe Text umbrechen; ein `outline` liegt außerhalb
+des Layoutflusses und ändert nichts an Breite oder Höhe (per
+`getBoundingClientRect()` vor/nach dem Setzen der Klasse nachgewiesen:
+Breite, Höhe, `top` und `left` bitgleich).
+
+**Spezifitätsmauer, keine überflüssige Deklaration:** `cbd-frontend-clean.css`
+erzwingt auf `.cbd-container` per `!important` `outline: none` und
+`box-shadow: none`, jeweils an mehreren Stellen wiederholt (u. a. Zeilen 46
+und 645), sowie für `::before` zusätzlich `background: none !important`.
+Eine einfache `.cbd-neu-freigegeben`-Regel hätte dagegen **immer**
+verloren — unabhängig von der Spezifität unterliegt eine Deklaration ohne
+`!important` jeder `!important`-Regel. AP-2.rev hat alle drei Kollisionen
+einzeln nachgezählt: **kein `!important` in diesem Abschnitt ist
+überflüssig.** Deshalb durchgehend der zusammengesetzte Selektor
+`.cbd-container.cbd-neu-freigegeben` (Spezifität 0-2-0, schlägt 0-1-0
+unabhängig von der Ladereihenfolge der beiden Dateien) mit `!important` auf
+genau den drei kollidierenden Eigenschaften.
+
+#### Bekannte, bewusst akzeptierte Einschränkungen
+
+Alle unten genannten Befunde stammen aus `AP-2.rev`
+(`PLAN-Klassenmodus-Live.md`) und wurden **bewusst nicht behoben** — je ein
+Satz, warum:
+
+- **B2 — Layout-Thrashing im Erstaufbau.** `$container.is(':visible')` las
+  vor AP-2.fix1 je Container Geometrie (`offsetWidth`) und erzwang damit
+  einen Layout-Durchlauf. **Warum offen:** Die zugrunde liegende Ursache ist
+  als Nebenwirkung der Korrektur von B1 bereits entfallen — `.style.display`
+  ist reines Attributlesen, kein Geometrie-Zugriff mehr —, das war aber
+  nicht das Ziel von AP-2.fix1, sondern ein Nebeneffekt; hier festgehalten,
+  statt stillschweigend als erledigt gebucht.
+- **B5 — Ein gelöschtes Tafelbild bleibt im Freigabe-Pfad stehen.**
+  `filterContainers()` ruft `baueTafelbild()` nur, wenn `drawings[stableId]`
+  existiert; fällt der Eintrag weg, bleibt der alte Abschnitt dort stehen
+  (nur `aktualisiereTafelbilder()` räumt ihn ab, und auch nur, wenn sich die
+  `tafel`-Signatur bewegt). **Warum offen:** Die Ursache liegt in der
+  `MAX(updated_at)`-Signaturformel aus Phase 1 — das Löschen einer
+  nicht-maximalen Zeile ändert die Signatur nicht. Eine Korrektur müsste die
+  Signaturbildung der Puls-Route ändern, was außerhalb des Scopes von
+  Phase 2 liegt. Fehlerrichtung harmlos: Ein Bild bleibt länger sichtbar, es
+  wird nie zu viel Neues gezeigt.
+- **B6 — `showError()` ohne Sperre gegen Mehrfacheinfügung.** Jeder Aufruf
+  hängt einen weiteren `.cbd-classroom-error` an den Seitenkopf. **Warum
+  offen:** `klassenpuls.js` löst `'abgelaufen'` laut eigenem Vertrag genau
+  einmal aus und sieht „bewusst keinen Weg zurück" vor — die Sperre wäre nur
+  eine Absicherung für den Fall, dass dieser Vertrag sich künftig ändert,
+  aktuell ohne praktische Wirkung.
+- **B7 — Zwei identische AJAX-Anfragen pro Takt möglich.** Ändern sich
+  `seite`- und `tafel`-Signatur im selben Durchlauf, senden `aktualisiere()`
+  und `aktualisiereTafelbilder()` beide `cbd_get_page_classroom_data` mit
+  denselben Parametern. **Warum offen:** Stufe 2 feuert ohnehin nur bei
+  echten Änderungen; ein zusammenfassender Aufruf wäre sparsamer, aber eine
+  strukturelle Änderung, die über den Scope der Korrektur-APs hinausgeht.
+- **B8 — `color-mix()` ohne Rückfall.** Kennt ein Browser
+  `color-mix(in srgb, …)` nicht (vor Chrome 111/Firefox 113/Safari 16.2,
+  alle 2023), verwirft er die gesamte `box-shadow`-Deklaration. **Warum
+  offen:** Die Fehlerrichtung ist harmlos — Rahmen und Fahne bleiben
+  bestehen, der Hinweis ist weiterhin klar erkennbar, nur der weiche Schein
+  fehlt auf sehr alten Browsern.
+- **B9 — Nicht aufgeräumte Klassensitzungs-Transienten auf dem
+  Testserver.** **Warum offen:** Reine Testserver-Hygiene ohne
+  Produktivbezug, gehört in die Testserver-Pflege, nicht in eine
+  Codeänderung.
+- **B10 — `debug.log` wächst im Live-Betrieb spürbar schneller.**
+  `ajax_get_page_classroom_data` schreibt bei jedem Aufruf Protokollzeilen;
+  vor Phase 2 geschah das einmal je Seitenaufruf, jetzt zusätzlich bei jeder
+  Signaturänderung (wegen B7 im Änderungsfall doppelt). **Warum offen:** Die
+  eigentliche Abhilfe ist betrieblich, nicht codeseitig — `WP_DEBUG_LOG`
+  muss auf einer Produktivinstallation ohnehin **aus** bleiben (siehe schon
+  Befund B9 aus AP-1.rev zur Puls-Route selbst).
+- **Nebenbefund aus AP-2.fix2 — strukturell unvollständige
+  `data-stable-id`-Duplikate auf Seite 1618.** Fünf der von
+  AP-2.rev/AP-2.fix1 gefundenen „unsichtbaren, verschachtelten" Container
+  erwiesen sich als dasselbe `data-stable-id` **zweimal** im DOM: einmal
+  ordentlich gerendert, einmal als Duplikat ohne
+  `.cbd-container-content`-Nachfahren (vermutlich Copy/Paste ohne neu
+  vergebene `stableId`). `baueTafelbild()` bricht an einem solchen Duplikat
+  bereits bei `$container.find('.cbd-container-content').first()` ab —
+  unabhängig von der Sichtbarkeitsprüfung. **Warum offen:** Ein
+  vorbestehendes DOM-/Import-Problem, das mit der Live-Aktualisierung nichts
+  zu tun hat (verwandt mit dem oben dokumentierten „Offenen Punkt:
+  `stableId`-Extraktion existiert dreifach") — außerhalb des Scopes dieses
+  Plans.
+
+#### Betriebshinweis für `AP-4.doc`: Der Versions-Bump ist Auslieferung, nicht Kosmetik
+
+`wp_enqueue_script()` hängt an jede Skript-URL `?ver=CBD_VERSION` an. Diese
+Konstante steht während der gesamten Phase 2 unverändert auf `3.1.117` — der
+Bump ist ausdrücklich für `AP-4.doc` vorgesehen. **Solange er nicht gelaufen
+ist, erreichen die Korrekturen aus AP-2.fix1 und AP-2.fix2 die Browser der
+Schüler nicht** — sie werden weiter aus dem Cache mit der alten
+`classroom-page-filter.js` bedient. Dieselbe Falle hat während der
+Entwicklung selbst wiederholt zugeschlagen (`transferSize === 0` im
+Netzwerk-Tab ist das Erkennungsmerkmal, testseitig mit einem temporären
+`script_loader_src`-Filter umgangen, nie durch ein Hochsetzen von
+`CBD_VERSION` selbst). **`AP-4.doc` muss den Bump deshalb als
+Auslieferungsschritt behandeln, nicht als reine Versionskosmetik.**
 
 ## Debugging-Konventionen
 
