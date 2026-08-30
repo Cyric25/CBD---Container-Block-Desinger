@@ -18,6 +18,11 @@
  * danach ueber die bestehenden Endpunkte mit ihren geprueften
  * Autorisierungsketten.
  *
+ * SEIT AP-1.fix1 ist das tatsaechliche Abfrageintervall NICHT mehr exakt der
+ * Takt: Im Normalbetrieb streut es bei jeder Planung neu um +-25 % um den
+ * Takt (Regel 9 unten), damit gemeinsam gestartete Tabs einer ganzen Klasse
+ * nicht dauerhaft im Sekundenbruchteil-Gleichschritt abfragen.
+ *
  * ES GIBT GENAU EINEN TAKTGEBER JE BROWSER-TAB. Das ist der ganze Zweck der
  * Datei: Ab Phase 2 haengen sich `classroom-page-filter.js`,
  * `classroom-frontend.js` und `fragenwand-frontend.js` daran - jeweils ohne
@@ -119,6 +124,18 @@
  *    erzeugen. Der Start erfolgt erst, wenn ein Verbraucher
  *    `setzeSitzung()` ruft. In Phase 1 ruft niemand auf - das ist gewollt.
  *
+ * 9. DAS INTERVALL IST NICHT EXAKT DER TAKT (seit AP-1.fix1). Im
+ *    Normalbetrieb streut `aktuellesIntervallMs()` bei JEDER Planung neu um
+ *    +-25 % (gleichverteilt, `basis * (0.75 + Math.random() * 0.5)`),
+ *    danach auf mindestens 5000 ms geklemmt. Grund: Ohne Streuung blieben
+ *    gemeinsam gestartete Abfrageschleifen (gemeinsamer Stundenbeginn einer
+ *    Klasse) dauerhaft im selben Sekundenbruchteil-Gleichschritt - gemessen
+ *    in AP-1.7, `docs/messung-klassenpuls.md` Abschnitt 5: 58 Runden, zehn
+ *    Minuten, Zeitband blieb bei 0,5-0,65 s statt sich aufzuloesen. Die
+ *    Streuung wirkt NUR im Normalbetrieb, NICHT zusaetzlich auf die bereits
+ *    verdoppelnden Rueckzugsstufen aus Regel 3 - dort wuerde sie nur addiert,
+ *    ohne den Gleichschritt-Fall zu betreffen.
+ *
  * ---------------------------------------------------------------------------
  * ADRESSBILDUNG
  * ---------------------------------------------------------------------------
@@ -201,6 +218,32 @@
 	 * @type {number}
 	 */
 	var TAKT_RUECKFALL = 10;
+
+	/**
+	 * Untergrenze der Streuung auf das Normalbetrieb-Intervall: 75 % des
+	 * Takts (AP-1.fix1, siehe Regel 9 im Kopfkommentar).
+	 *
+	 * @type {number}
+	 */
+	var STREUUNG_MIN_FAKTOR = 0.75;
+
+	/**
+	 * Breite des Streuungsbereichs oberhalb der Untergrenze. Zusammen mit
+	 * `STREUUNG_MIN_FAKTOR` ergibt sich ein Bereich von 75 % bis 125 % des
+	 * Takts.
+	 *
+	 * @type {number}
+	 */
+	var STREUUNG_SPANNE_FAKTOR = 0.5;
+
+	/**
+	 * Absolute Untergrenze des gestreuten Intervalls in Millisekunden.
+	 * Ohne sie fiele der Mindesttakt von 5 s (5000 ms) nach der Streuung
+	 * auf bis zu 3750 ms - also unter die eigentlich vorgesehene Untergrenze.
+	 *
+	 * @type {number}
+	 */
+	var INTERVALL_MIN_MS = 5000;
 
 	// =====================================================================
 	// ZUSTAND
@@ -393,9 +436,25 @@
 	/**
 	 * Das Intervall bis zur naechsten Abfrage in Millisekunden.
 	 *
-	 * Grundlage ist der Servertakt. Ab dem dritten Fehlschlag in Folge wird
-	 * verdoppelt, mit jedem weiteren erneut, gedeckelt bei
-	 * `RUECKZUG_MAX_MS`.
+	 * Grundlage ist der Servertakt. Im NORMALBETRIEB (kein laufender
+	 * Rueckzug) wird das Intervall bei JEDER Planung neu um +-25 % gestreut
+	 * (AP-1.fix1, Befund in `docs/messung-klassenpuls.md`, Abschnitt 5: Ohne
+	 * Streuung blieben fuenf gleichzeitig gestartete Abfrageschleifen ueber
+	 * zehn Minuten in einem 0,5-0,65 s breiten Zeitband - der beim
+	 * gemeinsamen Stundenbeginn entstehende Gleichschritt einer Klasse loest
+	 * sich von selbst nie wieder auf, weil die Serverantwortzeit auf diesem
+	 * Server kaum streut). Eine einmalige, je Tab fest gezogene Streuung
+	 * wuerde die Schueler nur dauerhaft konstant gegeneinander verschieben
+	 * und den Abstand zwischen ihnen starr lassen - deshalb wird bei jedem
+	 * Aufruf neu gewuerfelt.
+	 *
+	 * Ab dem dritten Fehlschlag in Folge greift STATTDESSEN die
+	 * Rueckzugsverdopplung, mit jedem weiteren Fehlschlag erneut, gedeckelt
+	 * bei `RUECKZUG_MAX_MS`. Die Streuung wird dort BEWUSST NICHT zusaetzlich
+	 * angewendet: Die Verdopplung wirkt bereits genau wie eine Streuung nach
+	 * oben, und der Gleichschritt-Fall aus AP-1.7/AP-1.fix1 betrifft ohnehin
+	 * nur den Normalbetrieb - ein Server, der bereits Fehler wirft, hat kein
+	 * Gleichschritt-Problem mehr, sondern ein Verfuegbarkeitsproblem.
 	 *
 	 * @returns {number} Millisekunden.
 	 */
@@ -405,7 +464,9 @@
 		var wert;
 
 		if (fehlerZaehler < RUECKZUG_AB_FEHLER) {
-			return basis;
+			wert = basis * (STREUUNG_MIN_FAKTOR + Math.random() * STREUUNG_SPANNE_FAKTOR);
+
+			return wert < INTERVALL_MIN_MS ? INTERVALL_MIN_MS : wert;
 		}
 
 		exponent = fehlerZaehler - RUECKZUG_AB_FEHLER + 1;
