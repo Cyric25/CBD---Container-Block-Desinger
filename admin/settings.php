@@ -60,6 +60,13 @@ if (isset($_POST['cbd_save_settings']) && wp_verify_nonce($_POST['cbd_settings_n
     update_option('cbd_default_block_status', sanitize_text_field($_POST['default_block_status']));
     update_option('cbd_enable_block_caching', isset($_POST['enable_block_caching']) ? 1 : 0);
     update_option('cbd_classroom_enabled', isset($_POST['classroom_enabled']) ? 1 : 0);
+
+    // Live-Aktualisierung im Klassenmodus (Sekunden, 0 = aus): Begrenzung und
+    // Standardwert stecken in cbd_sanitize_klassenpuls_takt() (includes/functions.php)
+    // nach dem Vorbild von cbd_sanitize_icon_scale() oben — dieselbe Funktion
+    // liest CBD_Klassenpuls::takt() im Frontend, damit beide nie auseinanderlaufen.
+    update_option('cbd_klassenpuls_takt', cbd_sanitize_klassenpuls_takt($_POST['klassenpuls_takt'] ?? ''));
+
     update_option('cbd_html_annotation', isset($_POST['html_annotation']) ? 1 : 0);
 
     // Icon-Größe: Begrenzung und Standardwert stecken in
@@ -106,6 +113,7 @@ $debug_mode = get_option('cbd_enable_debug_mode', 0);
 $default_status = get_option('cbd_default_block_status', 'draft');
 $enable_caching = get_option('cbd_enable_block_caching', 1);
 $classroom_enabled = get_option('cbd_classroom_enabled', 0);
+$klassenpuls_takt = (int) get_option('cbd_klassenpuls_takt', 10);
 $html_annotation = get_option('cbd_html_annotation', 1);
 $notes_manager_mode = get_option('cbd_personal_notes_manager', 'disabled');
 $notes_manager_pages = get_option('cbd_notes_manager_pages', array());
@@ -308,6 +316,18 @@ $needs_migration = !$is_default_exists || !$classroom_tables_exist || version_co
                             <?php _e('Klassen-System aktivieren', 'container-block-designer'); ?>
                         </label>
                         <p class="description"><?php _e('Ermöglicht Lehrern, Klassen zu erstellen, Notizen zu speichern und behandelte Themen zu markieren', 'container-block-designer'); ?></p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row"><?php esc_html_e('Live-Aktualisierung (Sekunden)', 'container-block-designer'); ?></th>
+                    <td>
+                        <input type="number" name="klassenpuls_takt" min="0" max="300" step="1" value="<?php echo esc_attr($klassenpuls_takt); ?>">
+                        <p class="description">
+                            <?php esc_html_e('Wie oft der Browser der Schülerinnen und Schüler nachfragt, ob etwas freigegeben wurde. Empfohlen: 10. Zulässig: 5 bis 300.', 'container-block-designer'); ?>
+                            <strong><?php esc_html_e('0 schaltet die Live-Aktualisierung ab', 'container-block-designer'); ?></strong>
+                            <?php esc_html_e('– der Klassenmodus verhält sich dann wie zuvor, Freigaben erscheinen erst beim Neuladen.', 'container-block-designer'); ?>
+                        </p>
                     </td>
                 </tr>
 
