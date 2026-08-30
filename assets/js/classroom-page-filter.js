@@ -220,9 +220,26 @@
                     var $container = $(this);
                     var stableId = $container.attr('data-stable-id');
 
-                    // Nur freigegebene, also sichtbare Container tragen
-                    // einen Tafelbild-Abschnitt.
-                    if (!stableId || !$container.is(':visible')) {
+                    // WARUM NICHT `$container.is(':visible')` (dieselbe Falle
+                    // wie Befund B1 aus AP-2.rev, dort in filterContainers()
+                    // behoben durch AP-2.fix1 – hier dieselbe Technik an der
+                    // zweiten Fundstelle, AP-2.fix2): `:visible` prueft die
+                    // gesamte VORFAHRENKETTE, nicht nur diesen Container. Ein
+                    // freigegebener Container in einem zugeklappten Elternteil
+                    // (`.cbd-container.cbd-collapsed .cbd-container-content
+                    // { display: none }`, ebenso Accordion-Panels) galt dadurch
+                    // als „nicht sichtbar" und wurde bei einer Tafelbild-
+                    // Aenderung UEBERSPRUNGEN – dauerhaft, denn dieser Zweig
+                    // laeuft nur bei einer Signaturaenderung, die dann bereits
+                    // vorbei ist. Der Schueler sah ein veraltetes Tafelbild,
+                    // sobald er den Elternteil spaeter aufklappte.
+                    //
+                    // Gefragt wird deshalb der EIGENE Zustand des Elements:
+                    // Dieser Filter versteckt ausschliesslich per
+                    // `$container.hide()`, und das setzt `style="display: none"`
+                    // am Element selbst. Ein Container in einem zugeklappten
+                    // Elternteil ist damit wieder ein ganz normaler Fall.
+                    if (!stableId || $container[0].style.display === 'none') {
                         return;
                     }
 
