@@ -1216,3 +1216,39 @@
 [data-theme="dark"] .cbd-live-hinweis {
     box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
 }
+
+/* --- Zustand „Abschied" (PLAN-Klassenmodus-Live.md, AP-3.2) ---------------
+
+   Dieselbe Leiste, ein anderer Anlass: Die letzte Freigabe dieser gesperrten
+   Seite wurde zurueckgenommen. `verlasseGesperrteSeite()` in
+   classroom-page-filter.js zeigt hier NICHT „Neu freigegeben", sondern einen
+   ganzen Satz, und leitet nach 4 Sekunden zur Klassenuebersicht um. Ein
+   Neuladen waere an dieser Stelle die 403-Hinweisseite des Themes.
+
+   WARUM DIESE ZUSTANDSKLASSE UEBERHAUPT NOETIG IST -- es geht nicht um Optik:
+   Die Grundregel oben traegt `white-space: nowrap` zusammen mit
+   `overflow: hidden` und `text-overflow: ellipsis`. Das ist fuer die zwei
+   kurzen Wortmeldungen aus AP-3.1 genau richtig, verstuemmelt hier aber den
+   Satz: „Diese Seite ist fuer deine Klasse nicht mehr freigegeben. Du wirst
+   zur Kapiteluebersicht zurueckgebracht." waere auf jeder ueblichen Breite
+   nach wenigen Woertern mit „..." abgeschnitten -- ausgerechnet die Meldung,
+   die eine Erklaerung transportiert. Deshalb hier Umbruch statt Kuerzung,
+   eine Lesebreite von hoechstens 32rem und mittige Ausrichtung, damit die
+   zwei bis drei Zeilen als Block stehen.
+
+   KEIN eigenes Auslaufen: Die Leiste bleibt bis zur Umleitung stehen. Das
+   ergibt sich von selbst -- das Entfernen nach 8 Sekunden steht nicht im CSS,
+   sondern im `setTimeout` von `zeigeWiederaufnahmeHinweis()`, und den ruft
+   dieser Pfad gar nicht auf. Es braucht hier also nichts abzuschalten.
+
+   Farben, Position, Schatten, Animation und die Darkmode-Regel erbt der
+   Zustand unveraendert von `.cbd-live-hinweis` -- inklusive der dort
+   begruendeten Entscheidung, ohne ein einziges !important auszukommen. */
+.cbd-live-hinweis--abschied {
+    max-width: min(32rem, calc(100vw - 2rem));
+    padding: 12px 22px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    text-align: center;
+}

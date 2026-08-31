@@ -63,6 +63,16 @@
     var HINWEIS_DAUER_MS = 8000;
 
     /**
+     * Wie lange die Abschiedsmeldung stehen bleibt, bevor der Schüler zur
+     * Klassenübersicht umgeleitet wird (AP-3.2).
+     *
+     * Kürzer als HINWEIS_DAUER_MS, weil die Meldung nicht wieder verschwindet,
+     * sondern von der Umleitung abgelöst wird — sie muss nur lang genug
+     * stehen, um gelesen zu werden.
+     */
+    var ABSCHIED_WARTE_MS = 4000;
+
+    /**
      * localStorage-Vertrag „Klassenmodus" (siehe PLAN-Inhaltsverzeichnisse.md,
      * Abschnitt 4): Schlüssel 'cbd_classroom_toc_collapsed', JSON-Array von
      * Seiten-IDs (als Strings) der zugeklappten Knoten. Identischer Code wie
@@ -106,6 +116,19 @@
          */
         vorgemerkterGrund: null,
         abstandZeitgeber: null,
+
+        /**
+         * Ob gerade eine Freigabeprüfung unterwegs ist bzw. die Umleitung
+         * bereits beschlossen wurde (AP-3.2).
+         *
+         * Beide sperren jeden weiteren Neuladeversuch ab. Nötig, weil das
+         * Zurücknehmen der letzten Freigabe die Signaturen `'seite'` UND
+         * `'tafel'` im selben Durchlauf bewegt: Ohne die Sperre liefe der
+         * zweite Rückruf synchron ins Neuladen, während die Prüfung des ersten
+         * noch läuft — und damit in genau den 403, den AP-3.2 verhindert.
+         */
+        pruefungLaeuft: false,
+        abschiedLaeuft: false,
 
         init: function() {
             // Get URL parameters
@@ -287,6 +310,12 @@
          * REDUZIERTEN Seiten gerufen. Auf normalen Seiten gibt es diesen Pfad
          * nicht — dort blendet AP-2.1/AP-2.2 ein und aus.
          *
+         * **Seit AP-3.2 lädt diese Methode nicht mehr selbst neu.** Sie prüft
+         * nur noch den Mindestabstand und übergibt dann an
+         * `pruefeFreigabeUndLade()`, das erst feststellt, ob die Seite
+         * überhaupt noch freigegeben ist. Das tatsächliche Neuladen steht in
+         * `fuehreNeuladenAus()`.
+         *
          * **Mindestabstand.** Zwischen zwei selbst ausgelösten Neuladungen
          * liegen mindestens MINDESTABSTAND_MS. Der Abstand greift über den
          * Ladevorgang hinweg, weil `stelleWiederaufnahmeHer()` unmittelbar nach
@@ -344,11 +373,261 @@
                 }
             }
 
-            this.letzteNeuladung = jetzt;
+            // Seit AP-3.2 wird hier NICHT mehr direkt neu geladen: Erst muss
+            // feststehen, dass die Seite für diese Klasse überhaupt noch
+            // freigegeben ist. Sonst liefe das Neuladen in die 403-Seite.
+            this.pruefeFreigabeUndLade(grund);
+        },
+
+        /**
+         * Vor dem Neuladen prüfen, ob die Seite für diese Klasse noch
+         * freigegeben ist (AP-3.2).
+         *
+         * **Warum das nötig ist.** Eine gesperrte Seite ist für einen Schüler
+         * nur erreichbar, solange mindestens ein Container für seine Klasse
+         * freigegeben ist: `CBD_Classroom_Gate::seite_freigeben()` öffnet den
+         * Theme-Filter `simple_clean_lehrerseite_freigeben` genau dann, wenn
+         * eine gültige Sitzung vorliegt UND
+         * `CBD_Classroom::behandelte_container()` mindestens einen Treffer
+         * liefert. Nimmt die Lehrperson die LETZTE Freigabe zurück, während
+         * der Schüler auf der Seite steht, liefe das Neuladen aus AP-3.1 in
+         * die 403-Hinweisseite des Themes — für den Schüler ein
+         * Fehlerbildschirm ohne erkennbaren Grund.
+         *
+         * **`treated_containers` ist dieselbe Wahrheit wie das Gate.** Die
+         * Liste in der Antwort von `cbd_get_page_classroom_data` entsteht aus
+         * derselben Tabelle mit demselben Filter (`is_behandelt = 1`) und
+         * derselben Reduktion auf Basis-Kennungen wie
+         * `behandelte_container()`. Leere Liste ⇔ geschlossenes Gate.
+         *
+         * **Die Prüfung gilt für BEIDE Anlässe, nicht nur für 'freigabe'** —
+         * hier weicht die Umsetzung bewusst vom AP-Text ab, der nur
+         * `ladeNeu('freigabe')` nennt. Grund: Das Zurücknehmen einer Freigabe
+         * setzt `is_behandelt = 0` und schreibt dabei `updated_at` mit, bewegt
+         * also **auch** die Signatur `'tafel'`. Beide Rückrufe feuern damit im
+         * selben Durchlauf. Würde nur der Freigabe-Zweig prüfen, liefe der
+         * Tafel-Zweig unmittelbar danach synchron in `reload()` — genau in den
+         * 403, den dieses AP verhindern soll.
+         *
+         * Aus demselben Grund sperrt `pruefungLaeuft` den zweiten Aufruf ab,
+         * solange der erste noch unterwegs ist. Der zweite Anlass geht dabei
+         * nicht verloren: Führt die laufende Prüfung zum Neuladen, bringt das
+         * Neuladen ohnehin beides mit.
+         *
+         * **Kosten:** Diese Abfrage läuft nur, wenn sich eine Signatur
+         * tatsächlich bewegt hat — also einige Male je Unterrichtsstunde, nicht
+         * im Takt des Pulses.
+         *
+         * @param {string} grund 'freigabe' oder 'tafel'.
+         */
+        pruefeFreigabeUndLade: function(grund) {
+            var self = this;
+
+            if (this.pruefungLaeuft || this.abschiedLaeuft) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Freigabeprüfung läuft bereits – zweiter Anlass (' + grund + ') übersprungen.');
+                return;
+            }
+
+            this.pruefungLaeuft = true;
+
+            $.post(cbdClassroomPageData.ajaxUrl, {
+                action: 'cbd_get_page_classroom_data',
+                token: this.token,
+                page_id: this.pageId
+            }, function(response) {
+                var liste;
+                var anzahl = 0;
+                var i;
+
+                self.pruefungLaeuft = false;
+
+                if (!response || !response.success) {
+                    // Kein verlässlicher Befund: NICHT neu laden. Siehe die
+                    // Begründung im fail()-Zweig unten.
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Freigabeprüfung ohne Erfolg – Neuladen unterbleibt.');
+                    return;
+                }
+
+                liste = (response.data && response.data.treated_containers) || [];
+
+                // Leere Kennungen zählen nicht — dieselbe Regel wie in
+                // `CBD_Classroom::behandelte_container()`, das '' aussortiert.
+                // Ohne diesen Abgleich könnte die Liste nicht-leer wirken,
+                // während das Gate sie als leer sieht: genau die Abweichung,
+                // die wieder in den 403 führte.
+                if (liste && typeof liste.length === 'number') {
+                    for (i = 0; i < liste.length; i++) {
+                        if (liste[i] !== null && typeof liste[i] !== 'undefined' && String(liste[i]) !== '') {
+                            anzahl++;
+                        }
+                    }
+                }
+
+                if (anzahl > 0) {
+                    self.fuehreNeuladenAus(grund);
+                } else {
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Keine Freigabe mehr auf dieser Seite – Umleitung statt Neuladen.');
+                    self.verlasseGesperrteSeite();
+                }
+            }).fail(function(xhr, status, error) {
+                self.pruefungLaeuft = false;
+
+                // Bewusst NICHT neu laden. Ohne Befund wäre das Neuladen ein
+                // Glücksspiel mit zwei ungleichen Einsätzen: Der Fehlschlag
+                // „Seite lädt einmal nicht nach" ist mild und beim nächsten
+                // Anlass von selbst behoben; der Fehlschlag „403-Fehlerseite"
+                // ist für den Schüler ein Sackgassenbildschirm. Der
+                // Mindestabstand bleibt dabei ungenutzt (`letzteNeuladung`
+                // wird erst in `fuehreNeuladenAus()` gesetzt), die nächste
+                // echte Änderung darf also sofort wieder prüfen.
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Freigabeprüfung fehlgeschlagen – Neuladen unterbleibt.', error);
+            });
+        },
+
+        /**
+         * Das eigentliche Neuladen ausführen (AP-3.2, herausgezogen aus
+         * `ladeNeu()`).
+         *
+         * **`letzteNeuladung` wird hier gesetzt, nicht schon in `ladeNeu()`.**
+         * Der Mindestabstand darf nur verbrauchen, wer tatsächlich neu lädt —
+         * eine fehlgeschlagene Freigabeprüfung würde sonst die nächsten 60
+         * Sekunden blockieren, ohne dass etwas passiert wäre.
+         *
+         * @param {string} grund 'freigabe' oder 'tafel'.
+         */
+        fuehreNeuladenAus: function(grund) {
+            this.letzteNeuladung = Date.now();
             this.merkeWiederaufnahme(grund);
 
             window.cbdDebug && console.log('CBD Classroom Page Filter: Reduzierte Seite wird neu geladen (' + grund + ').');
             window.location.reload();
+        },
+
+        /**
+         * Die nicht mehr freigegebene Seite verlassen (AP-3.2).
+         *
+         * Zeigt eine dauerhaft stehende Abschiedsmeldung und navigiert nach
+         * ABSCHIED_WARTE_MS zur Klassenübersicht. **Ausdrücklich kein
+         * `window.location.reload()`** — das führte in die 403-Seite, die
+         * dieser ganze Pfad vermeiden soll.
+         *
+         * Getrennt vom Fall „Sitzung abgelaufen": Der `'abgelaufen'`-Rückruf
+         * aus AP-2.1 zeigt weiterhin seine eigene Meldung über `showError()`
+         * und leitet NICHT um. Eine abgelaufene Sitzung und eine
+         * zurückgenommene Freigabe sind verschiedene Dinge und verdienen
+         * verschiedene Texte.
+         */
+        verlasseGesperrteSeite: function() {
+            var ziel;
+            var $hinweis;
+
+            if (this.abschiedLaeuft) {
+                return;
+            }
+
+            this.abschiedLaeuft = true;
+
+            // Einen offenen Wiederaufnahme-Hinweis abräumen: Zwei Leisten
+            // übereinander wären nicht lesbar, und die alte Meldung („Neu
+            // freigegeben") wäre jetzt falsch.
+            $('.cbd-live-hinweis').remove();
+
+            $hinweis = $('<div class="cbd-live-hinweis cbd-live-hinweis--abschied" role="status"></div>')
+                .text('Diese Seite ist für deine Klasse nicht mehr freigegeben. Du wirst zur Kapitelübersicht zurückgebracht.');
+
+            this.haengeHinweisEin($hinweis);
+
+            ziel = this.klassenlistenZiel();
+
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Umleitung in ' + ABSCHIED_WARTE_MS + ' ms nach ' + ziel);
+
+            window.setTimeout(function() {
+                window.location.href = ziel;
+            }, ABSCHIED_WARTE_MS);
+        },
+
+        /**
+         * Wohin der Schüler geht, wenn die Seite nicht mehr freigegeben ist
+         * (AP-3.2).
+         *
+         * **Der „Verlassen"-Knopf der Navigationsleiste ist hierfür NICHT
+         * benutzbar — anders als der AP-Text (Schritt 3) annimmt.** Er ist ein
+         * `<button>` ohne `href`; sein Klick-Handler entfernt `classroom` und
+         * `token` aus der AKTUELLEN Adresse und navigiert dorthin. Auf einer
+         * gesperrten Seite ist das Ergebnis genau die 403-Hinweisseite, die
+         * dieser Pfad vermeiden soll. Er scheidet damit aus, und der AP-Text
+         * ist an dieser Stelle sachlich falsch (in der Übergabenotiz vermerkt).
+         *
+         * Stattdessen eine Kaskade aus drei Quellen, keine davon eine zweite
+         * Fassung der Adressbildung:
+         *
+         * 1. **`document.referrer`**, sofern gleiche Herkunft und nicht die
+         *    eigene Seite. Das ist die einzige Quelle, die die
+         *    Klassen-Seitenliste (`[cbd_classroom]`-Seite) tatsächlich
+         *    erreichen kann — dort kommt der Schüler nach dem Login her. Ihre
+         *    Adresse steht nirgends sonst im Browser: Der Server liefert sie
+         *    weder in `cbd_student_get_data` noch in `cbdClassroomPageData`,
+         *    und `localStorage` hält nur Token und Klassen-ID.
+         * 2. **Der erste Link der Klassen-Navigationsleiste**, der auf eine
+         *    andere Seite zeigt. Diese Adressen baut der Server in
+         *    `ajax_student_get_data()` (`add_query_arg()` mit `classroom` und
+         *    `token`) — sie tragen die Sitzung also bereits. Nicht die
+         *    Seitenliste, aber eine erreichbare Seite derselben Klasse.
+         * 3. **Die Startseite.** Letzter Ausweg.
+         *
+         * @returns {string} Eine navigierbare Adresse, nie leer.
+         */
+        klassenlistenZiel: function() {
+            var referrer = '';
+            var url = null;
+            var treffer = '';
+
+            try {
+                referrer = document.referrer || '';
+            } catch (e) {
+                referrer = '';
+            }
+
+            if (referrer) {
+                try {
+                    url = new URL(referrer, window.location.href);
+                } catch (e) {
+                    url = null;
+                }
+
+                // Fremde Herkunft käme als Umleitungsziel nicht in Frage;
+                // die eigene Seite wäre eine Rückkehr in den 403.
+                if (url
+                    && url.origin === window.location.origin
+                    && url.pathname !== window.location.pathname) {
+                    return url.toString();
+                }
+            }
+
+            $('#cbd-classroom-nav-header a[href]').each(function() {
+                var kandidat;
+
+                if (treffer) {
+                    return;
+                }
+
+                try {
+                    kandidat = new URL($(this).attr('href'), window.location.href);
+                } catch (e) {
+                    return;
+                }
+
+                if (kandidat.origin === window.location.origin
+                    && kandidat.pathname !== window.location.pathname) {
+                    treffer = kandidat.toString();
+                }
+            });
+
+            if (treffer) {
+                return treffer;
+            }
+
+            return window.location.origin + '/';
         },
 
         /**
@@ -471,6 +750,25 @@
 
             $hinweis = $('<div class="cbd-live-hinweis" role="status"></div>').text(text);
 
+            this.haengeHinweisEin($hinweis);
+
+            window.setTimeout(function() {
+                $hinweis.remove();
+            }, HINWEIS_DAUER_MS);
+        },
+
+        /**
+         * Eine Hinweisleiste oben in den Inhaltsbereich hängen (AP-3.2,
+         * herausgezogen aus `zeigeWiederaufnahmeHinweis()`).
+         *
+         * Die Einfügekaskade `.entry-content` → `article` → `body` ist
+         * dieselbe wie in `showWarning()`/`showError()` und steht seit dem
+         * Herausziehen nur noch an EINER Stelle — `verlasseGesperrteSeite()`
+         * benutzt sie mit.
+         *
+         * @param {Object} $hinweis Das einzuhängende jQuery-Element.
+         */
+        haengeHinweisEin: function($hinweis) {
             if ($('.entry-content').length > 0) {
                 $('.entry-content').prepend($hinweis);
             } else if ($('article').length > 0) {
@@ -478,10 +776,6 @@
             } else {
                 $('body').prepend($hinweis);
             }
-
-            window.setTimeout(function() {
-                $hinweis.remove();
-            }, HINWEIS_DAUER_MS);
         },
 
         /**
