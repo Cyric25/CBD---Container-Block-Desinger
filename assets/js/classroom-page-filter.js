@@ -9,6 +9,60 @@
     'use strict';
 
     /**
+     * sessionStorage-Vertrag „Wiederaufnahme" (PLAN-Klassenmodus-Live.md,
+     * AP-3.1) — der Vertrag steht hier, damit er nicht stillschweigend
+     * auseinanderläuft.
+     *
+     * Unter dem Schlüssel `cbd_klassenmodus_wiederaufnahme` liegt genau ein
+     * JSON-Objekt:
+     *
+     *     {
+     *         seite:   <pageId>,                  // Zahl, aus cbdClassroomPageData
+     *         klasse:  <classroomId>,             // String, aus ?classroom=
+     *         scrollY: <Zahl>,                    // window.scrollY vor dem Neuladen
+     *         grund:   'freigabe' | 'tafel',      // was das Neuladen ausgelöst hat
+     *         zeit:    <ms>                       // Date.now() beim Schreiben
+     *     }
+     *
+     * Der Eintrag gilt für GENAU EINEN Ladevorgang. `stelleWiederaufnahmeHer()`
+     * entfernt ihn beim Auslesen **bedingungslos** — auch wenn er nicht zur
+     * Seite passt oder das Parsen wirft. Das ist die wichtigste Regel dieses
+     * Vertrags: Ein liegengebliebener Eintrag darf niemals einen zweiten
+     * Ladevorgang beeinflussen, sonst entstünde eine Seite, die sich immer
+     * wieder selbst neu lädt.
+     *
+     * `sessionStorage` und nicht `localStorage`: Der Eintrag soll den Tab
+     * nicht überleben. Ein zweiter Tab (zweite Sitzung) darf nichts davon
+     * sehen.
+     *
+     * **Jeder Zugriff steht in `try/catch`** — in privaten Fenstern und bei
+     * blockierten Website-Daten wirft schon der reine Zugriff auf
+     * `window.sessionStorage` eine Ausnahme.
+     *
+     * Das Feld `zeit` hat zwei Aufgaben: Es verwirft veraltete Einträge (älter
+     * als `MINDESTABSTAND_MS`) UND es trägt den Mindestabstand über den
+     * Ladevorgang hinweg — eine Instanzvariable allein überlebt
+     * `window.location.reload()` nicht.
+     */
+    var SPEICHER_SCHLUESSEL = 'cbd_klassenmodus_wiederaufnahme';
+
+    /**
+     * Frühestens 60 Sekunden zwischen zwei selbst ausgelösten Neuladungen.
+     *
+     * Zeichnet die Lehrperson fortlaufend an einem Tafelbild, bewegt sich die
+     * Signatur 'tafel' bei jedem Speichern. Ohne Mindestabstand lüde die
+     * reduzierte Seite dem Schüler im Minutentakt unter den Händen weg.
+     * Derselbe Wert dient als Höchstalter eines Wiederaufnahme-Eintrags.
+     */
+    var MINDESTABSTAND_MS = 60000;
+
+    /**
+     * Anzeigedauer des Wiederaufnahme-Hinweises in Millisekunden — dieselben
+     * 8 Sekunden wie bei `cbd-neu-freigegeben` (AP-2.1/AP-2.3).
+     */
+    var HINWEIS_DAUER_MS = 8000;
+
+    /**
      * localStorage-Vertrag „Klassenmodus" (siehe PLAN-Inhaltsverzeichnisse.md,
      * Abschnitt 4): Schlüssel 'cbd_classroom_toc_collapsed', JSON-Array von
      * Seiten-IDs (als Strings) der zugeklappten Knoten. Identischer Code wie
@@ -33,6 +87,26 @@
         pageId: null,
         className: null,
 
+        /**
+         * Zeitpunkt der letzten SELBST ausgelösten Neuladung (ms seit Epoche),
+         * 0 wenn in dieser Sitzung noch keine stattgefunden hat (AP-3.1).
+         *
+         * Die Variable überlebt `window.location.reload()` NICHT — deshalb
+         * füllt `stelleWiederaufnahmeHer()` sie unmittelbar nach dem Laden aus
+         * dem `zeit`-Feld des gerade gelesenen Wiederaufnahme-Objekts. Erst
+         * diese Übergabe lässt den Mindestabstand über den Ladevorgang hinweg
+         * greifen; ein reiner Zähler im Objekt täte das nicht.
+         */
+        letzteNeuladung: 0,
+
+        /**
+         * Grund einer wegen des Mindestabstands zurückgestellten Neuladung
+         * ('freigabe' | 'tafel' | null), plus der Zeitgeber, der sie zum
+         * frühestmöglichen Zeitpunkt nachzieht (AP-3.1).
+         */
+        vorgemerkterGrund: null,
+        abstandZeitgeber: null,
+
         init: function() {
             // Get URL parameters
             var urlParams = new URLSearchParams(window.location.search);
@@ -43,6 +117,16 @@
             if (typeof cbdClassroomPageData !== 'undefined') {
                 this.pageId = cbdClassroomPageData.pageId;
             }
+
+            // Wiederaufnahme BEDINGUNGSLOS und VOR jedem Datenabruf abholen
+            // (AP-3.1) — bewusst noch vor der Parameterprüfung darunter:
+            // Der Aufruf räumt den sessionStorage-Eintrag in jedem Fall ab,
+            // auch wenn er nicht zu dieser Seite gehört. Stünde er hinter
+            // dem `return`, bliebe ein Eintrag auf einer Seite ohne
+            // Klassenparameter liegen. Die Zuordnung prüft die Methode selbst
+            // gegen `this.pageId`/`this.classroomId` (beide oben gesetzt,
+            // notfalls null — dann passt der Eintrag schlicht nicht).
+            this.stelleWiederaufnahmeHer();
 
             // Only run if we have all required parameters
             if (!this.classroomId || !this.token || !this.pageId) {
@@ -85,11 +169,37 @@
 
             // Auf einer serverseitig reduzierten Seite liegt das HTML der noch
             // nicht freigegebenen Container GAR NICHT im DOM – ein Einblenden
-            // wäre wirkungslos. Dort löst Phase 3 des Vorhabens ein gezieltes
-            // Neuladen aus; hier wird deshalb bewusst KEIN 'seite'-Rückruf
-            // registriert.
+            // wäre wirkungslos. `CBD_Classroom_Gate::inhalt_reduzieren()` hängt
+            // auf `the_content` (Priorität 8, vor `do_blocks()` auf 9) und gibt
+            // ausschließlich die freigegebenen Container aus; alles andere wird
+            // verworfen und NIE ausgeliefert.
+            //
+            // Deshalb wird hier seit AP-3.1 gezielt NEU GELADEN statt
+            // nachgeladen. Die Entscheidung ist in Abschnitt 4 von
+            // PLAN-Klassenmodus-Live.md begründet und darf nicht umgedreht
+            // werden: (1) `assets/js/interactivity-store.js` ist ein ESM-Modul
+            // auf @wordpress/interactivity – WordPress bietet keinen Weg,
+            // nachträglich eingefügtes DOM zu hydratisieren; Aufklappen,
+            // Kopieren, Screenshot und PDF wären am eingefügten Block tot.
+            // (2) Der jQuery-Rückfall hilft nicht aus: `interactivity-fallback.js`
+            // steigt in `checkInteractivityAPI()` aus, sobald die Interactivity
+            // API da ist, und seine Pro-Container-Initialisierung
+            // `initializeContainers()` ist eine Closure in `$(document).ready()`.
+            // (3) Die serverseitige Reduktion ist die kanonische Ausgabe.
+            //
+            // Die beiden Zweige schließen sich gegenseitig aus: Auf einer
+            // reduzierten Seite gibt es KEIN `.show()`/`.hide()`, auf einer
+            // normalen Seite KEIN Neuladen.
             if (this.istReduzierteSeite()) {
-                window.cbdDebug && console.log('CBD Classroom Page Filter: Reduzierte Seite – kein seite-Rückruf (Phase 3 übernimmt).');
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Reduzierte Seite – Live-Aktualisierung über gezieltes Neuladen (AP-3.1).');
+
+                window.cbdKlassenpuls.abonniere('seite', function() {
+                    self.ladeNeu('freigabe');
+                });
+
+                window.cbdKlassenpuls.abonniere('tafel', function() {
+                    self.ladeNeu('tafel');
+                });
             } else {
                 window.cbdKlassenpuls.abonniere('seite', function() {
                     self.aktualisiere();
@@ -118,6 +228,260 @@
         istReduzierteSeite: function() {
             return (typeof cbdClassroomPageData !== 'undefined')
                 && !!cbdClassroomPageData.reduziert;
+        },
+
+        /**
+         * Benutzbaren `window.sessionStorage` liefern oder `null` (AP-3.1).
+         *
+         * In privaten Fenstern und bei blockierten Website-Daten wirft
+         * bereits der LESENDE ZUGRIFF AUF DIE EIGENSCHAFT selbst (nicht erst
+         * `getItem()`) eine SecurityError-Ausnahme. Deshalb steht schon der
+         * Eigenschaftszugriff hier in `try/catch` — jeder Aufrufer bekommt
+         * entweder ein benutzbares Objekt oder `null` und muss sich um die
+         * Ausnahme nicht mehr kümmern.
+         */
+        sitzungsSpeicher: function() {
+            try {
+                return window.sessionStorage || null;
+            } catch (e) {
+                return null;
+            }
+        },
+
+        /**
+         * Leseposition und Anlass für den nächsten Ladevorgang merken (AP-3.1).
+         *
+         * Schreibt das im Kopfkommentar dieser Datei beschriebene Objekt unter
+         * SPEICHER_SCHLUESSEL. Schlägt das Schreiben fehl, wird NICHT
+         * abgebrochen: Ohne Eintrag geht lediglich die Leseposition verloren,
+         * das Neuladen selbst wirkt trotzdem — und der Mindestabstand greift
+         * dann über den Ladevorgang hinweg nicht mehr. Genau deshalb ist der
+         * Mindestabstand zusätzlich an den Zeitgeber in `ladeNeu()` gebunden.
+         *
+         * @param {string} grund 'freigabe' oder 'tafel'.
+         */
+        merkeWiederaufnahme: function(grund) {
+            var speicher = this.sitzungsSpeicher();
+
+            if (!speicher) {
+                return;
+            }
+
+            try {
+                speicher.setItem(SPEICHER_SCHLUESSEL, JSON.stringify({
+                    seite: this.pageId,
+                    klasse: this.classroomId,
+                    scrollY: window.scrollY || window.pageYOffset || 0,
+                    grund: grund,
+                    zeit: Date.now()
+                }));
+            } catch (e) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Wiederaufnahme konnte nicht gespeichert werden – Neuladen trotzdem.', e);
+            }
+        },
+
+        /**
+         * Die reduzierte Seite gezielt neu laden (AP-3.1).
+         *
+         * Wird ausschließlich aus den beiden Rückrufen des Taktgebers auf
+         * REDUZIERTEN Seiten gerufen. Auf normalen Seiten gibt es diesen Pfad
+         * nicht — dort blendet AP-2.1/AP-2.2 ein und aus.
+         *
+         * **Mindestabstand.** Zwischen zwei selbst ausgelösten Neuladungen
+         * liegen mindestens MINDESTABSTAND_MS. Der Abstand greift über den
+         * Ladevorgang hinweg, weil `stelleWiederaufnahmeHer()` unmittelbar nach
+         * dem Laden `letzteNeuladung` aus dem `zeit`-Feld des gespeicherten
+         * Objekts füllt — eine Instanzvariable allein überlebt
+         * `window.location.reload()` nicht.
+         *
+         * Wird in der Sperrzeit eine Änderung gemeldet, geht sie NICHT
+         * verloren: Der Grund wird vorgemerkt und ein einzelner Zeitgeber zieht
+         * ihn zum frühestmöglichen Zeitpunkt nach. 'freigabe' verdrängt dabei
+         * ein vorgemerktes 'tafel' (neue Inhalte sind wichtiger als ein
+         * geändertes Tafelbild), umgekehrt nicht.
+         *
+         * @param {string} grund 'freigabe' oder 'tafel'.
+         */
+        ladeNeu: function(grund) {
+            var self = this;
+            var jetzt = Date.now();
+            var verstrichen;
+            var rest;
+
+            if (this.letzteNeuladung) {
+                verstrichen = jetzt - this.letzteNeuladung;
+
+                // Eine zurückgestellte Uhr (verstrichen < 0) gilt bewusst als
+                // „noch nicht abgelaufen" – die vorsichtige Richtung, denn ein
+                // zu frühes Neuladen ist der teurere Fehler.
+                if (verstrichen < MINDESTABSTAND_MS) {
+                    rest = MINDESTABSTAND_MS - verstrichen;
+                    if (rest < 0 || rest > MINDESTABSTAND_MS) {
+                        rest = MINDESTABSTAND_MS;
+                    }
+
+                    if (grund === 'freigabe' || !this.vorgemerkterGrund) {
+                        this.vorgemerkterGrund = grund;
+                    }
+
+                    // Nur EIN Zeitgeber, egal wie viele Änderungen in der
+                    // Sperrzeit gemeldet werden.
+                    if (!this.abstandZeitgeber) {
+                        this.abstandZeitgeber = window.setTimeout(function() {
+                            var nachgezogen = self.vorgemerkterGrund;
+
+                            self.abstandZeitgeber = null;
+                            self.vorgemerkterGrund = null;
+
+                            if (nachgezogen) {
+                                self.ladeNeu(nachgezogen);
+                            }
+                        }, rest + 250);
+                    }
+
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Neuladen (' + grund + ') zurückgestellt, Mindestabstand noch ' + rest + ' ms.');
+                    return;
+                }
+            }
+
+            this.letzteNeuladung = jetzt;
+            this.merkeWiederaufnahme(grund);
+
+            window.cbdDebug && console.log('CBD Classroom Page Filter: Reduzierte Seite wird neu geladen (' + grund + ').');
+            window.location.reload();
+        },
+
+        /**
+         * Nach dem Laden: Leseposition wiederherstellen, Anlass anzeigen und
+         * — am wichtigsten — den Mindestabstand über den Ladevorgang hinweg
+         * verankern (AP-3.1).
+         *
+         * **Der Eintrag wird BEDINGUNGSLOS entfernt**, bevor irgendetwas
+         * geprüft wird: auch wenn er nicht zu dieser Seite gehört, auch wenn
+         * das Parsen wirft, auch wenn er veraltet ist. Ein liegengebliebener
+         * Eintrag darf niemals einen zweiten Ladevorgang beeinflussen — das ist
+         * die einzige wirksame Vorkehrung gegen eine Seite, die sich immer
+         * wieder selbst neu lädt.
+         *
+         * Läuft in `init()` VOR dem ersten Datenabruf und sogar vor der
+         * Parameterprüfung.
+         */
+        stelleWiederaufnahmeHer: function() {
+            var speicher = this.sitzungsSpeicher();
+            var roh = null;
+            var eintrag = null;
+            var alter;
+            var ziel;
+
+            if (!speicher) {
+                return;
+            }
+
+            try {
+                roh = speicher.getItem(SPEICHER_SCHLUESSEL);
+            } catch (e) {
+                roh = null;
+            }
+
+            // Entfernen in JEDEM Fall, auch wenn das Lesen schon geworfen hat.
+            try {
+                speicher.removeItem(SPEICHER_SCHLUESSEL);
+            } catch (e) {}
+
+            if (!roh) {
+                return;
+            }
+
+            try {
+                eintrag = JSON.parse(roh);
+            } catch (e) {
+                eintrag = null;
+            }
+
+            if (!eintrag || typeof eintrag !== 'object') {
+                return;
+            }
+
+            // Gehört der Eintrag zu genau dieser Seite in genau dieser Klasse?
+            // Vergleich über String(), weil `seite` als Zahl und `klasse` als
+            // String aus der URL kommt (JSON behält beide Typen).
+            if (String(eintrag.seite) !== String(this.pageId)
+                || String(eintrag.klasse) !== String(this.classroomId)) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Wiederaufnahme passt nicht zu dieser Seite/Klasse – verworfen.');
+                return;
+            }
+
+            if (typeof eintrag.zeit !== 'number') {
+                return;
+            }
+
+            alter = Date.now() - eintrag.zeit;
+            if (alter < 0 || alter > MINDESTABSTAND_MS) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Wiederaufnahme veraltet (' + alter + ' ms) – verworfen.');
+                return;
+            }
+
+            // DER ANKER GEGEN DIE ENDLOSSCHLEIFE: Ab hier weiß diese frisch
+            // geladene Seite, wann zuletzt neu geladen wurde.
+            this.letzteNeuladung = eintrag.zeit;
+
+            this.zeigeWiederaufnahmeHinweis(eintrag.grund);
+
+            ziel = (typeof eintrag.scrollY === 'number' && isFinite(eintrag.scrollY) && eintrag.scrollY > 0)
+                ? eintrag.scrollY
+                : 0;
+
+            if (ziel > 0) {
+                // Die reduzierte Seite ist serverseitig gerendert; im
+                // Fußbereich steht der Inhalt bereits. Der zweite Versuch nach
+                // 'load' fängt Bilder ab, die die Höhe noch verschieben.
+                try { window.scrollTo(0, ziel); } catch (e) {}
+
+                window.addEventListener('load', function() {
+                    try { window.scrollTo(0, ziel); } catch (e) {}
+                });
+            }
+        },
+
+        /**
+         * Unaufdringliche Leiste einblenden, die den Anlass des Neuladens nennt
+         * (AP-3.1). Verschwindet nach HINWEIS_DAUER_MS von selbst.
+         *
+         * `role="status"` lässt Screenreader den Hinweis ansagen, ohne den
+         * Lesefluss zu unterbrechen (höflichere Stufe als `role="alert"`).
+         *
+         * Die Leiste wird oben in den Inhaltsbereich gehängt (dieselbe
+         * Einfügekaskade wie `showWarning()`), ist per CSS aber
+         * `position: fixed` — **mit Absicht**: Nach dem Neuladen steht der
+         * Schüler wieder an seiner alten Leseposition, unter Umständen
+         * tausende Pixel weit unten. Eine im Textfluss stehende Leiste am
+         * Anfang des Inhalts hätte er nie zu Gesicht bekommen. Nebeneffekt:
+         * Weil sie aus dem Fluss genommen ist, verschiebt sie den Inhalt weder
+         * beim Erscheinen noch beim Verschwinden — die gerade
+         * wiederhergestellte Leseposition bleibt exakt stehen.
+         *
+         * @param {string} grund 'freigabe' oder 'tafel'.
+         */
+        zeigeWiederaufnahmeHinweis: function(grund) {
+            var text = (grund === 'tafel') ? 'Tafelbild aktualisiert' : 'Neu freigegeben';
+            var $hinweis;
+
+            // Nie zwei Leisten übereinander.
+            $('.cbd-live-hinweis').remove();
+
+            $hinweis = $('<div class="cbd-live-hinweis" role="status"></div>').text(text);
+
+            if ($('.entry-content').length > 0) {
+                $('.entry-content').prepend($hinweis);
+            } else if ($('article').length > 0) {
+                $('article').prepend($hinweis);
+            } else {
+                $('body').prepend($hinweis);
+            }
+
+            window.setTimeout(function() {
+                $hinweis.remove();
+            }, HINWEIS_DAUER_MS);
         },
 
         /**
