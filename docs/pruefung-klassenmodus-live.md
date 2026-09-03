@@ -21,6 +21,7 @@ der neue Puls-Endpunkt sie nicht umgeht.
 | `CBD_VERSION` | `3.1.117`, unverändert — **nicht** zum Testen hochgesetzt |
 | Fehlerlog | `…\fos\wp-content\debug.log` |
 | Rückkehrpunkt vor dem Vorhaben | Commit `6b04708` auf `main` |
+| Browser-Werkzeug | **verfügbar** — anders als in `AP-3.1` und `AP-3.2`; vier der fünf dort offengebliebenen Punkte sind damit nachgeholt |
 
 **Hinweis zum CLI-Bootstrap.** Die im Projekt übliche PHP-CLI (`php` im
 Pfad, 8.5.1) kann WordPress **nicht** laden: Ihr fehlt `mysqli`, WordPress
@@ -318,6 +319,77 @@ unabhängig von diesem Vorhaben.
 
 ---
 
+## Nachgeholt: die offenen Browser-Prüfpunkte aus AP-3.1 und AP-3.2
+
+`AP-3.1` und `AP-3.2` sind beide ohne Browser-Werkzeug entstanden und haben
+fünf Punkte offengelassen (Abschnitt 0a des Plans, Punkt 2). In dieser
+Sitzung **stand ein Browser-Werkzeug zur Verfügung**; vier der fünf Punkte
+sind damit erledigt, einer teilweise.
+
+Geprüft wurde die echte gesperrte Seite 3003 als Schülerin der Klasse A. Um
+die Sitzung anonym zu halten — das Browser-Werkzeug teilt sein Profil mit der
+angemeldeten Lehrperson, und die sieht alles unreduziert — wurde der Schalter
+`?ap31anon=1` des in Befund F1 beschriebenen mu-plugins mitgegeben. Ohne ihn
+hätte die Reduktion gar nicht gegriffen.
+
+### Der Zustand der lebenden reduzierten Seite
+
+| Merkmal | Erwartet | Tatsächlich |
+|---|---|---|
+| `cbdClassroomPageData.reduziert` | `true` | **`"1"`** |
+| `cbdClassroomPageData.pageId` | 3003 | **`"3003"`** |
+| Container im DOM | genau die 2 freigegebenen | **genau 2**, `iNVDBCCc` + `R0R7es6h` |
+| `window.cbdKlassenpuls` | vorhanden | **`object`** |
+| `cbdKlassenpulsDaten.takt` | 10 | **`"10"`** |
+| `classroom-frontend.css` geladen | ja | **ja** |
+| Konsolenfehler | keine | **keine** (nur `JQMIGRATE`-Hinweise) |
+
+Damit ist der **dritte** offene Punkt aus AP-3.1 erledigt: Dass der Server
+`reduziert` auf einer gesperrten Seite mit gültiger Sitzung tatsächlich setzt,
+stammte bis jetzt aus AP-1.5 und war nie erneut gemessen.
+
+### Darstellung beider Leisten
+
+Beide Leisten wurden mit **dem Markup der echten Datei** erzeugt (Klassen,
+`role="status"` und Texte wörtlich aus `zeigeWiederaufnahmeHinweis()` bzw.
+`verlasseGesperrteSeite()`) und über dieselbe Einfügekaskade eingehängt:
+
+| Leiste | `position` | `top` | `z-index` | Grund/Farbe | Kasten | Unter der Navigationsleiste? | Vollständig im Sichtfeld? |
+|---|---|---|---|---|---|---|---|
+| `.cbd-live-hinweis` „Neu freigegeben" | `fixed` | 72 px | 1200 | `#2196F3` / weiß | 143 × 36 px | **ja** (Navleiste endet bei 44 px) | **ja** |
+| `.cbd-live-hinweis` „Tafelbild aktualisiert" | `fixed` | 72 px | 1200 | `#2196F3` / weiß | 164 × 36 px | **ja** | **ja** |
+| `.cbd-live-hinweis--abschied` (langer Satz) | `fixed` | 72 px | 1200 | `#2196F3` / weiß | 512 × 63 px, **3 Zeilen** | **ja** | **ja** |
+
+Damit ist der offene Punkt 3 aus AP-3.2 erledigt: **Der dreizeilige
+Abschiedssatz steht bei `top: 4.5rem` vollständig und lesbar unter der
+Navigationsleiste** — 20 px Abstand zu deren Unterkante, mittig, 512 px
+breit, kein Überlauf, keine Überdeckung. Ein Bildschirmfoto wurde
+aufgenommen und bestätigt es auch optisch.
+
+`top: 4.5rem` löst zu 72 px auf; während der 0,4 s langen Einblendung liegt
+die Oberkante animationsbedingt kurz bei 64 px und wandert auf 72 px.
+
+### Dunkelmodus und `prefers-reduced-motion`
+
+| Prüfung | Ergebnis |
+|---|---|
+| Dunkelmodus über `@media (prefers-color-scheme: dark)` | **greift bewusst nicht** — Projektkonvention ist `[data-theme="dark"]` auf `<html>`, und die CSS-Datei sagt das im Kommentar ausdrücklich. Eine Emulation von `prefers-color-scheme: dark` ändert die Seite folgerichtig in keinem Pixel |
+| Dunkelmodus über `[data-theme="dark"]` | **greift** — `box-shadow` wird auf `rgba(0,0,0,0.55)` verstärkt, Hintergrund- und Schriftfarbe bleiben; Position, `z-index` und Umbruch unverändert (72 px, 1200, 3 Zeilen) |
+| `@media (prefers-reduced-motion: reduce)` | **vorhanden und wirksam** — die Regel `.cbd-live-hinweis { animation: none; }` liegt im Dokument und wird für die Leiste gefunden |
+
+### Teilweise erledigt: das Umleitungsziel (`document.referrer`)
+
+Der fünfte offene Punkt — welche Adresse `document.referrer` im echten
+Ablauf trägt — ist **nicht abschließend** geklärt: Ein vollständiger
+Schülerweg (Anmeldung am `[cbd_classroom]`-Shortcode, Durchklicken,
+Rücknahme durch die Lehrperson) war ohne interaktive Lehrer-Anmeldung nicht
+herstellbar. Bei direktem Aufruf ist der Referrer leer.
+
+Gemessen wurde stattdessen **Stufe 2 der Kaskade** — und die trägt nicht.
+Siehe Befund F4.
+
+---
+
 ## Befunde
 
 Kein kritischer Befund. Die Phase ist nicht blockiert.
@@ -368,6 +440,72 @@ hat, ist unbekannt, was sie damit geprüft hat. Für `AP-3.rev` als
 Prozessbefund vorgemerkt, neben der dort bereits notierten
 Scope-Überschreitung.
 
+### F4 — Stufe 2 von `klassenlistenZiel()` kann auf dieser Website nie greifen; die Umleitung landet auf der Startseite (mittel, Anlass für `AP-3.fix1`)
+
+Die Übergabenotiz von `AP-3.2` hält als offenen Punkt fest, sollte
+`document.referrer` in der Praxis fehlen, greife „Stufe (b) und der Schüler
+landet auf einer anderen Kapitelseite statt auf der Liste — funktionsfähig,
+aber nicht das im AP-Text genannte Ziel". **Gemessen trifft das nicht zu:
+Stufe 2 findet auf dieser Website nichts, und die Kaskade fällt auf Stufe 3
+durch.**
+
+Die Kette, Glied für Glied am lebenden Objekt:
+
+1. `klassenlistenZiel()` durchsucht in Stufe 2 ausschließlich
+   `$('#cbd-classroom-nav-header a[href]')` — nur die Kopfleiste.
+2. Deren Liste füllt `buildNavUl(pages)`. Diese Methode übernimmt einen
+   Eintrag nur, wenn er **eine URL trägt und `page.level === 0`** ist.
+3. `cbd_student_get_data` liefert einen Seitenbaum, in dem eine URL nur an
+   Seiten mit freigegebenen Containern hängt; alle Vorfahren kommen als
+   `is_parent_only: true` mit `url: null`. Auf dieser Website sind die
+   Level-0-Seiten durchweg reine Kapiteleltern („Organische Chemie und
+   Biochemie"). **Eine Level-0-Seite mit URL gibt es nicht.**
+4. Folge: `<nav class="cbd-classroom-main-nav"><ul></ul></nav>` — im DOM der
+   lebenden Seite nachgemessen **leer**, 0 `<a>`-Elemente, auch nach
+   vollständigem Laden und mehreren Sekunden Wartezeit.
+5. `klassenlistenZiel()` gibt damit `window.location.origin + '/'` zurück.
+
+Gegengeprobt und ausgeschlossen, dass es an den Testdaten lag: Die Klasse
+erhielt zusätzlich zwei Einträge in `CBD_TABLE_CLASS_PAGES` **und** eine
+Freigabe auf einer zweiten Seite (3002). Die Kopfleiste blieb in beiden
+Fällen leer.
+
+**Die Auswirkung ist mehr als ein verfehltes Ziel:** Die Startseite wird
+**ohne** `classroom` und `token` angesteuert. Der Schüler verliert damit beim
+Verlassen der gesperrten Seite still den Klassenmodus, statt auf der
+Klassen-Seitenliste zu landen.
+
+**Der Weg zur Behebung liegt nahe und ist gemessen:** Die
+Theme-Seitenleiste, die `injectClassroomSidebar()` füllt, enthält auf
+derselben Seite sehr wohl einen brauchbaren Link auf eine andere Seite —
+**und er trägt `?classroom=…&token=…` bereits mit**. Stufe 2 sieht ihn nur
+nicht an, weil ihr Selektor auf `#cbd-classroom-nav-header` beschränkt ist.
+Ein `AP-3.fix1` hätte damit zwei Möglichkeiten: den Selektor um `#sidebar`
+erweitern (klein, rein clientseitig) oder — wie die AP-3.2-Übergabenotiz
+vorschlägt und weiterhin die sauberere Lösung — die Adresse der
+`[cbd_classroom]`-Seite serverseitig in `cbdClassroomPageData` mitliefern.
+
+Nicht in diesem AP behoben: `AP-3.3` ändert keine Produktivdatei.
+
+Nebenbefund, außerhalb dieses Vorhabens: Dass `buildNavUl()` wegen der
+`level === 0`-Bedingung auf dieser Seitenhierarchie **immer** eine leere
+Kopfleiste erzeugt, ist ein Bestandsproblem des Klassenmodus und
+unabhängig von Phase 3 — die Leiste war schon vor diesem Vorhaben leer.
+
+### F5 — Kontrast der Hinweisleiste unter WCAG AA (gering, Barrierefreiheit)
+
+Weiße Schrift auf `#2196F3` ergibt ein Kontrastverhältnis von **3,12:1**.
+WCAG 2.1 AA verlangt für Text dieser Größe (14 px, normale Stärke)
+**4,5:1**; 3:1 genügt nur für großen Text (ab 18,66 px fett bzw. 24 px).
+Die Leiste steht damit knapp unter der Anforderung.
+
+Betrifft beide Zustände, auch die Abschiedsleiste, und ist im Dunkelmodus
+unverändert (dort wird nur der Schatten kräftiger). Behebbar ohne
+Farbwechsel, indem die Schrift auf 18,66 px fett gesetzt oder der
+Hintergrund abgedunkelt wird (`#1565C0` ergäbe rund 5,0:1). Kein
+Sicherheitsbezug, deshalb gering — aber die Leiste ist der einzige Hinweis,
+den ein Schüler auf ein Neuladen bekommt.
+
 ### F3 — Zeilenenden der Serverkopie (gering, kosmetisch)
 
 `includes/class-cbd-klassenpuls.php` liegt auf dem Testserver mit LF, im
@@ -380,25 +518,26 @@ vier übrigen geprüften PHP-Dateien stimmen auch roh überein.
 
 ## Offen geblieben
 
-Die folgenden Punkte aus den Übergabenotizen von `AP-3.1` und `AP-3.2`
-konnten in diesem AP **nicht** nachgeholt werden und bleiben für `AP-3.rev`
-vorgemerkt. Sie betreffen ausnahmslos die **Darstellung** im Browser, nicht
-die Sicherheit der Reduktion:
+Bilanz der fünf Punkte, die Abschnitt 0a des Plans für `AP-3.rev`
+vorgemerkt hatte:
 
-- die tatsächliche Darstellung der Wiederaufnahme-Leiste
-  (`.cbd-live-hinweis`) und der Abschiedsleiste
-  (`.cbd-live-hinweis--abschied`): Farbe, Position, Kontrast, Dunkelmodus,
-  `prefers-reduced-motion`, und ob der dreizeilige Abschiedssatz bei
-  `top: 4.5rem` vollständig unter der Navigationsleiste steht;
-- der Ende-zu-Ende-Weg mit zwei Fenstern (Freigabe durch die Lehrperson →
-  Puls → Neuladen beim Schüler binnen ~10 s);
-- welche Adresse `document.referrer` im echten Ablauf trägt (Stufe 1 der
-  Kaskade in `klassenlistenZiel()`).
+| # | Offener Punkt aus AP-3.1 / AP-3.2 | Stand nach diesem AP |
+|---|---|---|
+| 1 | Smoke-Test am Quelltext einer echten reduzierten Seite | **erledigt** — Strang 4b: 2 von 22 Containern im HTML, die übrigen 20 nicht vorhanden |
+| 2 | Ein Neuladen ohne AP-3.2 liefe wirklich in HTTP 403 | **erledigt** — Strang 4e, am lebenden Server ausgelöst |
+| 3 | Darstellung beider Leisten (Farbe, Position, Dunkelmodus, `prefers-reduced-motion`, dreizeiliger Abschiedssatz) | **erledigt** — eigener Abschnitt oben; dazu zwei neue Befunde (F4, F5) |
+| 4 | Welche Adresse `document.referrer` im echten Ablauf trägt | **teilweise** — Stufe 1 nicht im vollen Schülerweg messbar (keine interaktive Lehrer-Anmeldung); Stufe 2 dagegen gemessen und **untauglich**, siehe F4 |
+| 5 | Ende-zu-Ende-Weg mit zwei Fenstern (Freigabe → Puls → Neuladen binnen ~10 s) | **offen** — braucht eine angemeldete Lehrperson in einem zweiten Fenster |
 
-Zwei der ursprünglich fünf offenen Punkte sind durch diesen Bericht
-**erledigt**: der Smoke-Test am Quelltext einer echten reduzierten Seite
-(Strang 4b) und der Nachweis, dass ein Neuladen ohne AP-3.2 in HTTP 403
-liefe (Strang 4e).
+Für `AP-3.rev` bleiben damit **zwei** Punkte, beide an derselben
+Voraussetzung hängend (interaktive Lehrer-Anmeldung): der Ende-zu-Ende-Weg
+mit zwei Fenstern und die Frage, welchen Referrer der echte Schülerweg
+trägt. Keiner der beiden betrifft die Sicherheit der Reduktion; beide
+betreffen den Komfortpfad.
+
+Zusätzlich für `AP-3.rev` vorgemerkt: die Löschung des mu-plugins aus
+Befund F1, der Prozessbefund F2 und die Entscheidung über ein `AP-3.fix1`
+zu Befund F4.
 
 ---
 
@@ -408,11 +547,23 @@ liefe (Strang 4e).
 |---|---|
 | Testserver-PHP nach dem Vorzustands-Abruf | aus der Sicherung wiederhergestellt, alle fünf Dateien per SHA-256 gegengeprüft |
 | `cbd_klassenpuls_takt` | zurück auf den Ausgangswert `10` |
-| Zeichnungsdatensätze der Klassen A und B | gelöscht (Seite 3003 wieder mit 0 Datensätzen, wie vorgefunden) |
-| Klassen 29 und 30 | gelöscht |
+| Zeichnungsdatensätze der Klassen A und B | 4 gelöscht (Seite 3003 wieder mit 0 Datensätzen, wie vorgefunden) |
+| Einträge in `CBD_TABLE_CLASS_PAGES` | 2 gelöscht (wieder 137, wie vorgefunden) |
+| Klassen 29 und 30 | gelöscht (wieder 7 Klassen, wie vorgefunden) |
 | Sitzungs-Transients | gelöscht (Server wieder ohne aktive Klassensitzung) |
-| `_simple_clean_nur_lehrpersonen` auf Seite 3003 | entfernt (Meta existierte vorher nicht) |
+| `_simple_clean_nur_lehrpersonen` auf Seite 3003 | entfernt (Meta existierte vorher nicht; Server wieder mit 0 gesperrten Seiten) |
 | HTML-Vergleichsdateien | **nicht** ins Repository aufgenommen — sie enthalten Seiteninhalte — und nach dem Test gelöscht |
+
+Jeder Punkt wurde nach dem Aufräumen gegen die Sicherungsdatei
+gegengeprüft; alle sechs Kennzahlen stimmen mit dem vorgefundenen Zustand
+überein. Die Serverkopie des Plugins stimmt in allen acht geprüften Dateien
+wieder inhaltlich mit dem Repository überein.
+
+Weil die Zeichnungsdatensätze restlos gelöscht wurden, war ein
+Zurücksetzen von `updated_at` nicht nötig — die Zeilen, deren Zeitstempel
+die Umschaltversuche bewegt hatten, existieren nicht mehr.
+
+**Nicht aufgeräumt, weil fremdes Eigentum:** das mu-plugin aus Befund F1.
 
 ---
 
@@ -431,8 +582,21 @@ unvollständige, fremde oder erfundene Legitimation mit derselben 87 Byte
 langen Ablehnung und demselben Status, und seine Erfolgsantwort besteht aus
 vier gekürzten Prüfsummen über Zahlen und einer Betriebseinstellung.
 
-Ein Befund mittleren Schweregrads (F1) betrifft ausschließlich die
-**Testumgebung**: ein stehengebliebenes mu-plugin mit einem
-Authentifizierungs-Schalter. Es kann die Produktion nicht erreichen, hat auf
-die Ergebnisse dieses Berichts nachweislich nicht gewirkt, und sollte
-gelöscht werden.
+**Zwei Befunde mittleren Schweregrads, keiner davon an der Grenze selbst:**
+
+- **F1** betrifft ausschließlich die **Testumgebung**: ein
+  stehengebliebenes mu-plugin mit einem Authentifizierungs-Schalter. Es kann
+  die Produktion nicht erreichen, hat auf die Ergebnisse dieses Berichts
+  nachweislich nicht gewirkt, und sollte gelöscht werden.
+- **F4** betrifft den **Komfortpfad** von AP-3.2: Stufe 2 der
+  Umleitungskaskade kann auf dieser Website nie greifen, die Umleitung
+  landet deshalb auf der Startseite und ohne Sitzungsparameter statt auf der
+  Klassen-Seitenliste. Die Schutzwirkung von AP-3.2 bleibt davon
+  unberührt — der Schüler läuft nicht in HTTP 403, er landet nur an einer
+  unschöneren Stelle. Anlass für ein `AP-3.fix1`.
+
+Drei geringe Befunde (F2 Prozess, F3 kosmetisch, F5 Kontrast) sind
+dokumentiert.
+
+**Die Grenze selbst — was ein Schüler auf einer Lösungsseite im HTML
+vorfindet — ist unverändert und dicht.**
