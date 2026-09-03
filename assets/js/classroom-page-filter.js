@@ -568,12 +568,42 @@
          *    Adresse steht nirgends sonst im Browser: Der Server liefert sie
          *    weder in `cbd_student_get_data` noch in `cbdClassroomPageData`,
          *    und `localStorage` hält nur Token und Klassen-ID.
-         * 2. **Der erste Link der Klassen-Navigationsleiste**, der auf eine
-         *    andere Seite zeigt. Diese Adressen baut der Server in
-         *    `ajax_student_get_data()` (`add_query_arg()` mit `classroom` und
-         *    `token`) — sie tragen die Sitzung also bereits. Nicht die
-         *    Seitenliste, aber eine erreichbare Seite derselben Klasse.
-         * 3. **Die Startseite.** Letzter Ausweg.
+         * 2. **Der erste Sitzungslink der Klassen-Seitenleiste** (`#sidebar`),
+         *    ersatzweise der Klassen-Navigationsleiste
+         *    (`#cbd-classroom-nav-header`) — siehe `sitzungsLinkAus()` und
+         *    den Absatz „AP-3.fix1" unten.
+         * 3. **Die Startseite.** Letzter Ausweg, und der einzige Weg dieser
+         *    Kaskade, der `classroom` und `token` NICHT mitnimmt: Der Schüler
+         *    verliert dort still seinen Klassenmodus und muss sich über die
+         *    `[cbd_classroom]`-Seite neu anmelden. Deshalb wirklich nur
+         *    Notausgang — jede neue Quelle gehört VOR diese Stufe, nicht
+         *    dahinter.
+         *
+         * **AP-3.fix1: Stufe 2 wurde ersetzt (Befund F4 aus AP-3.3).** Die
+         * ursprüngliche Fassung sah ausschließlich
+         * `#cbd-classroom-nav-header a[href]` an. Diese Liste füllt
+         * `buildNavUl()`, und die übernimmt einen Eintrag nur bei
+         * `page.url && page.level === 0`. `ajax_student_get_data()` hängt eine
+         * URL aber ausschließlich an Seiten MIT Freigaben, während die
+         * Level-0-Seiten dieser Website reine Kapiteleltern mit `url: null`
+         * sind — **die Kopfleiste bleibt damit strukturell leer**, im DOM der
+         * lebenden Seite nachgemessen (AP-3.3: 0 Links; AP-3.fix1 auf einer
+         * Level-0-Testseite: 1 Link, aber der zeigt auf die eigene Seite und
+         * fällt durch die Pfadprüfung). Die Kaskade landete deshalb immer auf
+         * Stufe 3, also auf der Startseite **ohne `classroom` und `token`**.
+         *
+         * Gemessen wurde stattdessen (AP-3.fix1, echte reduzierte Seite,
+         * anonyme Schülersitzung): `#sidebar a[href]` liefert die von
+         * `injectClassroomSidebar()` eingesetzte **vollständige** Hierarchie —
+         * 2 Links, **beide** mit `classroom` und `token`, einer davon auf eine
+         * andere Seite derselben Klasse. Die übrigen 10 Links der Seite
+         * (Theme-Menü, Titel, Glossar, `wp-login.php`) tragen keine
+         * Sitzungsparameter und sind als Ziel damit ungeeignet.
+         *
+         * **Der „Verlassen"-Knopf bleibt ausdrücklich kein Kandidat** (siehe
+         * oben) — wer diese Stelle künftig umbaut, prüfe zuerst im DOM, welche
+         * Links wirklich `classroom` und `token` führen, statt es anzunehmen.
+         * Genau diese Annahme hat F4 erzeugt.
          *
          * @returns {string} Eine navigierbare Adresse, nie leer.
          */
@@ -604,7 +634,54 @@
                 }
             }
 
-            $('#cbd-classroom-nav-header a[href]').each(function() {
+            // Stufe 2 (AP-3.fix1): erst die Seitenleiste — sie trägt die
+            // vollständige Hierarchie und ist die im DOM nachgemessene, hier
+            // tatsächlich gefüllte Quelle. Die Kopfleiste bleibt als zweiter
+            // Versuch stehen: Sie kostet nichts und griffe auf einer
+            // Seitenhierarchie, deren Level-0-Seiten eigene Freigaben haben.
+            treffer = this.sitzungsLinkAus('#sidebar');
+
+            if (!treffer) {
+                treffer = this.sitzungsLinkAus('#cbd-classroom-nav-header');
+            }
+
+            if (treffer) {
+                return treffer;
+            }
+
+            return window.location.origin + '/';
+        },
+
+        /**
+         * Ersten brauchbaren Sitzungslink unterhalb von `wurzel` finden
+         * (AP-3.fix1, Stufe 2 von `klassenlistenZiel()`).
+         *
+         * Brauchbar heißt: alle vier Bedingungen zugleich —
+         *
+         * 1. **gleiche Herkunft** wie die aktuelle Seite. Eine Umleitung auf
+         *    eine fremde Herkunft wäre ein Sicherheitsbefund, nicht bloß ein
+         *    falsches Ziel; die Prüfung ist zeichengleich mit der von Stufe 1.
+         * 2. **anderer Pfad** als die aktuelle Seite — die eigene Seite ist
+         *    gerade nicht mehr freigegeben, dorthin zurück wäre der 403, den
+         *    dieser ganze Pfad vermeidet.
+         * 3. `classroom` **und** `token` stehen in der Abfragezeichenfolge.
+         *    Diese Adressen baut der Server in `ajax_student_get_data()` per
+         *    `add_query_arg()`; es entsteht also **keine zweite Fassung der
+         *    Adressbildung**. Ohne diese Bedingung könnte ein Link der
+         *    gewöhnlichen Theme-Seitenleiste gewinnen — den setzt
+         *    `injectClassroomSidebar()` nur dann durch die Klassen-Hierarchie,
+         *    wenn `cbd_student_get_data` geantwortet hat. Der Schüler landete
+         *    sonst ohne Sitzung auf einer Kapitelseite, also so schlecht wie
+         *    auf der Startseite.
+         * 4. Die Adresse muss überhaupt parsbar sein (`new URL` wirft sonst).
+         *
+         * @param {string} wurzel Selektor des Behälters, z. B. '#sidebar'.
+         * @returns {string} Erste passende Adresse oder '' (keine gefunden).
+         */
+        sitzungsLinkAus: function(wurzel) {
+            var treffer = '';
+
+            $(wurzel + ' a[href]').each(function() {
                 var kandidat;
 
                 if (treffer) {
@@ -617,17 +694,23 @@
                     return;
                 }
 
-                if (kandidat.origin === window.location.origin
-                    && kandidat.pathname !== window.location.pathname) {
-                    treffer = kandidat.toString();
+                if (kandidat.origin !== window.location.origin) {
+                    return;
                 }
+
+                if (kandidat.pathname === window.location.pathname) {
+                    return;
+                }
+
+                if (!kandidat.searchParams.get('classroom')
+                    || !kandidat.searchParams.get('token')) {
+                    return;
+                }
+
+                treffer = kandidat.toString();
             });
 
-            if (treffer) {
-                return treffer;
-            }
-
-            return window.location.origin + '/';
+            return treffer;
         },
 
         /**
