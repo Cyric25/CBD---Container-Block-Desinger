@@ -112,8 +112,38 @@
  * und faellt nur ohne dieses Paar auf die Abfragezeichenfolge der Seite
  * zurueck (Details im Docblock von `sitzungAusTrigger()`).
  *
+ * ---------------------------------------------------------------------------
+ * WAS AP-4.2 („KLASSENMODUS-LIVE", PHASE 4) ERGAENZT HAT
+ * ---------------------------------------------------------------------------
+ *
+ * Die offene Wand aktualisiert sich jetzt von selbst. Sie haengt sich dafuer
+ * an den Taktgeber aus Phase 1 (`window.cbdKlassenpuls`, assets/js/
+ * klassenpuls.js) und abonniert die Signatur `'fragenwand'`. Bewegt sie sich,
+ * wird die Liste neu geholt - **nur solange das Modal offen ist**. Ist es zu,
+ * wird nichts nachgeladen; `close()` meldet sich beim Taktgeber ab, haelt ihn
+ * aber NICHT an: Auf einer Klassenseite haengen andere Verbraucher daran
+ * (`classroom-page-filter.js`, Phase 2/3).
+ *
+ * DER HEIKLE TEIL IST NICHT DAS NACHLADEN, SONDERN DAS NICHT-ZERSTOEREN. Ein
+ * Neuzeichnen zur falschen Zeit verwirft eine halb getippte Frage oder eine
+ * laufende Bearbeitung. `darfNeuZeichnen()` prueft deshalb VIER Bedingungen
+ * und zeichnet nur bei allen vier neu; sonst wird `nachzeichnenAusstehend`
+ * gesetzt und die Aktualisierung nachgeholt, sobald der Grund entfaellt
+ * (`holeNachzeichnenNach()`). Die Fehlerrichtung ist Absicht: **Im Zweifel
+ * nicht neu zeichnen** - eine um zehn Sekunden verzoegerte Frage ist harmlos,
+ * eine verlorene Eingabe nicht.
+ *
+ * `setzeSitzung()` wird mit denselben Werten gerufen, die `classroom-page-
+ * filter.js` dem Taktgeber auf einer Klassenseite bereits mitgeteilt hat. Das
+ * ist unschaedlich (Regel 2 im Kopfkommentar von klassenpuls.js: eine bereits
+ * gesetzte `page_id` bleibt unangetastet). `setzeSeite()` wird BEWUSST NICHT
+ * gerufen - die Fragenwand ist klassenweit und hat keinen Seitenbezug; ein
+ * Aufruf mit 0 wuerde den Abonnenten von `seite`/`tafel` still die Datenquelle
+ * wegnehmen.
+ *
  * @package ContainerBlockDesigner
- * @since Vorhaben „Fragenwand", Phase 3 (AP-3.2), erweitert in AP-3.3
+ * @since Vorhaben „Fragenwand", Phase 3 (AP-3.2), erweitert in AP-3.3;
+ *        Live-Aktualisierung aus Vorhaben „Klassenmodus-Live", AP-4.2
  */
 (function (window, document) {
 	'use strict';
@@ -321,6 +351,66 @@
 	 */
 	var abrufZaehler = 0;
 
+	/**
+	 * Ist das Modal gerade mit einer LISTE offen?
+	 *
+	 * Gesetzt in `open()`, geloescht in `close()` - und ebenfalls geloescht in
+	 * `openMitMeldung()`: Ein Modal, das nur einen Satz zeigt („Keine aktive
+	 * Klassensitzung."), hat keine Liste, die sich nachladen liesse. Der Merker
+	 * heisst deshalb nicht „ueberhaupt etwas offen", sondern „es gibt etwas zu
+	 * aktualisieren".
+	 *
+	 * @since AP-4.2
+	 */
+	var modalOffen = false;
+
+	/**
+	 * Die Sitzung, mit der die offene Wand geladen wurde: `{classroom, token}`
+	 * oder `null`.
+	 *
+	 * Gelesen aus derselben Quelle wie die Abrufadresse (`sitzungsAbfrage()`),
+	 * damit ein Nachladen dieselbe Adresse bildet - und damit der Taktgeber
+	 * dieselbe Sitzung sieht wie der Lese-Endpunkt.
+	 *
+	 * @since AP-4.2
+	 */
+	var letzteSitzung = null;
+
+	/**
+	 * Der Ausloeser, mit dem die offene Wand geladen wurde.
+	 *
+	 * NICHT dasselbe wie `schuelerAusloeser` (der ist nur gesetzt, wenn der
+	 * Schueler auch schreiben darf) und nicht dasselbe wie `ausloeser` (der
+	 * dient der Fokusrueckgabe). Gebraucht, weil `baueAbrufUrl()` beim
+	 * Nachladen dieselben `data-classroom`/`data-token` lesen koennen muss wie
+	 * beim ersten Laden - sonst ginge der Nachschlag auf der
+	 * `[cbd_classroom]`-Seite ohne Sitzungsangaben raus.
+	 *
+	 * @since AP-4.2
+	 */
+	var letzterTrigger = null;
+
+	/**
+	 * Die Abmeldefunktion des `'fragenwand'`-Abonnements, sonst `null`.
+	 *
+	 * @since AP-4.2
+	 */
+	var abmelder = null;
+
+	/**
+	 * Wurde eine Aktualisierung zurueckgestellt, weil gerade nicht neu
+	 * gezeichnet werden durfte?
+	 *
+	 * Der Taktgeber meldet eine Signaturaenderung genau EINMAL (Regel 1 in
+	 * klassenpuls.js: gemeldet wird nur, was sich gegenueber dem zuletzt
+	 * gesehenen Wert unterscheidet). Ohne diesen Merker waere eine waehrend
+	 * einer Eingabe eingetroffene Aenderung fuer immer verloren - sie kaeme
+	 * erst mit der naechsten Aenderung wieder.
+	 *
+	 * @since AP-4.2
+	 */
+	var nachzeichnenAusstehend = false;
+
 	// =====================================================================
 	// KLEINE HELFER
 	// =====================================================================
@@ -355,7 +445,8 @@
 	 * Warnung auf der Konsole.
 	 *
 	 * `console.warn` bleibt laut Hausstil ungegatet; nur `console.log` gehoert
-	 * hinter `window.cbdDebug`. In dieser Datei gibt es kein `console.log`.
+	 * hinter `window.cbdDebug` - dafuer gibt es `melde()` darunter (seit
+	 * AP-4.2; bis dahin gab es in dieser Datei gar kein `console.log`).
 	 *
 	 * @param {string} text
 	 * @returns {void}
@@ -364,6 +455,30 @@
 		if (window.console && 'function' === typeof window.console.warn) {
 			window.console.warn('CBD Fragenwand: ' + text);
 		}
+	}
+
+	/**
+	 * Eine Meldung ausgeben, aber nur bei eingeschaltetem Debug-Modus.
+	 *
+	 * Hausregel des Plugins (CLAUDE.md, „Debugging-Konventionen"):
+	 * `console.log` haengt hinter `window.cbdDebug`, `console.warn`/`.error`
+	 * bleiben immer aktiv.
+	 *
+	 * GEBRAUCHT WIRD SIE FUER DEN NACHSCHLAG: Ein fehlgeschlagener oder
+	 * zurueckgestellter Nachschlag darf keine sichtbare Fehlerbox erzeugen
+	 * (die Wand soll nicht bei jedem Netzwerkholpern aufblitzen), aber
+	 * nachvollziehbar bleiben.
+	 *
+	 * @since AP-4.2
+	 * @param {string} text
+	 * @returns {void}
+	 */
+	function melde(text) {
+		if (!window.cbdDebug || !window.console || 'function' !== typeof window.console.log) {
+			return;
+		}
+
+		window.console.log('CBD Fragenwand: ' + text);
 	}
 
 	/**
@@ -639,6 +754,30 @@
 			return '';
 		}
 
+		var such = sitzungsAbfrage(trigger);
+
+		if ('' === such) {
+			return basis;
+		}
+
+		return basis + ((-1 === basis.indexOf('?')) ? '?' : '&') + such;
+	}
+
+	/**
+	 * Die Abfragezeichenfolge, die eine Sitzung beschreibt - ohne fuehrendes `?`.
+	 *
+	 * HERAUSGELOEST AUS `baueAbrufUrl()` IN AP-4.2, mit unveraendertem Inhalt.
+	 * Grund: `sitzungsWerte()` darunter braucht dieselbe Vorrangregel
+	 * (Datenattribute des Ausloesers vor Abfragezeichenfolge der Seite), um
+	 * dem Taktgeber die Sitzung mitzuteilen. Zwei Fassungen derselben Regel
+	 * liefen frueher oder spaeter auseinander - dann redeten Lese-Endpunkt und
+	 * Taktgeber ueber verschiedene Klassen.
+	 *
+	 * @since AP-4.2 (Inhalt: Hotfix „Fragenwand in Klassenlisten")
+	 * @param {Element} [trigger]
+	 * @returns {string} leer, wenn nichts dasteht
+	 */
+	function sitzungsAbfrage(trigger) {
 		var such = sitzungAusTrigger(trigger);
 
 		if ('' === such) {
@@ -649,11 +788,81 @@
 			}
 		}
 
+		return such;
+	}
+
+	/**
+	 * Klasse und Token als Einzelwerte - fuer `cbdKlassenpuls.setzeSitzung()`.
+	 *
+	 * DER TAKTGEBER BRAUCHT ZWEI WERTE, KEINE ADRESSE. Deshalb wird die
+	 * Abfragezeichenfolge aus `sitzungsAbfrage()` hier zerlegt, statt
+	 * irgendwo eine zweite Adressbildung zu schreiben.
+	 *
+	 * BEIDE WERTE MUESSEN DA SEIN, sonst `null` - dieselbe Regel wie in
+	 * `sitzungAusTrigger()`: Eine halbe Angabe waere schlechter als gar keine.
+	 * Ohne Sitzung wird nicht abonniert, und die Wand verhaelt sich exakt wie
+	 * vor AP-4.2.
+	 *
+	 * `URLSearchParams` wird bewusst nicht benutzt (Hausstil ES5, und die
+	 * Datei laeuft ohne Build-Schritt in dem, was der Schueler mitbringt).
+	 *
+	 * @since AP-4.2
+	 * @param {Element} [trigger]
+	 * @returns {?Object} `{classroom, token}` oder `null`
+	 */
+	function sitzungsWerte(trigger) {
+		var such = sitzungsAbfrage(trigger);
+		var klasse = '';
+		var token = '';
+		var paare;
+		var trennstelle;
+		var name;
+		var wert;
+		var i;
+
 		if ('' === such) {
-			return basis;
+			return null;
 		}
 
-		return basis + ((-1 === basis.indexOf('?')) ? '?' : '&') + such;
+		paare = such.split('&');
+
+		for (i = 0; i < paare.length; i++) {
+			trennstelle = paare[i].indexOf('=');
+
+			if (trennstelle < 1) {
+				continue;
+			}
+
+			name = paare[i].substring(0, trennstelle);
+
+			if ('classroom' !== name && 'token' !== name) {
+				continue;
+			}
+
+			try {
+				// `+` steht in einer Abfragezeichenfolge fuer ein Leerzeichen;
+				// `decodeURIComponent` allein wandelt es nicht.
+				wert = decodeURIComponent(
+					paare[i].substring(trennstelle + 1).replace(/\+/g, ' ')
+				);
+			} catch (fehler) {
+				// Kaputte Prozentfolge: diesen Wert ueberspringen, nicht die
+				// ganze Sitzung verwerfen.
+				continue;
+			}
+
+			if ('classroom' === name) {
+				klasse = wert;
+			} else {
+				token = wert;
+			}
+		}
+
+		if ('' === klasse || '' === token) {
+			return null;
+		}
+
+		return { classroom: klasse, token: token };
 	}
 
 	// =====================================================================
@@ -971,6 +1180,13 @@
 			}
 		});
 
+		// AP-4.2: Verlaesst der Fokus das Feld, entfaellt womoeglich der Grund,
+		// aus dem eine Aktualisierung zurueckgestellt wurde (Bedingung 2 und 4
+		// von `darfNeuZeichnen()`). Der Handler haengt am Feld selbst, das bei
+		// jedem Neuaufbau der Liste neu entsteht - er kann sich deshalb nicht
+		// verdoppeln.
+		feld.addEventListener('blur', holeNachzeichnenNach);
+
 		bereich.appendChild(feld);
 		bereich.appendChild(knopf);
 
@@ -1037,6 +1253,12 @@
 			}
 		});
 
+		// AP-4.2: siehe `baueNeuBereich()` - dieselbe Nachhol-Bruecke fuer den
+		// Schuelerweg. Sie ist hier der wichtigere der beiden Faelle: Genau
+		// hier steht die halb getippte Frage, die ein Neuzeichnen verwerfen
+		// wuerde.
+		feld.addEventListener('blur', holeNachzeichnenNach);
+
 		zeile.appendChild(feld);
 		zeile.appendChild(knopf);
 
@@ -1092,6 +1314,13 @@
 			// Kette macht es zusaetzlich unmoeglich).
 			koerper.appendChild(baueSchuelerNeuBereich());
 		}
+
+		// AP-4.2: JEDER vollstaendige Neuaufbau erfuellt einen ausstehenden
+		// Nachschlag - egal, wer ihn ausgeloest hat. Das deckt den Regelfall
+		// „Nachholen" mit ab: Ein erfolgreiches Absenden laedt die Liste
+		// ohnehin neu (`ladeListeNeu()` bzw. `ladeSchuelerwand()`), die
+		// zwischenzeitlich eingetroffene Aenderung ist damit bereits drin.
+		nachzeichnenAusstehend = false;
 
 		erfuelleFokusWunsch();
 	}
@@ -1237,6 +1466,16 @@
 			? (optionen.trigger || null)
 			: null;
 
+		// ---- AP-4.2: Live-Aktualisierung anmelden ---------------------------
+		// `letzterTrigger` faellt auf `ausloeser` zurueck, weil der Lehrerweg
+		// (`ladeLehrerwand()`) keinen `trigger` in den Optionen mitgibt - dort
+		// hat `oeffneAusTrigger()`/`lehrerFlow()` ihn aber bereits gesetzt.
+		modalOffen = true;
+		nachzeichnenAusstehend = false;
+		letzterTrigger = optionen.trigger || ausloeser || null;
+		letzteSitzung = sitzungsWerte(letzterTrigger);
+		meldeAnBeimPuls();
+
 		if (dialog) {
 			// Ein Haken, den die Lehrperson auch bedienen darf, ist ein
 			// anderer Zustand als eine reine Leseansicht - AP-3.4 soll beides
@@ -1269,6 +1508,16 @@
 		// gehoert kein Formular, und `setzeMeldung()` baut ohnehin keins.
 		schuelerDarfFragen = false;
 		schuelerAusloeser = null;
+
+		// AP-4.2: Eine Meldung ist keine Liste - es gibt nichts nachzuladen.
+		// Abgemeldet wird trotzdem, falls vorher eine Wand offen war: sonst
+		// liefe der Rueckruf weiter und schriebe in ein Modal, das gerade
+		// etwas ganz anderes zeigt.
+		modalOffen = false;
+		nachzeichnenAusstehend = false;
+		letzteSitzung = null;
+		letzterTrigger = null;
+		meldeAbVomPuls();
 
 		if (dialog) {
 			dialog.setAttribute('data-modus', 'meldung');
@@ -1372,6 +1621,17 @@
 		schuelerAusloeser = null;
 		fokusWunsch = null;
 		schreibtGerade = false;
+
+		// AP-4.2: Bei geschlossenem Modal wird nicht nachgeladen - es gaebe
+		// nichts anzuzeigen. Abgemeldet wird deshalb sauber; DER TAKTGEBER
+		// SELBST WIRD NICHT ANGEHALTEN (`halte()` steht hier bewusst nicht):
+		// Auf einer Klassenseite haengen andere Verbraucher daran, die sonst
+		// still verstummten.
+		meldeAbVomPuls();
+		modalOffen = false;
+		nachzeichnenAusstehend = false;
+		letzteSitzung = null;
+		letzterTrigger = null;
 
 		document.body.style.overflow = overflowVorher;
 
@@ -2100,6 +2360,13 @@
 				aktionen.hidden = false;
 			}
 			eintrag.removeAttribute('data-bearbeitung');
+
+			// AP-4.2: Mit dem Attribut faellt Bedingung 3 von
+			// `darfNeuZeichnen()` weg - eine waehrend der Bearbeitung
+			// zurueckgestellte Aktualisierung wird jetzt nachgeholt. Der
+			// erfolgreiche Speicherweg braucht das nicht: Dort laedt
+			// `ladeListeNeu()` die Liste ohnehin neu.
+			holeNachzeichnenNach();
 		}
 
 		speichernKnopf.addEventListener('click', function () {
@@ -2144,6 +2411,380 @@
 
 		feld.focus();
 		feld.select();
+	}
+
+	// =====================================================================
+	// LIVE-AKTUALISIERUNG (AP-4.2 aus PLAN-Klassenmodus-Live.md)
+	// =====================================================================
+
+	/**
+	 * Darf die Wand JETZT neu gezeichnet werden?
+	 *
+	 * VIER BEDINGUNGEN, ALLE MUESSEN GELTEN. Die Reihenfolge ist von billig
+	 * nach teuer sortiert, inhaltlich sind sie gleichrangig:
+	 *
+	 *   1. Das Modal ist mit einer Liste offen (`modalOffen`, und Koerper und
+	 *      Dialog stehen wirklich noch im DOM).
+	 *   2. Kein Eingabefeld enthaelt Text. Geprueft wird `.cbd-fragenwand-
+	 *      neu__feld` - dieselbe Klasse traegt das Lehrer-Feld aus
+	 *      `baueNeuBereich()` UND das Schueler-Feld aus
+	 *      `baueSchuelerNeuBereich()`, ein Selektor deckt also beide ab.
+	 *      Verglichen wird der GETRIMMTE Wert: Ein versehentliches Leerzeichen
+	 *      ist keine Eingabe, die es zu retten lohnt.
+	 *   3. Keine Notiz ist in Bearbeitung. Die Markierung dafuer gab es schon:
+	 *      `starteBearbeiten()` setzt `data-bearbeitung="1"` am `<li>` und
+	 *      `beende()` entfernt es wieder - eine zusaetzliche Klasse waere eine
+	 *      zweite Wahrheit ueber denselben Zustand gewesen.
+	 *   4. Das aktive Element ist kein Eingabefeld im Modal. Deckt den Fall
+	 *      ab, dass jemand das Feld fokussiert hat, ohne schon zu tippen -
+	 *      ein Neuzeichnen zoege ihm den Fokus weg (`setzeListe()` baut den
+	 *      Koerper komplett neu auf). Der Schliessen-Knopf zaehlt bewusst
+	 *      NICHT: Er liegt im Kopf und ueberlebt jeden Neuaufbau.
+	 *
+	 * IM ZWEIFEL NICHT NEU ZEICHNEN. Eine um zehn Sekunden verzoegerte Frage
+	 * ist harmlos, eine verlorene Eingabe nicht. Jede Bedingung, die sich
+	 * nicht sicher pruefen laesst, faellt deshalb auf `false`.
+	 *
+	 * @since AP-4.2
+	 * @returns {boolean}
+	 */
+	function darfNeuZeichnen() {
+		// --- 1. Modal offen ---------------------------------------------
+		if (!modalOffen || !overlay || !dialog || !koerper) {
+			return false;
+		}
+
+		// --- 2. Kein Eingabefeld mit Text --------------------------------
+		var felder = koerper.querySelectorAll('.' + M + '-neu__feld');
+		var i;
+
+		for (i = 0; i < felder.length; i++) {
+			if ('string' === typeof felder[i].value
+				&& '' !== felder[i].value.replace(/^\s+|\s+$/g, '')) {
+				return false;
+			}
+		}
+
+		// --- 3. Keine Notiz in Bearbeitung -------------------------------
+		if (koerper.querySelector('[data-bearbeitung="1"]')) {
+			return false;
+		}
+
+		// --- 4. Fokus liegt nicht in einem Eingabefeld des Modals ---------
+		var aktiv = document.activeElement;
+
+		if (aktiv && 1 === aktiv.nodeType && dialog.contains(aktiv) && istEingabefeld(aktiv)) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Ist das Element ein Eingabefeld?
+	 *
+	 * Absichtlich weiter gefasst als das, was die Wand heute baut (ein
+	 * `<input type="text">`): Kaeme spaeter ein `<textarea>` oder ein
+	 * `contenteditable` dazu, waere die Schutzbedingung 4 sonst still
+	 * unvollstaendig. Ein `<button>` ist KEIN Eingabefeld - der Fokus darauf
+	 * darf ein Neuzeichnen nicht verhindern.
+	 *
+	 * @since AP-4.2
+	 * @param {Element} element
+	 * @returns {boolean}
+	 */
+	function istEingabefeld(element) {
+		var name = element.tagName ? element.tagName.toLowerCase() : '';
+
+		if ('input' === name || 'textarea' === name || 'select' === name) {
+			return true;
+		}
+
+		return !!element.isContentEditable;
+	}
+
+	/**
+	 * Die offene Wand vom Server nachladen - der Rueckruf des Taktgebers.
+	 *
+	 * REIHENFOLGE DER AUSSTIEGE, jeder mit eigener Absicht:
+	 *   - Modal zu: nichts tun und den Merker loeschen. Es gibt nichts
+	 *     anzuzeigen, und beim naechsten Oeffnen wird ohnehin frisch geladen.
+	 *   - Schreibende Anfrage unterwegs: zuruckstellen. Diese fuenfte Bremse
+	 *     steht bewusst NICHT in `darfNeuZeichnen()` (das haelt sich an die
+	 *     vier im Plan festgelegten Bedingungen), gehoert aber zur selben
+	 *     Vorsicht: Ein Neuzeichnen mitten in einem laufenden Schreibvorgang
+	 *     zeigte kurz einen Zustand, den niemand gespeichert hat. Nach dem
+	 *     Schreiben laedt der Erfolgspfad die Liste ohnehin neu.
+	 *   - `darfNeuZeichnen()` falsch: zuruckstellen (siehe dort).
+	 *
+	 * @since AP-4.2
+	 * @returns {void}
+	 */
+	function aktualisiereWand() {
+		if (!modalOffen) {
+			nachzeichnenAusstehend = false;
+			return;
+		}
+
+		if (schreibtGerade) {
+			nachzeichnenAusstehend = true;
+			melde('Nachschlag zurueckgestellt - es laeuft gerade eine Schreibanfrage.');
+			return;
+		}
+
+		if (!darfNeuZeichnen()) {
+			nachzeichnenAusstehend = true;
+			melde('Nachschlag zurueckgestellt - Eingabe oder Bearbeitung offen.');
+			return;
+		}
+
+		nachzeichnenAusstehend = false;
+
+		if (verwaltbar) {
+			aktualisiereLehrerwand();
+		} else {
+			aktualisiereSchuelerwand();
+		}
+	}
+
+	/**
+	 * Die Schuelerwand still nachladen.
+	 *
+	 * DERSELBE AUFRUF WIE IN `ladeSchuelerwand()` - dieselbe Adresse aus
+	 * `baueAbrufUrl()`, dieselbe Methode, dieselbe Auswertung. Drei
+	 * Unterschiede, alle vom AP-Text verlangt:
+	 *   1. Kein `oeffneGeruest()`/`setzeMeldung(t('laden'))` - das Modal steht
+	 *      schon, und ein „wird geladen …" alle zehn Sekunden waere Flackern.
+	 *   2. Kein `setzeFokus()` - eine automatische Aktualisierung ist keine
+	 *      Nutzerhandlung und darf den Fokus nicht verschieben.
+	 *   3. Ein Fehlschlag bleibt STILL: kein `openMitMeldung()`, kein
+	 *      `setzeStatus()`, nur `melde()`. Die Wand soll nicht bei jedem
+	 *      Netzwerkholpern eine Fehlerbox einblenden - der alte Stand bleibt
+	 *      stehen und ist besser als eine Fehlermeldung an seiner Stelle.
+	 *
+	 * `darfNeuZeichnen()` wird ein ZWEITES MAL geprueft, wenn die Antwort da
+	 * ist: Zwischen Absenden und Antwort liegt eine Netzwerkrunde, in der
+	 * jemand zu tippen begonnen haben kann.
+	 *
+	 * @since AP-4.2
+	 * @returns {void}
+	 */
+	function aktualisiereSchuelerwand() {
+		var url = baueAbrufUrl(letzterTrigger);
+
+		if ('' === url || 'function' !== typeof window.fetch) {
+			nachzeichnenAusstehend = true;
+			melde('Nachschlag nicht moeglich (restUrl oder fetch fehlt).');
+			return;
+		}
+
+		abrufZaehler += 1;
+		var meineNummer = abrufZaehler;
+
+		window.fetch(url, {
+			method: 'GET',
+			credentials: 'same-origin',
+			headers: { Accept: 'application/json' }
+		}).then(function (antwort) {
+			if (meineNummer !== abrufZaehler) {
+				return null;
+			}
+
+			if (!antwort.ok) {
+				// Auch die einheitliche 404 („keine gueltige Sitzung") landet
+				// hier: Der Taktgeber stellt sich bei HTTP 404 seinerseits
+				// endgueltig ein, es kommt also ohnehin kein weiterer Rueckruf.
+				return Promise.reject(new Error('HTTP ' + antwort.status));
+			}
+
+			return antwort.json();
+		}).then(function (daten) {
+			if (null === daten || meineNummer !== abrufZaehler) {
+				return;
+			}
+
+			if (!darfNeuZeichnen() || verwaltbar) {
+				nachzeichnenAusstehend = true;
+				melde('Antwort verworfen - inzwischen wird getippt oder bearbeitet.');
+				return;
+			}
+
+			// Dieselbe Regel wie in `ladeSchuelerwand()`: `true ===` statt
+			// `!!`, damit ein Endpunkt ohne dieses Feld das Eingabefeld
+			// ausblendet statt es zu raten. Der Wert wird mitgezogen, weil die
+			// Lehrperson ihn waehrend der Stunde umstellen kann.
+			schuelerDarfFragen = (true === (daten && daten.schuelerFragenErlaubt));
+
+			setzeListe((daten && daten.notes) ? daten.notes : [], true);
+			melde('Schuelerwand aktualisiert.');
+		})['catch'](function (fehler) {
+			if (meineNummer !== abrufZaehler) {
+				return;
+			}
+
+			nachzeichnenAusstehend = true;
+			melde('Der Nachschlag der Fragenwand ist fehlgeschlagen: ' + fehler);
+		});
+	}
+
+	/**
+	 * Die Lehrerwand still nachladen.
+	 *
+	 * DERSELBE WEG WIE IN `ladeLehrerwand()`/`ladeListeNeu()`: die AJAX-Action
+	 * `cbd_fragenwand_get_notes` ueber `rufeAjax()`, ausgewertet mit
+	 * `notizenAus()`, gezeichnet mit `setzeListe(…, false)`. Eine eigene
+	 * Funktion daneben statt eines Schalters an `ladeListeNeu()`, weil sich
+	 * genau zwei Dinge unterscheiden - und beide duerfen den Schreibpfad NICHT
+	 * treffen: der stille Fehlerzweig (`ladeListeNeu()` zeigt dort bewusst
+	 * `setzeStatus()`, denn dort hat jemand gerade selbst etwas ausgeloest) und
+	 * die zweite `darfNeuZeichnen()`-Pruefung nach der Antwort (nach einem
+	 * Speichern MUSS neu gezeichnet werden, auch wenn die Notiz formal noch
+	 * als „in Bearbeitung" markiert ist).
+	 *
+	 * @since AP-4.2
+	 * @returns {void}
+	 */
+	function aktualisiereLehrerwand() {
+		var klasse = aktuelleKlasse;
+
+		if (!klasse) {
+			return;
+		}
+
+		abrufZaehler += 1;
+		var meineNummer = abrufZaehler;
+
+		rufeAjax('cbd_fragenwand_get_notes', { class_id: klasse }, function (antwort) {
+			// Zwischenzeitlich geschlossen, andere Klasse gewaehlt oder bereits
+			// eine neuere Antwort verarbeitet: verwerfen.
+			if (meineNummer !== abrufZaehler || !koerper || klasse !== aktuelleKlasse) {
+				return;
+			}
+
+			if (!antwort || true !== antwort.success) {
+				nachzeichnenAusstehend = true;
+				melde('Der Nachschlag der Fragenwand wurde abgelehnt.');
+				return;
+			}
+
+			if (!darfNeuZeichnen() || !verwaltbar) {
+				nachzeichnenAusstehend = true;
+				melde('Antwort verworfen - inzwischen wird getippt oder bearbeitet.');
+				return;
+			}
+
+			setzeListe(notizenAus(antwort), false);
+			melde('Lehrerwand aktualisiert.');
+		}, function () {
+			if (meineNummer !== abrufZaehler) {
+				return;
+			}
+
+			nachzeichnenAusstehend = true;
+			melde('Der Nachschlag der Fragenwand ist fehlgeschlagen.');
+		});
+	}
+
+	/**
+	 * Eine zurueckgestellte Aktualisierung nachholen, sobald ihr Grund entfaellt.
+	 *
+	 * MIT `setTimeout(…, 0)`, und das ist kein Schoenheitsfehler: Der Aufrufer
+	 * ist unter anderem ein `blur`-Handler, und waehrend `blur` laeuft, steht
+	 * `document.activeElement` je nach Browser noch auf dem gerade
+	 * verlassenen Feld. Bedingung 4 von `darfNeuZeichnen()` waere dann
+	 * weiterhin verletzt, und das Nachholen scheiterte genau in dem Moment,
+	 * fuer den es gebaut ist. Nach einem Durchlauf der Ereignisschleife ist
+	 * der Fokus gesetzt.
+	 *
+	 * @since AP-4.2
+	 * @returns {void}
+	 */
+	function holeNachzeichnenNach() {
+		if (!nachzeichnenAusstehend) {
+			return;
+		}
+
+		window.setTimeout(function () {
+			if (nachzeichnenAusstehend) {
+				aktualisiereWand();
+			}
+		}, 0);
+	}
+
+	/**
+	 * Das `'fragenwand'`-Abonnement beenden.
+	 *
+	 * Mehrfaches Aufrufen ist harmlos - die Abmeldefunktion des Taktgebers ist
+	 * selbst gegen doppeltes Aufrufen gesichert, und `abmelder` wird hier
+	 * zusaetzlich geleert.
+	 *
+	 * @since AP-4.2
+	 * @returns {void}
+	 */
+	function meldeAbVomPuls() {
+		if (!abmelder) {
+			return;
+		}
+
+		try {
+			abmelder();
+		} catch (fehler) {
+			warne('Das Abmelden vom Klassenpuls ist fehlgeschlagen: ' + fehler);
+		}
+
+		abmelder = null;
+	}
+
+	/**
+	 * Beim Taktgeber anmelden, damit sich die offene Wand aktualisiert.
+	 *
+	 * ERST ABMELDEN, DANN ANMELDEN. `open()` kann mehrfach auf demselben
+	 * offenen Modal laufen - der Schuelerweg baut die Wand nach einem
+	 * erfolgreichen Absenden komplett neu auf (`ladeSchuelerwand()`), der
+	 * Lehrerweg nach der Klassenauswahl. Ohne diese Zeile haetten sich die
+	 * Abonnements bei jedem Durchlauf verdoppelt, und ein Puls loeste zwei,
+	 * vier, acht Nachschlaege aus.
+	 *
+	 * OHNE SITZUNG WIRD NICHT ABONNIERT. Der Puls-Endpunkt braucht
+	 * `classroom` und `token`; ohne sie gaebe es nur Ablehnungen. Die Wand
+	 * verhaelt sich dann exakt wie vor AP-4.2 - dasselbe gilt bei
+	 * abgeschaltetem Puls (`cbd_klassenpuls_takt = 0`): Dort reiht der Server
+	 * `klassenpuls.js` gar nicht erst ein, `window.cbdKlassenpuls` existiert
+	 * nicht, und diese Funktion kehrt still zurueck.
+	 *
+	 * `setzeSeite()` wird BEWUSST NICHT gerufen (siehe Kopfkommentar).
+	 *
+	 * @since AP-4.2
+	 * @returns {void}
+	 */
+	function meldeAnBeimPuls() {
+		meldeAbVomPuls();
+
+		var puls = window.cbdKlassenpuls;
+
+		if (!puls
+			|| 'function' !== typeof puls.setzeSitzung
+			|| 'function' !== typeof puls.abonniere) {
+			return;
+		}
+
+		if (!letzteSitzung) {
+			melde('Kein Abonnement - es ist keine Klassensitzung erkennbar.');
+			return;
+		}
+
+		// Unschaedlich, auch wenn `classroom-page-filter.js` dem Taktgeber
+		// dieselbe Sitzung bereits mitgeteilt hat: `setzeSitzung()` verwirft
+		// bei unveraenderten Werten nichts und laesst eine ueber `setzeSeite()`
+		// gesetzte `page_id` in JEDEM Fall unangetastet (Regel 2 im
+		// Kopfkommentar von klassenpuls.js, im Code nachgeprueft).
+		puls.setzeSitzung(letzteSitzung.classroom, letzteSitzung.token);
+
+		abmelder = puls.abonniere('fragenwand', function () {
+			aktualisiereWand();
+		});
+
+		melde('Am Klassenpuls angemeldet (Signatur „fragenwand").');
 	}
 
 	// =====================================================================
