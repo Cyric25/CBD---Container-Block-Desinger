@@ -4746,6 +4746,219 @@ groß-/kleinschreibungsunabhängige Token-Vergleich aus der `_ci`-Kollation
 von `option_name` (Phase 3, Befund B5); und die `sessionStorage`-Abhängigkeit
 der 60-Sekunden-Neulade-Bremse im privaten Fenster (Phase 3, Befund B3).
 
+### Nachtrag: Flackerschutz beim Erstaufbau — warum inline im `<head>` (`includes/class-cbd-classroom.php`, `assets/js/classroom-page-filter.js`, Branch `nachtrag-flackern-und-pdf-formeln`, 2026-09-04)
+
+**Der Fehler, gefunden im Live-Test nach Abschluss der vier Phasen und
+vorbestehend (identisch zum Stand vor dem Vorhaben):** Auf einer **normalen**
+Seite im Klassenmodus lieferte der Server alle Container **sichtbar** aus.
+Versteckt wurden die nicht freigegebenen erst durch die Kette
+`$(document).ready()` → `loadClassroomData()` → AJAX
+`cbd_get_page_classroom_data` → `filterContainers()`. Zwischen dem ersten
+Bildaufbau und dem Filtern liegt eine Netzwerk-Rundreise: **Der Schüler sah
+200–500 ms lang alles.**
+
+Nicht betroffen sind reduzierte („gesperrte") Seiten — dort wirft
+`CBD_Classroom_Gate::inhalt_reduzieren()` das HTML der nicht freigegebenen
+Container gar nicht mit aus, es gibt nichts zu flackern. Der Nachtrag greift
+deshalb ausschließlich im `$reduziert === false`-Fall.
+
+**Gemessen, nicht geschätzt** (rAF-Abtastung aus einem gleichherkünftigen
+Elternfenster, ein Zustandsabbild je Bildaufbau-Gelegenheit, Seite 1618 /
+Klasse 15 mit 26 Containern, davon 23 freigegeben):
+
+| | vorher | nachher |
+|---|---|---|
+| Bildaufbauten mit sichtbarem, nicht freigegebenem Container | **15** | **0** (drei Läufe) |
+| Dauer des Fensters | **333 ms** (t = 636 → 969 ms) | **0 ms** |
+| Zustand beim allerersten Bildaufbau, in dem der Container existierte | `display: block`, Höhe 128 px, `readyState: loading` | `display: none`, Höhe 0, Inline-Stil **leer** |
+
+Der leere Inline-Stil im „nachher"-Fall ist der eigentliche Beweis: Versteckt
+hat dort **das Stylesheet**, nicht JavaScript.
+
+#### Warum inline im `<head>` und nicht anders
+
+Der Server weiß beim Ausliefern **schon alles** — die Freigabeliste steht in
+`CBD_TABLE_DRAWINGS`, die Container stehen im `post_content`. Es gibt also
+keinen Grund, die Information erst nachträglich über das Netz zu holen. Sie
+geht jetzt auf **zwei** Wegen mit:
+
+1. **Als Inline-CSS im `<head>`** (`CBD_Classroom::versteck_regeln()`, per
+   `wp_add_inline_style('cbd-classroom-frontend', …)`). Ein Stylesheet im
+   `<head>` blockiert den ersten Bildaufbau — die Regel gilt also **vor**
+   dem ersten Pixel, ohne dass irgendein Skript gelaufen sein muss. Eine
+   externe Datei ginge nicht: Die Liste hängt an Klasse **und** Seite, wäre
+   also pro Kombination eine eigene Datei plus eine eigene Anfrage — genau
+   die Rundreise, die hier abgeschafft wird.
+2. **Als Feld `freigegeben` in `cbdClassroomPageData`**, damit
+   `classroom-page-filter.js` in `init()` **synchron** filtern kann, statt
+   auf die AJAX-Antwort zu warten (`vorabDaten()` baut daraus dieselbe
+   Datenform, die die Antwort liefert).
+
+#### Warum ausschließlich Verstecken-Regeln
+
+`versteck_regeln()` gibt **nur** `[data-stable-id="…"]{display:none!important}`
+aus, **niemals** eine Regel, die etwas sichtbar macht. Das ist die zentrale
+Entwurfsentscheidung, nicht ein Stilfrage:
+
+- Der ursprüngliche `display`-Wert eines Containers wird dadurch
+  **bedeutungslos** — es gibt nichts zurückzusetzen, keine Annahme über
+  `block`/`flex`/`grid`, keinen Zustand, der wiederhergestellt werden müsste.
+- **Die Fehlerrichtung liegt damit fest, und zwar in Richtung Sicherheit:**
+  Eine fehlende, falsch geschriebene oder nicht anwendbare Regel kann
+  höchstens das **Verstecken verpassen** — dann greift wie bisher der Filter
+  im Browser, und der Zustand ist genau der heutige. Sie kann **niemals
+  etwas fälschlich aufdecken.** Wer diesen Abschnitt erweitert, darf diese
+  Asymmetrie nicht aufgeben.
+
+Aus demselben Grund erzeugt nur eine Kennung aus einem engen Zeichenvorrat
+(`^[A-Za-z0-9_.:+-]+$`) überhaupt eine Regel. Echte Kennungen sehen aus wie
+`cbd-1771189754-VwC7kbc7`; **Altbestände auch wie
+`cbd-1.78642207462E+12-g9yov7bc`** — ein Artefakt aus einer Zeit, in der
+`Date.now()` als Gleitkommazahl in die Kennung geriet. Punkt und Plus mussten
+deshalb ausdrücklich in den Zeichenvorrat, sonst hätten ganze Seiten (5414,
+5422) **keine** Regeln bekommen. Anführungszeichen, Backslash und `<`/`>`
+sind ausgeschlossen und können damit weder den Selektor noch das
+`<style>`-Element verlassen. Auch hier die harmlose Fehlerrichtung: eine
+ungewöhnliche Kennung bekommt **keine** Regel statt einer kaputten.
+
+#### Der zweite Halbschritt: die Regeln müssen wieder weg
+
+**Das ist der Teil, den man beim Weiterentwickeln zerstört, wenn man ihn für
+Aufräumen hält.** `init()` ruft nach dem synchronen Vorfilter
+`loeseVorfilterRegelnAb()`, das die Regeln per CSSOM `deleteRule()` wieder aus
+dem Stylesheet nimmt (erkannt daran, dass `selectorText` mit
+`[data-stable-id=` beginnt — die Akzentfarben-Regel `body{--cbd-classroom-accent:…}`
+im selben `<style>`-Block bleibt unangetastet).
+
+**Warum das zwingend ist, im Browser gegengeprüft:** Der Filter erkennt den
+Zustandswechsel eines Containers an dessen **eigenem Inline-Stil**
+(`$container[0].style.display === 'none'`, die wichtigste Lehre aus Phase 2,
+siehe die Warnung zu `jQuery.is(':visible')` oben). Eine Versteckung aus einem
+Stylesheet sieht er dort **nicht**. Bliebe die Regel stehen, wäre die Folge
+zweifach:
+
+- `istVersteckt` bliebe `false`, ein neu freigegebener Container bekäme
+  **gar kein** `.show()`;
+- und selbst mit `.show()` verlöre jQuery: Es setzt `display: block`
+  **inline ohne `!important`** und unterliegt jeder `!important`-Regel.
+
+Beides ist am laufenden Server einzeln gemessen worden: Regel wieder
+eingefügt → `el.style.display` bleibt `''` (der Filter hielte den Container
+für sichtbar), nach erzwungenem `jQuery(el).show()` steht inline
+`display: block`, berechnet aber weiterhin `none`. **Ohne
+`loeseVorfilterRegelnAb()` wäre die Live-Freigabe aus Phase 2 lautlos kaputt**
+— der Schüler sähe eine Freigabe erst nach einem Neuladen von Hand, also
+genau der Zustand, den Phase 2 abgeschafft hat.
+
+Die Übergabe läuft deshalb in genau dieser Reihenfolge, in **einem**
+synchronen Aufgabenblock ohne Bildaufbau dazwischen:
+
+1. `filterContainers(vorab, true)` setzt an jedem nicht freigegebenen
+   Container `style="display: none"` — dieselbe Versteckung, die der Filter
+   seit immer benutzt, nur ohne vorherige Netzrundreise;
+2. `loeseVorfilterRegelnAb()` nimmt die Stylesheet-Regeln weg.
+
+Danach lebt der Zustand ausschließlich in Inline-Stilen, also genau dort, wo
+Phase 2 und Phase 3 ihn erwarten. Der Server hat nur das Fenster bis zum
+ersten Skriptlauf überbrückt. **Läuft Schritt 2 nicht** (JavaScript
+abgeschaltet, jQuery fehlt, Ausnahme davor), bleiben die Regeln stehen und die
+nicht freigegebenen Container bleiben versteckt — wieder die gewünschte
+Fehlerrichtung.
+
+#### Die gesparte Anfrage — und wann sie gespart wird
+
+`cbdClassroomPageData` trägt zusätzlich `hatTafelbilder` und `klasse`. Weiß
+der Server, dass es für diese Klasse und Seite **kein** Tafelbild gibt
+(`CBD_Classroom::hat_tafelbilder()`: `COUNT(*)` über
+`drawing_data IS NOT NULL AND drawing_data <> ''`, indexgestützt über den
+Unique Key `class_page_container`), überspringt der Browser den
+Erstaufbau-AJAX **vollständig**. Alles, was der Erstaufbau braucht, steht dann
+schon da:
+
+- Sichtbarkeit → `freigegeben`;
+- das Abzeichen „✓ Behandelt" → **ebenfalls** `freigegeben`. Das ist keine
+  Näherung: In `ajax_get_page_classroom_data()` beruhen `treated_containers`
+  **und** `drawings[…].is_behandelt` auf derselben Bedingung (irgendeine Zeile
+  des Containers hat `is_behandelt = 1`). Deshalb reicht die synthetische
+  Karte `{ is_behandelt: true, pages: {} }` je freigegebenem Container, die
+  `vorabDaten()` baut — `pages: {}` lässt `baueTafelbild()` sofort und ohne
+  jede DOM-Änderung zurückkehren (weder `hasPages` noch `hasLegacy`);
+- der Klassenname für die Navigationsleiste → `klasse`, gelesen aus
+  `CBD_TABLE_CLASSES` (**nicht** aus dem Sitzungs-Transient, der den Namen
+  vom Anmeldezeitpunkt festhält — nach einer Umbenennung stünde dort ein
+  anderer Name als bisher).
+
+**Gemessene Anfragezahl beim Erstaufbau** (Zählfenster 4 s, also unter dem
+Pulstakt von 10 s):
+
+| | vorher | nachher |
+|---|---|---|
+| Seite **ohne** Tafelbilder für diese Klasse (1618/15) | 2 × `admin-ajax.php` + 1 × `klassenpuls` = **3** | 1 × `admin-ajax.php` + 1 × `klassenpuls` = **2** |
+| Seite **mit** Tafelbildern (3591/15) | **3** | **3** (unverändert) |
+
+Die eingesparte Anfrage ist `cbd_get_page_classroom_data`. Die zweite,
+verbleibende `admin-ajax.php`-Anfrage ist `cbd_student_get_data` für die
+Klassen-Seitenleiste — die gab es vorher und nachher, sie ist nicht Teil
+dieses Nachtrags. Auf Seiten **mit** Tafelbildern bleibt die Zahl also
+gleich; das ist ehrlich gemeldet und keine Enttäuschung, sondern die Grenze
+der Sparsamkeit: Zeichnungsdaten sind Rastergrafiken und haben in einer
+`wp_localize_script()`-Zeile im `<head>` nichts zu suchen.
+
+`hatTafelbilder` zählt bewusst **alle** Zeilen mit Zeichnungsdaten, auch die
+zu nicht freigegebenen Containern. Diese Zeilen wertet der Filter im Browser
+ohnehin nie aus; die großzügigere Zählung irrt also nur in Richtung „lieber
+doch fragen", nie in Richtung „Tafelbild verschwiegen".
+
+#### Die `wp_localize_script()`-Falle, in die dieser Nachtrag selbst getreten ist
+
+`WP_Scripts::localize()` gießt **jeden skalaren Wert der obersten Ebene** in
+eine Zeichenkette. Aus PHPs `false` wird `""`, aus `true` wird `"1"` — genau
+wie beim älteren Feld `reduziert`, das deshalb schon immer mit `!!` geprüft
+wird. Die erste Fassung dieses Nachtrags prüfte `hatTafelbilder === false`;
+das trifft **nie** (`"" === false` ist unwahr), und die Abfrage lief trotzdem.
+Die Fehlerrichtung war harmlos — eine Anfrage zu viel statt zu wenig —, aber
+sie kostete eine Messung. **Zwei Regeln daraus:**
+
+- Auf **Wahrheitswert** prüfen, nie mit `=== false`;
+- und **nie** eine Zahl 0/1 aus PHP schicken: daraus würde `"0"`, und `"0"`
+  ist in JavaScript **wahr**.
+
+Verschachtelte Werte behalten ihren Typ (der `is_scalar()`-Zweig überspringt
+Arrays) — `freigegeben` kommt deshalb als echtes JavaScript-Array an.
+
+#### Keine vierte Kopie der `stableId`-Extraktion
+
+Der Vorfilter braucht die Regel „welche `stableId` trägt dieser Block" — sie
+existierte wörtlich in `CBD_Classroom_Gate::block_erlaubt()` und in zwei
+weiteren Fassungen (siehe „Offener Punkt: `stableId`-Extraktion existiert
+dreifach" oben). Statt eine vierte anzulegen, ist sie als geteilter,
+öffentlicher Helfer `CBD_Classroom::stabile_id_aus_block()` herausgezogen
+worden, dorthin, wo `zerlege_container_id()`, `basis_container_id()` und
+`behandelte_container()` schon leben; `block_erlaubt()` ruft ihn jetzt auf.
+Dazu kommen `CBD_Classroom::ist_container_block()` und
+`CBD_Classroom::container_ids_aus_inhalt()` (rekursiv über `innerBlocks`, weil
+Container regelmäßig in anderen Containern, Gruppen oder Accordion-Panels
+liegen).
+
+**`class-cbd-classroom-gate.php` ist damit angefasst worden** — die
+sicherheitskritischste Datei des Projekts. Es ist eine reine, verhaltensgleiche
+Verschiebung: Reihenfolge (Attribut zuerst, HTML-Rückfall danach) und Rückgabe
+`''` bei Nichtauffindbarkeit sind unverändert, es entsteht keine neue
+Abhängigkeit (`block_erlaubt()` rief `CBD_Classroom::basis_container_id()`
+schon vorher auf), und `php tools/test-classroom-gate.php` bleibt grün — die
+elf `block_erlaubt()`-Prüfungen darin decken beide Wege ab, einschließlich des
+Altbestands-Rückfalls. Die serverseitige Reduktion selbst ist nicht berührt.
+
+**Bekannte Grenze, bewusst:** Container, die erst beim Rendern entstehen
+(wiederverwendbare Blöcke `core/block`, Template-Teile, Shortcodes), stehen
+nicht im `post_content` und bekommen daher keine Regel. Der Browser-Filter
+holt sie wie bisher nach — die harmlose Fehlerrichtung. Umgekehrt ist eine
+Regel für einen Container, der gar nicht im DOM landet, ein wirkungsloser
+Leerlauf: Auf Seite 1618 gilt das für zwei der drei erzeugten Regeln, weil
+zwei Kennungen im `post_content` stehen, aber nichts rendern — ein
+vorbestehendes Inhaltsproblem, verwandt mit dem oben dokumentierten
+Duplikat-Nebenbefund aus AP-2.fix2.
+
 ## Debugging-Konventionen
 
 - **PHP:** Informations-Logs laufen über klasseneigene `debug_log()`-Helper

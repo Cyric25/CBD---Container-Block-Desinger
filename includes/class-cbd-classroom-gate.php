@@ -263,25 +263,23 @@ class CBD_Classroom_Gate {
             return false;
         }
 
-        $stable_id = '';
-        if (!empty($block['attrs']['stableId'])) {
-            $stable_id = (string) $block['attrs']['stableId'];
-        }
-
-        // RÜCKFALL FÜR ALTBESTÄNDE — nicht entfernen. Ältere Container tragen
-        // die Kennung nur im gespeicherten HTML, nicht in den Attributen.
-        // Dasselbe tut CBD_Block_Registration::render_block() (dort ab
-        // Zeile ~899). Ohne diesen Rückfall verschwänden korrekt markierte
-        // Blöcke stillschweigend aus der Klassenansicht.
-        if ('' === $stable_id) {
-            $html = isset($block['innerHTML']) ? (string) $block['innerHTML'] : '';
-            if ('' === $html && !empty($block['innerContent'])) {
-                $html = implode('', array_filter((array) $block['innerContent'], 'is_string'));
-            }
-            if (preg_match('/data-stable-id="([^"]+)"/', $html, $treffer)) {
-                $stable_id = $treffer[1];
-            }
-        }
+        // Attribut `stableId`, sonst RÜCKFALL FÜR ALTBESTÄNDE auf
+        // `data-stable-id` im gespeicherten HTML — ältere Container tragen die
+        // Kennung nur dort, nicht in den Attributen. Ohne diesen Rückfall
+        // verschwänden korrekt markierte Blöcke stillschweigend aus der
+        // Klassenansicht.
+        //
+        // BEIDE SCHRITTE STANDEN BIS ZUM NACHTRAG „FLACKERSCHUTZ" WÖRTLICH
+        // HIER. Sie liegen jetzt als geteilter Helfer in
+        // `CBD_Classroom::stabile_id_aus_block()`, weil der Flackerschutz in
+        // `CBD_Classroom::enqueue_frontend_assets()` dieselbe Regel braucht —
+        // ohne die Herausziehung wäre dort eine VIERTE Kopie entstanden. Reine
+        // Verschiebung, kein Verhaltensunterschied; die Reihenfolge und die
+        // Rückgabe '' bei Nichtauffindbarkeit sind unverändert. Auf
+        // `CBD_Classroom` griff diese Methode auch vorher schon zu (siehe
+        // `basis_container_id()` unten), es entsteht also keine neue
+        // Abhängigkeit.
+        $stable_id = CBD_Classroom::stabile_id_aus_block($block);
 
         if ('' === $stable_id) {
             return false;

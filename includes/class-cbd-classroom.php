@@ -210,6 +210,121 @@ class CBD_Classroom {
     }
 
     /**
+     * Die stabile Kennung eines Container-Blocks aus einem Eintrag von
+     * `parse_blocks()`.
+     *
+     * DIES IST DER GETEILTE HELFER FÜR DIESE REGEL — keine vierte Fassung
+     * anlegen. Die Extraktion stand ursprünglich wörtlich in
+     * `CBD_Classroom_Gate::block_erlaubt()`; sie wurde für den
+     * Flackerschutz (`enqueue_frontend_assets()`, Zweig „normale Seite mit
+     * ?classroom=") hierher gezogen, weil sonst eine vierte Kopie derselben
+     * Regel entstanden wäre. `CBD_Classroom_Gate::block_erlaubt()` ruft
+     * seither diese Methode auf; die beiden übrigen Fassungen
+     * (`CBD_Block_Registration::render_block()`,
+     * `CBD_Blocks_REST_API::extract_stable_id()`) bleiben unberührt — siehe
+     * CLAUDE.md, „Offener Punkt: `stableId`-Extraktion existiert dreifach".
+     *
+     * Reihenfolge (unverändert gegenüber der Fassung im Durchlass):
+     *   1. Blockattribut `stableId`
+     *   2. RÜCKFALL FÜR ALTBESTÄNDE: `data-stable-id` im gespeicherten HTML.
+     *      Ältere Container tragen die Kennung nur dort. Ohne diesen Rückfall
+     *      verschwänden korrekt markierte Blöcke stillschweigend aus der
+     *      Klassenansicht.
+     *
+     * @param array $block Eintrag aus parse_blocks()
+     * @return string Kennung oder '' wenn keine ermittelbar ist
+     */
+    public static function stabile_id_aus_block($block) {
+        if (!is_array($block)) {
+            return '';
+        }
+
+        if (!empty($block['attrs']['stableId'])) {
+            return (string) $block['attrs']['stableId'];
+        }
+
+        $html = isset($block['innerHTML']) ? (string) $block['innerHTML'] : '';
+        if ('' === $html && !empty($block['innerContent'])) {
+            $html = implode('', array_filter((array) $block['innerContent'], 'is_string'));
+        }
+
+        if (preg_match('/data-stable-id="([^"]+)"/', $html, $treffer)) {
+            return $treffer[1];
+        }
+
+        return '';
+    }
+
+    /**
+     * Ist dieser Eintrag aus `parse_blocks()` ein Container des CDB-Plugins?
+     *
+     * Ein fremder Blocktyp mit zufällig passender Kennung zählt nicht —
+     * dieselbe Regel wie in `CBD_Classroom_Gate::block_erlaubt()`.
+     *
+     * @param array $block
+     * @return bool
+     */
+    public static function ist_container_block($block) {
+        return is_array($block)
+            && !empty($block['blockName'])
+            && 0 === strpos((string) $block['blockName'], 'container-block-designer/');
+    }
+
+    /**
+     * Kennungen ALLER Container-Blöcke eines Seiteninhalts, in
+     * Dokumentreihenfolge und jede genau einmal.
+     *
+     * Steigt bewusst in `innerBlocks` ab: Container liegen regelmäßig
+     * verschachtelt (in anderen Containern, in Gruppen, in Accordion-Panels).
+     * Der Browser-Filter sammelt sie über
+     * `[data-stable-id^="cbd-"]` ebenfalls über alle Ebenen ein.
+     *
+     * BEKANNTE GRENZE, bewusst: Container, die erst beim Rendern entstehen
+     * (wiederverwendbare Blöcke `core/block`, Template-Teile, Shortcodes),
+     * stehen nicht im `post_content` und fehlen daher in dieser Liste. Für
+     * den Flackerschutz ist das die harmlose Fehlerrichtung — für einen
+     * solchen Container fehlt lediglich die Versteckregel, der
+     * Browser-Filter holt ihn wie bisher nach.
+     *
+     * @param string $post_content Roher Seiteninhalt (Blockmarkup)
+     * @return string[]
+     */
+    public static function container_ids_aus_inhalt($post_content) {
+        $post_content = (string) $post_content;
+
+        if ('' === trim($post_content) || !function_exists('parse_blocks')) {
+            return array();
+        }
+
+        $gesammelt = array();
+        self::sammle_container_ids(parse_blocks($post_content), $gesammelt);
+
+        return array_keys($gesammelt);
+    }
+
+    /**
+     * Rekursionsschritt für container_ids_aus_inhalt().
+     *
+     * @param array $bloecke
+     * @param array $gesammelt Kennung => true (Referenz, hält die Reihenfolge)
+     * @return void
+     */
+    private static function sammle_container_ids($bloecke, &$gesammelt) {
+        foreach ((array) $bloecke as $block) {
+            if (self::ist_container_block($block)) {
+                $id = self::stabile_id_aus_block($block);
+                if ('' !== $id && !isset($gesammelt[$id])) {
+                    $gesammelt[$id] = true;
+                }
+            }
+
+            if (!empty($block['innerBlocks'])) {
+                self::sammle_container_ids($block['innerBlocks'], $gesammelt);
+            }
+        }
+    }
+
+    /**
      * Register settings for the classroom toggle
      */
     public function register_settings() {
@@ -1627,6 +1742,160 @@ class CBD_Classroom {
     // HELPER: Get classes for current teacher (used by board-mode)
     // =========================================================================
 
+    // =========================================================================
+    // FLACKERSCHUTZ AUF NORMALEN KLASSENSEITEN
+    // =========================================================================
+
+    /**
+     * Alles, was der Browser fuer den Erstaufbau einer normalen Klassenseite
+     * braucht — serverseitig aufgeloest, damit er nicht erst fragen muss.
+     *
+     * Rueckgabe `null`, wenn nichts ausgegeben werden darf. Das ist der
+     * Regelfall fuer jeden Besucher OHNE gueltige Klassensitzung: Die
+     * Token-Deutung besorgt AUSSCHLIESSLICH CBD_Classroom_Gate::sitzung()
+     * (die einzige Stelle im Plugin, die das darf — hier entsteht KEINE
+     * zweite Fassung), und die entscheidet allein nach dem Transient, nicht
+     * nach `?classroom=`.
+     *
+     * @param int          $page_id
+     * @param WP_Post|null $post
+     * @return array|null array('freigegeben' => string[], 'hatTafelbilder' => bool,
+     *                          'klasse' => string, 'regeln' => string)
+     */
+    private function klassen_vorfilter($page_id, $post) {
+        $page_id = (int) $page_id;
+
+        if ($page_id <= 0 || !is_a($post, 'WP_Post') || !class_exists('CBD_Classroom_Gate')) {
+            return null;
+        }
+
+        $sitzung = CBD_Classroom_Gate::sitzung();
+        if (!is_array($sitzung) || empty($sitzung['class_id'])) {
+            return null;
+        }
+
+        $class_id    = (int) $sitzung['class_id'];
+        $freigegeben = self::behandelte_container($class_id, $page_id);
+
+        // Alle Container der Seite abzueglich der freigegebenen. Nur fuer
+        // diese Differenz entstehen Regeln — NIEMALS eine Aufdeckenregel,
+        // siehe versteck_regeln().
+        $alle       = self::container_ids_aus_inhalt($post->post_content);
+        $verstecken = array_values(array_diff($alle, $freigegeben));
+
+        return array(
+            'freigegeben'    => array_values($freigegeben),
+            'hatTafelbilder' => $this->hat_tafelbilder($class_id, $page_id),
+            'klasse'         => $this->klassenname($class_id),
+            'regeln'         => $this->versteck_regeln($verstecken),
+        );
+    }
+
+    /**
+     * CSS, das die nicht freigegebenen Container versteckt.
+     *
+     * NUR VERSTECKEN-REGELN, NIEMALS AUFDECKEN-REGELN. Das ist der Kern
+     * dieses Entwurfs, keine Stilfrage:
+     *   - Der urspruengliche `display`-Wert eines Containers bleibt dadurch
+     *     bedeutungslos — es muss nichts zurueckgesetzt werden.
+     *   - Die Fehlerrichtung ist damit festgelegt: Eine fehlende oder falsche
+     *     Regel kann hoechstens das Verstecken VERPASSEN (dann greift wie
+     *     bisher der Filter im Browser). Sie kann niemals etwas faelschlich
+     *     AUFDECKEN.
+     *
+     * `!important` ist noetig, weil `cbd-frontend-clean.css` an mehreren
+     * Stellen selbst mit `!important` auf `.cbd-container` schreibt.
+     *
+     * DIESE REGELN GELTEN NUR BIS ZUM ERSTEN SKRIPTLAUF. `init()` in
+     * `assets/js/classroom-page-filter.js` versteckt dieselben Container
+     * synchron noch einmal per Inline-Stil und nimmt die Regeln danach
+     * wieder aus dem Stylesheet (`loeseVorfilterRegelnAb()`). Das ist
+     * ZWINGEND, keine Kosmetik: Der Filter erkennt den Zustandswechsel eines
+     * Containers an dessen eigenem Inline-Stil, und ein `.show()` von jQuery
+     * setzt `display` OHNE `!important` — blieben die Regeln stehen, kaeme
+     * eine Live-Freigabe (Phase 2) beim Schueler nie an. Die Begruendung in
+     * ganzer Laenge steht im Docblock von `loeseVorfilterRegelnAb()`; wer
+     * hier etwas am Selektor aendert, muss die dortige Erkennung
+     * (`selectorText` beginnt mit `[data-stable-id=`) mitziehen.
+     *
+     * Nur Kennungen aus einem engen Zeichenvorrat erzeugen eine Regel
+     * (Buchstaben, Ziffern, `_ - . : +` — echte Kennungen sehen aus wie
+     * `cbd-1771189754-VwC7kbc7`, aeltere Bestaende auch wie
+     * `cbd-1.78642207462E+12-g9yov7bc`). Damit koennen weder ein
+     * Anfuehrungszeichen noch `<`/`>` in den Selektor oder aus dem
+     * `<style>`-Element heraus geraten. Auch hier die harmlose
+     * Fehlerrichtung: eine ungewoehnliche Kennung bekommt keine Regel,
+     * statt eine kaputte.
+     *
+     * @param string[] $ids
+     * @return string
+     */
+    private function versteck_regeln($ids) {
+        $regeln = array();
+
+        foreach ((array) $ids as $id) {
+            $id = (string) $id;
+            if ('' === $id || !preg_match('/^[A-Za-z0-9_.:+-]+$/', $id)) {
+                continue;
+            }
+            $regeln[] = '[data-stable-id="' . $id . '"]{display:none!important}';
+        }
+
+        return implode("\n", $regeln);
+    }
+
+    /**
+     * Gibt es fuer diese Klasse auf dieser Seite ueberhaupt ein Tafelbild?
+     *
+     * Wenn nicht, kann der Browser die AJAX-Abfrage beim Erstaufbau ganz
+     * ueberspringen (eine Anfrage weniger je Seitenaufruf) — alles Uebrige
+     * steht bereits in `cbdClassroomPageData`. Gezaehlt werden ALLE Zeilen
+     * mit Zeichnungsdaten, auch die zu nicht freigegebenen Containern:
+     * Diese Zeilen wertet der Filter im Browser ohnehin nie aus, die
+     * groszuegigere Zaehlung irrt also nur in Richtung „lieber doch
+     * fragen" — nie in Richtung „Tafelbild verschwiegen".
+     *
+     * @param int $class_id
+     * @param int $page_id
+     * @return bool
+     */
+    private function hat_tafelbilder($class_id, $page_id) {
+        global $wpdb;
+
+        $anzahl = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM " . CBD_TABLE_DRAWINGS . "
+             WHERE class_id = %d AND page_id = %d
+               AND drawing_data IS NOT NULL AND drawing_data <> ''",
+            (int) $class_id,
+            (int) $page_id
+        ));
+
+        return ((int) $anzahl) > 0;
+    }
+
+    /**
+     * Der Klassenname, wie ihn `ajax_get_page_classroom_data()` liefert.
+     *
+     * Bewusst aus CBD_TABLE_CLASSES und NICHT aus dem Sitzungs-Transient:
+     * Der Transient haelt den Namen vom Zeitpunkt der Anmeldung fest: Wurde
+     * die Klasse danach umbenannt, zeigte die Navigationsleiste einen
+     * anderen Namen als bisher. Diese Abfrage haelt den Erstaufbau
+     * unveraendert.
+     *
+     * @param int $class_id
+     * @return string
+     */
+    private function klassenname($class_id) {
+        global $wpdb;
+
+        $name = $wpdb->get_var($wpdb->prepare(
+            "SELECT name FROM " . CBD_TABLE_CLASSES . " WHERE id = %d",
+            (int) $class_id
+        ));
+
+        return null === $name ? '' : (string) $name;
+    }
+
     /**
      * Enqueue frontend assets for classroom shortcode
      */
@@ -1682,19 +1951,49 @@ class CBD_Classroom {
             // dann seine Warnung über "markierte Blöcke nicht gefunden": Auf
             // einer reduzierten Seite ist alles Vorhandene freigegeben, und
             // freigegebene Container ANDERER Seiten fehlen naturgemäß.
+            $page_id   = (int) get_the_ID();
             $reduziert = function_exists('simple_clean_seite_nur_lehrpersonen')
                 && function_exists('simple_clean_ist_lehrperson')
                 && !simple_clean_ist_lehrperson()
-                && simple_clean_seite_nur_lehrpersonen(get_the_ID());
+                && simple_clean_seite_nur_lehrpersonen($page_id);
+
+            $seitendaten = array(
+                'ajaxUrl' => admin_url('admin-ajax.php'),
+                'pageId' => $page_id,
+                'reduziert' => (bool) $reduziert
+            );
+
+            // Flackerschutz (Nachtrag zu PLAN-Klassenmodus-Live.md): Der Server
+            // weiss beim Ausliefern schon, welche Container freigegeben sind.
+            // Bis hierher liess er die Seite trotzdem VOLLSTAENDIG sichtbar
+            // hinausgehen und ueberliess das Verstecken dem Filter im Browser —
+            // der aber erst nach $(document).ready() und einer AJAX-Rundreise
+            // greift. Dazwischen sah der Schueler 200-500 ms lang ALLES.
+            //
+            // Deshalb wird die Freigabeliste hier aufgeloest und auf zwei Wegen
+            // mitgegeben:
+            //   1. als Inline-CSS im <head> (siehe versteck_regeln() weiter
+            //      unten) — das greift VOR dem ersten Bildaufbau;
+            //   2. als Feld `freigegeben` in cbdClassroomPageData, damit
+            //      classroom-page-filter.js sofort filtern kann, ohne auf die
+            //      AJAX-Antwort zu warten.
+            //
+            // NUR auf NICHT reduzierten Seiten. Auf einer reduzierten Seite hat
+            // CBD_Classroom_Gate::inhalt_reduzieren() das HTML der nicht
+            // freigegebenen Container gar nicht erst mit ausgeliefert — dort
+            // gibt es nichts zu verstecken und nichts zu flackern.
+            $vorfilter = $reduziert ? null : $this->klassen_vorfilter($page_id, $post);
+
+            if (null !== $vorfilter) {
+                $seitendaten['freigegeben']    = $vorfilter['freigegeben'];
+                $seitendaten['hatTafelbilder'] = $vorfilter['hatTafelbilder'];
+                $seitendaten['klasse']         = $vorfilter['klasse'];
+            }
 
             wp_localize_script(
                 'cbd-classroom-page-filter',
                 'cbdClassroomPageData',
-                array(
-                    'ajaxUrl' => admin_url('admin-ajax.php'),
-                    'pageId' => get_the_ID(),
-                    'reduziert' => (bool) $reduziert
-                )
+                $seitendaten
             );
 
             // Enqueue classroom CSS for badges and overlays
@@ -1705,6 +2004,13 @@ class CBD_Classroom {
                 CBD_VERSION
             );
             wp_add_inline_style('cbd-classroom-frontend', $this->classroom_accent_inline_css());
+
+            // Die Versteckregeln als ZWEITER Inline-Block, damit die
+            // Akzentfarbe oben unberuehrt bleibt. Ist die Liste leer, wird
+            // nichts ausgegeben.
+            if (null !== $vorfilter && '' !== $vorfilter['regeln']) {
+                wp_add_inline_style('cbd-classroom-frontend', $vorfilter['regeln']);
+            }
 
             return; // Don't load all the other assets
         }
