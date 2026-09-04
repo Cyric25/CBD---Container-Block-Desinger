@@ -3449,7 +3449,7 @@ gefunden.
    (`collectCSSVariables()` liest `data-theme="dark"` temporär ab). Details:
    `docs/PLAN-PDF-Export-und-Tafelmodus-Fixes.md`, AP-1.1/AP-1.2/AP-1.fix1.
 
-## Klassenmodus: Live-Aktualisierung (Phase 1 von `PLAN-Klassenmodus-Live.md`, seit 2026-08-30)
+## Klassenmodus: Live-Aktualisierung (`PLAN-Klassenmodus-Live.md`, 2026-08-30 bis 2026-09-04, alle vier Phasen abgeschlossen und in `main` gemergt)
 
 Gibt eine Lehrperson im Klassenmodus einen Container-Block frei, sieht der
 Schüler das heute erst nach einem Neuladen der Seite. Dieses Vorhaben lässt
@@ -3457,6 +3457,20 @@ Freigaben, Rücknahmen, Tafelbilder und die Fragenwand binnen rund zehn
 Sekunden von selbst erscheinen — ohne Neuladen von Hand, auf allen drei
 Schüleransichten (normale Seiten mit `?classroom=`, serverseitig reduzierte
 Lösungsseiten, die Klassen-Seitenliste `[cbd_classroom]`).
+
+**Die vier Phasen in Kürze:** Phase 1 baut die Infrastruktur — die Route
+`cbd/v1/klassenpuls` und den clientseitigen Taktgeber
+`window.cbdKlassenpuls` — und schließt bewusst noch keinen Abonnenten an.
+Phase 2 lässt Freigaben, Rücknahmen und Tafelbilder auf normalen Seiten mit
+`?classroom=` live erscheinen, weil deren Container-HTML dort bereits
+hydratisiert im DOM liegt. Phase 3 lädt auf serverseitig reduzierten
+(„gesperrten") Lösungsseiten stattdessen gezielt neu, mit erhaltener
+Leseposition, weil ein nachträglich eingefügter Container dort unbedienbar
+wäre. Phase 4 aktualisiert die Klassen-Seitenliste (`[cbd_classroom]`) und
+die offene Fragenwand live, ohne Klappzustände oder eine laufende Eingabe zu
+zerstören. **Die Notbremse `cbd_klassenpuls_takt = 0` schaltet alle vier
+Phasen gemeinsam ab** — der Klassenmodus verhält sich dann byteidentisch wie
+vor diesem Vorhaben.
 
 **Phase 1 (dieser Abschnitt) baut ausschließlich die Infrastruktur — Route
 und clientseitiger Taktgeber — und schließt bewusst KEINEN Abonnenten an.**
@@ -3472,8 +3486,8 @@ Datei war `classroom-frontend.js` — das war falsch**, korrigiert erst beim
 Schreiben dieses Abschnitts: Phase 3 hat keine einzige Zeile in
 `classroom-frontend.js` geändert. Dieselbe Lehre wie beim Umleitungsziel
 weiter unten: DOM- und Dateistrukturen messen, nicht vorab annehmen. Phase 4
-hängt `classroom-frontend.js` und `fragenwand-frontend.js` an — eigener
-Abschnitt folgt, sobald sie abgeschlossen ist.
+hängt `classroom-frontend.js` und `fragenwand-frontend.js` an — siehe
+Unterabschnitt „Phase 4: Klassen-Seitenliste und Fragenwand" unten.
 Analyse-Vorlauf: `docs/ERWEITERUNGSANALYSE-Klassenmodus-Live.md`.
 
 ### Warum zweistufig, und warum kein Push
@@ -3832,7 +3846,10 @@ voraussichtlich, die **absoluten Zahlen** nicht.
   erreicht** — trifft es zu, ist der Befund gegenstandslos; trifft es nicht
   zu, sollte der Docblock nach dem Muster von `fce32b1` auf die
   Vorhaben-/AP-Bezeichnung umgestellt werden. `CBD_VERSION` selbst wird durch
-  diese Dokumentation **nicht** angefasst.
+  diese Dokumentation **nicht** angefasst. **Nachtrag `AP-4.doc`: Die Prüfung
+  ist gelaufen und der Befund damit gegenstandslos** — `CBD_VERSION` erreicht
+  mit diesem AP tatsächlich `3.1.118`, der Docblock bleibt unverändert
+  korrekt, keine weitere Änderung nötig.
 
 ### Phase 2: Normale Seiten (`assets/js/classroom-page-filter.js`, `assets/css/classroom-frontend.css`, AP-2.1–AP-2.fix2, seit 2026-08-31)
 
@@ -4462,6 +4479,272 @@ Satz, warum:
   demselben Muster (Seite 5422, regulär angelegt, gescannt) liefert mit
   gültiger Sitzung HTTP 200. Eine Behebung läge am Theme und ist ein
   Nicht-Ziel dieses Plans (Abschnitt 2).
+
+### Phase 4: Klassen-Seitenliste und Fragenwand (`assets/js/classroom-frontend.js`, `assets/js/fragenwand-frontend.js`, AP-4.1/AP-4.2/AP-4.fix1, seit 2026-09-04)
+
+Die Seite mit dem Shortcode `[cbd_classroom]` zeigt nach dem Login die
+Kapitelliste (`renderClassroomContent()`). Bis AP-4.1 geschah das **genau
+einmal** — gab die Lehrperson während der Stunde auf einer bisher
+unberührten Seite den ersten Block frei, erfuhr der Schüler das erst nach
+einem Neuladen. Diese Ansicht ist der einzige Ort, an dem ein Schüler ohne
+jede Freigabe (HTTP 403 auf der Zielseite, Phase 3 kann dort nicht helfen)
+überhaupt von einer neuen Freigabe erfährt.
+
+Phase 4 hängt zwei weitere Verbraucher an denselben Taktgeber aus Phase 1:
+die Klassen-Seitenliste (`assets/js/classroom-frontend.js`, AP-4.1) und die
+Fragenwand (`assets/js/fragenwand-frontend.js`, AP-4.2). Ein anschließendes
+Korrektur-AP (`AP-4.fix1`) hat ein vom Review gefundenes Abonnement-Leck
+behoben; `AP-4.rev` hat das Zusammenspiel beider Dateien am selben
+Taktgeber unabhängig geprüft.
+
+#### Klassen-Seitenliste live (AP-4.1)
+
+**Zwei Besonderheiten dieser Seite gegenüber Phase 2/3:**
+
+1. **Der Login läuft rein per AJAX, ohne Seiten-Neuladen.** Die Adresszeile
+   trägt danach **kein** `?classroom=&token=` — anders als
+   `classroom-page-filter.js`, das beide Werte aus `window.location.search`
+   liest, kennt der Taktgeber sie hier nur über einen ausdrücklichen Aufruf
+   von `setzeSitzung(this.classId, this.token)`. Dasselbe Problem löst
+   `fragenwand-frontend.js` bereits über `data-classroom`/`data-token`-Attribute
+   (siehe oben, Abschnitt „Fragenwand", Hotfix „derselbe Knopf in den zwei
+   JS-gebauten Klassenlisten").
+2. **`setzeSeite()` wird hier bewusst NICHT gerufen.** Diese Seite zeigt
+   keine Container — die Signaturen `'seite'` und `'tafel'` sind hier
+   bedeutungslos, und ohne `page_id` im Abfragestring spart sich der Server
+   die entsprechende Abfrage (im Netzwerk-Tab nachgeprüft: die Puls-Anfrage
+   dieser Seite trägt nie `page_id`).
+
+**Neue Methode `verdrahteKlassenpuls()`**, aufgerufen als erste Anweisung in
+`loadClassroomData()` (nicht dreifach an den Aufrufstellen
+`checkExistingAuth()`/`autoLogin()`/`handleAuth()` dupliziert — an allen drei
+sind `this.classId`/`this.token` zu diesem Zeitpunkt bereits gesetzt, ein
+einziger Aufrufpunkt reicht). Abonniert `'klasse'` →
+`aktualisiereSeitenliste()` und `'abgelaufen'` → Fehlermeldung +
+`clearAuth()`. **Idempotent über die neue Instanzvariable
+`klassenpulsVerdrahtet`:** `loadClassroomData()` läuft bei einem
+Token-Ablauf mit anschließendem `autoLogin()` innerhalb derselben Sitzung
+zweimal — ohne die Sperre entstünden zwei `abonniere()`-Aufrufe je Ereignis
+und jede Signaturänderung riefe `aktualisiereSeitenliste()` doppelt auf.
+`clearAuth()` setzt die Sperre zurück, damit ein manueller Re-Login nach
+„Klasse verlassen" den Taktgeber mit der **neuen** Sitzung erneut verdrahtet
+(sonst bliebe `setzeSitzung()` nach einem Abmelden für den Rest des
+Seitenaufrufs ungerufen).
+
+**Neue Methode `aktualisiereSeitenliste()`** — der Rückruf des Abonnements
+`'klasse'`. Repliziert bewusst nur den `$.post`-Aufruf von
+`loadClassroomData()`, ruft aber **nicht** `loadClassroomData()` selbst auf:
+Deren Fehlerpfad löst bei `response.success === false` den
+Wiederanmelde-Pfad aus (`autoLogin()`/`clearAuth()`/Fehlermeldung) — richtig
+beim Erstaufruf, würde den Schüler hier aber bei einem einzelnen
+Netzwerk-Aussetzer grundlos aus der Klasse werfen. Ein Fehlschlag hier
+protokolliert nur (`window.cbdDebug`) und tut sonst nichts; eine
+**tatsächlich** abgelaufene Sitzung meldet ausschließlich der
+`'abgelaufen'`-Rückruf aus `verdrahteKlassenpuls()`, weil `cbd/v1/klassenpuls`
+bei ungültigem Token bereits mit HTTP 404 antwortet, bevor
+`cbd_student_get_data` überhaupt gefragt wird. **Live am Testserver mit
+einer absichtlich auf einen ungültigen Pfad verbogenen `ajaxUrl` geprüft:**
+Der Fehlschlag erzeugte exakt die erwartete Konsolenzeile, ohne
+Abmeldung — Inhalt, Sitzung und Taktgeber blieben unverändert; nach dem
+Zurücksetzen der Adresse übernahm die nächste Signaturänderung wieder
+normal.
+
+**Kein Doppelaufbau nötig — bereits vor AP-4.1 korrekt:** Geprüft wurde, ob
+`renderClassroomContent()` Ereignis-Handler außerhalb von
+`#cbd-classroom-pages` bindet, die ein wiederholtes `.empty()` überleben und
+sich verdoppeln würden. Das ist nicht der Fall: `bindEvents()` (Login,
+Logout, Passwortfeld, Klassenauswahl) läuft genau einmal aus `init()`; der
+einzige Handler, der innerhalb der geleerten Liste selbst entsteht (der
+Klapp-Knopf-Listener, `click.cbdClassroomToggle` an `#cbd-classroom-pages`
+delegiert), meldet sich bereits seit AP-1.2 vor dem Binden über denselben
+Namensraum ab (`.off('click.cbdClassroomToggle').on(...)`). Live über fünf
+aufeinanderfolgende Live-Aktualisierungen bestätigt: der Fragenwand-Knopf
+blieb dabei durchgehend bei genau einem Element.
+
+**Klappzustand unangetastet — ebenfalls bereits vor AP-4.1 korrekt:**
+`renderClassroomContent()` liest beim Neuaufbau ausschließlich über
+`cbdKlassenverzeichnisGeleseneCollapsedIds()`; geschrieben wird
+ausschließlich im Klick-Handler des Umschalt-Knopfs, nie beim Neuzeichnen.
+Live bestätigt: ein zugeklapptes Kapitel blieb über zwei weitere
+Live-Aktualisierungen zugeklappt, `localStorage.getItem('cbd_classroom_toc_collapsed')`
+unverändert `["<page-id>"]`.
+
+**Beim Abmelden wird der Taktgeber angehalten:**
+`window.cbdKlassenpuls && window.cbdKlassenpuls.halte()` in
+`handleLogout()`, direkt vor `clearAuth()` — sonst fragte der Browser mit
+einem bereits verworfenen Token weiter nach. Live bestätigt: Nach „Klasse
+verlassen" blieb die Zahl der `klassenpuls`-Anfragen im Netzwerk-Tab über
+20 Sekunden unverändert.
+
+**Live-Testfolge am Testserver** (eigene, isolierte Testklasse und
+Testseite, per Direkt-SQL angelegt und restlos wieder entfernt, kein
+interaktiver Lehrer-Login verfügbar): Ein Container auf einer bis dahin
+unbeteiligten Seite wurde per Bootstrap-Skript freigegeben — das Kapitel
+erschien im Schülerfenster **ohne Neuladen** innerhalb eines Puls-Takts;
+eine Unterseite mit eigener Freigabe ließ einen Klapp-Knopf entstehen, dessen
+Zustand über weitere Aktualisierungen hinweg hielt; die Rücknahme aller
+Freigaben ließ das Kapitel ebenso live wieder verschwinden
+(„Keine behandelten Blöcke vorhanden."); bei
+`cbd_klassenpuls_takt = 0` wird `klassenpuls.js` gar nicht erst eingereiht,
+Login und Liste funktionierten dabei unverändert. Browser-Konsole in allen
+Schritten frei von echten Fehlern (eine 404-Zeile stammte nachweislich vom
+absichtlich herbeigeführten Fehlschlagstest oben, nicht von einem echten
+Defekt).
+
+#### Abmeldemuster gegen doppelte Abonnements (AP-4.fix1, Befund R2)
+
+`AP-4.rev` fand, dass `verdrahteKlassenpuls()` und `clearAuth()` in
+`classroom-frontend.js` die von `window.cbdKlassenpuls.abonniere()`
+zurückgegebenen Abmeldefunktionen wegwarfen: `clearAuth()` setzte die Sperre
+`klassenpulsVerdrahtet` zurück, **ohne** die bestehenden Abonnements
+`'klasse'`/`'abgelaufen'` abzumelden. Meldet sich ein Schüler im selben Tab
+ab und neu an, blieben dadurch zwei `'klasse'`-Abonnements bestehen — je
+Signaturbewegung eine zusätzliche `cbd_student_get_data`-Anfrage; keine
+falsche Anzeige, aber unnötige Last, ausgerechnet bei dem Risiko, gegen das
+dieses Vorhaben eigens gemessen hat (Phase 1, `AP-1.7`/`AP-1.fix1`).
+
+**Behoben nach dem in der Fragenwand bereits vorhandenen Muster**
+(`meldeAbVomPuls()`/`meldeAnBeimPuls()`, `fragenwand-frontend.js:2724-2761`):
+Eine neue Instanzvariable `klassenpulsAbmelder` (ein **Array**, weil diese
+Datei zwei Signaturen zugleich abonniert) sammelt die Rückgabewerte beider
+`abonniere()`-Aufrufe. Die neue Methode `klassenpulsAbmelden()` ruft jeden
+gemerkten Abmelder in `try/catch` auf und leert die Liste — aufgerufen **vor
+jedem Anmelden** in `verdrahteKlassenpuls()` (macht die Funktion dadurch
+selbst idempotent, `klassenpulsVerdrahtet` wird zum reinen Sicherheitsnetz
+statt zur einzigen Verteidigung) und **vor** dem Zurücksetzen der Sperre in
+`clearAuth()`. `classroom-page-filter.js` hat dieses Problem strukturell
+nicht — dort läuft `verdrahteKlassenpuls()` nur einmal beim Seitenaufbau,
+ohne Login/Logout-Zyklus im selben Tab. Live gemessen: **2**
+`cbd_student_get_data`-Anfragen je Signaturbewegung vor der Korrektur, **1**
+danach, über drei Logout-Re-Login-Zyklen unverändert stabil.
+
+#### Fragenwand live (AP-4.2)
+
+Die Fragenwand (`assets/js/fragenwand-frontend.js`) ist eine klassenweite
+Notizwand, geöffnet über ein Modal. Vor AP-4.2 lud
+`ladeSchuelerwand(trigger)` die Liste **einmalig** über
+`GET cbd/v1/fragenwand`; legte die Lehrperson während der Stunde eine Frage
+an oder hakte eine ab, sah der Schüler das erst nach Schließen und
+Neuöffnen des Modals.
+
+**Der heikle Teil war nicht das Nachladen, sondern das Nicht-Zerstören: im
+Zweifel wird nicht neu gezeichnet.** Ein Neuzeichnen zur falschen Zeit hätte
+eine halb getippte Frage oder eine laufende Bearbeitung verworfen — eine um
+zehn Sekunden verzögerte Frage ist harmlos, eine verlorene Eingabe nicht.
+Die neue Funktion `darfNeuZeichnen()` verlangt deshalb **alle vier**
+folgenden Bedingungen zugleich; ist auch nur eine verletzt, wird **nicht**
+neu gezeichnet, sondern nur ein Merker `nachzeichnenAusstehend = true`
+gesetzt und später nachgeholt:
+
+1. **Das Modal ist mit einer Liste offen** (`modalOffen && overlay && dialog
+   && koerper`). `modalOffen` wird in `open()` gesetzt, in `close()` **und**
+   in `openMitMeldung()` wieder gelöscht — ein Modal, das nur „Keine aktive
+   Klassensitzung." zeigt, hat keine Liste zum Nachladen.
+2. **Kein Eingabefeld enthält Text.** Ein einziger Selektor
+   (`.cbd-fragenwand-neu__feld`) deckt beide Felder ab — `baueNeuBereich()`
+   (Lehrer) und `baueSchuelerNeuBereich()` (Schüler) vergeben dieselbe
+   Klasse.
+3. **Keine Notiz ist in Bearbeitung**, geprüft über das bereits vorhandene
+   Attribut `[data-bearbeitung="1"]`, das `starteBearbeiten()` setzt und
+   `beende()` entfernt — bewusst **keine** zweite, neue Markierung dafür
+   eingeführt.
+4. **`document.activeElement` ist kein Eingabefeld im Dialog**
+   (`istEingabefeld()` deckt `input`/`textarea`/`select`/`contenteditable`
+   ab) — deckt den Fall ab, dass ein Feld fokussiert, aber noch leer ist;
+   ein Neuzeichnen zöge sonst den Fokus weg.
+
+**Fünfte Bremse, bewusst außerhalb von `darfNeuZeichnen()`:**
+`aktualisiereWand()` stellt zusätzlich zurück, solange `schreibtGerade`
+läuft (eine eigene Schreibanfrage ist unterwegs) — sie zählt nicht zu den
+vier Plan-Bedingungen, damit die Funktion für ein Review eindeutig anhand
+genau dieser vier Punkte prüfbar bleibt.
+
+**Nachholen über `holeNachzeichnenNach()`:** Der Merker
+`nachzeichnenAusstehend` wird aufgelöst, sobald der Grund entfällt — beim
+`blur` beider Eingabefelder, beim Verlassen der Bearbeitung (`beende()`
+in `starteBearbeiten()`), oder implizit bei jedem vollständigen Neuaufbau
+(`setzeListe()` am Ende, deckt den Regelfall „Absenden" ab, weil ein
+erfolgreicher Schreibvorgang die Liste ohnehin neu lädt). `setTimeout(…, 0)`
+ist dabei kein Schönheitsfehler: Während `blur` läuft, steht
+`document.activeElement` je nach Browser noch auf dem verlassenen Feld —
+Bedingung 4 wäre sonst weiterhin verletzt, genau in dem Moment, für den das
+Nachholen gebaut ist.
+
+Der Lehrer-Zweig `aktualisiereLehrerwand()` benutzt Action, Auswertung und
+Zeichenweg zeichengleich mit dem bereits produktiven `ladeListeNeu()`; er
+ist nur nachgestellt geprüft, siehe Befund R3 unten.
+
+#### Mehrere Verbraucher an einem Taktgeber — `page_id` bleibt erhalten
+
+Auf einer Klassenseite hat `classroom-page-filter.js` (Phase 2/3) dem
+Taktgeber bereits `page_id` mitgeteilt. Öffnet der Schüler dort zusätzlich
+die Fragenwand, ruft `fragenwand-frontend.js` in `open()` erneut
+`setzeSitzung(letzteSitzung.classroom, letzteSitzung.token)` — **ohne**
+`setzeSeite()`, weil die Fragenwand klassenweit ist und keinen Seitenbezug
+hat. Damit ein zweiter `setzeSitzung()`-Aufruf mit derselben Sitzung die
+bereits gesetzte `page_id` nicht verwirft, gilt in `klassenpuls.js`
+(`setzeSitzung()`, Regel 2 im Kopfkommentar) ausdrücklich: Die
+Modulvariable `seiteId` wird von `setzeSitzung()` an **keiner** Stelle
+angefasst, und `signaturen`/`erstanfrageErledigt`/`fehlerZaehler` werden
+nur bei einem **echten** Wertwechsel von `classroom`/`token` verworfen —
+ein wiederholter Aufruf mit denselben Werten ist bis auf ein erneutes
+`starte()` wirkungslos. Am Server doppelt gemessen (AP-4.2: 24 von 24,
+AP-4.rev: 5 von 5): über die gesamte Sitzung trug **jede** Puls-Anfrage
+weiterhin `page_id`, auch während und nach mehreren
+Öffnen/Schließen-Zyklen der Fragenwand. Die Klassen-Seitenliste
+(`classroom-frontend.js`) ruft `setzeSitzung()` ebenfalls ohne
+`setzeSeite()` — dort ist `page_id` von vornherein bedeutungslos, weil
+diese Seite keine Container zeigt.
+
+#### Bekannte, bewusst akzeptierte Einschränkungen
+
+Die folgenden Befunde stammen aus `AP-4.rev` (`PLAN-Klassenmodus-Live.md`)
+und wurden **bewusst nicht behoben** — je ein bis zwei Sätze, warum. **R2**
+(doppeltes `'klasse'`-Abonnement nach Logout+Re-Login) ist nicht mehr
+offen — behoben in `AP-4.fix1`, siehe oben.
+
+- **R3 (gering) — Lehrer-Zweig `aktualisiereLehrerwand()` nur nachgestellt
+  geprüft.** Diese Umgebung kennt keinen interaktiven Lehrer-Login (ein
+  Passwort-Reset für Testzwecke ist gesperrt); der Zweig wurde deshalb nur
+  Zeile für Zeile gegen das bereits produktive `ladeListeNeu()` gelegt
+  (zeichengleiche Action, Auswertung und Zeichenweg, zwei konservative
+  Abweichungen: stiller Fehlerzweig, eine zweite
+  `darfNeuZeichnen()`-Prüfung). **Warum offen:** Der Schadensfall ist mild
+  — bleibt der Zweig ungeprüft falsch, fehlt nur die Selbstaktualisierung
+  der Lehrer-Fragenwand, keine Regression, kein Sicherheitsbezug.
+- **R4 (gering) — B2-Umleitungsziel (aus `AP-3.rev`) bleibt bewusst
+  ungelöst.** `klassenlistenZiel()` in `classroom-page-filter.js` kennt die
+  Adresse der `[cbd_classroom]`-Seite nicht und fällt bei Klassen mit
+  Freigaben auf nur einer Seite ohne `CBD_TABLE_CLASS_PAGES`-Einträge auf
+  die Startseite ohne Sitzung zurück. Die saubere Lösung bräuchte
+  zusätzlich eine Änderung an `classroom-page-filter.js`, außerhalb der
+  „Betroffenen Dateien" von AP-4.1. **Warum das kleiner ist, als es
+  klingt:** `ajax_student_get_data()`
+  (`includes/class-cbd-classroom.php:948 ff.`) bildet die Kapitelliste als
+  **Schnittmenge** aus `CBD_TABLE_CLASS_PAGES` und den Seiten mit
+  `is_behandelt = 1` — eine Klasse ohne `class_pages`-Einträge (genau die
+  B2-Konstellation) hat damit ohnehin eine **leere** Kapitelliste; das
+  „richtige" Umleitungsziel wäre für sie also auch mit sauberer Lösung
+  eine leere Seite. Am Server gemessen fiel die Kaskade stattdessen auf
+  Stufe 2 (Theme-Seitenleiste) mit `classroom`/`token` zurück — kein 403,
+  kein Sitzungsverlust. Fertiger Umsetzungsvorschlag: neues Feld
+  `klassenlisteUrl` in `cbdClassroomPageData`
+  (`CBD_Classroom::enqueue_frontend_assets()`), plus eine neue Stufe 1 in
+  `klassenlistenZiel()` davor (Details in der AP-4.1-Übergabenotiz,
+  `PLAN-Klassenmodus-Live.md`).
+
+**Aus den Phasen 1–3 geerbte, weiterhin gültige Einschränkungen** (volle
+Begründung an den verlinkten Stellen, hier nur der Vollständigkeit halber
+zusammengefasst, gelten unverändert für den gesamten Klassenmodus, nicht
+nur für Phase 4): Nummerierungslücken durch `CBDRenumberBlocks()`, das nur
+die oberste Ebene zählt statt den Sichtbarkeitszustand (Phase 2, Abschnitt
+„Die beiden Nachrüst-Haken"); der Kontrast der Hinweisleiste von 3,12:1
+unter WCAG AA (Phase 3, Befund B6); der beim Neuladen grundsätzlich
+verlorene Aufklappzustand eines Containers (Phase 3, erster Absatz von
+„Bekannte, bewusst akzeptierte Einschränkungen"); der
+groß-/kleinschreibungsunabhängige Token-Vergleich aus der `_ci`-Kollation
+von `option_name` (Phase 3, Befund B5); und die `sessionStorage`-Abhängigkeit
+der 60-Sekunden-Neulade-Bremse im privaten Fenster (Phase 3, Befund B3).
 
 ## Debugging-Konventionen
 
