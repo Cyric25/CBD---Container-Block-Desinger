@@ -3449,6 +3449,161 @@ gefunden.
    (`collectCSSVariables()` liest `data-theme="dark"` temporär ab). Details:
    `docs/PLAN-PDF-Export-und-Tafelmodus-Fixes.md`, AP-1.1/AP-1.2/AP-1.fix1.
 
+## PDF-Export: Formeln als Bild — die Blankheitsprüfung (N2, Branch `nachtrag-flackern-und-pdf-formeln`, 2026-09-04)
+
+**Der gemeldete Fehler:** Im erzeugten PDF fehlten die LaTeX-Formeln.
+**Die naheliegende Erklärung war falsch** und ist ausdrücklich widerlegt:
+Es fehlt nicht `katex.css` in mPDF — es geht überhaupt **kein KaTeX-HTML** an
+den Server. Vollständige Diagnose mit allen Messwerten:
+`docs/diagnose-pdf-formeln.md`.
+
+### Wie der Weg tatsächlich gebaut ist
+
+Seit v3.1.58/59 rastert `assets/js/pdf-server-side.js` jede Formel **im
+Browser** per `html2canvas` zu einem PNG, ersetzt sie im Klon durch einen
+Platzhalter `<span|div class="cbd-pdf-formula" data-cbd-formula-id="…">` mit
+lesbarem Fallback-Text und schickt `{id, image, width, height, isDisplay}`
+mit. Serverseitig tauscht `CBD_PDF_Generator::insert_formula_image()` den
+Platzhalter gegen ein `<img src="data:image/png;base64,…">`.
+**Dieser Serverteil funktioniert und ist nicht anzufassen.**
+
+**Zwei Funktionen dieses Wegs sind toter Code — nicht wiederbeleben:**
+
+| Tot | Warum |
+|---|---|
+| `extractFormulas()` (`pdf-server-side.js`) | wird an keiner Stelle aufgerufen; sie erzeugt `renderedHtml`, das in der Nutzlast nie vorkommt |
+| `CBD_PDF_Generator::insert_formula()` | Gegenstück dazu; kann ohne `renderedHtml` nie feuern und matcht zudem auf `id="…"` statt auf `data-cbd-formula-id="…"` |
+
+Beide tragen seit N2 einen Docblock, der genau das sagt. Ein Wiederbeleben
+hieße, KaTeX-Markup (`.vlist`, `.strut`, absolute Positionierung, negative
+Ränder, `em`-Ketten) von mPDFs CSS-Maschine setzen zu lassen — das kann sie
+nicht, und die KaTeX-Schriften sind dort nicht registriert.
+
+### Die drei behobenen Fehler
+
+**1. Die Leinwand war leer, und niemand hat hingesehen (Hauptursache).**
+`html2canvas` mit `foreignObjectRendering: true` liefert eine korrekt
+dimensionierte, aber **vollständig transparente** Leinwand. Die
+Annahmeprüfung testete nur `canvas.width > 0 && canvas.height > 0` — ein
+Leerbild bestand sie, wurde angenommen, und der **funktionierende**
+Standard-Painter (`foreignObjectRendering: false`) war damit unerreichbar.
+Der Server bettete das leere PNG korrekt ein; im PDF blieb an der
+Formelstelle eine Lücke. Belegt am übertragenen Bild: 742 Byte für ein
+276×48-PNG, **0 opake Pixel**.
+
+Der Fix ist `canvasIstBemalt(canvas)`: Es wird der **Inhalt** geprüft, nicht
+das Maß — mindestens ein Pixel mit Alpha > 10. **Die Schwelle ist bewusst
+bei einem einzigen Pixel:** Ein Bruchstrich, ein Komma oder ein einzelner
+Buchstabe darf nicht als „leer" gelten. Erst oberhalb von rund einer Million
+Pixeln wird mit Schrittweite abgetastet, damit die Prüfung nicht selbst
+bremst; ist die Leinwand nicht auslesbar, gilt sie als bemalt (annehmen ist
+dann besser als grundlos verwerfen — dieselbe Fehlerrichtung wie bisher).
+
+**Das Ergebnis wird einmal je Seitenaufruf gemerkt**
+(`foRenderingLiefertLeerbild`). Eine leere FO-Leinwand ist eine Eigenschaft
+des Browsers, nicht der einzelnen Formel; ohne dieses Merken zahlt **jede**
+Formel den aussichtslosen Versuch. Genau daran hing die Exportdauer:
+**263 s → 18,5 s** für dieselben 21 Formeln, der Volllauf über 23 Blöcke mit
+76 Formeln braucht **51 s** (vorher erreichte derselbe Lauf nach 454 s erst
+Block 20 von 23).
+
+**2. Abgesetzte Formeln haben Breite 0.** Eine Display-Formel ist ein
+`<span class="cbd-latex-formula cbd-latex-display">`. Als Inline-Element hat
+der Span keine eigene Breite — `getBoundingClientRect()` meldet dort 0,
+obwohl das gerenderte KaTeX-Kind sichtbar ist. Die Größenbremse
+(`rect.width < 2`) übersprang solche Formeln **stumm**, ganze Blöcke meldeten
+`Captured 0/5`. Übrig blieb der Textabzug aus `.katex-html` — und der ist bei
+Brüchen **mathematisch falsch**: Aus der Nernst-Gleichung wird
+`E=E0+n⋅FR⋅T​⋅lnc(Red)c(Ox)​`, Zähler und Nenner vertauscht. Für einen
+Chemielehrer ist das schlechter als eine Lücke. `messeFormel(el)` nimmt jetzt
+ersatzweise das erste Kind mit echtem Kasten (`.katex-display`, `.katex`,
+`.cbd-latex-content`) als Capture-Ziel.
+
+**3. Im Dunkelmodus weiß auf weiß.** Ein PDF bildet den Darkmode
+grundsätzlich nicht ab — das leistet `collectCSSVariables()`, indem es
+`data-theme` kurz entfernt. Das passiert aber in `sendPDFRequest()`, also
+**nach** allen Captures. Die Formelbilder trugen deshalb weiße Glyphen.
+Gemessen im Dunkelmodus, dieselbe Formel, derselbe Standard-Painter:
+**ohne** Fix 743 opake Pixel, davon 0 dunkel und 743 hell; **mit** Fix
+26 122 dunkel und 0 hell.
+
+Der Fix ist `neutralisiereDarkmodeImKlon()` als `onclone`-Rückruf von
+html2canvas: Er entfernt `data-theme` und setzt die Formelfarbe **im Klon**,
+den html2canvas vor dem Malen ohnehin anlegt. **Ausdrücklich nicht** durch
+Umschalten von `data-theme` an der laufenden Seite — das wäre sichtbares
+Flackern, und genau das ist auf demselben Branch gerade behoben worden
+(Abschnitt „Nachtrag: Flackerschutz beim Erstaufbau"). Nachgeprüft: Nach dem
+Export steht `data-theme` der echten Seite unverändert auf `dark`.
+
+### Zwei Mitnahmen im selben Zug
+
+- **`expandAllBlocks()` sucht Container jetzt über
+  `CONTAINER_SELEKTOR`** = `[data-wp-interactive="container-block-designer"],
+  [data-stable-id^="cbd-"]` — **derselbe Doppel-Selektor, den
+  `assets/js/classroom-page-filter.js` bereits benutzt**, bewusst keine neue,
+  fünfte Erkennungsregel. Container ohne `data-wp-interactive` blieben sonst
+  zugeklappt, ihre Formeln haben Maß 0 und fallen der Größenbremse zum Opfer.
+  _Ehrlich eingeordnet:_ Auf der Prüfseite 1636 tragen **alle 23**
+  Top-Level-Container `data-wp-interactive`, die Erweiterung ist dort also
+  wirkungslos — sie ist Vorsorge, keine gemessene Reparatur. Die im
+  Diagnosebericht als „U2" beschriebene Mechanik (`interactiveFound: 0`) hat
+  sich in dieser Form **nicht** reproduzieren lassen; die dort gemessenen
+  `Captured 0/13 · 0/5 · 0/12 · 0/10` gehen auf Punkt 2 oben zurück.
+- **Die Formel-IDs werden jetzt vor `$block.clone()` vergeben.** Vorher
+  geschah das danach — der Klon trüge dann leere `id`-Attribute und der
+  Server könnte keinen Platzhalter zuordnen. Praktisch trat das nie ein, weil
+  `CBD_LaTeX_Parser` jede Formel bereits mit `id` ausliefert; für
+  clientseitig nachgerenderte Formeln wäre die Falle zugeschnappt. Für die
+  interaktiven Elemente stand dieselbe Reihenfolge schon länger im Code, mit
+  demselben Kommentar.
+
+### Wie das nachgewiesen wurde — und warum nicht anders
+
+**Opake Pixel zählen, nicht Maße und nicht Dateigrößen.** Genau daran ist der
+bestehende Code gescheitert; eine Prüfung, die dieselbe Größe misst, hätte
+denselben Fehler wiederholt. Gemessen wurde an den **übertragenen** Base64-PNGs
+(aus der abgefangenen Netzwerk-Nutzlast) und zusätzlich an den **im fertigen
+PDF eingebetteten** Bildern (SMask-Alphakanal ausgezählt):
+
+| | vorher | nachher |
+|---|---|---|
+| erfasste Formeln (Volllauf, 23 Blöcke) | Lauf brach ab, u. a. `0/1`, `0/5` | **76/76** |
+| PNGs mit opaken Pixeln | **0 von 21** (0,00 %) | **76 von 76**, 1,03–16,17 % |
+| Formelbilder im PDF mit sichtbarem Inhalt | — | **69 von 69**, 0 leer |
+| Exportdauer, 21 Formeln, gleiche Bedingungen | **263 s** | **18,5 s** |
+| Exportdauer, Volllauf 76 Formeln | > 454 s (unvollendet) | **51 s** |
+| PDF-Textebene | `E=E0+n⋅FR⋅T…` | `E=E` 0×, `lnc(` 0×, `logc(` 0× |
+
+**Die HTTP-Cache-Falle:** `wp_enqueue_script()` hängt `?ver=CBD_VERSION` an,
+und die Konstante bleibt bis zum ZIP-Bau unverändert — der Browser liefert die
+geänderte Datei weiter aus dem Cache, und die Nachher-Messung sieht aus, als
+hätte der Fix nichts bewirkt. `transferSize` taugt **nicht** als Beleg. Deshalb
+steht die einmalige Zeile
+
+```
+[CBD PDF] foreignObjectRendering liefert eine leere Leinwand - ab jetzt
+Standard-Painter fuer alle Formeln dieser Sitzung.
+```
+
+bewusst **nicht** hinter `window.cbdDebug`: Sie existiert nur im reparierten
+Code und ist damit der Beleg, dass er läuft.
+
+### Bekannte, bewusst offen gelassene Punkte
+
+1. **Der `html2pdf-loader.js`-Weg ist weiterhin ungeprüft.** Er enthält
+   keinerlei Formelbehandlung und wird nur aus
+   `includes/class-cbd-classroom.php` eingereiht — an dieser Datei arbeitete
+   parallel ein zweites Vorhaben (N3), sie wurde deshalb nicht angefasst.
+2. **Die Apple-Weiche ist nicht am Gerät gemessen.** Sie ruft dieselbe
+   Funktion `window.cbdPDFExportServerSide()` auf und profitiert damit
+   vollständig vom Fix; die im Diagnosebericht notierte Leseauffälligkeit
+   (`.each()` auf einem einfachen Array in `expandAllBlocks()`) bleibt offen
+   und ist ein eigener Befund.
+3. **Warum `foreignObjectRendering` überhaupt leer liefert**, ist nicht
+   geklärt und war nicht Ziel: Der Fix erkennt den Fall und weicht aus, statt
+   ihn zu erklären. Liefert FO auf einem anderen Browser ein Bild, wird es
+   unverändert genommen — die bessere KaTeX-Treue bleibt also erhalten, wo sie
+   zu haben ist.
 ## Klassenmodus: Live-Aktualisierung (`PLAN-Klassenmodus-Live.md`, 2026-08-30 bis 2026-09-04, alle vier Phasen abgeschlossen und in `main` gemergt)
 
 Gibt eine Lehrperson im Klassenmodus einen Container-Block frei, sieht der
