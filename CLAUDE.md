@@ -4591,6 +4591,63 @@ Schritten frei von echten Fehlern (eine 404-Zeile stammte nachweislich vom
 absichtlich herbeigeführten Fehlschlagstest oben, nicht von einem echten
 Defekt).
 
+#### Nachtrag N3: dieselbe Live-Aktualisierung fehlte auf Inhaltsseiten (`PLAN-Nachtraege-Klassenmodus.md`, 2026-09-04)
+
+Die vorstehenden Befunde gelten für die Login-Seite (`[cbd_classroom]`,
+`classroom-frontend.js`). **Die Klassen-Seitenleiste, die auf gewöhnlichen
+Inhaltsseiten die Theme-Sidebar ersetzt (`injectClassroomSidebar()` in
+`assets/js/classroom-page-filter.js`), abonnierte `'klasse'` dagegen bis zu
+diesem Nachtrag gar nicht** — nur `'seite'`, `'tafel'` und `'abgelaufen'`
+(Phase 2/3 oben). Symptom: Gab eine Lehrperson auf einer Seite, die bislang
+keine Freigabe trug, den ersten Block frei, erschien die Seite im
+Inhaltsverzeichnis sofort, in der Klassen-Seitenleiste eines Schülers auf
+einer anderen Inhaltsseite aber erst nach eigenem Neuladen — dieselbe
+Signatur `'klasse'` bewegte sich korrekt, nur hörte hier niemand zu.
+
+**Der Fix ist symmetrisch zur Kapitelliste oben:** `verdrahteKlassenpuls()`
+in `classroom-page-filter.js` abonniert jetzt zusätzlich `'klasse'` →
+`aktualisiereSeitenliste()`, für **beide** Zweige (reduziert und normal)
+gleichermaßen, weil `#sidebar` unabhängig davon von `injectClassroomNavBar()`
+aufgebaut wird. `aktualisiereSeitenliste()` holt `cbd_student_get_data`
+erneut und ruft `buildNavUl()` (Header-`<ul>`) sowie `injectClassroomSidebar()`
+(Seitenleiste) neu auf — **nicht** `injectClassroomNavBar()` selbst, die an
+ihrem eigenen Schutz gegen einen zweiten Header/„Verlassen"-Knopf abbräche
+(`#cbd-classroom-nav-header` existiert ja bereits) und den Datenabruf damit
+nie wiederholte.
+
+**Zusätzlich gefundene und mitbehobene Doppelaufbau-Falle:**
+`injectClassroomSidebar()`s Klick-Delegation für `.page-toggle` hing
+ungeschützt (`$nav.on('click', …)`, kein Namensraum, kein `.off()` davor) an
+`.sidebar-navigation` — einem Element, das über beliebig viele Aufrufe dieser
+Methode hinweg **dasselbe** DOM-Element bleibt (nur sein Inhalt wird per
+`empty()` neu aufgebaut). Ohne den Abwurf hätte sich bei jeder
+Live-Aktualisierung der Seitenleiste ein weiterer delegierter Handler
+angesammelt — dieselbe Falle wie bei `injectClassroomNavBar()`/
+`interceptLinks()` oben, nur an einem Klick-Handler statt an einer ganzen
+Navigationsleiste. Seit dem Fix: `$nav.off('click.cbdSidebarToggle').on('click.cbdSidebarToggle', …)`.
+
+**Live an einer eigenen, restlos wieder entfernten Testklasse geprüft**
+(drei Seiten, ein Elternkapitel mit zwei Kindseiten, Sitzung per
+Transient-Bootstrap statt Passwort-Login): Über zehn aufeinanderfolgende
+Signaturbewegungen (`window.cbdKlassenpuls.sofort()` nach je einer
+Freigabe/Rücknahme in der Datenbank) blieben Header, Seitenleiste,
+„Verlassen"-Knopf und der `click.cbdSidebarToggle`-Handler durchgehend bei
+genau **einem** Element (`jQuery._data(nav, 'events')` zeigte nie mehr als
+einen Eintrag im richtigen Namensraum), pro Signaturbewegung ging genau
+**eine** `cbd_student_get_data`-Anfrage hinaus (isoliert per
+`ajaxSend`-Zähler gemessen, da der geteilte Browser dieser Umgebung auch
+Netzverkehr paralleler Sitzungen mitschneidet), ein zuvor zugeklapptes
+Elternkapitel blieb nach jeder Aktualisierung zugeklappt und
+`localStorage['cbd_classroom_toc_collapsed']` blieb dabei **bitgleich**, und
+die Rücknahme der einzigen Freigabe einer Seite entfernte sie umgehend
+wieder aus der Leiste (Gegenprobe). Die Konsolenzeile „CBD Classroom Page
+Filter: Seitenlisten-Aktualisierung erhalten" existiert nur im gefixten Code
+und diente als Nachweis gegen die HTTP-Cache-Falle
+(`CBD_VERSION` unverändert). `classroom-page-filter.js` braucht das
+`klassenpulsAbmelden()`-Abmeldemuster aus AP-4.fix1 **nicht** — anders als
+`classroom-frontend.js` läuft `verdrahteKlassenpuls()` hier strukturell nur
+einmal beim Seitenaufbau, ohne Login/Logout-Zyklus im selben Tab.
+
 #### Abmeldemuster gegen doppelte Abonnements (AP-4.fix1, Befund R2)
 
 `AP-4.rev` fand, dass `verdrahteKlassenpuls()` und `clearAuth()` in

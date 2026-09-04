@@ -420,6 +420,28 @@
                 });
             }
 
+            // Klassen-Seitenleiste (Nachtrag N3, PLAN-Nachtraege-Klassenmodus.md,
+            // 2026-09-04): 'klasse' bewegt sich genau dann, wenn irgendeine
+            // Seite der Klasse ihren ERSTEN behandelten Container bekommt oder
+            // ihren letzten verliert – exakt das Ereignis, bei dem eine Seite
+            // in der Kapitelliste auftauchen bzw. verschwinden muss.
+            // classroom-frontend.js abonniert dieselbe Signatur bereits für die
+            // Kapitelliste auf der [cbd_classroom]-Login-Seite (AP-4.1); dies
+            // hier ist das fehlende Gegenstück für die Seitenleiste auf
+            // Inhaltsseiten – ohne dieses Abonnement blieb die Leiste auf dem
+            // Stand des Seitenaufbaus stehen, während das Inhaltsverzeichnis
+            // (das denselben Datenweg über 'klasse' längst nutzt) bereits die
+            // neue Seite zeigte.
+            //
+            // Gilt für BEIDE Zweige oben (reduziert und normal) gleichermaßen:
+            // #sidebar wird in beiden Fällen unverändert von
+            // injectClassroomNavBar() über einmaligAufbauen() aufgebaut, ganz
+            // unabhängig davon, ob diese Seite selbst reduziert ausgeliefert
+            // wird.
+            window.cbdKlassenpuls.abonniere('klasse', function() {
+                self.aktualisiereSeitenliste();
+            });
+
             window.cbdKlassenpuls.abonniere('abgelaufen', function() {
                 self.showError('Die Klassensitzung ist abgelaufen. Bitte erneut anmelden.');
             });
@@ -1169,6 +1191,70 @@
                 });
             }).fail(function(xhr, status, error) {
                 window.cbdDebug && console.log('CBD Classroom Page Filter: Tafelbild-Aktualisierung fehlgeschlagen – still ignoriert.', error);
+            });
+        },
+
+        /**
+         * Klassen-Seitenleiste (und Header-Navigationsliste) live nachziehen
+         * (Nachtrag N3, PLAN-Nachtraege-Klassenmodus.md).
+         *
+         * Rückruf des Taktgeber-Abonnements 'klasse' (siehe
+         * verdrahteKlassenpuls()). Holt dieselben Daten wie der Erstaufbau
+         * (cbd_student_get_data, siehe injectClassroomNavBar()) und baut
+         * Header-Liste und Seitenleiste neu auf.
+         *
+         * Ruft ABSICHTLICH NICHT injectClassroomNavBar() selbst auf: Die
+         * bricht sofort ab, sobald `#cbd-classroom-nav-header` bereits
+         * existiert (ihr eigener Schutz gegen einen zweiten Header samt
+         * zweitem "Verlassen"-Knopf beim Erstaufbau) – der Datenabruf würde
+         * bei jedem Puls-Durchlauf also nie erneut laufen. Diese Methode
+         * repliziert stattdessen nur den `$.post`-Aufruf plus den Aufbau der
+         * Header-<ul> und der Seitenleiste, ohne Header, Menü-Knopf oder
+         * "Verlassen"-Button erneut anzufassen – genau EINE Navigationsleiste
+         * und EIN "Verlassen"-Knopf bleiben damit über beliebig viele
+         * Aktualisierungen hinweg bestehen (Vertrag aus Phase 2, „Doppelaufbau").
+         *
+         * injectClassroomSidebar() selbst ist beliebig oft aufrufbar: Sie
+         * leert `.sidebar-navigation` vor jedem Aufbau (`$nav.empty()`) und
+         * liest den Klappzustand nur aus `localStorage`, schreibt ihn nie
+         * (siehe deren Kopfkommentar und CLAUDE.md) – ein zugeklapptes Kapitel
+         * bleibt über jede Aktualisierung hinweg zugeklappt.
+         *
+         * Ein fehlgeschlagener Nachschlag bleibt bewusst STILL, aus demselben
+         * Grund wie bei aktualisiere()/aktualisiereTafelbilder(): kein Grund,
+         * dem lesenden Schüler eine Fehlermeldung vor die Nase zu setzen – der
+         * nächste Takt versucht es ohnehin wieder.
+         */
+        aktualisiereSeitenliste: function() {
+            var self = this;
+
+            $.post(cbdClassroomPageData.ajaxUrl, {
+                action: 'cbd_student_get_data',
+                token: this.token
+            }, function(response) {
+                if (!response || !response.success || !response.data.pages) {
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Seitenlisten-Aktualisierung ohne Erfolg – still ignoriert.');
+                    return;
+                }
+
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Seitenlisten-Aktualisierung erhalten', response.data);
+
+                var pages = response.data.pages;
+
+                // Header-Navigation: nur ersetzen, wenn injectClassroomNavBar()
+                // den Header bereits gebaut hat (Regelfall). `<nav
+                // class="cbd-classroom-main-nav">` selbst bleibt stehen, nur
+                // ihr Inhalt (die <ul>) wird neu aufgebaut – dieselbe Technik
+                // wie bei der Seitenleiste unten.
+                var $navContainer = $('#cbd-classroom-nav-header nav.cbd-classroom-main-nav');
+                if ($navContainer.length > 0) {
+                    $navContainer.empty().append(self.buildNavUl(pages));
+                }
+
+                // Seitenleiste neu aufbauen – siehe Docblock oben.
+                self.injectClassroomSidebar(pages, response.data.class_name);
+            }).fail(function(xhr, status, error) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Seitenlisten-Aktualisierung fehlgeschlagen – still ignoriert.', error);
             });
         },
 
@@ -1945,8 +2031,18 @@
 
             $nav.append($rootUl);
 
-            // Event-Delegation für Toggle-Buttons (Theme-JS läuft vor dem AJAX-Ergebnis)
-            $nav.on('click', '.page-toggle', function(e) {
+            // Event-Delegation für Toggle-Buttons (Theme-JS läuft vor dem AJAX-Ergebnis).
+            //
+            // Eigener Namensraum + Abwurf VOR dem Binden (Nachtrag N3): $nav
+            // (`.sidebar-navigation`) ist dasselbe DOM-Element über beliebig
+            // viele Aufrufe dieser Methode hinweg – nur sein INHALT wird oben
+            // per `$nav.empty()` neu aufgebaut, der Container selbst bleibt
+            // stehen. Ein delegierter Handler ohne Abwurf würde sich also bei
+            // jeder Live-Aktualisierung der Seitenleiste (aktualisiereSeitenliste())
+            // ein weiteres Mal auf denselben Container legen – exakt die in
+            // Phase 2 als Hauptfalle dokumentierte Verdopplung, hier nicht an
+            // einer Navigationsleiste, sondern an einem Klick-Handler.
+            $nav.off('click.cbdSidebarToggle').on('click.cbdSidebarToggle', '.page-toggle', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 var $item = $(this).closest('.page-item');
