@@ -32,6 +32,17 @@
         classId: null,
         token: null,
 
+        /**
+         * Ob der Taktgeber `window.cbdKlassenpuls` fuer diese Sitzung bereits
+         * verdrahtet ist (AP-4.1). Verhindert doppelte `abonniere()`-Aufrufe,
+         * wenn `loadClassroomData()` innerhalb derselben Sitzung mehrfach
+         * durchlaeuft (z. B. `checkExistingAuth()` mit abgelaufenem Token,
+         * gefolgt von einem erfolgreichen `autoLogin()`). Wird von
+         * `clearAuth()` zurueckgesetzt, damit eine neue Sitzung nach einem
+         * Abmelden erneut verdrahtet wird.
+         */
+        klassenpulsVerdrahtet: false,
+
         init: function() {
             this.loadClasses();
             this.bindEvents();
@@ -248,6 +259,15 @@
         loadClassroomData: function() {
             var self = this;
 
+            // Taktgeber verdrahten (AP-4.1). An dieser Stelle sind
+            // this.classId/this.token bereits gesetzt -- loadClassroomData()
+            // wird ausschliesslich aus checkExistingAuth() (Wiederaufnahme
+            // einer gespeicherten Sitzung), autoLogin() und handleAuth()
+            // (beide nach erfolgreichem Login) gerufen, alle drei setzen
+            // beide Werte unmittelbar vorher. verdrahteKlassenpuls() ist
+            // idempotent, ein mehrfacher Aufruf hier ist deshalb unschaedlich.
+            self.verdrahteKlassenpuls();
+
             window.cbdDebug && console.log('[CBD Classroom] Loading classroom data...');
 
             $.post(cbdClassroomFrontend.ajaxUrl, {
@@ -275,6 +295,87 @@
             }).fail(function() {
                 console.error('[CBD Classroom] Network error');
                 $('#cbd-classroom-error').text('Netzwerk-Fehler.').show();
+            });
+        },
+
+        /**
+         * Den Taktgeber `window.cbdKlassenpuls` anzapfen (AP-4.1,
+         * `PLAN-Klassenmodus-Live.md`, Phase 4).
+         *
+         * BESONDERHEIT DIESER SEITE: Der Login laeuft rein per AJAX, ohne
+         * Seiten-Neuladen -- die Adresszeile traegt danach KEIN
+         * `?classroom=&token=`. Anders als `classroom-page-filter.js`, das
+         * beide Werte aus `window.location.search` liest, kennt der
+         * Taktgeber sie hier nur, wenn wir sie ihm ausdruecklich per
+         * `setzeSitzung()` mitteilen.
+         *
+         * `setzeSeite()` wird hier BEWUSST NICHT gerufen: Diese Seite zeigt
+         * keine Container, die Signaturen 'seite' und 'tafel' sind hier
+         * bedeutungslos -- ohne `page_id` spart sich der Server die
+         * entsprechende Abfrage.
+         *
+         * Idempotent ueber `klassenpulsVerdrahtet`, siehe Kommentar dort.
+         */
+        verdrahteKlassenpuls: function() {
+            if (this.klassenpulsVerdrahtet) {
+                return;
+            }
+
+            if (!window.cbdKlassenpuls) {
+                window.cbdDebug && console.log('[CBD Classroom] Kein Taktgeber vorhanden (cbd_klassenpuls_takt = 0?) – keine Live-Aktualisierung.');
+                return;
+            }
+
+            if (!this.classId || !this.token) {
+                return;
+            }
+
+            this.klassenpulsVerdrahtet = true;
+
+            var self = this;
+
+            window.cbdKlassenpuls.setzeSitzung(this.classId, this.token);
+
+            window.cbdKlassenpuls.abonniere('klasse', function() {
+                self.aktualisiereSeitenliste();
+            });
+
+            window.cbdKlassenpuls.abonniere('abgelaufen', function() {
+                $('#cbd-classroom-error').text('Die Sitzung ist abgelaufen. Bitte erneut einloggen.').show();
+                self.clearAuth();
+            });
+        },
+
+        /**
+         * Regelmaessige Aktualisierung der Kapitelliste, Rueckruf des
+         * Abonnements 'klasse' (AP-4.1).
+         *
+         * Ruft `cbd_student_get_data` mit demselben `$.post`-Aufruf wie
+         * `loadClassroomData()` auf, aber BEWUSST NICHT `loadClassroomData()`
+         * selbst: Deren Fehlerpfad loest bei `response.success === false`
+         * den Wiederanmelde-Pfad aus (`autoLogin()`/`clearAuth()`/
+         * Fehlermeldung) -- das ist beim allerersten Aufruf richtig, wuerfe
+         * den Schueler hier aber bei einem einzelnen fehlgeschlagenen
+         * Nachschlag (z. B. ein kurzer Netzwerk-Aussetzer) grundlos aus der
+         * Klasse. Eine tatsaechlich abgelaufene Sitzung meldet stattdessen
+         * der `'abgelaufen'`-Rueckruf aus `verdrahteKlassenpuls()` oben --
+         * der Puls-Endpunkt liefert bei ungueltigem Token HTTP 404, bevor
+         * `cbd_student_get_data` ueberhaupt gefragt wird.
+         */
+        aktualisiereSeitenliste: function() {
+            var self = this;
+
+            $.post(cbdClassroomFrontend.ajaxUrl, {
+                action: 'cbd_student_get_data',
+                token: this.token
+            }, function(response) {
+                if (response.success) {
+                    self.renderClassroomContent(response.data);
+                } else {
+                    window.cbdDebug && console.log('[CBD Classroom] Aktualisierung der Seitenliste fehlgeschlagen (kein Rauswurf), naechster Versuch folgt.', response);
+                }
+            }).fail(function() {
+                window.cbdDebug && console.log('[CBD Classroom] Netzwerk-Fehler bei der Aktualisierung der Seitenliste (kein Rauswurf), naechster Versuch folgt.');
             });
         },
 
@@ -470,6 +571,12 @@
         },
 
         handleLogout: function() {
+            // Taktgeber anhalten (AP-4.1) -- sonst fragt der Browser mit
+            // einem verworfenen Token weiter nach. `halte()` existiert nur,
+            // wenn `window.cbdKlassenpuls` ueberhaupt eingereiht wurde
+            // (cbd_klassenpuls_takt > 0).
+            window.cbdKlassenpuls && window.cbdKlassenpuls.halte();
+
             this.clearAuth();
             $('#cbd-classroom-content').hide();
             $('#cbd-classroom-auth').show();
@@ -513,6 +620,11 @@
         clearAuth: function() {
             this.token = null;
             this.classId = null;
+            // Sperre gegen doppelte abonniere()-Aufrufe zuruecksetzen
+            // (AP-4.1) -- eine folgende neue Sitzung (manueller Re-Login
+            // nach "Klasse verlassen") muss den Taktgeber erneut mit
+            // setzeSitzung() versorgen koennen.
+            this.klassenpulsVerdrahtet = false;
             try {
                 localStorage.removeItem('cbd_classroom_token');
                 localStorage.removeItem('cbd_classroom_class_id');
