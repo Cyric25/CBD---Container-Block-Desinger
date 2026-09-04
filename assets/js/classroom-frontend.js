@@ -43,6 +43,22 @@
          */
         klassenpulsVerdrahtet: false,
 
+        /**
+         * Abmeldefunktionen der beim Taktgeber `window.cbdKlassenpuls`
+         * bestehenden Abonnements (AP-4.fix1, Befund R2 aus AP-4.rev).
+         *
+         * Vorher warf `verdrahteKlassenpuls()` die von `abonniere()`
+         * zurueckgegebenen Abmeldefunktionen weg, und `clearAuth()` setzte
+         * die Sperre `klassenpulsVerdrahtet` zurueck, ohne abzumelden --
+         * ein Logout+Re-Login im selben Tab hinterliess dadurch ein
+         * zweites `'klasse'`-Abonnement (je Signaturbewegung eine
+         * zusaetzliche `cbd_student_get_data`-Anfrage). Vorbild: die
+         * Modulvariable `abmelder` in `fragenwand-frontend.js:2724-2736`;
+         * hier ein Array statt einer einzelnen Variable, weil diese Datei
+         * zwei Signaturen ('klasse', 'abgelaufen') zugleich abonniert.
+         */
+        klassenpulsAbmelder: [],
+
         init: function() {
             this.loadClasses();
             this.bindEvents();
@@ -315,6 +331,13 @@
          * entsprechende Abfrage.
          *
          * Idempotent ueber `klassenpulsVerdrahtet`, siehe Kommentar dort.
+         *
+         * VOR jedem Anmelden werden zuerst bestehende Abonnements
+         * abgemeldet (AP-4.fix1, Befund R2 aus AP-4.rev) -- dadurch ist
+         * diese Funktion selbst idempotent, und `klassenpulsVerdrahtet`
+         * wird zum reinen Sicherheitsnetz statt zur einzigen Verteidigung
+         * gegen doppelte Abonnements. Vorbild: `meldeAnBeimPuls()` in
+         * `fragenwand-frontend.js:2760-2761`.
          */
         verdrahteKlassenpuls: function() {
             if (this.klassenpulsVerdrahtet) {
@@ -330,20 +353,45 @@
                 return;
             }
 
+            this.klassenpulsAbmelden();
+
             this.klassenpulsVerdrahtet = true;
 
             var self = this;
 
             window.cbdKlassenpuls.setzeSitzung(this.classId, this.token);
 
-            window.cbdKlassenpuls.abonniere('klasse', function() {
+            this.klassenpulsAbmelder.push(window.cbdKlassenpuls.abonniere('klasse', function() {
                 self.aktualisiereSeitenliste();
-            });
+            }));
 
-            window.cbdKlassenpuls.abonniere('abgelaufen', function() {
+            this.klassenpulsAbmelder.push(window.cbdKlassenpuls.abonniere('abgelaufen', function() {
                 $('#cbd-classroom-error').text('Die Sitzung ist abgelaufen. Bitte erneut einloggen.').show();
                 self.clearAuth();
+            }));
+        },
+
+        /**
+         * Alle Abonnements dieser Seite beim Taktgeber abmelden
+         * (AP-4.fix1, Befund R2 aus AP-4.rev).
+         *
+         * Mehrfaches Aufrufen ist harmlos -- die Abmeldefunktion des
+         * Taktgebers ist selbst gegen doppeltes Aufrufen gesichert, und
+         * `klassenpulsAbmelder` wird hier in jedem Fall geleert. Vorbild:
+         * `meldeAbVomPuls()` in `fragenwand-frontend.js:2724-2736`.
+         */
+        klassenpulsAbmelden: function() {
+            window.cbdDebug && console.log('[CBD Classroom] AP-4.fix1: klassenpulsAbmelden() – ' + this.klassenpulsAbmelder.length + ' Abonnement(s) werden abgemeldet.');
+
+            this.klassenpulsAbmelder.forEach(function(abmelder) {
+                try {
+                    abmelder();
+                } catch (e) {
+                    window.cbdDebug && console.log('[CBD Classroom] Abmelden vom Klassenpuls fehlgeschlagen: ', e);
+                }
             });
+
+            this.klassenpulsAbmelder = [];
         },
 
         /**
@@ -620,6 +668,11 @@
         clearAuth: function() {
             this.token = null;
             this.classId = null;
+            // Zuerst abmelden, DANN die Sperre zuruecksetzen (AP-4.fix1,
+            // Befund R2 aus AP-4.rev) -- vorher blieben die Abonnements
+            // der alten Sitzung bestehen, und ein Re-Login im selben Tab
+            // haengte ein zweites Paar daran, statt sie zu ersetzen.
+            this.klassenpulsAbmelden();
             // Sperre gegen doppelte abonniere()-Aufrufe zuruecksetzen
             // (AP-4.1) -- eine folgende neue Sitzung (manueller Re-Login
             // nach "Klasse verlassen") muss den Taktgeber erneut mit
