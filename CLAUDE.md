@@ -4758,6 +4758,22 @@ der 60-Sekunden-Neulade-Bremse im privaten Fenster (Phase 3, Befund B3).
 - **Render-Schutz:** `CBD_Block_Registration::render_block()` fängt Throwables
   pro Block — ein kaputter Block wird mit HTML-Kommentar übersprungen statt
   die Seite mit HTTP 500 abzubrechen; die Fundstelle steht im PHP-Error-Log.
+- **Betriebsregel für temporäre Testskripte/Bootstrap-Hilfen** (aus dem
+  Vorhaben „Live-Aktualisierung im Klassenmodus" abgeleitet, `AP-4.doc`):
+  Ein Skript, das kurzzeitig `wp-load.php` einbindet, um einen Test
+  vorzubereiten oder Testdaten anzulegen, gehört **nie** in die
+  WordPress-Wurzel und **nie** nach `wp-content/mu-plugins/` — beides macht
+  es entweder über HTTP erreichbar (oft ohne eigene Autorisierungsprüfung)
+  oder lässt es bei jedem Seitenaufruf ungefragt mitlaufen. Es gehört in ein
+  projektfremdes Scratchpad-Verzeichnis und wird von dort ausschließlich per
+  PHP-CLI ausgeführt (`php script.php`), nie über den Browser aufgerufen.
+  **Die Entfernung nach getaner Arbeit ist nachzuprüfen (`ls`/`find` mit
+  leerem Ergebnis), nicht nur zu behaupten.** In diesem Vorhaben musste der
+  Orchestrator aus genau diesem Grund wiederholt nacharbeiten: ein
+  mu-plugin mit `determine_current_user`-Bypass, sechs ungeschützte
+  Testskripte im Webroot mit datenbankändernden `?do=`-Aktionen ohne
+  Autorisierungsprüfung und eine Testklasse samt Abhängigen — teils, obwohl
+  deren Entfernung zuvor bereits als erledigt gemeldet worden war.
 
 ## Important Files
 
