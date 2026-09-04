@@ -1118,3 +1118,137 @@
 [data-theme="dark"] .cbd-container.cbd-neu-freigegeben {
     box-shadow: 0 0 22px 6px color-mix(in srgb, var(--cbd-classroom-accent, #e24614) 65%, transparent) !important;
 }
+
+/* === LEISTE „WIEDERAUFNAHME" (PLAN-Klassenmodus-Live.md, AP-3.1) === */
+
+/* Auf einer serverseitig REDUZIERTEN Seite (nur-fuer-Lehrpersonen, Schueler
+   mit gueltiger Klassensitzung) kann ein neu freigegebener Container nicht
+   eingeblendet werden -- sein HTML ist gar nicht erst ausgeliefert worden.
+   Dort laedt `ladeNeu()` in classroom-page-filter.js die Seite gezielt neu
+   und `zeigeWiederaufnahmeHinweis()` haengt danach fuer 8 Sekunden
+   <div class="cbd-live-hinweis" role="status"> oben in den Inhaltsbereich.
+
+   POSITION: FIXED, MIT ABSICHT -- und nicht als Notloesung:
+   Nach dem Neuladen stellt `stelleWiederaufnahmeHer()` die alte Leseposition
+   wieder her; der Schueler steht also unter Umstaenden mehrere tausend Pixel
+   weit unten. Eine im Textfluss stehende Leiste am ANFANG des Inhalts haette
+   er nie zu Gesicht bekommen -- das Akzeptanzkriterium „nach dem Neuladen ist
+   die Leiste sichtbar" waere genau in dem Fall gerissen, fuer den es gedacht
+   ist. Zweiter, ebenso wichtiger Grund: Aus dem Fluss genommen veraendert die
+   Leiste die Seitenhoehe nicht. Stuende sie im Fluss, verschoebe sie beim
+   Erscheinen den gesamten Inhalt nach unten und beim Verschwinden nach acht
+   Sekunden wieder nach oben -- die gerade erst muehsam wiederhergestellte
+   Leseposition waere zweimal verrutscht.
+
+   `top: 4.5rem` statt `0`, weil `.cbd-classroom-nav-header` (weiter oben in
+   dieser Datei) `position: sticky; top: 0; z-index: 1100` traegt. Die Leiste
+   setzt sich mit z-index 1200 darueber, beginnt aber erst unterhalb der
+   Navigationsleiste, statt sie fuer acht Sekunden zu verdecken.
+
+   SPEZIFITAET -- geprueft, NICHT vorsorglich mit !important zugepflastert:
+   cbd-frontend-clean.css erzwingt an drei Stellen `outline: none !important`,
+   `box-shadow: none !important` und (fuer ::before) `background: none
+   !important` -- alle drei aber ausschliesslich auf `.cbd-container` bzw.
+   `.cbd-container::before`. `.cbd-live-hinweis` ist kein `.cbd-container`,
+   sondern ein eigenstaendiges Element im Inhaltsbereich, und traegt auch
+   keinen der uebrigen Klassennamen aus jener Datei. Keine der drei Regeln
+   greift hier; deshalb steht unten kein einziges !important. Sollte die
+   Leiste dennoch einmal ohne Hintergrund oder ohne Schatten erscheinen, ist
+   diese Mauer die erste Verdaechtige -- dann aber erst die tatsaechlich
+   gewinnende Regel in den Entwicklerwerkzeugen ansehen.
+
+   Farbgebung wie bei der Fahne aus AP-2.3: ausschliesslich ueber
+   --cbd-classroom-accent (gesetzt von
+   CBD_Classroom::classroom_accent_inline_css(), gekoppelt an
+   get_theme_mod('color_ui_surface', '#e24614')) mit Rueckfallwert #e24614,
+   Schriftfarbe ueber --color-text-on-accent mit Rueckfallwert #ffffff. */
+.cbd-live-hinweis {
+    position: fixed;
+    top: 4.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1200;
+    max-width: calc(100vw - 2rem);
+    padding: 8px 18px;
+    border-radius: 6px;
+    background: var(--cbd-classroom-accent, #e24614);
+    color: var(--color-text-on-accent, #ffffff);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+    animation: cbd-live-hinweis-einblenden 0.4s ease;
+}
+
+/* Dieselbe Bewegung wie cbd-neu-freigegeben-einblenden aus AP-2.3, nur um die
+   Zentrierung ergaenzt: `transform` traegt hier bereits translateX(-50%), das
+   die Keyframes mitfuehren muessen -- sonst spraenge die Leiste beim Start der
+   Animation nach rechts. Deshalb eigene Keyframes statt Wiederverwendung. */
+@keyframes cbd-live-hinweis-einblenden {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* Barrierefreiheit: Bewegung abschalten, die Leiste selbst bleibt stehen --
+   dieselbe Ruecksicht wie bei .cbd-container.cbd-neu-freigegeben::before. */
+@media (prefers-reduced-motion: reduce) {
+    .cbd-live-hinweis {
+        animation: none;
+    }
+}
+
+/* Darkmode ueber [data-theme="dark"] auf <html> (Projektkonvention, siehe
+   Root-CLAUDE.md und Plugins/CDB-Designer/CLAUDE.md, Abschnitt „Darkmode"),
+   NIE ueber @media (prefers-color-scheme: dark). Nur der Schlagschatten wird
+   kraeftiger; Hintergrund- und Schriftfarbe haben auf dunklem Grund bereits
+   ausreichend Kontrast. */
+[data-theme="dark"] .cbd-live-hinweis {
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55);
+}
+
+/* --- Zustand „Abschied" (PLAN-Klassenmodus-Live.md, AP-3.2) ---------------
+
+   Dieselbe Leiste, ein anderer Anlass: Die letzte Freigabe dieser gesperrten
+   Seite wurde zurueckgenommen. `verlasseGesperrteSeite()` in
+   classroom-page-filter.js zeigt hier NICHT „Neu freigegeben", sondern einen
+   ganzen Satz, und leitet nach 4 Sekunden zur Klassenuebersicht um. Ein
+   Neuladen waere an dieser Stelle die 403-Hinweisseite des Themes.
+
+   WARUM DIESE ZUSTANDSKLASSE UEBERHAUPT NOETIG IST -- es geht nicht um Optik:
+   Die Grundregel oben traegt `white-space: nowrap` zusammen mit
+   `overflow: hidden` und `text-overflow: ellipsis`. Das ist fuer die zwei
+   kurzen Wortmeldungen aus AP-3.1 genau richtig, verstuemmelt hier aber den
+   Satz: „Diese Seite ist fuer deine Klasse nicht mehr freigegeben. Du wirst
+   zur Kapiteluebersicht zurueckgebracht." waere auf jeder ueblichen Breite
+   nach wenigen Woertern mit „..." abgeschnitten -- ausgerechnet die Meldung,
+   die eine Erklaerung transportiert. Deshalb hier Umbruch statt Kuerzung,
+   eine Lesebreite von hoechstens 32rem und mittige Ausrichtung, damit die
+   zwei bis drei Zeilen als Block stehen.
+
+   KEIN eigenes Auslaufen: Die Leiste bleibt bis zur Umleitung stehen. Das
+   ergibt sich von selbst -- das Entfernen nach 8 Sekunden steht nicht im CSS,
+   sondern im `setTimeout` von `zeigeWiederaufnahmeHinweis()`, und den ruft
+   dieser Pfad gar nicht auf. Es braucht hier also nichts abzuschalten.
+
+   Farben, Position, Schatten, Animation und die Darkmode-Regel erbt der
+   Zustand unveraendert von `.cbd-live-hinweis` -- inklusive der dort
+   begruendeten Entscheidung, ohne ein einziges !important auszukommen. */
+.cbd-live-hinweis--abschied {
+    max-width: min(32rem, calc(100vw - 2rem));
+    padding: 12px 22px;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    text-align: center;
+}
