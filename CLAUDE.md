@@ -3463,10 +3463,17 @@ und clientseitiger Taktgeber — und schließt bewusst KEINEN Abonnenten an.**
 Nach Phase 1 läuft der Taktgeber mit, aber `setzeSitzung()` ruft niemand auf;
 der Klassenmodus verhält sich für den Schüler byteidentisch wie zuvor
 (strukturell belegt: 0 gelöschte Zeilen in jeder Produktivdatei, kein
-Aufrufer von `setzeSitzung()` im Repo). **Phase 2 (Unterabschnitt weiter
-unten in diesem Kapitel) hat `classroom-page-filter.js` daran gehängt**;
-Phasen 3–4 hängen `classroom-frontend.js` und `fragenwand-frontend.js` an —
-eigene Abschnitte folgen, sobald diese Phasen abgeschlossen sind.
+Aufrufer von `setzeSitzung()` im Repo). **Phase 2 und Phase 3 (beide
+Unterabschnitte weiter unten in diesem Kapitel) hängen sich beide an
+`classroom-page-filter.js`** — Phase 2 an den Zweig für normale Seiten,
+Phase 3 an einen zweiten, sich gegenseitig ausschließenden Zweig für
+serverseitig reduzierte Seiten. **Die hier ursprünglich für Phase 3 vermutete
+Datei war `classroom-frontend.js` — das war falsch**, korrigiert erst beim
+Schreiben dieses Abschnitts: Phase 3 hat keine einzige Zeile in
+`classroom-frontend.js` geändert. Dieselbe Lehre wie beim Umleitungsziel
+weiter unten: DOM- und Dateistrukturen messen, nicht vorab annehmen. Phase 4
+hängt `classroom-frontend.js` und `fragenwand-frontend.js` an — eigener
+Abschnitt folgt, sobald sie abgeschlossen ist.
 Analyse-Vorlauf: `docs/ERWEITERUNGSANALYSE-Klassenmodus-Live.md`.
 
 ### Warum zweistufig, und warum kein Push
@@ -4113,6 +4120,348 @@ Netzwerk-Tab ist das Erkennungsmerkmal, testseitig mit einem temporären
 `script_loader_src`-Filter umgangen, nie durch ein Hochsetzen von
 `CBD_VERSION` selbst). **`AP-4.doc` muss den Bump deshalb als
 Auslieferungsschritt behandeln, nicht als reine Versionskosmetik.**
+
+### Phase 3: Gesperrte Seiten — warum hier neu geladen wird (`assets/js/classroom-page-filter.js`, `assets/css/classroom-frontend.css`, AP-3.1–AP-3.fix1, seit 2026-08-31, gemergt 2026-09-04)
+
+Eine Seite, die das Theme als „nur für Lehrpersonen" sperrt, wird für einen
+Schüler in laufender Klassensitzung **serverseitig reduziert**
+(`CBD_Classroom_Gate::inhalt_reduzieren()`, `the_content`-Filter Priorität 8):
+Ausgeliefert wird ausschließlich das HTML der für die Klasse freigegebenen
+Container, alles andere — auch freistehende Absätze und Überschriften — wird
+verworfen und **nie an den Browser gesendet**. Phase 2 (oben) blendet auf
+normalen Seiten bereits vorhandenes, verstecktes DOM per `.show()`/`.hide()`
+ein und aus; auf einer reduzierten Seite gibt es dieses DOM schlicht nicht.
+Phase 3 hängt dafür einen zweiten, sich mit Phase 2 gegenseitig
+ausschließenden Zweig an `verdrahteKlassenpuls()`: Auf reduzierten Seiten
+(`cbdClassroomPageData.reduziert === true`) wird bei einer Änderung **gezielt
+neu geladen**, mit über `sessionStorage` hinübergeretteter Leseposition und
+einer 8-Sekunden-Hinweisleiste.
+
+**Die wichtigste Kennzahl dieser Phase, weil sie ihr größtes Risiko
+strukturell ausschließt statt nur zu mindern:** Über alle fünf Commits von
+Phase 3 hinweg ist `git diff main --name-only -- '*.php'` **vollständig
+leer** — kein einziges Byte PHP wurde verändert (AP-3.rev, Schritt 1). Die
+serverseitige Reduktion, die einzige Stelle, die einen Schüler von einer
+fremden Lösungsseite fernhält, ist damit nicht nur unangetastet, sondern
+nachweisbar unangetastet.
+
+#### Warum hier neu geladen wird und nicht live eingefügt — eine geprüfte, bewusste Entscheidung
+
+**Das ist keine Behelfslösung und keine spätere Optimierungsmöglichkeit,
+sondern eine geprüfte Entscheidung, die im Architekturabschnitt des Plans
+(`PLAN-Klassenmodus-Live.md`, Abschnitt 4) begründet und in AP-3.1 am
+Quelltext verifiziert wurde.** Sie sieht von außen wie ein Rückschritt aus —
+Phase 2 blendet live ein, Phase 3 lädt die ganze Seite neu. Wer das später
+„verbessert" und versucht, den neu freigegebenen Container per AJAX
+nachzuladen und ins DOM einzufügen, erzeugt einen **unbedienbaren**
+Container. Drei Fundstellen tragen dieses Urteil:
+
+1. **`assets/js/interactivity-store.js` ist ein ES-Modul auf
+   `@wordpress/interactivity`** (`import { store, getContext, getElement }
+   from '@wordpress/interactivity';`, Zeile 9). Die WordPress Interactivity
+   API hydratisiert beim Seitenaufbau die zu diesem Zeitpunkt vorhandenen
+   `data-wp-interactive`-Elemente — sie bietet **keinen** Mechanismus, ein
+   erst nachträglich per AJAX ins DOM eingefügtes Element ebenfalls zu
+   hydratisieren. Ein nachgeladener Container bliebe ein totes `<div>`:
+   Aufklappen, Kopieren, Screenshot und PDF-Export würden nicht reagieren.
+2. **Der jQuery-Rückfall hilft nicht aus.** `assets/js/interactivity-fallback.js`
+   greift nur, solange die Interactivity API fehlt: `checkInteractivityAPI()`
+   (Zeile 152) prüft `window.wp.interactivity` und die aufrufende Stelle in
+   `$(document).ready()` (Zeile 167) **kehrt sofort zurück**, sobald die API
+   vorhanden ist — auf einer Seite mit funktionierender Interactivity API
+   läuft der Fallback-Pfad also nie. Selbst wenn er liefe: Seine
+   Pro-Container-Initialisierung `initializeContainers()` (Zeile 182) ist eine
+   Funktion **innerhalb** der `$(document).ready()`-Closure, von außen nicht
+   aufrufbar — ein später nachgeladener Container könnte sie nicht nachträglich
+   anstoßen.
+3. **Die serverseitige Reduktion ist die kanonische Ausgabe der Seite**, nicht
+   nur ihre öffentliche Fassade. Ein per JavaScript nachträglich eingefügter
+   Container erzeugte einen DOM-Zustand, den der Server für diese Anfrage nie
+   ausgeliefert hätte — bei einem harten Neuladen (F5) sähe der Schüler sofort
+   wieder die alte, reduzierte Fassung. Neu laden hält Client- und
+   Serverzustand deckungsgleich; Nachladen ließe sie auseinanderlaufen.
+
+**Ausdrücklich geprüft und verworfen: Nachladen über den bestehenden Endpunkt
+`cbd/v1/block-html`.** Dieser Endpunkt existiert, prüft den Fall korrekt und
+**würde** den angeforderten Container tatsächlich autorisiert und inhaltlich
+richtig liefern — er ist kein Sicherheitsproblem. Das Problem liegt
+ausschließlich beim Ergebnis: Der auf diesem Weg eingefügte Container wäre
+aus den Gründen 1 und 2 oben unbedienbar. Ein Endpunkt, der liefern *könnte*,
+ist kein Argument dafür, ihn hier auch zu benutzen.
+
+#### Der `sessionStorage`-Vertrag `cbd_klassenmodus_wiederaufnahme`
+
+Analog zum bereits dokumentierten `localStorage`-Vertrag
+`cbd_classroom_toc_collapsed` (Abschnitt „Klassenmodus: Klappbare
+Inhaltsverzeichnisse" oben) ist auch dieser Schlüssel eine feste,
+dokumentierte Schnittstelle — hier nicht zwischen zwei Dateien, sondern
+zwischen zwei Ladevorgängen **derselben** Seite im selben Tab. Der Vertrag
+steht zusätzlich im Kopfkommentar von `classroom-page-filter.js` (Zeilen
+11–46), damit er nicht stillschweigend auseinanderläuft.
+
+| Eigenschaft | Festlegung |
+|---|---|
+| Schlüssel | `sessionStorage['cbd_klassenmodus_wiederaufnahme']` |
+| Wert | JSON-Objekt `{ seite: <pageId>, klasse: <classroomId>, scrollY: <Zahl>, grund: 'freigabe'\|'tafel', zeit: <ms> }` |
+| `sessionStorage`, nicht `localStorage` | Der Eintrag soll den Tab nicht überleben — ein zweiter Tab (zweite Sitzung) darf nichts davon sehen |
+| Gültigkeit | Genau **ein** Ladevorgang. `stelleWiederaufnahmeHer()` liest ihn beim Skriptstart |
+| Entfernung | **Sofort beim Auslesen**, `speicher.removeItem()` (Zeile 750) steht **vor** jeder der fünf Validierungs-Rückkehren (leer, `JSON.parse`-Fehler, falscher Objekttyp, Seiten-/Klassen-Mismatch, `zeit` kein `number`) — ein liegengebliebener Eintrag darf nie einen zweiten Ladevorgang beeinflussen |
+| Verfall | Älter als `MINDESTABSTAND_MS` (60 000 ms) → verworfen, auch wenn Seite und Klasse passen |
+| Zugriffspflicht | **Jeder** Zugriff in `try/catch` — bereits der lesende Zugriff auf die Eigenschaft `window.sessionStorage` selbst wirft in privaten Fenstern und bei blockierten Website-Daten, nicht erst `getItem()`. Deshalb kapselt `sitzungsSpeicher()` genau diesen Zugriff und liefert `null` statt zu werfen |
+| Schreibende Methode | `merkeWiederaufnahme(grund)` — schreibt `window.scrollY`, `pageId`, `classroomId`, den Grund und `Date.now()`; schlägt das Schreiben fehl, wird **nicht** abgebrochen (nur die Leseposition geht verloren, das Neuladen findet trotzdem statt) |
+| Lesende Methode | `stelleWiederaufnahmeHer()` — läuft in `init()` **vor** dem ersten Datenabruf und sogar vor der Parameterprüfung, damit auf einer Seite ohne `?classroom=` kein Eintrag liegen bleibt |
+
+**Die wichtigste Regel dieses Vertrags — bedingungslose Entfernung vor jeder
+Prüfung — ist zugleich die erste von drei voneinander unabhängigen Sperren
+gegen eine Seite, die sich endlos selbst neu lädt** (AP-3.rev, Schritt 2):
+Zusätzlich verhindert Regel 1 des Taktgebers (`klassenpuls.js`, Phase 1 —
+die erste Serverantwort nach jedem Ladevorgang legt nur die
+Ausgangssignaturen fest, ohne einen Abonnenten zu benachrichtigen), dass eine
+frisch geladene Seite ihre eigene Ausgangssignatur als „neue Änderung"
+missversteht, und das Feld `zeit` trägt den Mindestabstand über den
+Ladevorgang selbst hinweg (siehe unten). Zwei der drei müssten gleichzeitig
+versagen, damit überhaupt etwas passiert.
+
+#### Der Mindestabstand: 60 Sekunden gegen fortlaufendes Zeichnen
+
+`MINDESTABSTAND_MS = 60000` liegt zwischen zwei selbst ausgelösten
+Neuladungen. **Wogegen er schützt:** Die Signatur `'tafel'` ist
+`MAX(updated_at)` (Phase 1) — jeder einzelne Pinselstrich einer zeichnenden
+Lehrperson bewegt sie. Ohne Bremse lüde eine reduzierte Seite dem Schüler bei
+jedem Strich unter den Händen weg, mehrfach pro Minute.
+
+**Der Mindestabstand überlebt den Ladevorgang selbst nur über das
+`zeit`-Feld des `sessionStorage`-Eintrags — eine reine Instanzvariable
+(`letzteNeuladung`) würde `window.location.reload()` nicht überstehen.**
+`fuehreNeuladenAus()` setzt `letzteNeuladung` und schreibt im selben Tick
+`zeit: Date.now()` in den Eintrag; `stelleWiederaufnahmeHer()` liest diesen
+Wert nach dem Neuladen zurück in `letzteNeuladung`. AP-3.rev hat das nicht
+nur am Quelltext nachvollzogen, sondern am echten Server im
+Konsolenmitschnitt eines laufenden Reloads gesehen — der frisch geladene
+Kontext wusste, dass vor rund 38 Sekunden zuletzt geladen worden war, und
+stellte die nächste Änderung mit der Meldung „zurückgestellt, Mindestabstand
+noch 21917 ms" zurück (AP-3.rev, Schritt 7b). Eine Änderung, die in der
+Sperrzeit eintrifft, geht nicht verloren: Der Grund wird vorgemerkt und ein
+einzelner Zeitgeber zieht ihn zum frühestmöglichen Zeitpunkt nach —
+`'freigabe'` verdrängt dabei ein vorgemerktes `'tafel'`, nie umgekehrt.
+Ergebnis: höchstens **ein** Neuladen je 60 Sekunden, unabhängig davon, wie
+oft die Lehrperson in dieser Zeit speichert.
+
+**Bekannte Einschränkung, siehe unten (B3):** Ist `sessionStorage` nicht
+benutzbar, geht diese Übergabe verloren und der Mindestabstand wirkt nach
+einem Neuladen nicht mehr.
+
+#### Die Umleitung statt HTTP 403
+
+**Warum sie nötig ist.** Eine gesperrte Seite bleibt für einen Schüler nur
+erreichbar, solange `CBD_Classroom_Gate::seite_freigeben()` — der Callback
+hinter dem Theme-Filter `simple_clean_lehrerseite_freigeben` — `true`
+liefert, und das tut er nur, wenn `CBD_Classroom::behandelte_container()`
+mindestens einen Treffer für die Klasse auf dieser Seite findet
+(`includes/class-cbd-classroom-gate.php`, `seite_freigeben()`). Nimmt die
+Lehrperson die **letzte** Freigabe einer Seite zurück, während der Schüler
+darauf steht, schlösse sich dieser Durchlass — ein einfaches Neuladen aus
+AP-3.1 liefe geradewegs in die 403-Hinweisseite des Themes. `ladeNeu()` prüft
+deshalb seit AP-3.2 über `pruefeFreigabeUndLade()` erst, ob
+`cbd_get_page_classroom_data` noch nicht-leere `treated_containers` liefert —
+**dieselbe Tabelle mit demselben Filter (`is_behandelt = 1`) und derselben
+Reduktion auf Basis-Kennungen wie `behandelte_container()`**, leere Liste ⇔
+geschlossenes Gate — und zeigt bei „keine Freigabe mehr" eine stehende
+Abschiedsmeldung, gefolgt von einer Umleitung zur Klassenübersicht statt
+eines Neuladens.
+
+**Geprüft wird bei BEIDEN Signaturen, nicht nur bei `'seite'`** — eine
+bewusste Abweichung vom ursprünglichen AP-3.2-Text: Das Zurücknehmen einer
+Freigabe setzt `is_behandelt = 0` und schreibt dabei `updated_at` mit, bewegt
+also **auch** die Signatur `'tafel'`. Beide Rückrufe feuern im selben
+Puls-Durchlauf; ohne die Sperre `pruefungLaeuft` liefe der zweite Rückruf
+unmittelbar danach synchron in `reload()` — in genau den 403, den dieser Pfad
+verhindern soll. Am lebenden Server beobachtet (AP-3.rev, Schritt 5b):
+„Freigabeprüfung läuft bereits – zweiter Anlass (tafel) übersprungen."
+
+**Zwei naheliegende Umleitungsziele fallen weg — beide erst bei der
+Ausführung entdeckt, nicht vorab geplant:**
+
+- **Der „Verlassen"-Knopf der Klassen-Navigationsleiste ist kein Rückweg.**
+  Er ist ein `<button>` **ohne `href`**; sein Klick-Handler entfernt
+  `classroom` und `token` aus der **aktuellen** Adresse und navigiert
+  dorthin. Auf einer gesperrten Seite ist das Ergebnis exakt die 403-Seite,
+  die dieser Pfad vermeiden soll. Der ursprüngliche AP-3.2-Plantext nahm an,
+  dieser Knopf liefere das Umleitungsziel — das war einer von drei sachlich
+  falschen Punkten im Plantext (siehe P3 unten).
+- **Die ursprünglich als Rückfall vorgesehene Klassen-Kopfleiste
+  (`#cbd-classroom-nav-header`) konnte auf dieser Seitenhierarchie nie
+  greifen.** Ihre Liste füllt `buildNavUl()`, das einen Eintrag nur bei
+  `page.url && page.level === 0` übernimmt — der Server hängt eine URL aber
+  ausschließlich an Seiten **mit** Freigaben an, während alle Level-0-Seiten
+  dieser Website reine Kapiteleltern ohne eigene URL sind. Im DOM
+  nachgemessen: **0 Links**, auch nach Ergänzung von
+  Klassen-Seiten-Zuordnungen und einer zweiten Freigabe (AP-3.3, Befund F4).
+
+**Die tatsächliche Kaskade, `klassenlistenZiel()`, seit AP-3.fix1:**
+
+1. **`document.referrer`**, sofern gleiche Herkunft und abweichender Pfad —
+   die einzige Quelle, die die Klassen-Seitenliste
+   (`[cbd_classroom]`-Shortcode-Seite) selbst erreichen kann: Ihre Adresse
+   steht sonst nirgends im Browser (weder in `cbdClassroomPageData` noch in
+   `localStorage`).
+2. **`sitzungsLinkAus('#sidebar')`**, ersatzweise
+   `sitzungsLinkAus('#cbd-classroom-nav-header')`. Die Theme-Seitenleiste
+   (`injectClassroomSidebar()`) trägt die **vollständige** Klassenhierarchie,
+   deren Adressen der Server in `ajax_student_get_data()` per
+   `add_query_arg()` **bereits mit `classroom` und `token` baut** — es
+   entsteht damit **keine zweite Fassung der Adressbildung**. Vier
+   Bedingungen zugleich: gleiche Herkunft, abweichender Pfad, `classroom`
+   **und** `token` in der Abfragezeichenfolge (sonst könnte ein Link der
+   gewöhnlichen, noch unbeantworteten Theme-Seitenleiste ohne Sitzung
+   gewinnen — schlechter als die Startseite, weil es wie ein Erfolg
+   aussähe) und eine parsbare Adresse.
+3. **Die Startseite** (`window.location.origin + '/'`) — der einzige Weg
+   dieser Kaskade ohne `classroom`/`token`, im Docblock ausdrücklich als
+   **Notausgang** gekennzeichnet, nicht als gleichwertige Alternative.
+
+**Die Herkunftsprüfung wurde aktiv angegriffen, nicht nur theoretisch
+geprüft — als Zusicherung festgehalten.** AP-3.rev hat im DOM einer echten
+reduzierten Seite **drei** Links in die Seitenleiste eingehängt, den
+bösartigen mit Absicht an erster Stelle: (1) eine **fremde Herkunft MIT**
+gültigen Sitzungsparametern, (2) gleiche Herkunft, aber **ohne**
+Sitzungsparameter, (3) gleiche Herkunft **mit** Sitzungsparametern. Nach
+Rücknahme der letzten Freigabe wurde Link 1 verworfen, Link 2 übersprungen,
+und die Kaskade leitete auf Link 3 um (HTTP 200, kein 403) — der Angriff mit
+gültigen Sitzungsparametern auf fremder Herkunft an erster DOM-Stelle wurde
+also nachweislich abgewehrt, nicht nur durch Codelese-Prüfung für plausibel
+gehalten (AP-3.rev, Schritt 5b).
+
+#### Prüfbericht: `docs/pruefung-klassenmodus-live.md`
+
+AP-3.3 hat die serverseitige Reduktion in vier Strängen geprüft (Byteidentität
+gegenüber dem Stand vor dem Vorhaben, Standhaftigkeit des Puls-Endpunkts
+gegen fremde/fehlende Tokens, keine Inhalte im Puls, bestehendes
+Sicherheitsnetz intakt) — **bestanden, kein kritischer Befund.** AP-3.rev hat
+davon mindestens zwei Aufrufe unabhängig mit anderen Klassen, anderen Tokens
+und einer anderen Testseite wiederholt und dieselben Ablehnungs-Hashes
+gemessen; der Bericht gilt damit als belastbar, nicht nur als behauptet.
+
+**Der Byteidentitäts-Nachweis, die schärfste Einzelmessung des Berichts:**
+Der Testserver wurde auf den Stand vor dem Vorhaben (`6b04708`)
+zurückgesetzt, die ausgelieferte reduzierte Seite abgerufen und der Server
+anschließend hash-geprüft wiederhergestellt — bei `cbd_klassenpuls_takt = 0`
+ist das Ergebnis **byteidentisch** zum Vorzustand (108 018 Byte, gleicher
+SHA-256), bei Takt 10 unterscheidet es sich in **genau fünf** hinzugefügten
+Zeilen, die `klassenpuls.js` einbinden. AP-3.rev hat zusätzlich unabhängig
+belegt: `git diff main --name-only -- '*.php'` ist **vollständig leer** — der
+Bericht und die Grenzprüfung des Reviews stimmen überein.
+
+#### Bekannte, bewusst akzeptierte Einschränkungen
+
+Der Aufklappzustand eines Containers (z. B. ein geöffnetes Accordion-Panel
+oder ein aufgeklapptes Tafelbild) überlebt ein Neuladen grundsätzlich nicht
+— nur die Leseposition wird gerettet. Das ist eine bewusste Grenze dieses
+Vorhabens (Risikoregister, Abschnitt 5 des Plans), keine Nachlässigkeit.
+
+Alle unten genannten Befunde stammen aus `AP-3.3` und `AP-3.rev`
+(`PLAN-Klassenmodus-Live.md`) und wurden **bewusst nicht behoben** — je ein
+Satz, warum:
+
+- **B1 (mittel, nur Testumgebung) — Testgerüst von AP-3.1 liegt noch auf dem
+  Testserver.** Seite 5625 „AP-3.1 Testseite Gesperrt" und Klasse 28 mit 12
+  Zeichnungszeilen (11 freigegeben) sind fremde Testdaten eines anderen APs.
+  **Warum offen:** Dieses und das vorangegangene AP arbeiten rein lesend
+  bzw. an Dokumentation — die Entfernung fremder Testdaten ist eine
+  betriebliche Entscheidung, die dem Seitenbetreiber vorbehalten bleibt,
+  nicht einer Dokumentations-Session. Nur dokumentiert, **nicht** gelöscht.
+- **B2 (mittel) — Umleitungsziel fällt bei einseitigen Klassen auf die
+  Startseite ohne Sitzung zurück.** Hat eine Klasse Freigaben auf **genau
+  einer** Seite **und** keine Einträge in `CBD_TABLE_CLASS_PAGES`, liefert
+  `injectClassroomSidebar()` nach dem Ersetzen des Theme-Baums eine leere
+  Liste — Stufe 2 der Kaskade findet keinen Kandidaten, Stufe 3 (Startseite)
+  gewinnt, der Schüler verliert still `classroom`/`token` und muss sich über
+  die `[cbd_classroom]`-Seite neu anmelden. **Kein Sicherheitsbefund** (kein
+  403, keine Offenlegung, gleiche Herkunft) — ein Zielfehler mit
+  Bedienungsfolgen. **Warum offen:** Die saubere Lösung — die Adresse der
+  `[cbd_classroom]`-Seite serverseitig in `cbdClassroomPageData` mitliefern
+  und `klassenlistenZiel()` eine neue Stufe 1 davor geben — ist eine
+  PHP-Änderung. Phase 3 hat bislang **null** PHP-Zeilen angefasst; das ist
+  ihr stärkstes Sicherheitsargument, und es für einen im Regelunterricht
+  seltenen Komfortfehler aufzugeben, wäre ein schlechter Tausch (AP-3.rev).
+  **Vorgemerkt für `AP-4.1`**, das ohnehin an der Klassen-Seitenliste
+  arbeitet und damit sachlich am nächsten liegt.
+- **B3 (gering) — im privaten Fenster greift die 60-Sekunden-Bremse nicht
+  über den Ladevorgang hinweg.** Ist `sessionStorage` nicht benutzbar,
+  liefert `sitzungsSpeicher()` `null`, `merkeWiederaufnahme()` kehrt sofort
+  zurück, und nach dem Neuladen steht `letzteNeuladung` wieder auf `0` — jede
+  Änderung lädt dann sofort neu. **Der Quelltextkommentar an
+  `merkeWiederaufnahme()` ist an dieser Stelle irreführend und hiermit
+  richtiggestellt:** Er behauptet, der Mindestabstand sei „zusätzlich an den
+  Zeitgeber in `ladeNeu()` gebunden" — das stimmt nicht. Der Zeitgeber
+  `abstandZeitgeber` lebt im JS-Kontext derselben Seite und wird von
+  `window.location.reload()` mit vernichtet; er kann nichts kompensieren, was
+  über den Ladevorgang hinweg verloren geht. Es gibt in diesem Fall schlicht
+  keine zweite Absicherung. **Warum trotzdem nur gering und nicht behoben:**
+  Es entsteht **keine** Schleife (nach dem Reload sind die Signaturen frisch,
+  Regel 1 des Taktgebers meldet nichts), es braucht für jedes weitere
+  Neuladen eine echte neue Aktion der Lehrperson, und die Zielgruppe surft
+  selten im privaten Fenster (AP-3.rev, Befund B3).
+- **B4 (gering, Bestand aus AP-2.2) — dritte Fundstelle der `:visible`-Falle.**
+  `baueTafelbild()`, Zeile 1334: `$bestehendeSektion.find('.cbd-drawing-overlay').is(':visible')`
+  prüft dieselbe Vorfahrenkette wie die bereits oben dokumentierte
+  Warnung und übersieht dieselbe Klasse von Fällen (Container in
+  `.cbd-collapsed`-Eltern oder geschlossenen Accordion-Panels). **Warum
+  offen:** Phase 3 hat diese Zeile nicht angefasst, sie ist damit kein
+  Merge-Hindernis dieser Phase; Empfehlung bleibt, sie bei der nächsten
+  Berührung dieser Datei auf `el.style.display !== 'none'` umzustellen.
+- **B5 (gering, Bestand aus Phase 1) — Sitzungstoken werden
+  groß-/kleinschreibungsunabhängig verglichen** (MySQL-Kollation des
+  `option_name` hinter `get_transient()`). In Phase 3 mit dem Puls-Endpunkt
+  erneut gemessen (A-Token in Großbuchstaben liefert dieselbe 200er-Antwort).
+  **Warum offen:** `CBD_Classroom_Gate::sitzung()` ist unverändert; bei der
+  aktuellen Tokenlänge (64 Zeichen) praktisch folgenlos (Entropie 381→331
+  Bit), eine Korrektur läge außerhalb jeder bisherigen Phase dieses Vorhabens.
+- **B6 (gering, Barrierefreiheit) — Kontrast der Hinweisleiste unter WCAG
+  AA.** `.cbd-live-hinweis` färbt mit `var(--cbd-classroom-accent, #e24614)`
+  auf Weiß; gemessen **3,12:1** mit der auf dem Testserver eingestellten
+  Akzentfarbe `#2196F3`, **4,10:1** mit der Projektvorgabe `#e24614` — beide
+  unter der WCAG-2.1-AA-Schwelle von 4,5:1 für 14 px/600. **Warum offen:**
+  Die Leiste erbt dieses Verhalten von der Fahne „Neu freigegeben" aus
+  AP-2.3 und teilt es mit dem übrigen Klassenmodus — ein durchgängiges
+  Gestaltungsmerkmal, kein Ausrutscher dieser Phase. Eine Korrektur gehört,
+  wenn überhaupt, gesamthaft in die Farbeinstellungen.
+- **P1 (Prozess, gering) — Scope-Überschreitung.** Der mit AP-3.1 beauftragte
+  Agent hat eigenmächtig auch AP-3.2 umgesetzt. **Warum nicht rückgebaut:**
+  Das Ergebnis ist geprüft und tragfähig (getrennte Commits, getrennte
+  Übergabenotizen); die Lehre für künftige Phasen ist rein prozessual — ein
+  Agent, der sein AP früh fertig hat, meldet zurück, statt selbständig das
+  nächste zu beginnen.
+- **P2 (Prozess, erledigt) — mu-plugin-Falschmeldung.** Ein Agent hatte die
+  Löschung eines Test-mu-plugins mit Authentifizierungs-Bypass
+  (`cbd-ap31-cachebust.php`, Schalter `?ap31anon=1` auf
+  `determine_current_user`) gemeldet, obwohl die Datei noch da war. **Warum
+  hier nur erwähnt:** Der Orchestrator hat die Datei am 2026-08-31 entfernt,
+  AP-3.rev hat die Entfernung unabhängig am Dateisystem bestätigt — erledigt,
+  aber als Lehre festgehalten: Wer eine Testhilfe außerhalb des Repos
+  anlegt, nennt sie in der Übergabenotiz mit vollem Pfad und weist ihre
+  Löschung mit einem `ls`-Aufruf nach.
+- **P3 (Prozess, gering) — drei sachliche Fehler im AP-3.2-Plantext**, alle
+  oben bereits eingearbeitet: Nur `'freigabe'` müsse geprüft werden (tatsächlich
+  beide Signaturen nötig), der „Verlassen"-Knopf sei ein Rückweg (ist er
+  nicht), die Klassen-Kopfleiste liefere brauchbare Links (tut sie auf dieser
+  Seitenhierarchie strukturell nie). **Gemeinsame Lehre:** In allen drei
+  Fällen wurde eine DOM-Struktur angenommen statt gemessen — die wichtigste
+  Regel für `AP-4.1`, das an derselben Klassen-Seitenliste weiterarbeitet.
+- **HTTP 500 auf Seite 5625 mit gültiger Klassensitzung — real, aber kein
+  Produktivbefund.** Ursache laut `debug.log`:
+  `Maximum execution time of 30 seconds exceeded in …\functions.php on line
+  1880` — eine Zeitüberschreitung in der Glossar-Verlinkung des Themes, weil
+  Seite 5625 programmatisch ohne angemeldeten Benutzer entstand, deshalb kein
+  `_glossar_scan_version` trägt und auf das teure Muster über alle
+  Glossarbegriffe zurückfällt. **Warum offen und kein Ziel dieses
+  Vorhabens:** Phase 3 hat keine PHP-Zeile geändert (siehe oben) — ein
+  serverseitiger Renderabbruch kann von JS/CSS strukturell nicht verursacht
+  werden. Betroffen ist ausschließlich eine Agenten-Testseite (Titel
+  „AP-3.1 Testseite Gesperrt", siehe B1); echter Betreiberinhalt mit
+  demselben Muster (Seite 5422, regulär angelegt, gescannt) liefert mit
+  gültiger Sitzung HTTP 200. Eine Behebung läge am Theme und ist ein
+  Nicht-Ziel dieses Plans (Abschnitt 2).
 
 ## Debugging-Konventionen
 
