@@ -25,7 +25,37 @@ Betreiber denselben Eindruck:
 | # | Ursache | Betroffen | Symptom im PDF |
 |---|---|---|---|
 | **U1** | `html2canvas` mit `foreignObjectRendering: true` liefert eine **vollständig transparente** Leinwand; die Annahmeprüfung testet nur `width>0 && height>0`, erkennt das Leerbild nicht und erreicht den funktionierenden Standard-Painter nie | **alle** Formeln in aufgeklappten Containern (hier 36 von 76) | Formel **völlig unsichtbar**, es bleibt eine Lücke |
-| **U2** | `expandAllBlocks()` sucht nur unterhalb von `[data-wp-interactive="container-block-designer"]`; die Container dieser Seite haben dieses Attribut **nicht**, bleiben also zugeklappt → Formeln haben Maß 0 → die Größenbremse überspringt sie stumm | alle Formeln in **zugeklappten** Containern (hier 40 von 76) | Formel als **verstümmelter Fließtext**, mathematisch **falsch** |
+| **U2** | ~~`expandAllBlocks()` sucht nur unterhalb von `[data-wp-interactive="container-block-designer"]`; die Container dieser Seite haben dieses Attribut **nicht**, bleiben also zugeklappt → Formeln haben Maß 0 → die Größenbremse überspringt sie stumm~~ **— widerlegt, siehe Richtigstellung unten** | alle Formeln in **zugeklappten** Containern (hier 40 von 76) | Formel als **verstümmelter Fließtext**, mathematisch **falsch** |
+
+> **Richtigstellung (unabhängiges Review, `PLAN-Nachtraege-Klassenmodus.md`,
+> Befund N2-1, 2026-09-04):** **U2 ist widerlegt.** Diese Zeile prüfte nur
+> `$block.find('[data-wp-interactive="container-block-designer"]')` (0
+> Treffer, siehe Abschnitt 5.1) — aber die zweite Zeile desselben
+> Code-Ausschnitts, `$block.is('[data-wp-interactive="container-block-designer"]')`,
+> ist über alle 23 geprüften Container **23 von 23 wahr**, weil
+> `includes/class-cbd-block-registration.php:930` dieses Attribut
+> **bedingungslos** an jeden gerenderten Container schreibt. `$allContainers`
+> hat dadurch immer mindestens einen Eintrag (den Block selbst), die
+> Schleife läuft, und nach der Aufklapplogik von `expandAllBlocks()` haben
+> **0 von 76** Formeln ein Maß < 2 px — nicht 40. **Auch die als Ersatz
+> vorgeschlagene Erklärung des N2-Fixes (abgesetzte Formeln hätten als
+> Inline-Element keine eigene Breite) ist widerlegt** (Review-Befund N2-2):
+> `assets/css/latex-formulas.css:31–34` setzt
+> `.cbd-latex-formula.cbd-latex-display { display: block !important; }` —
+> der berechnete `display`-Wert dieser Spans ist `block`, nicht `inline`,
+> und keine sichtbare abgesetzte Formel hatte je Breite 0. Die 40 Formeln
+> mit Maß 0 lagen ausnahmslos in **zugeklappten** Containern (Inline- wie
+> abgesetzte gemischt) — die Ursache dort war das Zuklappen, nicht die
+> Formelart. Die **einzige belegte** Ursache der
+> `Captured 0/N`-Zeilen ist Punkt 1 aus `CLAUDE.md`, Abschnitt „PDF-Export:
+> Formeln als Bild — die Blankheitsprüfung" (`canvasIstBemalt()` gegen die
+> leere `foreignObjectRendering`-Leinwand); `messeFormel()` rettet auf der
+> Prüfseite **0 von 76** Formeln und ist reine, ungemessene Vorsorge. Die
+> Messwerte in Abschnitt 5 dieses Berichts (Selektorergebnis,
+> Capture-Protokoll, Nachweis in 5.3) bleiben gültig — **nur der daraus
+> gezogene Schluss „das ist die Ursache" ist falsch.** Details und
+> Gegenmessung: `PLAN-Nachtraege-Klassenmodus.md`, Abschnitt „Priorität 2 —
+> der U2-Streit: beide Seiten haben unrecht".
 
 **Empfehlung: Variante A** — den bestehenden PNG-Weg reparieren (U1 zuerst),
 Umfang ca. **35–40 Zeilen JavaScript in einer Datei**, Aufwand **0,5–1 Tag**
@@ -220,7 +250,28 @@ zuerst versucht, beschleunigt den Export also deutlich mit.
 
 ---
 
-## 5. Die tatsächliche Ursache U2 — zugeklappte Container werden nie aufgeklappt
+## 5. U2 — zugeklappte Container werden nie aufgeklappt (widerlegt, siehe Richtigstellung)
+
+> **Diese Abschnittsüberschrift stammt aus der ursprünglichen Diagnose und
+> ist widerlegt.** Das unabhängige Review (`PLAN-Nachtraege-Klassenmodus.md`,
+> Befund N2-1) hat gemessen, dass `$block.is('[data-wp-interactive=
+> "container-block-designer"]')` — die Zeile direkt unter der in 5.1
+> zitierten `.find()`-Zeile — **23 von 23 mal wahr** ist und `$allContainers`
+> deshalb nie leer bleibt. Die Messungen in 5.1–5.3 unten sind unverändert
+> zutreffend (sie sind stehen gelassen, nicht gelöscht), nur der Schluss
+> „das ist die Ursache der fehlenden Formeln" ist falsch: Nach der
+> Aufklapplogik von `expandAllBlocks()` hat **keine** der 76 Formeln ein
+> Maß < 2 px. **Die ursprünglich hier vermutete Ersatzursache — `messeFormel()`s
+> Vorgänger-Zustand, eine Breite-0-Messung bei abgesetzten Formeln — ist
+> ebenfalls widerlegt** (Review-Befund N2-2): `assets/css/latex-formulas.css:32`
+> setzt `display: block !important` auf diese Spans, keine sichtbare
+> abgesetzte Formel hatte je Breite 0, und `messeFormel()`s Rückfall rettet
+> auf der Prüfseite **0 von 76** Formeln. Die belegte, alleinige Ursache der
+> `Captured 0/N`-Zeilen ist stattdessen Punkt 1 aus `CLAUDE.md`, Abschnitt
+> „PDF-Export: Formeln als Bild — die Blankheitsprüfung" —
+> `canvasIstBemalt()` gegen die leere `foreignObjectRendering`-Leinwand.
+> `messeFormel()` (Punkt 2 dort) bleibt unschädlich im Code, ist aber
+> nachweislich wirkungslos, nicht die Ursache.
 
 ### 5.1 Der Selektor greift nicht (`pdf-server-side.js:128–131`)
 
@@ -356,12 +407,19 @@ Trennung nicht nach Sorte, sondern nach Klappzustand: Von den 40 übersprungenen
 Formeln sind sowohl abgesetzte als auch inline betroffen.
 
 **f) Sind Formeln in zugeklappten Containern betroffen?**
-**Ja — das ist U2**, siehe Abschnitt 5. Anders als in der Auftragsvermutung
-liegt es hier aber **nicht** an falschem KaTeX-Rendern in `display:none`:
+**Zum Zeitpunkt dieser Diagnose ja** (40 von 76 hatten Maß 0, siehe Abschnitt
+5) — **als Ursache der PDF-Lücken aber widerlegt.** Das unabhängige Review
+(`PLAN-Nachtraege-Klassenmodus.md`, N2-1) hat nachgewiesen, dass
+`expandAllBlocks()` über `$block.is(...)` (23/23 wahr) tatsächlich jeden
+Container aufklappt und nach dieser Aufklapplogik **0 von 76** Formeln ein
+Maß < 2 px behalten — die hier vermutete Ursache U2 tritt in dieser Form
+nicht auf. Anders als in der Auftragsvermutung liegt das ohnehin **nicht**
+an falschem KaTeX-Rendern in `display:none`:
 `cbdRenderLatex` hatte bereits alle **76 von 76** Formeln gerendert
 (`data-cbd-latex-rendered="1"`, 76 `.katex`-Knoten, 0 `.cbd-latex-error`,
-0 `data-cbd-latex-failed`) — auch die zugeklappten. Es liegt allein daran, dass
-sie zum Capture-Zeitpunkt **Maß 0** haben.
+0 `data-cbd-latex-failed`) — auch die zugeklappten. Sie hatten zum
+Capture-Zeitpunkt zwar Maß 0, aber weil sie aufgeklappt wurden, bevor der
+Capture lief, wirkte sich das nicht aus.
 
 **g) Stehen die Formeln womöglich weiß auf weiß? (U3)**
 **Nicht im gemeldeten Fall, aber der Mechanismus existiert.**
@@ -410,7 +468,7 @@ Z. 245-247) — bei den Formeln nicht. **3 Zeilen, gratis mitzunehmen.**
 | Teil | Eingriff | Umfang |
 |---|---|---|
 | **A1 (U1)** | In `captureFormulaImages()` nach dem Capture prüfen, ob die Leinwand überhaupt bemalt ist (`getImageData`, irgendein Pixel mit Alpha > 10), und nur dann annehmen; sonst Standard-Painter. **Zusätzlich das Ergebnis je Sitzung merken** — ist FO beim ersten Mal leer, für die restlichen Formeln direkt den Standard-Painter nehmen (sonst zahlt jede Formel beide Verfahren und der Export wird noch langsamer). | ~20 Z. |
-| **A2 (U2)** | In `expandAllBlocks()` zusätzlich `$block.find('.cbd-container-content')` (alle, nicht `.first()`) einsammeln, unabhängig von `data-wp-interactive`. Sichern/Zurücksetzen bleibt unverändert. | ~10 Z. |
+| **A2 (U2, widerlegt — siehe Richtigstellung Abschnitt 5)** | In `expandAllBlocks()` zusätzlich `$block.find('.cbd-container-content')` (alle, nicht `.first()`) einsammeln, unabhängig von `data-wp-interactive`. Sichern/Zurücksetzen bleibt unverändert. **Umgesetzt als `CONTAINER_SELEKTOR`-Erweiterung (Commit `08d8db6`), aber nachweislich wirkungslos:** Alle 23 Container der Prüfseite tragen `data-wp-interactive` bereits, `$block.is(...)` griff schon vorher. Bewusst nicht zurückgebaut — siehe `PLAN-Nachtraege-Klassenmodus.md`, Befund N2-4. | ~10 Z. |
 | **A3 (U3)** | Formelfarbe für das Capture erzwingen — am saubersten über die `onclone`-Rückrufoption von html2canvas, die den Klon vor dem Malen anfasst (Farbe aus dem Hellmodus-Wertesatz), **nicht** durch Umschalten von `data-theme` an der echten Seite (das würde flackern — und Flackern ist auf diesem Branch bereits ein eigenes Thema). | ~8 Z. |
 | **A4 (latent)** | ID-Vergabe vor `$block.clone()` ziehen (Abschnitt 7). | ~3 Z. |
 
@@ -501,8 +559,13 @@ Wirksamkeitsnachweis eines Aufklappens (13/13) · Erreichbarkeit von
   ist in dieser Umgebung nicht installiert. Statt eines Screenshots liegen die
   Pixelauszählung der übertragenen Bilder (stärker) und die extrahierte
   Textebene vor.
-- **Andere Seiten.** Nur Seite 1636 wurde vollständig exportiert. Die
-  Ursachen U1/U2 sind aber strukturell und nicht inhaltsabhängig.
+- **Andere Seiten.** Nur Seite 1636 wurde vollständig exportiert. Ursache U1
+  ist strukturell und nicht inhaltsabhängig. **U2 ist widerlegt, und die als
+  Ersatz vermutete Breite-0-Messung bei abgesetzten Formeln ebenfalls**
+  (siehe Richtigstellung in Abschnitt 5 und 0, Review-Befunde N2-1/N2-2) —
+  die einzige belegte Ursache der `Captured 0/N`-Zeilen ist U1
+  (`canvasIstBemalt()` in `CLAUDE.md`), ebenfalls strukturell und nicht
+  inhaltsabhängig.
 - **Kein interaktiver WordPress-Login.** WordPress wurde per **PHP-CLI**
   (`php.exe -c C:\allinkl-testserver\conf\php.ini` + `wp-load.php`)
   gebootstrappt; **es wurde nichts in den Web-Root gelegt** und nichts in der

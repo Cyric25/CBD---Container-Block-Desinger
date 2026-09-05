@@ -3507,17 +3507,47 @@ Formel den aussichtslosen Versuch. Genau daran hing die Exportdauer:
 76 Formeln braucht **51 s** (vorher erreichte derselbe Lauf nach 454 s erst
 Block 20 von 23).
 
-**2. Abgesetzte Formeln haben Breite 0.** Eine Display-Formel ist ein
-`<span class="cbd-latex-formula cbd-latex-display">`. Als Inline-Element hat
-der Span keine eigene Breite — `getBoundingClientRect()` meldet dort 0,
-obwohl das gerenderte KaTeX-Kind sichtbar ist. Die Größenbremse
-(`rect.width < 2`) übersprang solche Formeln **stumm**, ganze Blöcke meldeten
-`Captured 0/5`. Übrig blieb der Textabzug aus `.katex-html` — und der ist bei
-Brüchen **mathematisch falsch**: Aus der Nernst-Gleichung wird
-`E=E0+n⋅FR⋅T​⋅lnc(Red)c(Ox)​`, Zähler und Nenner vertauscht. Für einen
-Chemielehrer ist das schlechter als eine Lücke. `messeFormel(el)` nimmt jetzt
-ersatzweise das erste Kind mit echtem Kasten (`.katex-display`, `.katex`,
-`.cbd-latex-content`) als Capture-Ziel.
+**2. `messeFormel()` und die Selektor-Erweiterung: harmlose Vorsorge, keine
+gemessene Reparatur (richtiggestellt nach dem unabhängigen Review,
+`PLAN-Nachtraege-Klassenmodus.md`, Befunde N2-2/N2-4/N2-5).** Ursprünglich
+stand hier die Begründung, eine Display-Formel
+(`<span class="cbd-latex-formula cbd-latex-display">`) habe als
+Inline-Element keine eigene Breite und `getBoundingClientRect()` melde dort
+0. **Das ist sachlich falsch:** `assets/css/latex-formulas.css:31–34` setzt
+`.cbd-latex-formula.cbd-latex-display { display: block !important; width:
+100%; }` — der berechnete `display`-Wert dieser Spans ist `block`, nicht
+`inline`. Gemessen auf der Prüfseite 1636 (23 Container, 76 Formeln): **keine
+sichtbare** abgesetzte Formel hat je Breite 0, weder im Ruhezustand noch nach
+dem Aufklappen durch `expandAllBlocks()`. Die 40 Formeln mit Maß 0, die die
+Diagnose beobachtet hatte, lagen ausnahmslos in **zugeklappten** Containern
+(Inline- wie abgesetzte gemischt) — die Ursache dort war das Zuklappen, nicht
+die Formelart.
+
+`messeFormel(el)` (nimmt ersatzweise das erste Kind mit echtem Kasten —
+`.katex-display`, `.katex`, `.cbd-latex-content` — als Capture-Ziel) und die
+`CONTAINER_SELEKTOR`-Erweiterung von `expandAllBlocks()` (zusätzlich
+`[data-stable-id^="cbd-"]` neben `[data-wp-interactive=
+"container-block-designer"]`) sind deshalb **beide unschädlich, aber
+nachweislich wirkungslos**: `data-wp-interactive` wird in
+`includes/class-cbd-block-registration.php:930` bedingungslos an jeden
+gerenderten Container geschrieben, `expandAllBlocks()` klappte über
+`$block.is(...)` also schon vorher jeden Container auf, und `messeFormel()`s
+Rückfall greift auf der Prüfseite **0 von 76** Mal — weder im Ruhezustand
+noch danach. Beide Härtungen bleiben im Code (Entfernen wäre ein Risiko ohne
+Gewinn), gelten aber als Vorsorge für einen Fall, der auf dieser Website
+nicht auftritt, nicht als gemessene Reparatur.
+
+**Die belegte, alleinige Ursache der `Captured 0/N`-Zeilen ist Punkt 1
+oben (`canvasIstBemalt()`).** Ohne diesen Fix blieb der vergebliche
+`foreignObjectRendering`-Versuch für **jede** Formel bestehen — Formeln in
+aufgeklappten Containern verloren dabei den Standard-Painter (leeres Bild
+statt eines gemalten), und der Textabzug aus `.katex-html` blieb als
+Platzhalter stehen. Der ist bei Brüchen **mathematisch falsch**: Aus der
+Nernst-Gleichung wird `E=E0+n⋅FR⋅T​⋅lnc(Red)c(Ox)​`, Zähler und Nenner
+vertauscht — für einen Chemielehrer schlechter als eine Lücke. Details der
+Gegenmessung: `docs/diagnose-pdf-formeln.md`, Abschnitt 5 (Richtigstellung),
+und `PLAN-Nachtraege-Klassenmodus.md`, Abschnitt „Priorität 2 — der
+U2-Streit: beide Seiten haben unrecht".
 
 **3. Im Dunkelmodus weiß auf weiß.** Ein PDF bildet den Darkmode
 grundsätzlich nicht ab — das leistet `collectCSSVariables()`, indem es
@@ -4986,6 +5016,31 @@ Klasse 15 mit 26 Containern, davon 23 freigegeben):
 
 Der leere Inline-Stil im „nachher"-Fall ist der eigentliche Beweis: Versteckt
 hat dort **das Stylesheet**, nicht JavaScript.
+
+**Nachweisqualität dieser Messstelle, vom unabhängigen Review geprüft
+(`PLAN-Nachtraege-Klassenmodus.md`, Befund G1):** Von den drei nicht
+freigegebenen Kennungen auf Seite 1618 erzeugen **zwei** überhaupt kein
+DOM-Element — sie stehen im `post_content`, werden aber nicht gerendert. Die
+obige Messung „15 Frames → 0" beruht damit faktisch auf **einem** einzigen
+versteckbaren Container. Das Review hat die Messung deshalb auf Seite 3002
+„Die Glycosidische Bindung" (Klasse 15) mit **16** tatsächlich gerenderten
+versteckbaren Containern wiederholt (drei Läufe à 358–360 Frames): Ergebnis
+unverändert **0 Flackerframes**, mit einer freigegebenen Positivkontrolle im
+selben Lauf (sichtbar in 337–340 der Frames), die belegt, dass die Messung
+selbst nicht blind ist. Beim allerersten Frame, in dem die 16 Container
+existierten, war ihr Inline-Stil leer und `display` bereits `none` —
+derselbe Beweis wie oben, nur mit einer Messstelle, die tatsächlich 16 statt
+1 Container prüft. Für künftige Messungen: die Messstelle an der Zahl der
+**gerenderten** Elemente aussuchen, nicht an der Zahl im `post_content`.
+
+**Nicht live gemessen (Befund G2):** Der Tafelbild-Zweig
+(`hatTafelbilder === true`, also der Weg **mit** AJAX-Erstaufbau) ist von
+keiner der bisherigen Messungen — weder der ursprünglichen noch der des
+Reviews — tatsächlich durchlaufen worden: Keine der benutzten Prüfseiten hat
+für ihre Klasse eine Zeichnungszeile. Der Zweig selbst ist unverändert der
+bisherige Code (`loadClassroomData()`), von diesem Nachtrag nicht angefasst
+— aber die Behauptung, er sei gemessen, ist nicht belegt. Offene
+Prüflücke, vor einem Ausrollen von Hand anzusehen.
 
 #### Warum inline im `<head>` und nicht anders
 

@@ -221,29 +221,6 @@
         },
 
         /**
-         * Die serverseitig mitgelieferten Klassendaten in der Form, die
-         * `filterContainers()`/`einmaligAufbauen()` erwarten — oder `null`
-         * (Nachtrag „Flackerschutz").
-         *
-         * `null` bedeutet: kein Vorfilter möglich, der bisherige Weg über
-         * `loadClassroomData()` gilt unverändert. Das ist der Fall auf
-         * reduzierten Seiten (dort hat der Server das HTML der nicht
-         * freigegebenen Container nie ausgeliefert — Phase 3), ohne gültige
-         * Klassensitzung, und bei einer älteren PHP-Fassung ohne das Feld
-         * `freigegeben`. **Dieser Rückfall muss erhalten bleiben** — die
-         * beiden Dateien werden nicht zwangsläufig gemeinsam ausgeliefert.
-         *
-         * Die synthetische `drawings`-Karte trägt je freigegebenen Container
-         * genau `{ is_behandelt: true, pages: {} }`. Das ist kein Notbehelf,
-         * sondern reproduziert die Serverantwort exakt: `treated_containers`
-         * und `drawings[...].is_behandelt` beruhen in
-         * `ajax_get_page_classroom_data()` auf DERSELBEN Bedingung
-         * (irgendeine Zeile des Containers hat `is_behandelt = 1`) — das
-         * Abzeichen „✓ Behandelt" gehört also genau den freigegebenen
-         * Containern. `pages: {}` lässt `baueTafelbild()` sofort und ohne
-         * DOM-Änderung zurückkehren (weder `hasPages` noch `hasLegacy`).
-         */
-        /**
          * Die Inline-Versteckregeln des Servers aus dem Stylesheet entfernen
          * (Nachtrag „Flackerschutz").
          *
@@ -319,6 +296,29 @@
             return entfernt;
         },
 
+        /**
+         * Die serverseitig mitgelieferten Klassendaten in der Form, die
+         * `filterContainers()`/`einmaligAufbauen()` erwarten — oder `null`
+         * (Nachtrag „Flackerschutz").
+         *
+         * `null` bedeutet: kein Vorfilter möglich, der bisherige Weg über
+         * `loadClassroomData()` gilt unverändert. Das ist der Fall auf
+         * reduzierten Seiten (dort hat der Server das HTML der nicht
+         * freigegebenen Container nie ausgeliefert — Phase 3), ohne gültige
+         * Klassensitzung, und bei einer älteren PHP-Fassung ohne das Feld
+         * `freigegeben`. **Dieser Rückfall muss erhalten bleiben** — die
+         * beiden Dateien werden nicht zwangsläufig gemeinsam ausgeliefert.
+         *
+         * Die synthetische `drawings`-Karte trägt je freigegebenen Container
+         * genau `{ is_behandelt: true, pages: {} }`. Das ist kein Notbehelf,
+         * sondern reproduziert die Serverantwort exakt: `treated_containers`
+         * und `drawings[...].is_behandelt` beruhen in
+         * `ajax_get_page_classroom_data()` auf DERSELBEN Bedingung
+         * (irgendeine Zeile des Containers hat `is_behandelt = 1`) — das
+         * Abzeichen „✓ Behandelt" gehört also genau den freigegebenen
+         * Containern. `pages: {}` lässt `baueTafelbild()` sofort und ohne
+         * DOM-Änderung zurückkehren (weder `hasPages` noch `hasLegacy`).
+         */
         vorabDaten: function() {
             if (typeof cbdClassroomPageData === 'undefined') {
                 return null;
