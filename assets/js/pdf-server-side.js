@@ -73,6 +73,11 @@
     // siehe CLAUDE.md, Abschnitt "PDF-Export").
     var inlineZuschnittGemeldet = false;
 
+    // AP-1.2: Einmal je Seitenaufruf gemeldet, dass die Formeln im Klon auf
+    // volle Deckkraft gesetzt werden. Aus demselben Grund wie oben bewusst
+    // NICHT hinter window.cbdDebug.
+    var formelDeckkraftGemeldet = false;
+
     /**
      * Main export function - called by floating-pdf-button.js
      *
@@ -569,6 +574,98 @@
     }
 
     /**
+     * AP-1.2: Deckkraft und Animationen der Formeln im Klon neutralisieren.
+     *
+     * WARUM (gemessen in AP-1.1, nicht vermutet): assets/css/latex-formulas.css
+     * gibt jeder erfolgreich gerenderten Formel eine Einblendblende
+     *
+     *     .cbd-latex-rendered { animation: fadeIn 0.3s ease-in; }   (Zeile 169)
+     *
+     * Der Klon, den html2canvas anlegt, ist ein FRISCHES Dokument in einem
+     * <iframe> - CSS-Animationen beginnen dort von vorn. html2canvas rastert,
+     * waehrend die Blende noch laeuft, und das Formelbild traegt dann nur die
+     * Teil-Deckkraft dieses Augenblicks. Die Deckkraft ist damit ein WETTLAUF
+     * zwischen der 300-ms-Blende und der Zeit, die html2canvas zwischen
+     * Klonaufbau und Rasterung braucht - deshalb war der Fehler nicht immer
+     * sichtbar: Ein grosses Dokument gewinnt den Wettlauf, eine kleine
+     * Pruefseite verliert ihn.
+     *
+     * Gemessen an derselben Formel, Phase im Klon gezielt gesetzt:
+     *
+     *     Phase    0 ms   60 ms  120 ms  180 ms  240 ms  300 ms
+     *     maxAlpha    0      16      55     109     176     255
+     *
+     * Vier vom Betreiber erzeugte PDFs lagen zwischen maxAlpha 19 und 155,
+     * mit NULL Pixeln >= 250 - alle 15 Werte liegen auf dieser Kurve. Ein
+     * fuenftes, grosses PDF (10 Seiten) hatte durchgehend 255.
+     *
+     * WARUM IM KLON und nicht an der laufenden Seite: Ein Eingriff an der
+     * echten Seite waere sichtbares Flackern - genau der Fehler, der auf dem
+     * Vorgaengerbranch (N1, Flackerschutz beim Erstaufbau) behoben wurde.
+     * Dieselbe Begruendung traegt bereits neutralisiereDarkmodeImKlon().
+     *
+     * WARUM KEINE FARBE: Diese Funktion setzt opacity, animation und
+     * transition - NIEMALS color oder -webkit-text-fill-color. Bis 3.1.119
+     * erzwang neutralisiereDarkmodeImKlon() zusaetzlich eine feste
+     * Formelfarbe; das plaettete im PDF alle Glyphen auf #333333, unabhaengig
+     * vom Block, und wurde in N4b wieder entfernt. latex-formulas.css gibt
+     * Formeln bewusst `color: inherit` (Zeilen 25, 61, 85, 92), damit sie die
+     * Textfarbe ihres Blocks tragen. Wer hier je wieder eine feste Farbe
+     * erzwingen will: Das war schon einmal falsch.
+     *
+     * WARUM NICHT ueber window.cbdPrepareFormulasForPDF() / den vorhandenen
+     * Haken .cbd-latex-formula[data-pdf-ready="true"]: Jene CSS-Regel
+     * (latex-formulas.css:309-314) setzt neben opacity: 1 auch
+     * `display: block !important`. Das machte jede Inline-Formel zum Block und
+     * hebelte polstereInlineFormel() aus, die auf display === 'inline' prueft -
+     * der N4a-Zuschnitt waere gebrochen. Ausserdem schriebe jener Weg
+     * Attribute an die LAUFENDE Seite statt an den Klon.
+     *
+     * Die Alpha-Schwelle 10 in canvasIstBemalt() und beschneideAufTinte()
+     * bleibt bewusst unveraendert: Sie ist so niedrig, damit ein Bruchstrich
+     * oder ein Komma nicht als "leer" gilt.
+     *
+     * @param {Document} klonDokument Klon, den html2canvas vor dem Malen anlegt
+     */
+    function entblasseFormelnImKlon(klonDokument) {
+        try {
+            var stil = klonDokument.createElement('style');
+            stil.textContent =
+                '.cbd-latex-formula, .cbd-latex-formula * {' +
+                ' opacity: 1 !important;' +
+                ' animation: none !important;' +
+                ' transition: none !important; }';
+            (klonDokument.head || klonDokument.documentElement).appendChild(stil);
+        } catch (e) {
+            // Ohne Neutralisierung wird trotzdem erfasst - bisheriges Verhalten.
+        }
+    }
+
+    /**
+     * AP-1.2: Gemeinsamer onclone-Rueckruf fuer den Formel-Capture.
+     *
+     * Bewusst zwei getrennte Funktionen statt einer erweiterten: Der Docblock
+     * von neutralisiereDarkmodeImKlon() beschreibt ausschliesslich die
+     * Darkmode-Neutralisierung und traegt die N4b-Warnung. Ein zweiter,
+     * thematisch fremder Eingriff in derselben Funktion wuerde diesen Docblock
+     * stillschweigend falsch machen.
+     *
+     * @param {Document} klonDokument
+     */
+    function bereiteKlonVor(klonDokument) {
+        neutralisiereDarkmodeImKlon(klonDokument);
+        entblasseFormelnImKlon(klonDokument);
+        if (!formelDeckkraftGemeldet) {
+            formelDeckkraftGemeldet = true;
+            // Bewusst NICHT hinter window.cbdDebug: Diese Zeile ist der Beleg
+            // dafuer, dass der reparierte Codestand laeuft. Die HTTP-Cache-
+            // Falle (?ver=CBD_VERSION) macht transferSize dafuer untauglich.
+            console.log('[CBD PDF] Formeln werden im Klon auf volle Deckkraft gesetzt ' +
+                '(fadeIn-Blende neutralisiert, AP-1.2).');
+        }
+    }
+
+    /**
      * N4a: Temporaerer senkrechter Innenabstand am Capture-Ziel einer
      * INLINE-Formel.
      *
@@ -766,7 +863,12 @@
                     logging: false,
                     useCORS: true,
                     foreignObjectRendering: useForeignObject,
-                    onclone: neutralisiereDarkmodeImKlon
+                    // AP-1.2: bereiteKlonVor() ruft nacheinander
+                    // neutralisiereDarkmodeImKlon() und entblasseFormelnImKlon()
+                    // auf - Darkmode zurueckdrehen UND die fadeIn-Blende
+                    // neutralisieren, die im frischen Klondokument sonst neu
+                    // startet und das Formelbild blass macht.
+                    onclone: bereiteKlonVor
                 }).then(function (canvas) {
                     onDone(canvas);
                 }).catch(function (err) {
