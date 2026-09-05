@@ -3449,6 +3449,191 @@ gefunden.
    (`collectCSSVariables()` liest `data-theme="dark"` temporär ab). Details:
    `docs/PLAN-PDF-Export-und-Tafelmodus-Fixes.md`, AP-1.1/AP-1.2/AP-1.fix1.
 
+## PDF-Export: Formeln als Bild — die Blankheitsprüfung (N2, Branch `nachtrag-flackern-und-pdf-formeln`, 2026-09-04)
+
+**Der gemeldete Fehler:** Im erzeugten PDF fehlten die LaTeX-Formeln.
+**Die naheliegende Erklärung war falsch** und ist ausdrücklich widerlegt:
+Es fehlt nicht `katex.css` in mPDF — es geht überhaupt **kein KaTeX-HTML** an
+den Server. Vollständige Diagnose mit allen Messwerten:
+`docs/diagnose-pdf-formeln.md`.
+
+### Wie der Weg tatsächlich gebaut ist
+
+Seit v3.1.58/59 rastert `assets/js/pdf-server-side.js` jede Formel **im
+Browser** per `html2canvas` zu einem PNG, ersetzt sie im Klon durch einen
+Platzhalter `<span|div class="cbd-pdf-formula" data-cbd-formula-id="…">` mit
+lesbarem Fallback-Text und schickt `{id, image, width, height, isDisplay}`
+mit. Serverseitig tauscht `CBD_PDF_Generator::insert_formula_image()` den
+Platzhalter gegen ein `<img src="data:image/png;base64,…">`.
+**Dieser Serverteil funktioniert und ist nicht anzufassen.**
+
+**Zwei Funktionen dieses Wegs sind toter Code — nicht wiederbeleben:**
+
+| Tot | Warum |
+|---|---|
+| `extractFormulas()` (`pdf-server-side.js`) | wird an keiner Stelle aufgerufen; sie erzeugt `renderedHtml`, das in der Nutzlast nie vorkommt |
+| `CBD_PDF_Generator::insert_formula()` | Gegenstück dazu; kann ohne `renderedHtml` nie feuern und matcht zudem auf `id="…"` statt auf `data-cbd-formula-id="…"` |
+
+Beide tragen seit N2 einen Docblock, der genau das sagt. Ein Wiederbeleben
+hieße, KaTeX-Markup (`.vlist`, `.strut`, absolute Positionierung, negative
+Ränder, `em`-Ketten) von mPDFs CSS-Maschine setzen zu lassen — das kann sie
+nicht, und die KaTeX-Schriften sind dort nicht registriert.
+
+### Die drei behobenen Fehler
+
+**1. Die Leinwand war leer, und niemand hat hingesehen (Hauptursache).**
+`html2canvas` mit `foreignObjectRendering: true` liefert eine korrekt
+dimensionierte, aber **vollständig transparente** Leinwand. Die
+Annahmeprüfung testete nur `canvas.width > 0 && canvas.height > 0` — ein
+Leerbild bestand sie, wurde angenommen, und der **funktionierende**
+Standard-Painter (`foreignObjectRendering: false`) war damit unerreichbar.
+Der Server bettete das leere PNG korrekt ein; im PDF blieb an der
+Formelstelle eine Lücke. Belegt am übertragenen Bild: 742 Byte für ein
+276×48-PNG, **0 opake Pixel**.
+
+Der Fix ist `canvasIstBemalt(canvas)`: Es wird der **Inhalt** geprüft, nicht
+das Maß — mindestens ein Pixel mit Alpha > 10. **Die Schwelle ist bewusst
+bei einem einzigen Pixel:** Ein Bruchstrich, ein Komma oder ein einzelner
+Buchstabe darf nicht als „leer" gelten. Erst oberhalb von rund einer Million
+Pixeln wird mit Schrittweite abgetastet, damit die Prüfung nicht selbst
+bremst; ist die Leinwand nicht auslesbar, gilt sie als bemalt (annehmen ist
+dann besser als grundlos verwerfen — dieselbe Fehlerrichtung wie bisher).
+
+**Das Ergebnis wird einmal je Seitenaufruf gemerkt**
+(`foRenderingLiefertLeerbild`). Eine leere FO-Leinwand ist eine Eigenschaft
+des Browsers, nicht der einzelnen Formel; ohne dieses Merken zahlt **jede**
+Formel den aussichtslosen Versuch. Genau daran hing die Exportdauer:
+**263 s → 18,5 s** für dieselben 21 Formeln, der Volllauf über 23 Blöcke mit
+76 Formeln braucht **51 s** (vorher erreichte derselbe Lauf nach 454 s erst
+Block 20 von 23).
+
+**2. `messeFormel()` und die Selektor-Erweiterung: harmlose Vorsorge, keine
+gemessene Reparatur (richtiggestellt nach dem unabhängigen Review,
+`PLAN-Nachtraege-Klassenmodus.md`, Befunde N2-2/N2-4/N2-5).** Ursprünglich
+stand hier die Begründung, eine Display-Formel
+(`<span class="cbd-latex-formula cbd-latex-display">`) habe als
+Inline-Element keine eigene Breite und `getBoundingClientRect()` melde dort
+0. **Das ist sachlich falsch:** `assets/css/latex-formulas.css:31–34` setzt
+`.cbd-latex-formula.cbd-latex-display { display: block !important; width:
+100%; }` — der berechnete `display`-Wert dieser Spans ist `block`, nicht
+`inline`. Gemessen auf der Prüfseite 1636 (23 Container, 76 Formeln): **keine
+sichtbare** abgesetzte Formel hat je Breite 0, weder im Ruhezustand noch nach
+dem Aufklappen durch `expandAllBlocks()`. Die 40 Formeln mit Maß 0, die die
+Diagnose beobachtet hatte, lagen ausnahmslos in **zugeklappten** Containern
+(Inline- wie abgesetzte gemischt) — die Ursache dort war das Zuklappen, nicht
+die Formelart.
+
+`messeFormel(el)` (nimmt ersatzweise das erste Kind mit echtem Kasten —
+`.katex-display`, `.katex`, `.cbd-latex-content` — als Capture-Ziel) und die
+`CONTAINER_SELEKTOR`-Erweiterung von `expandAllBlocks()` (zusätzlich
+`[data-stable-id^="cbd-"]` neben `[data-wp-interactive=
+"container-block-designer"]`) sind deshalb **beide unschädlich, aber
+nachweislich wirkungslos**: `data-wp-interactive` wird in
+`includes/class-cbd-block-registration.php:930` bedingungslos an jeden
+gerenderten Container geschrieben, `expandAllBlocks()` klappte über
+`$block.is(...)` also schon vorher jeden Container auf, und `messeFormel()`s
+Rückfall greift auf der Prüfseite **0 von 76** Mal — weder im Ruhezustand
+noch danach. Beide Härtungen bleiben im Code (Entfernen wäre ein Risiko ohne
+Gewinn), gelten aber als Vorsorge für einen Fall, der auf dieser Website
+nicht auftritt, nicht als gemessene Reparatur.
+
+**Die belegte, alleinige Ursache der `Captured 0/N`-Zeilen ist Punkt 1
+oben (`canvasIstBemalt()`).** Ohne diesen Fix blieb der vergebliche
+`foreignObjectRendering`-Versuch für **jede** Formel bestehen — Formeln in
+aufgeklappten Containern verloren dabei den Standard-Painter (leeres Bild
+statt eines gemalten), und der Textabzug aus `.katex-html` blieb als
+Platzhalter stehen. Der ist bei Brüchen **mathematisch falsch**: Aus der
+Nernst-Gleichung wird `E=E0+n⋅FR⋅T​⋅lnc(Red)c(Ox)​`, Zähler und Nenner
+vertauscht — für einen Chemielehrer schlechter als eine Lücke. Details der
+Gegenmessung: `docs/diagnose-pdf-formeln.md`, Abschnitt 5 (Richtigstellung),
+und `PLAN-Nachtraege-Klassenmodus.md`, Abschnitt „Priorität 2 — der
+U2-Streit: beide Seiten haben unrecht".
+
+**3. Im Dunkelmodus weiß auf weiß.** Ein PDF bildet den Darkmode
+grundsätzlich nicht ab — das leistet `collectCSSVariables()`, indem es
+`data-theme` kurz entfernt. Das passiert aber in `sendPDFRequest()`, also
+**nach** allen Captures. Die Formelbilder trugen deshalb weiße Glyphen.
+Gemessen im Dunkelmodus, dieselbe Formel, derselbe Standard-Painter:
+**ohne** Fix 743 opake Pixel, davon 0 dunkel und 743 hell; **mit** Fix
+26 122 dunkel und 0 hell.
+
+Der Fix ist `neutralisiereDarkmodeImKlon()` als `onclone`-Rückruf von
+html2canvas: Er entfernt `data-theme` und setzt die Formelfarbe **im Klon**,
+den html2canvas vor dem Malen ohnehin anlegt. **Ausdrücklich nicht** durch
+Umschalten von `data-theme` an der laufenden Seite — das wäre sichtbares
+Flackern, und genau das ist auf demselben Branch gerade behoben worden
+(Abschnitt „Nachtrag: Flackerschutz beim Erstaufbau"). Nachgeprüft: Nach dem
+Export steht `data-theme` der echten Seite unverändert auf `dark`.
+
+### Zwei Mitnahmen im selben Zug
+
+- **`expandAllBlocks()` sucht Container jetzt über
+  `CONTAINER_SELEKTOR`** = `[data-wp-interactive="container-block-designer"],
+  [data-stable-id^="cbd-"]` — **derselbe Doppel-Selektor, den
+  `assets/js/classroom-page-filter.js` bereits benutzt**, bewusst keine neue,
+  fünfte Erkennungsregel. Container ohne `data-wp-interactive` blieben sonst
+  zugeklappt, ihre Formeln haben Maß 0 und fallen der Größenbremse zum Opfer.
+  _Ehrlich eingeordnet:_ Auf der Prüfseite 1636 tragen **alle 23**
+  Top-Level-Container `data-wp-interactive`, die Erweiterung ist dort also
+  wirkungslos — sie ist Vorsorge, keine gemessene Reparatur. Die im
+  Diagnosebericht als „U2" beschriebene Mechanik (`interactiveFound: 0`) hat
+  sich in dieser Form **nicht** reproduzieren lassen; die dort gemessenen
+  `Captured 0/13 · 0/5 · 0/12 · 0/10` gehen auf Punkt 2 oben zurück.
+- **Die Formel-IDs werden jetzt vor `$block.clone()` vergeben.** Vorher
+  geschah das danach — der Klon trüge dann leere `id`-Attribute und der
+  Server könnte keinen Platzhalter zuordnen. Praktisch trat das nie ein, weil
+  `CBD_LaTeX_Parser` jede Formel bereits mit `id` ausliefert; für
+  clientseitig nachgerenderte Formeln wäre die Falle zugeschnappt. Für die
+  interaktiven Elemente stand dieselbe Reihenfolge schon länger im Code, mit
+  demselben Kommentar.
+
+### Wie das nachgewiesen wurde — und warum nicht anders
+
+**Opake Pixel zählen, nicht Maße und nicht Dateigrößen.** Genau daran ist der
+bestehende Code gescheitert; eine Prüfung, die dieselbe Größe misst, hätte
+denselben Fehler wiederholt. Gemessen wurde an den **übertragenen** Base64-PNGs
+(aus der abgefangenen Netzwerk-Nutzlast) und zusätzlich an den **im fertigen
+PDF eingebetteten** Bildern (SMask-Alphakanal ausgezählt):
+
+| | vorher | nachher |
+|---|---|---|
+| erfasste Formeln (Volllauf, 23 Blöcke) | Lauf brach ab, u. a. `0/1`, `0/5` | **76/76** |
+| PNGs mit opaken Pixeln | **0 von 21** (0,00 %) | **76 von 76**, 1,03–16,17 % |
+| Formelbilder im PDF mit sichtbarem Inhalt | — | **69 von 69**, 0 leer |
+| Exportdauer, 21 Formeln, gleiche Bedingungen | **263 s** | **18,5 s** |
+| Exportdauer, Volllauf 76 Formeln | > 454 s (unvollendet) | **51 s** |
+| PDF-Textebene | `E=E0+n⋅FR⋅T…` | `E=E` 0×, `lnc(` 0×, `logc(` 0× |
+
+**Die HTTP-Cache-Falle:** `wp_enqueue_script()` hängt `?ver=CBD_VERSION` an,
+und die Konstante bleibt bis zum ZIP-Bau unverändert — der Browser liefert die
+geänderte Datei weiter aus dem Cache, und die Nachher-Messung sieht aus, als
+hätte der Fix nichts bewirkt. `transferSize` taugt **nicht** als Beleg. Deshalb
+steht die einmalige Zeile
+
+```
+[CBD PDF] foreignObjectRendering liefert eine leere Leinwand - ab jetzt
+Standard-Painter fuer alle Formeln dieser Sitzung.
+```
+
+bewusst **nicht** hinter `window.cbdDebug`: Sie existiert nur im reparierten
+Code und ist damit der Beleg, dass er läuft.
+
+### Bekannte, bewusst offen gelassene Punkte
+
+1. **Der `html2pdf-loader.js`-Weg ist weiterhin ungeprüft.** Er enthält
+   keinerlei Formelbehandlung und wird nur aus
+   `includes/class-cbd-classroom.php` eingereiht — an dieser Datei arbeitete
+   parallel ein zweites Vorhaben (N3), sie wurde deshalb nicht angefasst.
+2. **Die Apple-Weiche ist nicht am Gerät gemessen.** Sie ruft dieselbe
+   Funktion `window.cbdPDFExportServerSide()` auf und profitiert damit
+   vollständig vom Fix; die im Diagnosebericht notierte Leseauffälligkeit
+   (`.each()` auf einem einfachen Array in `expandAllBlocks()`) bleibt offen
+   und ist ein eigener Befund.
+3. **Warum `foreignObjectRendering` überhaupt leer liefert**, ist nicht
+   geklärt und war nicht Ziel: Der Fix erkennt den Fall und weicht aus, statt
+   ihn zu erklären. Liefert FO auf einem anderen Browser ein Bild, wird es
+   unverändert genommen — die bessere KaTeX-Treue bleibt also erhalten, wo sie
+   zu haben ist.
 ## Klassenmodus: Live-Aktualisierung (`PLAN-Klassenmodus-Live.md`, 2026-08-30 bis 2026-09-04, alle vier Phasen abgeschlossen und in `main` gemergt)
 
 Gibt eine Lehrperson im Klassenmodus einen Container-Block frei, sieht der
@@ -4591,6 +4776,63 @@ Schritten frei von echten Fehlern (eine 404-Zeile stammte nachweislich vom
 absichtlich herbeigeführten Fehlschlagstest oben, nicht von einem echten
 Defekt).
 
+#### Nachtrag N3: dieselbe Live-Aktualisierung fehlte auf Inhaltsseiten (`PLAN-Nachtraege-Klassenmodus.md`, 2026-09-04)
+
+Die vorstehenden Befunde gelten für die Login-Seite (`[cbd_classroom]`,
+`classroom-frontend.js`). **Die Klassen-Seitenleiste, die auf gewöhnlichen
+Inhaltsseiten die Theme-Sidebar ersetzt (`injectClassroomSidebar()` in
+`assets/js/classroom-page-filter.js`), abonnierte `'klasse'` dagegen bis zu
+diesem Nachtrag gar nicht** — nur `'seite'`, `'tafel'` und `'abgelaufen'`
+(Phase 2/3 oben). Symptom: Gab eine Lehrperson auf einer Seite, die bislang
+keine Freigabe trug, den ersten Block frei, erschien die Seite im
+Inhaltsverzeichnis sofort, in der Klassen-Seitenleiste eines Schülers auf
+einer anderen Inhaltsseite aber erst nach eigenem Neuladen — dieselbe
+Signatur `'klasse'` bewegte sich korrekt, nur hörte hier niemand zu.
+
+**Der Fix ist symmetrisch zur Kapitelliste oben:** `verdrahteKlassenpuls()`
+in `classroom-page-filter.js` abonniert jetzt zusätzlich `'klasse'` →
+`aktualisiereSeitenliste()`, für **beide** Zweige (reduziert und normal)
+gleichermaßen, weil `#sidebar` unabhängig davon von `injectClassroomNavBar()`
+aufgebaut wird. `aktualisiereSeitenliste()` holt `cbd_student_get_data`
+erneut und ruft `buildNavUl()` (Header-`<ul>`) sowie `injectClassroomSidebar()`
+(Seitenleiste) neu auf — **nicht** `injectClassroomNavBar()` selbst, die an
+ihrem eigenen Schutz gegen einen zweiten Header/„Verlassen"-Knopf abbräche
+(`#cbd-classroom-nav-header` existiert ja bereits) und den Datenabruf damit
+nie wiederholte.
+
+**Zusätzlich gefundene und mitbehobene Doppelaufbau-Falle:**
+`injectClassroomSidebar()`s Klick-Delegation für `.page-toggle` hing
+ungeschützt (`$nav.on('click', …)`, kein Namensraum, kein `.off()` davor) an
+`.sidebar-navigation` — einem Element, das über beliebig viele Aufrufe dieser
+Methode hinweg **dasselbe** DOM-Element bleibt (nur sein Inhalt wird per
+`empty()` neu aufgebaut). Ohne den Abwurf hätte sich bei jeder
+Live-Aktualisierung der Seitenleiste ein weiterer delegierter Handler
+angesammelt — dieselbe Falle wie bei `injectClassroomNavBar()`/
+`interceptLinks()` oben, nur an einem Klick-Handler statt an einer ganzen
+Navigationsleiste. Seit dem Fix: `$nav.off('click.cbdSidebarToggle').on('click.cbdSidebarToggle', …)`.
+
+**Live an einer eigenen, restlos wieder entfernten Testklasse geprüft**
+(drei Seiten, ein Elternkapitel mit zwei Kindseiten, Sitzung per
+Transient-Bootstrap statt Passwort-Login): Über zehn aufeinanderfolgende
+Signaturbewegungen (`window.cbdKlassenpuls.sofort()` nach je einer
+Freigabe/Rücknahme in der Datenbank) blieben Header, Seitenleiste,
+„Verlassen"-Knopf und der `click.cbdSidebarToggle`-Handler durchgehend bei
+genau **einem** Element (`jQuery._data(nav, 'events')` zeigte nie mehr als
+einen Eintrag im richtigen Namensraum), pro Signaturbewegung ging genau
+**eine** `cbd_student_get_data`-Anfrage hinaus (isoliert per
+`ajaxSend`-Zähler gemessen, da der geteilte Browser dieser Umgebung auch
+Netzverkehr paralleler Sitzungen mitschneidet), ein zuvor zugeklapptes
+Elternkapitel blieb nach jeder Aktualisierung zugeklappt und
+`localStorage['cbd_classroom_toc_collapsed']` blieb dabei **bitgleich**, und
+die Rücknahme der einzigen Freigabe einer Seite entfernte sie umgehend
+wieder aus der Leiste (Gegenprobe). Die Konsolenzeile „CBD Classroom Page
+Filter: Seitenlisten-Aktualisierung erhalten" existiert nur im gefixten Code
+und diente als Nachweis gegen die HTTP-Cache-Falle
+(`CBD_VERSION` unverändert). `classroom-page-filter.js` braucht das
+`klassenpulsAbmelden()`-Abmeldemuster aus AP-4.fix1 **nicht** — anders als
+`classroom-frontend.js` läuft `verdrahteKlassenpuls()` hier strukturell nur
+einmal beim Seitenaufbau, ohne Login/Logout-Zyklus im selben Tab.
+
 #### Abmeldemuster gegen doppelte Abonnements (AP-4.fix1, Befund R2)
 
 `AP-4.rev` fand, dass `verdrahteKlassenpuls()` und `clearAuth()` in
@@ -4745,6 +4987,244 @@ verlorene Aufklappzustand eines Containers (Phase 3, erster Absatz von
 groß-/kleinschreibungsunabhängige Token-Vergleich aus der `_ci`-Kollation
 von `option_name` (Phase 3, Befund B5); und die `sessionStorage`-Abhängigkeit
 der 60-Sekunden-Neulade-Bremse im privaten Fenster (Phase 3, Befund B3).
+
+### Nachtrag: Flackerschutz beim Erstaufbau — warum inline im `<head>` (`includes/class-cbd-classroom.php`, `assets/js/classroom-page-filter.js`, Branch `nachtrag-flackern-und-pdf-formeln`, 2026-09-04)
+
+**Der Fehler, gefunden im Live-Test nach Abschluss der vier Phasen und
+vorbestehend (identisch zum Stand vor dem Vorhaben):** Auf einer **normalen**
+Seite im Klassenmodus lieferte der Server alle Container **sichtbar** aus.
+Versteckt wurden die nicht freigegebenen erst durch die Kette
+`$(document).ready()` → `loadClassroomData()` → AJAX
+`cbd_get_page_classroom_data` → `filterContainers()`. Zwischen dem ersten
+Bildaufbau und dem Filtern liegt eine Netzwerk-Rundreise: **Der Schüler sah
+200–500 ms lang alles.**
+
+Nicht betroffen sind reduzierte („gesperrte") Seiten — dort wirft
+`CBD_Classroom_Gate::inhalt_reduzieren()` das HTML der nicht freigegebenen
+Container gar nicht mit aus, es gibt nichts zu flackern. Der Nachtrag greift
+deshalb ausschließlich im `$reduziert === false`-Fall.
+
+**Gemessen, nicht geschätzt** (rAF-Abtastung aus einem gleichherkünftigen
+Elternfenster, ein Zustandsabbild je Bildaufbau-Gelegenheit, Seite 1618 /
+Klasse 15 mit 26 Containern, davon 23 freigegeben):
+
+| | vorher | nachher |
+|---|---|---|
+| Bildaufbauten mit sichtbarem, nicht freigegebenem Container | **15** | **0** (drei Läufe) |
+| Dauer des Fensters | **333 ms** (t = 636 → 969 ms) | **0 ms** |
+| Zustand beim allerersten Bildaufbau, in dem der Container existierte | `display: block`, Höhe 128 px, `readyState: loading` | `display: none`, Höhe 0, Inline-Stil **leer** |
+
+Der leere Inline-Stil im „nachher"-Fall ist der eigentliche Beweis: Versteckt
+hat dort **das Stylesheet**, nicht JavaScript.
+
+**Nachweisqualität dieser Messstelle, vom unabhängigen Review geprüft
+(`PLAN-Nachtraege-Klassenmodus.md`, Befund G1):** Von den drei nicht
+freigegebenen Kennungen auf Seite 1618 erzeugen **zwei** überhaupt kein
+DOM-Element — sie stehen im `post_content`, werden aber nicht gerendert. Die
+obige Messung „15 Frames → 0" beruht damit faktisch auf **einem** einzigen
+versteckbaren Container. Das Review hat die Messung deshalb auf Seite 3002
+„Die Glycosidische Bindung" (Klasse 15) mit **16** tatsächlich gerenderten
+versteckbaren Containern wiederholt (drei Läufe à 358–360 Frames): Ergebnis
+unverändert **0 Flackerframes**, mit einer freigegebenen Positivkontrolle im
+selben Lauf (sichtbar in 337–340 der Frames), die belegt, dass die Messung
+selbst nicht blind ist. Beim allerersten Frame, in dem die 16 Container
+existierten, war ihr Inline-Stil leer und `display` bereits `none` —
+derselbe Beweis wie oben, nur mit einer Messstelle, die tatsächlich 16 statt
+1 Container prüft. Für künftige Messungen: die Messstelle an der Zahl der
+**gerenderten** Elemente aussuchen, nicht an der Zahl im `post_content`.
+
+**Nicht live gemessen (Befund G2):** Der Tafelbild-Zweig
+(`hatTafelbilder === true`, also der Weg **mit** AJAX-Erstaufbau) ist von
+keiner der bisherigen Messungen — weder der ursprünglichen noch der des
+Reviews — tatsächlich durchlaufen worden: Keine der benutzten Prüfseiten hat
+für ihre Klasse eine Zeichnungszeile. Der Zweig selbst ist unverändert der
+bisherige Code (`loadClassroomData()`), von diesem Nachtrag nicht angefasst
+— aber die Behauptung, er sei gemessen, ist nicht belegt. Offene
+Prüflücke, vor einem Ausrollen von Hand anzusehen.
+
+#### Warum inline im `<head>` und nicht anders
+
+Der Server weiß beim Ausliefern **schon alles** — die Freigabeliste steht in
+`CBD_TABLE_DRAWINGS`, die Container stehen im `post_content`. Es gibt also
+keinen Grund, die Information erst nachträglich über das Netz zu holen. Sie
+geht jetzt auf **zwei** Wegen mit:
+
+1. **Als Inline-CSS im `<head>`** (`CBD_Classroom::versteck_regeln()`, per
+   `wp_add_inline_style('cbd-classroom-frontend', …)`). Ein Stylesheet im
+   `<head>` blockiert den ersten Bildaufbau — die Regel gilt also **vor**
+   dem ersten Pixel, ohne dass irgendein Skript gelaufen sein muss. Eine
+   externe Datei ginge nicht: Die Liste hängt an Klasse **und** Seite, wäre
+   also pro Kombination eine eigene Datei plus eine eigene Anfrage — genau
+   die Rundreise, die hier abgeschafft wird.
+2. **Als Feld `freigegeben` in `cbdClassroomPageData`**, damit
+   `classroom-page-filter.js` in `init()` **synchron** filtern kann, statt
+   auf die AJAX-Antwort zu warten (`vorabDaten()` baut daraus dieselbe
+   Datenform, die die Antwort liefert).
+
+#### Warum ausschließlich Verstecken-Regeln
+
+`versteck_regeln()` gibt **nur** `[data-stable-id="…"]{display:none!important}`
+aus, **niemals** eine Regel, die etwas sichtbar macht. Das ist die zentrale
+Entwurfsentscheidung, nicht ein Stilfrage:
+
+- Der ursprüngliche `display`-Wert eines Containers wird dadurch
+  **bedeutungslos** — es gibt nichts zurückzusetzen, keine Annahme über
+  `block`/`flex`/`grid`, keinen Zustand, der wiederhergestellt werden müsste.
+- **Die Fehlerrichtung liegt damit fest, und zwar in Richtung Sicherheit:**
+  Eine fehlende, falsch geschriebene oder nicht anwendbare Regel kann
+  höchstens das **Verstecken verpassen** — dann greift wie bisher der Filter
+  im Browser, und der Zustand ist genau der heutige. Sie kann **niemals
+  etwas fälschlich aufdecken.** Wer diesen Abschnitt erweitert, darf diese
+  Asymmetrie nicht aufgeben.
+
+Aus demselben Grund erzeugt nur eine Kennung aus einem engen Zeichenvorrat
+(`^[A-Za-z0-9_.:+-]+$`) überhaupt eine Regel. Echte Kennungen sehen aus wie
+`cbd-1771189754-VwC7kbc7`; **Altbestände auch wie
+`cbd-1.78642207462E+12-g9yov7bc`** — ein Artefakt aus einer Zeit, in der
+`Date.now()` als Gleitkommazahl in die Kennung geriet. Punkt und Plus mussten
+deshalb ausdrücklich in den Zeichenvorrat, sonst hätten ganze Seiten (5414,
+5422) **keine** Regeln bekommen. Anführungszeichen, Backslash und `<`/`>`
+sind ausgeschlossen und können damit weder den Selektor noch das
+`<style>`-Element verlassen. Auch hier die harmlose Fehlerrichtung: eine
+ungewöhnliche Kennung bekommt **keine** Regel statt einer kaputten.
+
+#### Der zweite Halbschritt: die Regeln müssen wieder weg
+
+**Das ist der Teil, den man beim Weiterentwickeln zerstört, wenn man ihn für
+Aufräumen hält.** `init()` ruft nach dem synchronen Vorfilter
+`loeseVorfilterRegelnAb()`, das die Regeln per CSSOM `deleteRule()` wieder aus
+dem Stylesheet nimmt (erkannt daran, dass `selectorText` mit
+`[data-stable-id=` beginnt — die Akzentfarben-Regel `body{--cbd-classroom-accent:…}`
+im selben `<style>`-Block bleibt unangetastet).
+
+**Warum das zwingend ist, im Browser gegengeprüft:** Der Filter erkennt den
+Zustandswechsel eines Containers an dessen **eigenem Inline-Stil**
+(`$container[0].style.display === 'none'`, die wichtigste Lehre aus Phase 2,
+siehe die Warnung zu `jQuery.is(':visible')` oben). Eine Versteckung aus einem
+Stylesheet sieht er dort **nicht**. Bliebe die Regel stehen, wäre die Folge
+zweifach:
+
+- `istVersteckt` bliebe `false`, ein neu freigegebener Container bekäme
+  **gar kein** `.show()`;
+- und selbst mit `.show()` verlöre jQuery: Es setzt `display: block`
+  **inline ohne `!important`** und unterliegt jeder `!important`-Regel.
+
+Beides ist am laufenden Server einzeln gemessen worden: Regel wieder
+eingefügt → `el.style.display` bleibt `''` (der Filter hielte den Container
+für sichtbar), nach erzwungenem `jQuery(el).show()` steht inline
+`display: block`, berechnet aber weiterhin `none`. **Ohne
+`loeseVorfilterRegelnAb()` wäre die Live-Freigabe aus Phase 2 lautlos kaputt**
+— der Schüler sähe eine Freigabe erst nach einem Neuladen von Hand, also
+genau der Zustand, den Phase 2 abgeschafft hat.
+
+Die Übergabe läuft deshalb in genau dieser Reihenfolge, in **einem**
+synchronen Aufgabenblock ohne Bildaufbau dazwischen:
+
+1. `filterContainers(vorab, true)` setzt an jedem nicht freigegebenen
+   Container `style="display: none"` — dieselbe Versteckung, die der Filter
+   seit immer benutzt, nur ohne vorherige Netzrundreise;
+2. `loeseVorfilterRegelnAb()` nimmt die Stylesheet-Regeln weg.
+
+Danach lebt der Zustand ausschließlich in Inline-Stilen, also genau dort, wo
+Phase 2 und Phase 3 ihn erwarten. Der Server hat nur das Fenster bis zum
+ersten Skriptlauf überbrückt. **Läuft Schritt 2 nicht** (JavaScript
+abgeschaltet, jQuery fehlt, Ausnahme davor), bleiben die Regeln stehen und die
+nicht freigegebenen Container bleiben versteckt — wieder die gewünschte
+Fehlerrichtung.
+
+#### Die gesparte Anfrage — und wann sie gespart wird
+
+`cbdClassroomPageData` trägt zusätzlich `hatTafelbilder` und `klasse`. Weiß
+der Server, dass es für diese Klasse und Seite **kein** Tafelbild gibt
+(`CBD_Classroom::hat_tafelbilder()`: `COUNT(*)` über
+`drawing_data IS NOT NULL AND drawing_data <> ''`, indexgestützt über den
+Unique Key `class_page_container`), überspringt der Browser den
+Erstaufbau-AJAX **vollständig**. Alles, was der Erstaufbau braucht, steht dann
+schon da:
+
+- Sichtbarkeit → `freigegeben`;
+- das Abzeichen „✓ Behandelt" → **ebenfalls** `freigegeben`. Das ist keine
+  Näherung: In `ajax_get_page_classroom_data()` beruhen `treated_containers`
+  **und** `drawings[…].is_behandelt` auf derselben Bedingung (irgendeine Zeile
+  des Containers hat `is_behandelt = 1`). Deshalb reicht die synthetische
+  Karte `{ is_behandelt: true, pages: {} }` je freigegebenem Container, die
+  `vorabDaten()` baut — `pages: {}` lässt `baueTafelbild()` sofort und ohne
+  jede DOM-Änderung zurückkehren (weder `hasPages` noch `hasLegacy`);
+- der Klassenname für die Navigationsleiste → `klasse`, gelesen aus
+  `CBD_TABLE_CLASSES` (**nicht** aus dem Sitzungs-Transient, der den Namen
+  vom Anmeldezeitpunkt festhält — nach einer Umbenennung stünde dort ein
+  anderer Name als bisher).
+
+**Gemessene Anfragezahl beim Erstaufbau** (Zählfenster 4 s, also unter dem
+Pulstakt von 10 s):
+
+| | vorher | nachher |
+|---|---|---|
+| Seite **ohne** Tafelbilder für diese Klasse (1618/15) | 2 × `admin-ajax.php` + 1 × `klassenpuls` = **3** | 1 × `admin-ajax.php` + 1 × `klassenpuls` = **2** |
+| Seite **mit** Tafelbildern (3591/15) | **3** | **3** (unverändert) |
+
+Die eingesparte Anfrage ist `cbd_get_page_classroom_data`. Die zweite,
+verbleibende `admin-ajax.php`-Anfrage ist `cbd_student_get_data` für die
+Klassen-Seitenleiste — die gab es vorher und nachher, sie ist nicht Teil
+dieses Nachtrags. Auf Seiten **mit** Tafelbildern bleibt die Zahl also
+gleich; das ist ehrlich gemeldet und keine Enttäuschung, sondern die Grenze
+der Sparsamkeit: Zeichnungsdaten sind Rastergrafiken und haben in einer
+`wp_localize_script()`-Zeile im `<head>` nichts zu suchen.
+
+`hatTafelbilder` zählt bewusst **alle** Zeilen mit Zeichnungsdaten, auch die
+zu nicht freigegebenen Containern. Diese Zeilen wertet der Filter im Browser
+ohnehin nie aus; die großzügigere Zählung irrt also nur in Richtung „lieber
+doch fragen", nie in Richtung „Tafelbild verschwiegen".
+
+#### Die `wp_localize_script()`-Falle, in die dieser Nachtrag selbst getreten ist
+
+`WP_Scripts::localize()` gießt **jeden skalaren Wert der obersten Ebene** in
+eine Zeichenkette. Aus PHPs `false` wird `""`, aus `true` wird `"1"` — genau
+wie beim älteren Feld `reduziert`, das deshalb schon immer mit `!!` geprüft
+wird. Die erste Fassung dieses Nachtrags prüfte `hatTafelbilder === false`;
+das trifft **nie** (`"" === false` ist unwahr), und die Abfrage lief trotzdem.
+Die Fehlerrichtung war harmlos — eine Anfrage zu viel statt zu wenig —, aber
+sie kostete eine Messung. **Zwei Regeln daraus:**
+
+- Auf **Wahrheitswert** prüfen, nie mit `=== false`;
+- und **nie** eine Zahl 0/1 aus PHP schicken: daraus würde `"0"`, und `"0"`
+  ist in JavaScript **wahr**.
+
+Verschachtelte Werte behalten ihren Typ (der `is_scalar()`-Zweig überspringt
+Arrays) — `freigegeben` kommt deshalb als echtes JavaScript-Array an.
+
+#### Keine vierte Kopie der `stableId`-Extraktion
+
+Der Vorfilter braucht die Regel „welche `stableId` trägt dieser Block" — sie
+existierte wörtlich in `CBD_Classroom_Gate::block_erlaubt()` und in zwei
+weiteren Fassungen (siehe „Offener Punkt: `stableId`-Extraktion existiert
+dreifach" oben). Statt eine vierte anzulegen, ist sie als geteilter,
+öffentlicher Helfer `CBD_Classroom::stabile_id_aus_block()` herausgezogen
+worden, dorthin, wo `zerlege_container_id()`, `basis_container_id()` und
+`behandelte_container()` schon leben; `block_erlaubt()` ruft ihn jetzt auf.
+Dazu kommen `CBD_Classroom::ist_container_block()` und
+`CBD_Classroom::container_ids_aus_inhalt()` (rekursiv über `innerBlocks`, weil
+Container regelmäßig in anderen Containern, Gruppen oder Accordion-Panels
+liegen).
+
+**`class-cbd-classroom-gate.php` ist damit angefasst worden** — die
+sicherheitskritischste Datei des Projekts. Es ist eine reine, verhaltensgleiche
+Verschiebung: Reihenfolge (Attribut zuerst, HTML-Rückfall danach) und Rückgabe
+`''` bei Nichtauffindbarkeit sind unverändert, es entsteht keine neue
+Abhängigkeit (`block_erlaubt()` rief `CBD_Classroom::basis_container_id()`
+schon vorher auf), und `php tools/test-classroom-gate.php` bleibt grün — die
+elf `block_erlaubt()`-Prüfungen darin decken beide Wege ab, einschließlich des
+Altbestands-Rückfalls. Die serverseitige Reduktion selbst ist nicht berührt.
+
+**Bekannte Grenze, bewusst:** Container, die erst beim Rendern entstehen
+(wiederverwendbare Blöcke `core/block`, Template-Teile, Shortcodes), stehen
+nicht im `post_content` und bekommen daher keine Regel. Der Browser-Filter
+holt sie wie bisher nach — die harmlose Fehlerrichtung. Umgekehrt ist eine
+Regel für einen Container, der gar nicht im DOM landet, ein wirkungsloser
+Leerlauf: Auf Seite 1618 gilt das für zwei der drei erzeugten Regeln, weil
+zwei Kennungen im `post_content` stehen, aber nichts rendern — ein
+vorbestehendes Inhaltsproblem, verwandt mit dem oben dokumentierten
+Duplikat-Nebenbefund aus AP-2.fix2.
 
 ## Debugging-Konventionen
 

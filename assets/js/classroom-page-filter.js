@@ -130,6 +130,18 @@
         pruefungLaeuft: false,
         abschiedLaeuft: false,
 
+        /**
+         * Ob die Warnung „markierte Blöcke nicht im DOM gefunden" schon
+         * erschienen ist (Nachtrag „Flackerschutz").
+         *
+         * Seit dem Vorfilter (siehe `vorabDaten()`) kann `filterContainers()`
+         * mit `istErstaufbau === true` ZWEIMAL laufen: einmal synchron aus
+         * den mitgelieferten Serverdaten, einmal aus der AJAX-Antwort. Ohne
+         * diesen Merker hinge die Warnung doppelt am Seitenkopf —
+         * `showWarning()` hat keine eigene Sperre gegen Mehrfacheinfügung.
+         */
+        warnungGezeigt: false,
+
         init: function() {
             // Get URL parameters
             var urlParams = new URLSearchParams(window.location.search);
@@ -158,8 +170,177 @@
             }
 
             window.cbdDebug && console.log('CBD Classroom Page Filter: Initializing for page', this.pageId, 'classroom', this.classroomId);
-            this.loadClassroomData();
+
+            // FLACKERSCHUTZ (Nachtrag zu PLAN-Klassenmodus-Live.md):
+            // SOFORT filtern, wenn der Server die Freigabeliste mitgegeben
+            // hat — synchron, noch vor jedem Netzverkehr. Die Inline-Regeln
+            // im <head> (CBD_Classroom::versteck_regeln()) haben das Nötige
+            // bereits vor dem ersten Bildaufbau erledigt; dieser Aufruf
+            // bringt das DOM in denselben Zustand, den auch der bisherige
+            // Weg herstellt (style="display: none" AM ELEMENT, worauf sich
+            // die Zustandserkennung in filterContainers() stützt).
+            var vorab = this.vorabDaten();
+
+            if (vorab) {
+                this.filterContainers(vorab, true);
+
+                // UND DANN DIE REGELN WIEDER WEGNEHMEN. Das ist kein
+                // Aufräumen, sondern der zweite Halbschritt einer Übergabe —
+                // siehe loeseVorfilterRegelnAb().
+                this.loeseVorfilterRegelnAb();
+            }
+
+            // Die AJAX-Abfrage ist nur noch nötig, wenn es Tafelbilder geben
+            // KANN. Weiß der Server, dass es für diese Klasse und Seite
+            // keines gibt, trägt `vorab` alles, was der Erstaufbau braucht —
+            // die Anfrage entfällt vollständig.
+            //
+            // FALLE, in die die erste Fassung dieses Nachtrags getreten ist:
+            // `wp_localize_script()` gießt jeden SKALAREN Wert der obersten
+            // Ebene in eine Zeichenkette (`WP_Scripts::localize()`,
+            // `is_scalar()`-Zweig). Aus PHPs `false` wird `""`, aus `true`
+            // wird `"1"` — genau wie beim älteren Feld `reduziert`, das
+            // deshalb schon immer mit `!!` geprüft wird. Ein Vergleich
+            // `=== false` trifft hier NIE (`"" === false` ist unwahr) und die
+            // Abfrage lief trotzdem. **Nicht auf `=== false` zurückstellen.**
+            // Ebenso verboten: eine Zahl 0/1 aus PHP zu schicken — daraus
+            // würde `"0"`, und `"0"` ist in JavaScript WAHR.
+            //
+            // Das `in`-Vorspiel ist kein Zierrat: Fehlt das Feld (ältere
+            // PHP-Fassung), wäre `!undefined` wahr und der Browser spränge
+            // die Abfrage in genau dem Fall, in dem er sie am dringendsten
+            // braucht.
+            if (vorab && ('hatTafelbilder' in cbdClassroomPageData) && !cbdClassroomPageData.hatTafelbilder) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Erstaufbau ohne AJAX (keine Tafelbilder fuer diese Klasse/Seite).');
+                this.einmaligAufbauen(vorab);
+            } else {
+                this.loadClassroomData();
+            }
+
             this.verdrahteKlassenpuls();
+        },
+
+        /**
+         * Die Inline-Versteckregeln des Servers aus dem Stylesheet entfernen
+         * (Nachtrag „Flackerschutz").
+         *
+         * DAS IST DER WICHTIGSTE TEIL DIESES NACHTRAGS — nicht das Setzen der
+         * Regeln, sondern ihr Wegnehmen. Wer diese Methode entfernt, bricht
+         * die Live-Freigabe aus Phase 2, und zwar lautlos.
+         *
+         * WARUM: Der Filter erkennt den Zustandswechsel eines Containers an
+         * dessen EIGENEM Inline-Stil (`$container[0].style.display === 'none'`,
+         * siehe die ausführliche Warnung in `filterContainers()`). Eine
+         * Versteckung, die aus einem Stylesheet kommt, sieht er dort NICHT —
+         * `istVersteckt` bliebe `false`, und ein neu freigegebener Container
+         * bekäme gar kein `.show()`. Selbst wenn er es bekäme, verlöre
+         * jQuery: `.show()` setzt `display: block` INLINE OHNE `!important`
+         * und unterliegt damit jeder `!important`-Regel. Der Schüler sähe die
+         * Freigabe erst nach einem Neuladen von Hand — genau der Zustand, den
+         * Phase 2 abgeschafft hat.
+         *
+         * DIE ÜBERGABE, in dieser Reihenfolge und ohne Bildaufbau dazwischen
+         * (alles im selben synchronen Aufgabenblock von `init()`):
+         *   1. `filterContainers(vorab, true)` setzt an jedem nicht
+         *      freigegebenen Container `style="display: none"` — dieselbe
+         *      Versteckung, die der Filter seit immer benutzt, nur ohne
+         *      vorherige Netzrundreise.
+         *   2. Diese Methode nimmt die Stylesheet-Regeln weg.
+         * Danach lebt der Zustand ausschließlich in Inline-Stilen, also genau
+         * dort, wo Phase 2 und Phase 3 ihn erwarten. Der Server hat nur das
+         * Fenster bis zum ersten Skriptlauf überbrückt.
+         *
+         * Entfernt werden ausschließlich Regeln, deren Selektor mit
+         * `[data-stable-id=` beginnt. Die zweite Regel in demselben
+         * `<style>`-Block — `body{--cbd-classroom-accent:…}` aus
+         * `classroom_accent_inline_css()` — bleibt unangetastet.
+         *
+         * Läuft diese Methode NICHT (JavaScript abgeschaltet, jQuery fehlt,
+         * Ausnahme davor), bleiben die Regeln stehen und die nicht
+         * freigegebenen Container bleiben versteckt. Das ist die gewünschte
+         * Fehlerrichtung: zu wenig gezeigt, nie zu viel.
+         *
+         * @return {number} Anzahl entfernter Regeln (nur für die Diagnose).
+         */
+        loeseVorfilterRegelnAb: function() {
+            var el = document.getElementById('cbd-classroom-frontend-inline-css');
+            var entfernt = 0;
+
+            if (!el) {
+                return 0;
+            }
+
+            try {
+                var blatt = el.sheet;
+                if (!blatt || !blatt.cssRules) {
+                    return 0;
+                }
+                // Von hinten nach vorn, weil deleteRule() die Indizes
+                // nachrückender Regeln verschiebt.
+                for (var i = blatt.cssRules.length - 1; i >= 0; i--) {
+                    var selektor = blatt.cssRules[i].selectorText || '';
+                    if (selektor.indexOf('[data-stable-id=') === 0) {
+                        blatt.deleteRule(i);
+                        entfernt++;
+                    }
+                }
+            } catch (e) {
+                // Kommt der Zugriff auf `cssRules` nicht zustande, bleiben die
+                // Regeln stehen. Siehe Fehlerrichtung im Docblock.
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Vorfilter-Regeln nicht ablösbar.', e);
+                return 0;
+            }
+
+            window.cbdDebug && console.log('CBD Classroom Page Filter: ' + entfernt + ' Vorfilter-Regeln abgelöst (Zustand liegt jetzt in Inline-Stilen).');
+
+            return entfernt;
+        },
+
+        /**
+         * Die serverseitig mitgelieferten Klassendaten in der Form, die
+         * `filterContainers()`/`einmaligAufbauen()` erwarten — oder `null`
+         * (Nachtrag „Flackerschutz").
+         *
+         * `null` bedeutet: kein Vorfilter möglich, der bisherige Weg über
+         * `loadClassroomData()` gilt unverändert. Das ist der Fall auf
+         * reduzierten Seiten (dort hat der Server das HTML der nicht
+         * freigegebenen Container nie ausgeliefert — Phase 3), ohne gültige
+         * Klassensitzung, und bei einer älteren PHP-Fassung ohne das Feld
+         * `freigegeben`. **Dieser Rückfall muss erhalten bleiben** — die
+         * beiden Dateien werden nicht zwangsläufig gemeinsam ausgeliefert.
+         *
+         * Die synthetische `drawings`-Karte trägt je freigegebenen Container
+         * genau `{ is_behandelt: true, pages: {} }`. Das ist kein Notbehelf,
+         * sondern reproduziert die Serverantwort exakt: `treated_containers`
+         * und `drawings[...].is_behandelt` beruhen in
+         * `ajax_get_page_classroom_data()` auf DERSELBEN Bedingung
+         * (irgendeine Zeile des Containers hat `is_behandelt = 1`) — das
+         * Abzeichen „✓ Behandelt" gehört also genau den freigegebenen
+         * Containern. `pages: {}` lässt `baueTafelbild()` sofort und ohne
+         * DOM-Änderung zurückkehren (weder `hasPages` noch `hasLegacy`).
+         */
+        vorabDaten: function() {
+            if (typeof cbdClassroomPageData === 'undefined') {
+                return null;
+            }
+
+            if (!cbdClassroomPageData.freigegeben || !$.isArray(cbdClassroomPageData.freigegeben)) {
+                return null;
+            }
+
+            var drawings = {};
+
+            $.each(cbdClassroomPageData.freigegeben, function(_, stableId) {
+                if (stableId) {
+                    drawings[stableId] = { is_behandelt: true, pages: {} };
+                }
+            });
+
+            return {
+                class_name: cbdClassroomPageData.klasse || '',
+                treated_containers: cbdClassroomPageData.freigegeben,
+                drawings: drawings
+            };
         },
 
         /**
@@ -238,6 +419,28 @@
                     self.aktualisiereTafelbilder();
                 });
             }
+
+            // Klassen-Seitenleiste (Nachtrag N3, PLAN-Nachtraege-Klassenmodus.md,
+            // 2026-09-04): 'klasse' bewegt sich genau dann, wenn irgendeine
+            // Seite der Klasse ihren ERSTEN behandelten Container bekommt oder
+            // ihren letzten verliert – exakt das Ereignis, bei dem eine Seite
+            // in der Kapitelliste auftauchen bzw. verschwinden muss.
+            // classroom-frontend.js abonniert dieselbe Signatur bereits für die
+            // Kapitelliste auf der [cbd_classroom]-Login-Seite (AP-4.1); dies
+            // hier ist das fehlende Gegenstück für die Seitenleiste auf
+            // Inhaltsseiten – ohne dieses Abonnement blieb die Leiste auf dem
+            // Stand des Seitenaufbaus stehen, während das Inhaltsverzeichnis
+            // (das denselben Datenweg über 'klasse' längst nutzt) bereits die
+            // neue Seite zeigte.
+            //
+            // Gilt für BEIDE Zweige oben (reduziert und normal) gleichermaßen:
+            // #sidebar wird in beiden Fällen unverändert von
+            // injectClassroomNavBar() über einmaligAufbauen() aufgebaut, ganz
+            // unabhängig davon, ob diese Seite selbst reduziert ausgeliefert
+            // wird.
+            window.cbdKlassenpuls.abonniere('klasse', function() {
+                self.aktualisiereSeitenliste();
+            });
 
             window.cbdKlassenpuls.abonniere('abgelaufen', function() {
                 self.showError('Die Klassensitzung ist abgelaufen. Bitte erneut anmelden.');
@@ -992,6 +1195,70 @@
         },
 
         /**
+         * Klassen-Seitenleiste (und Header-Navigationsliste) live nachziehen
+         * (Nachtrag N3, PLAN-Nachtraege-Klassenmodus.md).
+         *
+         * Rückruf des Taktgeber-Abonnements 'klasse' (siehe
+         * verdrahteKlassenpuls()). Holt dieselben Daten wie der Erstaufbau
+         * (cbd_student_get_data, siehe injectClassroomNavBar()) und baut
+         * Header-Liste und Seitenleiste neu auf.
+         *
+         * Ruft ABSICHTLICH NICHT injectClassroomNavBar() selbst auf: Die
+         * bricht sofort ab, sobald `#cbd-classroom-nav-header` bereits
+         * existiert (ihr eigener Schutz gegen einen zweiten Header samt
+         * zweitem "Verlassen"-Knopf beim Erstaufbau) – der Datenabruf würde
+         * bei jedem Puls-Durchlauf also nie erneut laufen. Diese Methode
+         * repliziert stattdessen nur den `$.post`-Aufruf plus den Aufbau der
+         * Header-<ul> und der Seitenleiste, ohne Header, Menü-Knopf oder
+         * "Verlassen"-Button erneut anzufassen – genau EINE Navigationsleiste
+         * und EIN "Verlassen"-Knopf bleiben damit über beliebig viele
+         * Aktualisierungen hinweg bestehen (Vertrag aus Phase 2, „Doppelaufbau").
+         *
+         * injectClassroomSidebar() selbst ist beliebig oft aufrufbar: Sie
+         * leert `.sidebar-navigation` vor jedem Aufbau (`$nav.empty()`) und
+         * liest den Klappzustand nur aus `localStorage`, schreibt ihn nie
+         * (siehe deren Kopfkommentar und CLAUDE.md) – ein zugeklapptes Kapitel
+         * bleibt über jede Aktualisierung hinweg zugeklappt.
+         *
+         * Ein fehlgeschlagener Nachschlag bleibt bewusst STILL, aus demselben
+         * Grund wie bei aktualisiere()/aktualisiereTafelbilder(): kein Grund,
+         * dem lesenden Schüler eine Fehlermeldung vor die Nase zu setzen – der
+         * nächste Takt versucht es ohnehin wieder.
+         */
+        aktualisiereSeitenliste: function() {
+            var self = this;
+
+            $.post(cbdClassroomPageData.ajaxUrl, {
+                action: 'cbd_student_get_data',
+                token: this.token
+            }, function(response) {
+                if (!response || !response.success || !response.data.pages) {
+                    window.cbdDebug && console.log('CBD Classroom Page Filter: Seitenlisten-Aktualisierung ohne Erfolg – still ignoriert.');
+                    return;
+                }
+
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Seitenlisten-Aktualisierung erhalten', response.data);
+
+                var pages = response.data.pages;
+
+                // Header-Navigation: nur ersetzen, wenn injectClassroomNavBar()
+                // den Header bereits gebaut hat (Regelfall). `<nav
+                // class="cbd-classroom-main-nav">` selbst bleibt stehen, nur
+                // ihr Inhalt (die <ul>) wird neu aufgebaut – dieselbe Technik
+                // wie bei der Seitenleiste unten.
+                var $navContainer = $('#cbd-classroom-nav-header nav.cbd-classroom-main-nav');
+                if ($navContainer.length > 0) {
+                    $navContainer.empty().append(self.buildNavUl(pages));
+                }
+
+                // Seitenleiste neu aufbauen – siehe Docblock oben.
+                self.injectClassroomSidebar(pages, response.data.class_name);
+            }).fail(function(xhr, status, error) {
+                window.cbdDebug && console.log('CBD Classroom Page Filter: Seitenlisten-Aktualisierung fehlgeschlagen – still ignoriert.', error);
+            });
+        },
+
+        /**
          * Alles, was GENAU EINMAL geschehen darf (AP-2.1).
          *
          * Navigationsleiste (mit "Verlassen"-Button) IMMER einfügen –
@@ -1065,7 +1332,15 @@
             // Seit AP-2.1 NUR beim Erstaufbau: Bei jeder Live-Aktualisierung
             // würde sich dieselbe Warnung sonst endlos wiederholen. Der
             // istReduziert-Vorbehalt bleibt davon unberührt bestehen.
-            if (istErstaufbau && missingContainers.length > 0 && !istReduziert) {
+            // `!this.warnungGezeigt` seit dem Nachtrag „Flackerschutz": Der
+            // Vorfilter lässt diesen Zweig mit `istErstaufbau === true`
+            // zweimal laufen (einmal synchron aus cbdClassroomPageData,
+            // einmal aus der AJAX-Antwort). `showWarning()` hat keine eigene
+            // Sperre gegen Mehrfacheinfügung (Befund B6 aus AP-2.rev, dort
+            // für showError() beschrieben) — ohne den Merker hingen zwei
+            // wortgleiche Hinweise am Seitenkopf.
+            if (istErstaufbau && missingContainers.length > 0 && !istReduziert && !this.warnungGezeigt) {
+                this.warnungGezeigt = true;
                 console.warn('CBD Classroom Page Filter: WARNING - ' + missingContainers.length + ' treated containers from DB not found in DOM (page was likely edited):', missingContainers);
 
                 // Show warning but DON'T auto-cleanup - teacher might want to re-mark the blocks
@@ -1756,8 +2031,18 @@
 
             $nav.append($rootUl);
 
-            // Event-Delegation für Toggle-Buttons (Theme-JS läuft vor dem AJAX-Ergebnis)
-            $nav.on('click', '.page-toggle', function(e) {
+            // Event-Delegation für Toggle-Buttons (Theme-JS läuft vor dem AJAX-Ergebnis).
+            //
+            // Eigener Namensraum + Abwurf VOR dem Binden (Nachtrag N3): $nav
+            // (`.sidebar-navigation`) ist dasselbe DOM-Element über beliebig
+            // viele Aufrufe dieser Methode hinweg – nur sein INHALT wird oben
+            // per `$nav.empty()` neu aufgebaut, der Container selbst bleibt
+            // stehen. Ein delegierter Handler ohne Abwurf würde sich also bei
+            // jeder Live-Aktualisierung der Seitenleiste (aktualisiereSeitenliste())
+            // ein weiteres Mal auf denselben Container legen – exakt die in
+            // Phase 2 als Hauptfalle dokumentierte Verdopplung, hier nicht an
+            // einer Navigationsleiste, sondern an einem Klick-Handler.
+            $nav.off('click.cbdSidebarToggle').on('click.cbdSidebarToggle', '.page-toggle', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
                 var $item = $(this).closest('.page-item');

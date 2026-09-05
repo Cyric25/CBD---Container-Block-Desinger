@@ -56,6 +56,16 @@
     // Container erneut angefragt wird).
     var serverDrawingsCache = {};
 
+    // N2 (PLAN-Nachtraege-Klassenmodus.md, Diagnose docs/diagnose-pdf-formeln.md):
+    // Ergebnis des ersten foreignObjectRendering-Versuchs, gemerkt fuer den
+    // ganzen Seitenaufruf. Liefert html2canvas mit foreignObjectRendering: true
+    // eine leere Leinwand, ist das eine Eigenschaft des Browsers, nicht der
+    // einzelnen Formel - der Versuch schlaegt dann fuer JEDE Formel fehl und
+    // kostet trotzdem jedes Mal mehrere Sekunden. Ohne dieses Merken zahlt jede
+    // Formel den aussichtslosen Versuch erneut; genau daran hing die gemessene
+    // Exportdauer von mehreren Minuten fuer eine einzige Seite.
+    var foRenderingLiefertLeerbild = false;
+
     /**
      * Main export function - called by floating-pdf-button.js
      *
@@ -117,6 +127,12 @@
     // =========================================================================
 
     /**
+     * Container-Erkennung, wortgleich mit assets/js/classroom-page-filter.js.
+     * Der zweite Teil faengt Container ohne data-wp-interactive ab.
+     */
+    var CONTAINER_SELEKTOR = '[data-wp-interactive="container-block-designer"], [data-stable-id^="cbd-"]';
+
+    /**
      * Expand all collapsed blocks (including nested ones)
      * Returns array of states to restore later
      */
@@ -126,9 +142,21 @@
         containerBlocks.each(function () {
             var $block = $(this);
 
-            // Find ALL interactive containers (including nested)
-            var $allContainers = $block.find('[data-wp-interactive="container-block-designer"]');
-            if ($block.is('[data-wp-interactive="container-block-designer"]')) {
+            // Find ALL containers (including nested).
+            //
+            // N2: Bis dahin wurde ausschliesslich nach
+            // [data-wp-interactive="container-block-designer"] gesucht. Dieses
+            // Attribut traegt nur das interaktive Wurzelelement eines Containers -
+            // ein Container ohne dieses Attribut bleibt zugeklappt, seine Formeln
+            // haben dann Mass 0 und werden von der Groessenbremse in
+            // captureFormulaImages() still uebersprungen; im PDF bleibt der
+            // Textrueckfall stehen.
+            //
+            // Bewusst KEINE neue Erkennungsregel: Dies ist derselbe
+            // Doppel-Selektor, den assets/js/classroom-page-filter.js bereits
+            // benutzt, um Container-Bloecke einer Seite einzusammeln.
+            var $allContainers = $block.find(CONTAINER_SELEKTOR);
+            if ($block.is(CONTAINER_SELEKTOR)) {
                 $allContainers = $allContainers.add($block);
             }
 
@@ -248,6 +276,29 @@
         // (must happen before cloning so the IDs are included in the clone)
         var interactiveElements = findInteractiveElements($block);
 
+        // Step 1b: Formel-IDs vergeben - ebenfalls VOR dem Klonen.
+        //
+        // N2: Bis dahin geschah das erst nach $block.clone(). Der Klon truege
+        // dann leere id-Attribute und der Server koennte den Platzhalter keiner
+        // Formel zuordnen. Praktisch trat das nicht ein, weil CBD_LaTeX_Parser
+        // jede Formel bereits mit id ausliefert - fuer clientseitig
+        // nachgerenderte Formeln ohne id waere die Falle aber zugeschnappt.
+        // Dieselbe Reihenfolge gilt aus demselben Grund bereits fuer die
+        // interaktiven Elemente in Schritt 1.
+        var formulaElements = [];
+        var formulaCounter = 0;
+        $block.find('.cbd-latex-formula').each(function () {
+            var el = this;
+            if (!el.id) {
+                el.id = 'cbd-pdf-formula-' + Date.now() + '-' + (formulaCounter++);
+            }
+            formulaElements.push({
+                id: el.id,
+                element: el,
+                isDisplay: $(el).hasClass('cbd-latex-display')
+            });
+        });
+
         // Step 2: Clone block for HTML extraction (don't modify original)
         var $clone = $block.clone();
 
@@ -287,19 +338,8 @@
         // serverseitig als <img> eingesetzt (mPDF kann KaTeX-HTML nicht rendern).
         // Schlägt der Capture fehl, ersetzt der Server nichts und der lesbare
         // Fallback-Text bleibt stehen (bisheriges Verhalten).
-        var formulaElements = [];
-        var formulaCounter = 0;
-        $block.find('.cbd-latex-formula').each(function () {
-            var el = this;
-            if (!el.id) {
-                el.id = 'cbd-pdf-formula-' + Date.now() + '-' + (formulaCounter++);
-            }
-            formulaElements.push({
-                id: el.id,
-                element: el,
-                isDisplay: $(el).hasClass('cbd-latex-display')
-            });
-        });
+        // Die IDs dafuer sind bereits VOR dem Klonen vergeben worden - siehe
+        // Schritt 1b am Anfang dieser Funktion.
 
         $clone.find('.cbd-latex-formula').each(function () {
             var $formula = $(this);
@@ -404,6 +444,99 @@
     }
 
     /**
+     * Prueft, ob eine Leinwand ueberhaupt bemalt ist - also mindestens ein
+     * Pixel mit nennenswerter Deckkraft traegt.
+     *
+     * Die Schwelle ist bewusst niedrig (EIN Pixel genuegt): Ein Bruchstrich,
+     * ein Komma oder ein einzelner Buchstabe darf nicht als "leer" gelten.
+     * Ist die Leinwand nicht auslesbar, gilt sie als bemalt - annehmen ist
+     * dann besser als grundlos verwerfen.
+     */
+    function canvasIstBemalt(canvas) {
+        if (!canvas || !canvas.width || !canvas.height) {
+            return false;
+        }
+        var daten;
+        try {
+            var ctx = canvas.getContext('2d');
+            if (!ctx) { return true; }
+            daten = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        } catch (e) {
+            return true;
+        }
+        // Bei sehr grossen Leinwaenden mit Schrittweite abtasten, damit die
+        // Pruefung nicht selbst bremst. Bis rund 1 Mio. Pixel bleibt sie exakt.
+        var schritt = Math.max(1, Math.round(Math.sqrt((canvas.width * canvas.height) / 1000000)));
+        for (var y = 0; y < canvas.height; y += schritt) {
+            var basis = y * canvas.width * 4;
+            for (var x = 0; x < canvas.width; x += schritt) {
+                if (daten[basis + x * 4 + 3] > 10) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Liefert Capture-Ziel und Masse einer Formel.
+     *
+     * N2: Eine abgesetzte Formel ist ein <span class="cbd-latex-formula
+     * cbd-latex-display">. Als Inline-Element hat der Span keine eigene
+     * Breite - getBoundingClientRect() meldet dort Breite 0, obwohl das
+     * gerenderte KaTeX-Kind darin sichtbar ist. Die Groessenbremse unten hat
+     * diese Formeln deshalb still uebersprungen; im PDF blieb der bei
+     * Bruechen mathematisch falsche Textrueckfall stehen (Zaehler und Nenner
+     * vertauscht). Gemessen: Bloecke mit ausschliesslich abgesetzten Formeln
+     * meldeten "Captured 0/5".
+     *
+     * Ist das Element selbst zu klein, wird das erste gerenderte Kind mit
+     * echtem Kasten zum Capture-Ziel. Findet sich keines, gilt die Formel wie
+     * bisher als unsichtbar und wird uebersprungen (Fallback-Text greift).
+     */
+    function messeFormel(el) {
+        var rect = el.getBoundingClientRect();
+        if (rect.width >= 2 && rect.height >= 2) {
+            return { ziel: el, rect: rect };
+        }
+        var kandidaten = el.querySelectorAll('.katex-display, .katex, .cbd-latex-content');
+        for (var i = 0; i < kandidaten.length; i++) {
+            var r = kandidaten[i].getBoundingClientRect();
+            if (r.width >= 2 && r.height >= 2) {
+                return { ziel: kandidaten[i], rect: r };
+            }
+        }
+        return null;
+    }
+
+    /**
+     * N2 (U3): Formelfarbe fuer den Capture auf den Hellmodus-Wertesatz
+     * zwingen. Ein PDF bildet den Darkmode grundsaetzlich nicht ab (siehe
+     * collectCSSVariables() weiter unten) - ohne diesen Eingriff kaemen im
+     * Darkmode weisse Glyphen auf weissem Papier heraus, weil die
+     * Darkmode-Neutralisierung erst NACH allen Captures laeuft.
+     *
+     * Der Eingriff passiert ausschliesslich im KLON, den html2canvas vor dem
+     * Malen anlegt, NICHT an der laufenden Seite. Ein Umschalten von
+     * data-theme am echten <html> waere sichtbares Flackern - und genau das
+     * ist auf diesem Branch gerade behoben worden (N1).
+     */
+    function neutralisiereDarkmodeImKlon(klonDokument) {
+        try {
+            klonDokument.documentElement.removeAttribute('data-theme');
+            var stil = klonDokument.createElement('style');
+            stil.textContent =
+                '.cbd-latex-formula, .cbd-latex-formula * {' +
+                'color: var(--color-text-primary, #333333) !important;' +
+                '-webkit-text-fill-color: var(--color-text-primary, #333333) !important;' +
+                '}';
+            (klonDokument.head || klonDokument.documentElement).appendChild(stil);
+        } catch (e) {
+            // Ohne Neutralisierung wird trotzdem erfasst - bisheriges Verhalten.
+        }
+    }
+
+    /**
      * Rendert KaTeX-Formeln als PNG-Bilder (html2canvas, scale 2 für Schärfe).
      * Liefert [{id, image, width, height, isDisplay}] – width/height in CSS-px,
      * damit der Server das Bild in Originalgröße einsetzen kann.
@@ -421,21 +554,23 @@
 
         function nextFormula() {
             if (index >= formulaElements.length) {
-                window.cbdDebug && console.log('[CBD PDF] Captured ' + formulas.length + '/' + formulaElements.length + ' formula images');
+                window.cbdDebug && console.log('[CBD PDF] Captured ' + formulas.length + '/' + formulaElements.length +
+                    ' formula images (' + (foRenderingLiefertLeerbild ? 'Standard-Painter' : 'foreignObject') + ')');
                 callback(formulas);
                 return;
             }
 
             var item = formulaElements[index];
-            var el = item.element;
-            var rect = el.getBoundingClientRect();
+            var mass = messeFormel(item.element);
 
             // Unsichtbare/leere Formeln überspringen (Fallback-Text greift)
-            if (rect.width < 2 || rect.height < 2) {
+            if (!mass) {
                 index++;
                 nextFormula();
                 return;
             }
+            var el = mass.ziel;
+            var rect = mass.rect;
 
             // foreignObjectRendering rendert KaTeX' komplexe vertikale Stapelung
             // (Brüche, \xrightarrow-Beschriftungen, Wurzeln) über den nativen
@@ -448,7 +583,8 @@
                     backgroundColor: null,
                     logging: false,
                     useCORS: true,
-                    foreignObjectRendering: useForeignObject
+                    foreignObjectRendering: useForeignObject,
+                    onclone: neutralisiereDarkmodeImKlon
                 }).then(function (canvas) {
                     onDone(canvas);
                 }).catch(function (err) {
@@ -473,15 +609,10 @@
                 setTimeout(nextFormula, 10);
             }
 
-            // 1. Versuch: foreignObjectRendering (beste KaTeX-Treue)
-            attemptCapture(true, function (canvas) {
-                if (canvas && canvas.width > 0 && canvas.height > 0) {
-                    store(canvas);
-                    return;
-                }
-                // 2. Versuch: Standard-Painter
+            // 2. Versuch: Standard-Painter
+            function standardPainter() {
                 attemptCapture(false, function (canvas2) {
-                    if (canvas2 && canvas2.width > 0 && canvas2.height > 0) {
+                    if (canvasIstBemalt(canvas2)) {
                         store(canvas2);
                     } else {
                         // Beide fehlgeschlagen – Fallback-Text im Platzhalter bleibt
@@ -489,6 +620,38 @@
                         setTimeout(nextFormula, 10);
                     }
                 });
+            }
+
+            // Ist foreignObjectRendering in dieser Sitzung bereits als untauglich
+            // erkannt, gar nicht erst versuchen (N2).
+            if (foRenderingLiefertLeerbild) {
+                standardPainter();
+                return;
+            }
+
+            // 1. Versuch: foreignObjectRendering (beste KaTeX-Treue).
+            //
+            // N2 - der Kern der Reparatur: Geprueft wird jetzt der INHALT der
+            // Leinwand, nicht nur ihre Masse. Eine korrekt dimensionierte, aber
+            // vollstaendig transparente Leinwand bestand die alte Pruefung
+            // (width > 0 && height > 0) und wurde angenommen - der
+            // funktionierende Standard-Painter war damit unerreichbar. Der Server
+            // bettete das leere PNG korrekt ein, im PDF blieb an der Formelstelle
+            // eine Luecke. Belegt in docs/diagnose-pdf-formeln.md: 742 Byte fuer
+            // ein 276x48-PNG mit 0 opaken Pixeln.
+            attemptCapture(true, function (canvas) {
+                if (canvasIstBemalt(canvas)) {
+                    store(canvas);
+                    return;
+                }
+                if (!foRenderingLiefertLeerbild) {
+                    foRenderingLiefertLeerbild = true;
+                    // Bewusst NICHT hinter window.cbdDebug: Diese Zeile ist der
+                    // Beleg dafuer, dass der reparierte Codestand laeuft.
+                    console.warn('[CBD PDF] foreignObjectRendering liefert eine leere Leinwand - ' +
+                        'ab jetzt Standard-Painter fuer alle Formeln dieser Sitzung.');
+                }
+                standardPainter();
             });
         }
 
@@ -911,6 +1074,21 @@
     // =========================================================================
 
     /**
+     * TOTER CODE - wird an keiner Stelle aufgerufen (Stand N2, 2026-09-04).
+     *
+     * Diese Funktion sammelt gerendertes KaTeX-HTML (renderedHtml) fuer den
+     * Serverzweig CBD_PDF_Generator::insert_formula(). Beide Seiten sind tot:
+     * Der Weg rastert Formeln seit v3.1.58/59 im Browser zu PNG
+     * (captureFormulaImages() weiter oben), und die an den Server gehende
+     * Nutzlast enthaelt ausschliesslich id/image/width/height/isDisplay -
+     * kein renderedHtml, kein latex.
+     *
+     * NICHT wiederbeleben: mPDFs CSS-Maschine kann KaTeX-Markup (.vlist,
+     * .strut, absolute Positionierung, negative Raender, em-Ketten) nicht
+     * setzen, und die KaTeX-Schriften sind dort nicht registriert.
+     * Vollstaendige Begruendung samt Messwerten: docs/diagnose-pdf-formeln.md,
+     * Abschnitte 3 und 8 (Variante B, ausdruecklich nicht empfohlen).
+     *
      * Extract KaTeX formula data from block
      * Captures the rendered HTML so mPDF can display it
      */

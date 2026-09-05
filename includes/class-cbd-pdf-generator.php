@@ -531,6 +531,22 @@ class CBD_PDF_Generator {
         return $html;
     }
 
+    /**
+     * TOTER CODE - wird nie erreicht (Stand N2, 2026-09-04).
+     *
+     * Dieser Zweig setzt gerendertes KaTeX-HTML (Schluessel renderedHtml) in
+     * den Platzhalter ein. Die Nutzlast des Browsers enthaelt diesen
+     * Schluessel jedoch nie: Sie stammt ausschliesslich aus
+     * captureFormulaImages() in assets/js/pdf-server-side.js und traegt nur
+     * id/image/width/height/isDisplay. Der Erzeuger auf der Browserseite
+     * (extractFormulas()) wird seinerseits nirgends aufgerufen. Zusaetzlich
+     * matcht der Ausdruck hier auf id="..." statt auf
+     * data-cbd-formula-id="...", was der Platzhalter tatsaechlich traegt.
+     *
+     * NICHT wiederbeleben: mPDFs CSS-Maschine kann KaTeX-Markup nicht setzen.
+     * Begruendung und Messwerte: docs/diagnose-pdf-formeln.md, Abschnitte 3
+     * und 8 (Variante B, ausdruecklich nicht empfohlen).
+     */
     private function insert_formula($html, $formula) {
         $formula_id = preg_quote($formula['id'], '/');
         $rendered = $formula['renderedHtml'];
