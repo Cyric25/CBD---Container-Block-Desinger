@@ -66,6 +66,13 @@
     // Exportdauer von mehreren Minuten fuer eine einzige Seite.
     var foRenderingLiefertLeerbild = false;
 
+    // N4a: Einmal je Seitenaufruf gemeldet, dass der gepolsterte Capture mit
+    // Zuschnitt gelaufen ist. Bewusst NICHT hinter window.cbdDebug - diese
+    // Zeile existiert nur im reparierten Code und ist damit der Beleg, dass
+    // er laeuft (die HTTP-Cache-Falle macht transferSize dafuer untauglich,
+    // siehe CLAUDE.md, Abschnitt "PDF-Export").
+    var inlineZuschnittGemeldet = false;
+
     /**
      * Main export function - called by floating-pdf-button.js
      *
@@ -520,20 +527,177 @@
      * Malen anlegt, NICHT an der laufenden Seite. Ein Umschalten von
      * data-theme am echten <html> waere sichtbares Flackern - und genau das
      * ist auf diesem Branch gerade behoben worden (N1).
+     *
+     * N4b - KORREKTUR der N2-Fassung. Bis 3.1.119 setzte diese Funktion
+     * zusaetzlich
+     *
+     *     .cbd-latex-formula, .cbd-latex-formula * {
+     *         color: var(--color-text-primary, #333333) !important;
+     *         -webkit-text-fill-color: ... !important; }
+     *
+     * Das war ein Rueckschritt und ist ENTFERNT: `latex-formulas.css` gibt
+     * Formeln bewusst `color: inherit` (Zeilen 25, 85, 92), damit sie die
+     * Textfarbe ihres Blocks tragen - etwa #71230a in Spezialtext-Bloecken.
+     * Die pauschale Erzwingung plaettete im PDF ALLE Glyphen auf #333333,
+     * unabhaengig vom Block (am erzeugten PDF nachgemessen: 8 von 8 Formeln
+     * grau, auch im Block mit #71230a).
+     *
+     * Das Entfernen von data-theme allein reicht, weil der Darkmode des
+     * Themes ausschliesslich ueber `:root[data-theme="dark"]` ausgeloest wird
+     * (Theme/style.css, Zeile 96: "Ausgeloest ausschliesslich durch das
+     * Attribut data-theme='dark' auf <html>"; kein
+     * prefers-color-scheme-Zweig). Mit dem Attribut faellt sowohl der
+     * Darkmode-Wertesatz der CSS-Variablen als auch die Regel
+     * `[data-theme="dark"] .cbd-container-block { color: ... !important }`
+     * aus cbd-frontend-clean.css weg - danach greift wieder `color: inherit`
+     * und liefert die richtige Blockfarbe. `color-scheme: light` sperrt
+     * zusaetzlich die Formularsteuerelemente-Umfaerbung des Browsers aus.
+     *
+     * Wer hier je wieder eine feste Farbe erzwingen will: Das war schon
+     * einmal falsch. Der Darkmode wird durch die Wertesaetze
+     * zurueckgedreht, nicht durch Ueberschreiben der Formelfarbe.
      */
     function neutralisiereDarkmodeImKlon(klonDokument) {
         try {
             klonDokument.documentElement.removeAttribute('data-theme');
             var stil = klonDokument.createElement('style');
-            stil.textContent =
-                '.cbd-latex-formula, .cbd-latex-formula * {' +
-                'color: var(--color-text-primary, #333333) !important;' +
-                '-webkit-text-fill-color: var(--color-text-primary, #333333) !important;' +
-                '}';
+            stil.textContent = ':root { color-scheme: light !important; }';
             (klonDokument.head || klonDokument.documentElement).appendChild(stil);
         } catch (e) {
             // Ohne Neutralisierung wird trotzdem erfasst - bisheriges Verhalten.
         }
+    }
+
+    /**
+     * N4a: Temporaerer senkrechter Innenabstand am Capture-Ziel einer
+     * INLINE-Formel.
+     *
+     * Warum das noetig ist (gemessen, nicht vermutet): html2canvas setzt
+     * Text ueber `ctx.fillText(text, bounds.left, bounds.top + baseline)`,
+     * wobei `baseline` aus seiner eigenen `FontMetrics`-Messung stammt
+     * (`img.offsetTop - span.offsetTop + 2` in einem Hilfs-<div> am
+     * document.body). Diese Messung faellt fuer die KaTeX-Schriften deutlich
+     * zu gross aus - fuer `18px KaTeX_Main` liefert sie 27 px, waehrend die
+     * echte Grundlinie rund 17 px unter der Textkastenoberkante liegt. Jede
+     * KaTeX-Glyphe wird dadurch rund 7-11 px zu tief gemalt.
+     *
+     * Bei einer ABGESETZTEN Formel faellt das nicht auf: Ihr Ausschnitt ist
+     * die Blockbox samt `padding: 15px 0` (gemessen 712,8x89,8 px), die
+     * Verschiebung bleibt darin. Bei einer INLINE-Formel ist der Ausschnitt
+     * genau die Zeilenbox - 24 px hoch -, und die um 7-11 px nach unten
+     * verschobene Glyphe faellt unten heraus. Im PDF des Betreibers sass der
+     * Inhalt deshalb in den untersten zehn von 48 Pixelzeilen und lief dort
+     * ueber den Rand (nachgestellt und bestaetigt: Tinte nur in Zeile 35..47
+     * von 48, an allen sechs Inline-Formeln der Pruefseite).
+     *
+     * Der Ausschnitt, den html2canvas malt, ist `getBoundingClientRect()`
+     * des uebergebenen Elements. Senkrechter Innenabstand an einem
+     * INLINE-Kasten vergroessert genau diesen Kasten, **ohne die Seite neu
+     * umzubrechen** - CSS laesst Innenabstand oben/unten bei Inline-Boxen
+     * nicht in die Zeilenhoehe einfliessen. Nachgemessen: Nachbarformel und
+     * `document.documentElement.scrollHeight` bleiben unveraendert. Deshalb
+     * ist der Eingriff hier zulaessig, obwohl er die laufende Seite beruehrt
+     * - er ist unsichtbar (kein Hintergrund, kein Rahmen an
+     * `.cbd-latex-formula`) und wird in jedem Ausgang wieder entfernt.
+     *
+     * Fuer `display: inline-block`/`block` gilt das NICHT (dort waere
+     * Innenabstand ein echter Umbruch), deshalb die Pruefung des berechneten
+     * display-Werts.
+     *
+     * @param {Element} el Capture-Ziel
+     * @return {Object|null} Handle zum Zuruecknehmen oder null
+     */
+    var CBD_FORMEL_POLSTER_PX = 48;
+
+    function polstereInlineFormel(el) {
+        try {
+            var stil = el.ownerDocument.defaultView.getComputedStyle(el);
+            if (stil.display !== 'inline') {
+                return null;
+            }
+            var vorher = el.getAttribute('style');
+            el.style.setProperty('padding-top', CBD_FORMEL_POLSTER_PX + 'px', 'important');
+            el.style.setProperty('padding-bottom', CBD_FORMEL_POLSTER_PX + 'px', 'important');
+            return { el: el, vorher: vorher };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function polsterZuruecknehmen(handle) {
+        if (!handle) return;
+        try {
+            if (handle.vorher === null) {
+                handle.el.removeAttribute('style');
+            } else {
+                handle.el.setAttribute('style', handle.vorher);
+            }
+        } catch (e) {
+            // Im schlimmsten Fall bleibt unsichtbarer Innenabstand stehen.
+        }
+    }
+
+    /**
+     * N4a: Schneidet eine Leinwand auf ihren bemalten Bereich zu.
+     *
+     * Gegenstueck zur Polsterung oben: Erfasst wird grosszuegig, geliefert
+     * wird der Tintenkasten. Damit ist das Formelbild im PDF genau die
+     * Formel - der Server setzt es mit `vertical-align:middle` in die Zeile
+     * (class-cbd-pdf-generator.php, insert_formula_image()), die Formel sitzt
+     * also mittig zur Textzeile.
+     *
+     * Liefert null, wenn nichts zu holen ist (leere oder nicht auslesbare
+     * Leinwand) - der Aufrufer bleibt dann beim ungeschnittenen Bild.
+     *
+     * @param {HTMLCanvasElement} leinwand
+     * @param {number} skala html2canvas-Skalierung (Leinwandpixel je CSS-px)
+     * @return {Object|null} {leinwand, breite, hoehe} - Masse in CSS-px
+     */
+    function beschneideAufTinte(leinwand, skala) {
+        if (!leinwand || !leinwand.width || !leinwand.height) {
+            return null;
+        }
+        var daten;
+        try {
+            daten = leinwand.getContext('2d').getImageData(0, 0, leinwand.width, leinwand.height).data;
+        } catch (e) {
+            return null; // verunreinigte Leinwand - ungeschnitten weiterverwenden
+        }
+        var b = leinwand.width, h = leinwand.height;
+        var oben = -1, unten = -1, links = b, rechts = -1;
+        for (var y = 0; y < h; y++) {
+            for (var x = 0; x < b; x++) {
+                if (daten[(y * b + x) * 4 + 3] > 10) {
+                    if (oben < 0) oben = y;
+                    unten = y;
+                    if (x < links) links = x;
+                    if (x > rechts) rechts = x;
+                }
+            }
+        }
+        if (oben < 0) {
+            return null;
+        }
+        // Zwei Pixel Luft, damit die Kantenglaettung nicht am Bildrand
+        // abgeschnitten wird (bei einem Pixel Rand beruehrte die
+        // Unterlaenge von "p" in $pK_S$ im erzeugten PDF noch die letzte
+        // Zeile). Zwei Leinwandpixel sind bei scale 2 genau ein CSS-px.
+        var LUFT = 2;
+        oben = Math.max(0, oben - LUFT);
+        links = Math.max(0, links - LUFT);
+        unten = Math.min(h - 1, unten + LUFT);
+        rechts = Math.min(b - 1, rechts + LUFT);
+        var neueB = rechts - links + 1;
+        var neueH = unten - oben + 1;
+        var ziel = document.createElement('canvas');
+        ziel.width = neueB;
+        ziel.height = neueH;
+        ziel.getContext('2d').drawImage(leinwand, links, oben, neueB, neueH, 0, 0, neueB, neueH);
+        return {
+            leinwand: ziel,
+            breite: Math.max(1, Math.round(neueB / skala)),
+            hoehe: Math.max(1, Math.round(neueH / skala))
+        };
     }
 
     /**
@@ -572,6 +736,24 @@
             var el = mass.ziel;
             var rect = mass.rect;
 
+            // N4a: Inline-Formeln grosszuegig erfassen und danach auf die
+            // Tinte zuschneiden (Begruendung an polstereInlineFormel()).
+            // Abgesetzte Formeln bleiben unveraendert - ihr Ausschnitt ist
+            // die Blockbox samt Innenabstand, dort sitzt der Inhalt bereits
+            // vollstaendig drin (gemessen: Tinte Zeile 56..110 von 128).
+            var polster = item.isDisplay ? null : polstereInlineFormel(el);
+            if (polster) {
+                rect = el.getBoundingClientRect();
+            }
+
+            // Jeder Ausgang dieser Formel muss die Polsterung zuruecknehmen.
+            function weiterZurNaechsten() {
+                polsterZuruecknehmen(polster);
+                polster = null;
+                index++;
+                setTimeout(nextFormula, 10);
+            }
+
             // foreignObjectRendering rendert KaTeX' komplexe vertikale Stapelung
             // (Brüche, \xrightarrow-Beschriftungen, Wurzeln) über den nativen
             // SVG-foreignObject des Browsers KORREKT – der Standard-Canvas-Painter
@@ -595,18 +777,40 @@
 
             function store(canvas) {
                 try {
+                    var bild = canvas;
+                    var breite = Math.round(rect.width);
+                    var hoehe = Math.round(rect.height);
+                    if (polster) {
+                        // N4a: Der Ausschnitt war absichtlich zu gross -
+                        // jetzt auf die Formel selbst zurueckschneiden.
+                        var zu = beschneideAufTinte(canvas, 2);
+                        if (zu) {
+                            bild = zu.leinwand;
+                            breite = zu.breite;
+                            hoehe = zu.hoehe;
+                            if (!inlineZuschnittGemeldet) {
+                                inlineZuschnittGemeldet = true;
+                                console.log('[CBD PDF] Inline-Formeln werden gepolstert erfasst und auf die Tinte ' +
+                                    'zugeschnitten (N4a) - erste Formel: ' + breite + 'x' + hoehe + ' CSS-px.');
+                            }
+                        } else {
+                            // Kein Zuschnitt moeglich: wenigstens die
+                            // Polsterung nicht als Bildmass melden.
+                            breite = Math.round(mass.rect.width);
+                            hoehe = Math.round(mass.rect.height);
+                        }
+                    }
                     formulas.push({
                         id: item.id,
-                        image: canvas.toDataURL('image/png'),
-                        width: Math.round(rect.width),
-                        height: Math.round(rect.height),
+                        image: bild.toDataURL('image/png'),
+                        width: breite,
+                        height: hoehe,
                         isDisplay: item.isDisplay ? 1 : 0
                     });
                 } catch (e) {
                     console.warn('[CBD PDF] Formula toDataURL failed for', item.id, e);
                 }
-                index++;
-                setTimeout(nextFormula, 10);
+                weiterZurNaechsten();
             }
 
             // 2. Versuch: Standard-Painter
@@ -616,8 +820,7 @@
                         store(canvas2);
                     } else {
                         // Beide fehlgeschlagen – Fallback-Text im Platzhalter bleibt
-                        index++;
-                        setTimeout(nextFormula, 10);
+                        weiterZurNaechsten();
                     }
                 });
             }

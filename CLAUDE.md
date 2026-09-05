@@ -3558,7 +3558,12 @@ Gemessen im Dunkelmodus, dieselbe Formel, derselbe Standard-Painter:
 26 122 dunkel und 0 hell.
 
 Der Fix ist `neutralisiereDarkmodeImKlon()` als `onclone`-Rückruf von
-html2canvas: Er entfernt `data-theme` und setzt die Formelfarbe **im Klon**,
+html2canvas. **Achtung, seit N4b überholt:** Die hier beschriebene zweite
+Hälfte — das Setzen einer festen Formelfarbe — war ein Rückschritt und ist
+entfernt; geblieben ist nur das Entfernen von `data-theme` (plus
+`color-scheme: light`). Siehe Abschnitt „PDF-Export: Inline-Formeln und
+Formelfarbe (N4)" weiter unten. Der ursprüngliche Wortlaut, zur Einordnung:
+Er entfernt `data-theme` und setzt die Formelfarbe **im Klon**,
 den html2canvas vor dem Malen ohnehin anlegt. **Ausdrücklich nicht** durch
 Umschalten von `data-theme` an der laufenden Seite — das wäre sichtbares
 Flackern, und genau das ist auf demselben Branch gerade behoben worden
@@ -3634,6 +3639,148 @@ Code und ist damit der Beleg, dass er läuft.
    ihn zu erklären. Liefert FO auf einem anderen Browser ein Bild, wird es
    unverändert genommen — die bessere KaTeX-Treue bleibt also erhalten, wo sie
    zu haben ist.
+
+## PDF-Export: Inline-Formeln und Formelfarbe (N4, Branch `nachtrag-n4-inline-formeln`, 2026-09-05)
+
+Nachtrag zum Abschnitt oben. Der N2-Fix hat die Formeln **sichtbar** gemacht;
+der Live-Test am echten PDF des Betreibers hat danach zwei weitere Fehler
+gezeigt, beide hier behoben. Beide betreffen ausschließlich
+`assets/js/pdf-server-side.js`; `class-cbd-pdf-generator.php` ist unverändert.
+
+### N4a — Inline-Formeln waren abgeschnitten
+
+**Der Befund, am PDF gemessen:** Die Bilder lagen an den richtigen Stellen und
+in den richtigen Maßen, aber der Inhalt saß **nur in den untersten zehn von 48
+Pixelzeilen** und lief dort über den Rand. Gedruckt wurde ein Kopffragment,
+auf 6,3 mm gestaucht. Die abgesetzte Formel war korrekt.
+
+**Die Ursache — gemessen, nicht vermutet.** `messeFormel()` war unschuldig
+(der Verdacht aus dem Plan hat sich nicht bestätigt): Sie liefert für eine
+Inline-Formel korrekt die Zeilenbox des `<span>`, und html2canvas nimmt genau
+diese als Ausschnitt. Der Fehler liegt in html2canvas 1.4.1 selbst. Es setzt
+Text über
+
+```
+ctx.fillText(text, bounds.left, bounds.top + baseline)
+```
+
+wobei `bounds` aus `Range.getClientRects()` stammt und `baseline` aus der
+eigenen Messung `FontMetrics.parseMetrics()` —
+`img.offsetTop - span.offsetTop + 2` in einem Hilfs-`<div>` am
+`document.body`. Diese Messung nimmt die vom Body geerbte Zeilenhöhe mit und
+fällt für die KaTeX-Schriften deutlich zu groß aus. Nachgemessen auf der
+Prüfseite:
+
+| | Wert |
+|---|---|
+| `Range`-Rechteck des Textknotens „1" | oben 783,8 px, Höhe 20,7 px |
+| `FontMetrics.baseline` für `18px KaTeX_Main` | **27** |
+| daraus gemalte Grundlinie (`fillText`-Mitschnitt) | **y = 810,8** |
+| echte Grundlinie (Glyphen sitzen im Kasten 780,5..804,5) | ≈ **800** |
+| Versatz | **rund 7–11 px nach unten** |
+
+Zum Gegenprobieren: Mit `line-height: normal` liefert dieselbe Messung 24, mit
+`line-height: 1` nur 22 — der Wert hängt an der geerbten Zeilenhöhe, nicht an
+der Schrift allein.
+
+**Warum das nur inline auffällt:** Der Ausschnitt einer abgesetzten Formel ist
+die Blockbox samt `padding: 15px 0` (gemessen 712,8 × 89,8 px) — die
+Verschiebung bleibt darin. Der Ausschnitt einer Inline-Formel ist genau die
+Zeilenbox, 24 px hoch; 7–11 px nach unten heißt dort: unten heraus.
+
+**Der Fix — großzügig erfassen, auf die Tinte zuschneiden.** Zwei neue
+Funktionen:
+
+- `polstereInlineFormel(el)` legt dem Capture-Ziel kurz
+  `padding-top`/`padding-bottom: 48px` an, **nur wenn der berechnete
+  `display`-Wert `inline` ist**. Senkrechter Innenabstand an einer Inline-Box
+  vergrößert `getBoundingClientRect()` — und damit den html2canvas-Ausschnitt
+  —, fließt aber **nicht in die Zeilenhöhe ein**: Die Seite bricht nicht neu
+  um. Nachgemessen: Nachbarformel und
+  `document.documentElement.scrollHeight` bleiben unverändert; die Formel hat
+  keinen Hintergrund und keinen Rahmen, der Eingriff ist also auch optisch
+  nicht sichtbar. `polsterZuruecknehmen()` läuft in **jedem** Ausgang
+  (Erfolg, leere Leinwand, Ausnahme). Die `display`-Prüfung ist keine
+  Vorsichtsmaßnahme, sondern Bedingung: Bei `inline-block`/`block` wäre
+  Innenabstand ein echter Umbruch — abgesetzte Formeln laufen deshalb
+  unverändert durch den alten Weg.
+- `beschneideAufTinte(leinwand, skala)` schneidet die Leinwand danach auf den
+  bemalten Bereich zu (zwei Leinwandpixel Luft, bei `scale: 2` genau ein
+  CSS-px) und meldet die zugeschnittenen Maße als `width`/`height`. Das
+  Formelbild im PDF ist damit genau die Formel;
+  `CBD_PDF_Generator::insert_formula_image()` setzt es unverändert mit
+  `vertical-align:middle` in die Zeile, die Formel sitzt also mittig zur
+  Textzeile.
+
+**Warum nicht die naheliegende Variante** (`html2canvas` mit `x`/`y`/`width`/
+`height` einen größeren Ausschnitt geben): probiert und **verworfen** — die
+Leinwand kam vollständig leer zurück, obwohl der `fillText`-Mitschnitt
+zeigte, dass gemalt wurde. Die Optionen verschieben in dieser Fassung nicht
+das, was sie zu verschieben scheinen. Auch **nicht** gemacht: an html2canvas
+selbst herumoperieren oder der laufenden Seite die Zeilenhöhe umstellen.
+
+### N4b — die pauschale Formelfarbe war ein Rückschritt und ist entfernt
+
+**Richtigstellung zum Abschnitt oben, Punkt 3.** Die N2-Fassung von
+`neutralisiereDarkmodeImKlon()` setzte im Klon zusätzlich
+
+```
+.cbd-latex-formula, .cbd-latex-formula * {
+    color: var(--color-text-primary, #333333) !important;
+    -webkit-text-fill-color: var(--color-text-primary, #333333) !important; }
+```
+
+Das war **falsch** und ist gestrichen. `assets/css/latex-formulas.css` gibt
+Formeln bewusst `color: inherit` (Zeilen 25, 85, 92), damit sie die Textfarbe
+ihres Blocks tragen — etwa `#71230a` in Spezialtext-Blöcken. Die pauschale
+Regel plättete im PDF **alle** Glyphen auf `#333333`, unabhängig vom Block;
+am erzeugten Prüf-PDF nachgemessen: 8 von 8 Formeln grau, auch im Block mit
+`#71230a`.
+
+Geblieben ist `removeAttribute('data-theme')`, ergänzt um
+`:root { color-scheme: light !important }`. **Das genügt**, weil der Darkmode
+des Themes ausschließlich über `:root[data-theme="dark"]` ausgelöst wird
+(`Theme/style.css`, Zeile 96: „Ausgelöst ausschließlich durch das Attribut
+`data-theme='dark'` auf `<html>`"; es gibt keinen
+`prefers-color-scheme`-Zweig). Mit dem Attribut fällt sowohl der
+Darkmode-Wertesatz der CSS-Variablen weg als auch die Regel
+`[data-theme="dark"] .cbd-container-block { color: … !important }` aus
+`assets/css/cbd-frontend-clean.css` — danach greift wieder `color: inherit`
+und liefert die Blockfarbe.
+
+**Wer hier je wieder eine feste Farbe erzwingen will: Das war schon einmal
+falsch.** Der Darkmode wird durch das Zurückdrehen der Wertesätze
+neutralisiert, nicht durch Überschreiben der Formelfarbe.
+
+### Wie das nachgewiesen wurde
+
+Prüfseite eigens angelegt und danach wieder entfernt: zwei Container mit
+denselben vier Formeln (drei inline: `$K$`, `$K >> 1$`, `$pK_S = -\log K_S$`;
+eine abgesetzt), Block A in `#333333`, Block B in `#71230a`. Gemessen wurde am
+**erzeugten PDF**, an den eingebetteten Bildern (SMask = Form, Farbbild =
+Glyphenfarbe), nicht an Zwischenwerten:
+
+| | vorher | nachher |
+|---|---|---|
+| Inline-Bild `$K >> 1$` | 128 × 48 px, Tinte **nur Zeile 35..47** (unterste 13 von 48), Randberührung | 127 × 30 px, Tinte **Zeile 2..27**, kein Randkontakt |
+| Inline-Bild `$K$` | 34 × 48 px, Tinte Zeile 36..47 | 34 × 29 px, Tinte Zeile 2..26 |
+| Inline-Bild `$pK_S = -\log K_S$` | 242 × 48 px, Tinte Zeile 36..47 | 240 × 37 px, Tinte Zeile 2..34 (samt Unterlänge des „p" und Tiefstellung) |
+| abgesetzte Formel | 1426 × 128 px auf 478,7 × 43,0 pt, Tinte 56..110 | **unverändert** 1426 × 128 px auf 478,7 × 43,0 pt, Tinte 56..110 |
+| Glyphenfarbe Block A (`#333333`) | `#333333` | `#333333` |
+| Glyphenfarbe Block B (`#71230a`) | **`#333333`** (falsch) | **`#71230a`** |
+| Dunkelmodus-Export | (nur dunkel/hell geprüft) | alle 8 Bilder vollständig, Farben `#333333` bzw. `#71230a`, **keine weißen Glyphen** |
+
+Der Beleg, dass der neue Code lief (die HTTP-Cache-Falle macht
+`transferSize` untauglich), ist die nur dort vorhandene Konsolenzeile
+
+```
+[CBD PDF] Inline-Formeln werden gepolstert erfasst und auf die Tinte
+zugeschnitten (N4a) - erste Formel: 17x14 CSS-px.
+```
+
+Sie steht wie die N2-Zeile bewusst **nicht** hinter `window.cbdDebug` und
+erscheint einmal je Seitenaufruf.
+
 ## Klassenmodus: Live-Aktualisierung (`PLAN-Klassenmodus-Live.md`, 2026-08-30 bis 2026-09-04, alle vier Phasen abgeschlossen und in `main` gemergt)
 
 Gibt eine Lehrperson im Klassenmodus einen Container-Block frei, sieht der
