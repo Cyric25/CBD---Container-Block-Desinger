@@ -96,6 +96,179 @@
     // bewusst NICHT hinter window.cbdDebug.
     var downloadSchaltflaecheGemeldet = false;
 
+    // =====================================================================
+    // MathJax (AP-1.1 aus PLAN-Formeln-als-Vektor-im-PDF.md)
+    // =====================================================================
+
+    // Einmal je Seitenaufruf: das Versprechen des Nachladens. Solange es
+    // null ist, wurde MathJax nie angefordert - und genau das ist der
+    // Normalfall, denn ein gewoehnlicher Seitenaufruf ruft ladeMathJax()
+    // nicht auf.
+    var mathJaxVersprechen = null;
+    var mathJaxGemeldet = false;
+
+    /**
+     * Laedt MathJax mit SVG-Ausgabe nach - ausschliesslich beim PDF-Export.
+     *
+     * Warum ueberhaupt: html2canvas rastert die Bildschirmdarstellung, statt
+     * die Formel zu setzen. Jeder Formelfehler der letzten vier Vorhaben
+     * stammt aus dieser einen Entscheidung (siehe CLAUDE.md, Abschnitte N2,
+     * N4 und "Der Bruchstrich und der Bibliothekstausch"). MathJax setzt die
+     * Formel und gibt SVG aus - eine Quelle statt zweier.
+     *
+     * Warum erst beim Export: Der normale Seitenaufruf soll sich nicht
+     * aendern. KaTeX bleibt fuer den Bildschirm zustaendig; MathJax kommt nur
+     * dazu, wenn wirklich exportiert wird, und dann einmal je Seitenaufruf.
+     *
+     * DREI EINSTELLUNGEN, DIE NICHT WEGDUERFEN:
+     *
+     * 1. `startup.typeset: false` und leere Delimiter-Listen.
+     *    Ohne sie durchsucht MathJax beim Laden das ganze Dokument und
+     *    fasst die von KaTeX bereits gerenderten Formeln ein zweites Mal an
+     *    - sichtbares Springen der Seite mitten im Export.
+     *
+     * 2. `loader.paths.fonts` auf das lokale Verzeichnis.
+     *    **Das ist die wichtigste Zeile dieser Funktion.** MathJax 4 hat die
+     *    Schriften aus dem Hauptbuendel ausgelagert und laedt fehlende
+     *    Zeichen zur Laufzeit nach - die Voreinstellung dafuer ist
+     *    `https://cdn.jsdelivr.net/npm/@mathjax`. Gemessen: `oe`, `ue`, `Oe`
+     *    in \text{} loesen genau das aus. Ein "Loesung" in einer Formel
+     *    haette also stillschweigend einen Drittanbieter kontaktiert - auf
+     *    einer deutschsprachigen Seite praktisch garantiert, und dem
+     *    Betreiber im Betrieb nicht sichtbar. Mit dem lokalen Pfad ist der
+     *    Weg fail-closed: Fehlt eine Schriftdatei, scheitert das Setzen
+     *    dieser einen Formel und sie faellt auf den Rasterweg zurueck.
+     *    **Wer diese Zeile entfernt, oeffnet eine DSGVO-Luecke.**
+     *    Einzelheiten: assets/vendor/mathjax/HERKUNFT.md
+     *
+     * 3. `svg.fontCache: 'none'`.
+     *    Jeder Glyph wird ein eigenes <path> statt einer <use>-Referenz auf
+     *    einen <defs>-Block. Zwingend, denn CBD_SVG_Sanitizer laesst <use>
+     *    und xlink:href **nicht** durch (bewusst - xlink:href kann auf
+     *    fremde Dokumente zeigen). Mit 'local' kaemen die Formeln leer im
+     *    PDF an.
+     *
+     * @return {Promise} erfuellt, sobald MathJax.tex2svg benutzbar ist
+     */
+    /**
+     * Ein Skript per <script>-Element einreihen, als Versprechen.
+     * @param {string} url
+     * @return {Promise}
+     */
+    function ladeSkript(url) {
+        return new Promise(function (erfuellen, ablehnen) {
+            var s = document.createElement('script');
+            s.src = url;
+            s.async = false;   // Reihenfolge einhalten
+            s.onload = function () { erfuellen(url); };
+            s.onerror = function () {
+                ablehnen(new Error('Skript nicht ladbar: ' + url));
+            };
+            document.head.appendChild(s);
+        });
+    }
+
+    function ladeMathJax() {
+        if (mathJaxVersprechen) {
+            return mathJaxVersprechen;
+        }
+
+        mathJaxVersprechen = new Promise(function (erfuellen, ablehnen) {
+            if (window.MathJax && window.MathJax.tex2svg) {
+                erfuellen(window.MathJax);
+                return;
+            }
+
+            var basis = (window.cbdPDFData && cbdPDFData.pluginUrl)
+                ? cbdPDFData.pluginUrl.replace(/\/+$/, '')
+                : null;
+            if (!basis) {
+                ablehnen(new Error('cbdPDFData.pluginUrl fehlt - MathJax nicht ladbar'));
+                return;
+            }
+            var verzeichnis = basis + '/assets/vendor/mathjax';
+
+            // Muss VOR dem Laden stehen: MathJax liest window.MathJax beim Start.
+            window.MathJax = {
+                startup: { typeset: false },
+                svg: { fontCache: 'none' },
+                tex: { inlineMath: [], displayMath: [] },
+                loader: { paths: { fonts: verzeichnis + '/fonts' } },
+                // Vierte Pflichteinstellung, beim Bauen von AP-1.1 gefunden:
+                // MathJax 4 erzeugt zu jeder Formel Sprachausgabe fuer
+                // Screenreader und startet dafuer einen Worker aus
+                // `[mathjax]/sre/speech-worker.js`. Diese Datei liefern wir
+                // nicht mit (sie gehoert zum Sprachpaket, das der Export
+                // nicht braucht). Ohne die Abschaltung passiert Folgendes:
+                // Der Worker laeuft in einen 404, und `tex2svgPromise()`
+                // wird **nie erfuellt** - das Setzen haengt still, ohne
+                // Fehler beim Aufrufer. Live gemessen: Ein Aufruf blieb
+                // ueber 45 s unerledigt.
+                // Fuer den PDF-Weg ist Sprachausgabe ohnehin sinnlos: Was
+                // hier entsteht, ist ein Vektorbild im PDF, kein bedienbares
+                // Element im Browser. Die Barrierefreiheit der Website
+                // haengt an KaTeX im Frontend und bleibt unberuehrt.
+                options: {
+                    enableSpeech: false,
+                    enableEnrichment: false,
+                    enableMenu: false
+                }
+            };
+
+            ladeSkript(verzeichnis + '/tex-svg.js').then(function () {
+                var start = window.MathJax && window.MathJax.startup;
+                if (!start || !start.promise) {
+                    return Promise.reject(new Error('MathJax geladen, aber startup.promise fehlt'));
+                }
+                return start.promise;
+            }).then(function () {
+                // Schrifterweiterungen SELBST einreihen, statt MathJax sie
+                // nachladen zu lassen. Zwei Gruende, beide gemessen:
+                //
+                // 1. MathJax' eigener Nachlader scheitert an diesen Dateien.
+                //    Die Datei wird korrekt ausgeliefert (HTTP 200,
+                //    text/javascript, volle Groesse), von Hand ausgefuehrt
+                //    registriert sie ihre Glyphen anstandslos - der Loader
+                //    meldet trotzdem "dynamic file 'latin' failed to load",
+                //    und `tex2svgPromise()` wird dann **nie erfuellt**. Ein
+                //    Aufruf blieb ueber 45 s unerledigt, ohne Fehler beim
+                //    Aufrufer.
+                // 2. Selbst geladen gibt es die Nachladewege gar nicht mehr,
+                //    an denen die CDN-Voreinstellung haengt. Der Weg ist
+                //    damit nicht nur fail-closed, sondern hat die
+                //    Fehlerquelle nicht.
+                //
+                // WELCHE Dateien hier stehen muessen, wird gemessen, nicht
+                // geraten - siehe AP-1.3. `latin` deckt die deutschen
+                // Umlaute ab (oe, ue, Oe); ss, µ, ° und Ω sind bereits im
+                // Grundbestand von tex-svg.js.
+                var erweiterungen = ['latin'];
+                return Promise.all(erweiterungen.map(function (name) {
+                    return ladeSkript(verzeichnis + '/fonts/mathjax-newcm-font/svg/dynamic/'
+                        + name + '.js');
+                }));
+            }).then(function () {
+                if (!mathJaxGemeldet) {
+                    mathJaxGemeldet = true;
+                    console.log('[CBD PDF] MathJax mit SVG-Ausgabe nachgeladen ' +
+                        '(nur fuer den Export, Schriften lokal und vorab, AP-1.1).');
+                }
+                erfuellen(window.MathJax);
+            }).catch(ablehnen);
+        });
+
+        // Ein Fehlschlag darf nicht dauerhaft blockieren: beim naechsten
+        // Aufruf wird erneut versucht.
+        mathJaxVersprechen.catch(function () { mathJaxVersprechen = null; });
+
+        return mathJaxVersprechen;
+    }
+
+    // Fuer die Abnahme von AP-1.1 und die Messungen in AP-1.2/AP-1.3 von
+    // aussen erreichbar. Kein oeffentlicher Vertrag - der entsteht erst mit
+    // Phase 2.
+    window.cbdLadeMathJax = ladeMathJax;
+
     /**
      * Main export function - called by floating-pdf-button.js
      *

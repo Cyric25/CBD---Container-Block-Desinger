@@ -669,6 +669,13 @@ class CBD_Block_Registration {
                     'resturl' => rest_url('cbd/v1/'),
                     'nonce'   => wp_create_nonce('cbd-pdf-nonce'),
                     'restnonce' => wp_create_nonce('wp_rest'),
+                    // AP-1.1 (PLAN-Formeln-als-Vektor-im-PDF.md): Basis fuer
+                    // das Nachladen von MathJax beim Export. Muss auch in
+                    // class-cbd-classroom.php stehen - cbdPDFData wird an
+                    // ZWEI unabhaengigen Stellen lokalisiert, und genau diese
+                    // Doppelung hat bei 'pageId' schon einmal dazu gefuehrt,
+                    // dass der Wert auf gewoehnlichen Seiten fehlte.
+                    'pluginUrl' => CBD_PLUGIN_URL,
                 )
             );
         }
