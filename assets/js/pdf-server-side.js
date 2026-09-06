@@ -96,6 +96,424 @@
     // bewusst NICHT hinter window.cbdDebug.
     var downloadSchaltflaecheGemeldet = false;
 
+    // =====================================================================
+    // MathJax (AP-1.1 aus PLAN-Formeln-als-Vektor-im-PDF.md)
+    // =====================================================================
+
+    // Einmal je Seitenaufruf: das Versprechen des Nachladens. Solange es
+    // null ist, wurde MathJax nie angefordert - und genau das ist der
+    // Normalfall, denn ein gewoehnlicher Seitenaufruf ruft ladeMathJax()
+    // nicht auf.
+    var mathJaxVersprechen = null;
+    var mathJaxGemeldet = false;
+
+    /**
+     * Laedt MathJax mit SVG-Ausgabe nach - ausschliesslich beim PDF-Export.
+     *
+     * Warum ueberhaupt: html2canvas rastert die Bildschirmdarstellung, statt
+     * die Formel zu setzen. Jeder Formelfehler der letzten vier Vorhaben
+     * stammt aus dieser einen Entscheidung (siehe CLAUDE.md, Abschnitte N2,
+     * N4 und "Der Bruchstrich und der Bibliothekstausch"). MathJax setzt die
+     * Formel und gibt SVG aus - eine Quelle statt zweier.
+     *
+     * Warum erst beim Export: Der normale Seitenaufruf soll sich nicht
+     * aendern. KaTeX bleibt fuer den Bildschirm zustaendig; MathJax kommt nur
+     * dazu, wenn wirklich exportiert wird, und dann einmal je Seitenaufruf.
+     *
+     * DREI EINSTELLUNGEN, DIE NICHT WEGDUERFEN:
+     *
+     * 1. `startup.typeset: false` und leere Delimiter-Listen.
+     *    Ohne sie durchsucht MathJax beim Laden das ganze Dokument und
+     *    fasst die von KaTeX bereits gerenderten Formeln ein zweites Mal an
+     *    - sichtbares Springen der Seite mitten im Export.
+     *
+     * 2. `loader.paths.fonts` auf das lokale Verzeichnis.
+     *    **Das ist die wichtigste Zeile dieser Funktion.** MathJax 4 hat die
+     *    Schriften aus dem Hauptbuendel ausgelagert und laedt fehlende
+     *    Zeichen zur Laufzeit nach - die Voreinstellung dafuer ist
+     *    `https://cdn.jsdelivr.net/npm/@mathjax`. Gemessen: `oe`, `ue`, `Oe`
+     *    in \text{} loesen genau das aus. Ein "Loesung" in einer Formel
+     *    haette also stillschweigend einen Drittanbieter kontaktiert - auf
+     *    einer deutschsprachigen Seite praktisch garantiert, und dem
+     *    Betreiber im Betrieb nicht sichtbar. Mit dem lokalen Pfad ist der
+     *    Weg fail-closed: Fehlt eine Schriftdatei, scheitert das Setzen
+     *    dieser einen Formel und sie faellt auf den Rasterweg zurueck.
+     *    **Wer diese Zeile entfernt, oeffnet eine DSGVO-Luecke.**
+     *    Einzelheiten: assets/vendor/mathjax/HERKUNFT.md
+     *
+     * 3. `svg.fontCache: 'none'`.
+     *    Jeder Glyph wird ein eigenes <path> statt einer <use>-Referenz auf
+     *    einen <defs>-Block. Zwingend, denn CBD_SVG_Sanitizer laesst <use>
+     *    und xlink:href **nicht** durch (bewusst - xlink:href kann auf
+     *    fremde Dokumente zeigen). Mit 'local' kaemen die Formeln leer im
+     *    PDF an.
+     *
+     * @return {Promise} erfuellt, sobald MathJax.tex2svg benutzbar ist
+     */
+    /**
+     * Ein Skript per <script>-Element einreihen, als Versprechen.
+     * @param {string} url
+     * @return {Promise}
+     */
+    function ladeSkript(url) {
+        return new Promise(function (erfuellen, ablehnen) {
+            var s = document.createElement('script');
+            s.src = url;
+            s.async = false;   // Reihenfolge einhalten
+            s.onload = function () { erfuellen(url); };
+            s.onerror = function () {
+                ablehnen(new Error('Skript nicht ladbar: ' + url));
+            };
+            document.head.appendChild(s);
+        });
+    }
+
+    function ladeMathJax() {
+        if (mathJaxVersprechen) {
+            return mathJaxVersprechen;
+        }
+
+        mathJaxVersprechen = new Promise(function (erfuellen, ablehnen) {
+            if (window.MathJax && window.MathJax.tex2svg) {
+                erfuellen(window.MathJax);
+                return;
+            }
+
+            var basis = (window.cbdPDFData && cbdPDFData.pluginUrl)
+                ? cbdPDFData.pluginUrl.replace(/\/+$/, '')
+                : null;
+            if (!basis) {
+                ablehnen(new Error('cbdPDFData.pluginUrl fehlt - MathJax nicht ladbar'));
+                return;
+            }
+            var verzeichnis = basis + '/assets/vendor/mathjax';
+
+            // Muss VOR dem Laden stehen: MathJax liest window.MathJax beim Start.
+            window.MathJax = {
+                startup: { typeset: false },
+                svg: {
+                    fontCache: 'none',
+                    // FUENFTE Pflichteinstellung, im Review von Phase 1
+                    // gefunden - und die folgenreichste.
+                    //
+                    // MathJax 4 bricht Inline-Mathematik standardmaessig um
+                    // (`linebreaks: {inline: true, width: "100%"}`). Passt
+                    // eine Formel nicht in die angenommene Breite, gibt es
+                    // statt EINER <svg>-Wurzel MEHRERE nebeneinander - eine
+                    // je Zeile. Wer davon die erste nimmt, verliert den Rest.
+                    //
+                    // Gemessen an `\text{Ag}^+ + e^- \rightleftharpoons
+                    // \text{Ag}`: display:true -> 1 Wurzel, 9 Pfade;
+                    // display:false -> 3 Wurzeln, davon 3 Pfade in der
+                    // ersten. Auf der Pruefseite waren 10 von 22
+                    // Inline-Formeln betroffen.
+                    //
+                    // Das ist ein STILLER Fehler: kein merror, keine
+                    // Ausnahme, kein Log - der Export meldet Erfolg und
+                    // liefert eine mathematisch falsche Formel. "Ag+" statt
+                    // "Ag+ + e- -> Ag" ist schlimmer als eine Luecke.
+                    //
+                    // Im PDF gibt es keinen Grund umzubrechen: Jede Formel
+                    // wird einzeln gesetzt und als geschlossenes Bild in den
+                    // Text gestellt; den Zeilenumbruch besorgt mPDF.
+                    linebreaks: { inline: false }
+                },
+                tex: { inlineMath: [], displayMath: [] },
+                loader: { paths: { fonts: verzeichnis + '/fonts' } },
+                // Vierte Pflichteinstellung, beim Bauen von AP-1.1 gefunden:
+                // MathJax 4 erzeugt zu jeder Formel Sprachausgabe fuer
+                // Screenreader und startet dafuer einen Worker aus
+                // `[mathjax]/sre/speech-worker.js`. Diese Datei liefern wir
+                // nicht mit (sie gehoert zum Sprachpaket, das der Export
+                // nicht braucht). Ohne die Abschaltung passiert Folgendes:
+                // Der Worker laeuft in einen 404, und `tex2svgPromise()`
+                // wird **nie erfuellt** - das Setzen haengt still, ohne
+                // Fehler beim Aufrufer. Live gemessen: Ein Aufruf blieb
+                // ueber 45 s unerledigt.
+                // Fuer den PDF-Weg ist Sprachausgabe ohnehin sinnlos: Was
+                // hier entsteht, ist ein Vektorbild im PDF, kein bedienbares
+                // Element im Browser. Die Barrierefreiheit der Website
+                // haengt an KaTeX im Frontend und bleibt unberuehrt.
+                options: {
+                    enableSpeech: false,
+                    enableEnrichment: false,
+                    enableMenu: false
+                }
+            };
+
+            ladeSkript(verzeichnis + '/tex-svg.js').then(function () {
+                var start = window.MathJax && window.MathJax.startup;
+                if (!start || !start.promise) {
+                    return Promise.reject(new Error('MathJax geladen, aber startup.promise fehlt'));
+                }
+                return start.promise;
+            }).then(function () {
+                // Schrifterweiterungen SELBST einreihen, statt MathJax sie
+                // nachladen zu lassen. Zwei Gruende, beide gemessen:
+                //
+                // 1. MathJax' eigener Nachlader scheitert an diesen Dateien.
+                //    Die Datei wird korrekt ausgeliefert (HTTP 200,
+                //    text/javascript, volle Groesse), von Hand ausgefuehrt
+                //    registriert sie ihre Glyphen anstandslos - der Loader
+                //    meldet trotzdem "dynamic file 'latin' failed to load",
+                //    und `tex2svgPromise()` wird dann **nie erfuellt**. Ein
+                //    Aufruf blieb ueber 45 s unerledigt, ohne Fehler beim
+                //    Aufrufer.
+                // 2. Selbst geladen gibt es die Nachladewege gar nicht mehr,
+                //    an denen die CDN-Voreinstellung haengt. Der Weg ist
+                //    damit nicht nur fail-closed, sondern hat die
+                //    Fehlerquelle nicht.
+                //
+                // WELCHE Dateien hier stehen muessen, ist GEMESSEN, nicht
+                // geraten (AP-1.3): Der gesamte Formelbestand der Website
+                // wurde ausgewertet - 5655 Vorkommen, 3096 eindeutige
+                // Formeln auf 246 Seiten, 16 verschiedene Sonderzeichen -
+                // und MathJax hat selbst benannt, welche Dateien es dafuer
+                // anfordert. Es sind genau diese drei:
+                //
+                //   latin    aufrecht  (\text{ae}, \mathrm{...})
+                //   latin-b  fett      (\mathbf, \textbf)
+                //   latin-i  kursiv    (Sonderzeichen im Mathe-Modus)
+                //
+                // Ausloeser sind ausschliesslich die deutschen Umlaute und
+                // ss. Alles andere im Bestand - °, →, ⇌, ≡, ‡, µ, α, β,
+                // Tiefstellungen - steckt bereits im Grundbestand von
+                // tex-svg.js (85 von 100 Pruefungen liefen ohne Nachladung).
+                //
+                // Wer neue Sonderzeichen in Formeln einfuehrt (kyrillisch,
+                // hebraeisch, Braille), muss die Liste erweitern. Das
+                // Verfahren dafuer steht in docs/inventar-formeln.md:
+                // MathJax anfordern lassen, nicht raten.
+                var erweiterungen = ['latin', 'latin-b', 'latin-i'];
+                return Promise.all(erweiterungen.map(function (name) {
+                    return ladeSkript(verzeichnis + '/fonts/mathjax-newcm-font/svg/dynamic/'
+                        + name + '.js');
+                }));
+            }).then(function () {
+                if (!mathJaxGemeldet) {
+                    mathJaxGemeldet = true;
+                    console.log('[CBD PDF] MathJax mit SVG-Ausgabe nachgeladen ' +
+                        '(nur fuer den Export, Schriften lokal und vorab, AP-1.1).');
+                }
+                erfuellen(window.MathJax);
+            }).catch(ablehnen);
+        });
+
+        // Ein Fehlschlag darf nicht dauerhaft blockieren: beim naechsten
+        // Aufruf wird erneut versucht.
+        mathJaxVersprechen.catch(function () { mathJaxVersprechen = null; });
+
+        return mathJaxVersprechen;
+    }
+
+    // Fuer die Abnahme von AP-1.1 und die Messungen in AP-1.2/AP-1.3 von
+    // aussen erreichbar. Kein oeffentlicher Vertrag - der entsteht erst mit
+    // Phase 2.
+    window.cbdLadeMathJax = ladeMathJax;
+
+    /**
+     * 1 ex der Formelschrift in px - GEMESSEN, nicht geschaetzt.
+     *
+     * MathJax gibt Breite, Hoehe und Grundlinienversatz in `ex` an. mPDF
+     * kennt die Einheit nicht und setzt die Grafik dann riesig (im Versuch
+     * fuellte EINE Formel drei Viertel einer A4-Seite und verdraengte den
+     * Folgetext). Der Umrechnungsfaktor haengt an der Schrift des jeweiligen
+     * Elements und wird deshalb dort gemessen, statt als Konstante zu raten.
+     *
+     * @param {Element} el
+     * @return {number} px je ex
+     */
+    function exInPx(el) {
+        try {
+            var probe = el.ownerDocument.createElement('div');
+            probe.style.cssText = 'position:absolute;visibility:hidden;' +
+                'width:1ex;height:1ex;padding:0;border:0;';
+            el.appendChild(probe);
+            var px = probe.getBoundingClientRect().height;
+            el.removeChild(probe);
+            if (px > 0.5 && px < 100) { return px; }
+        } catch (e) { }
+        // Ersatzwert: rund die halbe Schriftgroesse, so wie bei den meisten
+        // Serifenschriften. Nur Notnagel - der Messweg oben greift praktisch
+        // immer.
+        var fs = parseFloat(el.ownerDocument.defaultView.getComputedStyle(el).fontSize);
+        return (fs > 0 ? fs : 16) * 0.45;
+    }
+
+    /**
+     * Loest verschachtelte <svg>-Elemente in gleichwertige <g transform>
+     * auf.
+     *
+     * DRITTE PFLICHTUMFORMUNG, in AP-1.2 gefunden - sie stand nicht im Plan.
+     * MathJax streckt Operatoren (\xrightarrow, \xleftarrow, \overbrace,
+     * lange Pfeile) mit einem INNEREN <svg> samt eigenem viewBox:
+     *
+     *   <svg width="3237.1" height="188" x="0" y="156"
+     *        viewBox="809.3 156 3237.1 188">
+     *
+     * **mPDF kann verschachtelte <svg> nicht** und laesst deren Inhalt
+     * weg - gemessen an `\xrightarrow{\text{Oxidation}}`: 107 statt 427
+     * Zeichenbefehle, im PDF blieb vom Pfeil ein Strichlein uebrig, die
+     * Beschriftung fehlte ganz. Der Sanitizer ist unschuldig, er laesst das
+     * Element durch (Pfadzahl vorher wie nachher 18).
+     *
+     * Ein solches Element ist gleichwertig zu
+     *   translate(x, y) scale(w/vbW, h/vbH) translate(-vbX, -vbY)
+     * Nach der Umformung: 427 Zeichenbefehle, Pfeil und Beschriftung
+     * vollstaendig im PDF.
+     *
+     * @param {SVGElement} wurzel
+     */
+    function loeseVerschachtelteSvgAuf(wurzel) {
+        var innere = wurzel.querySelectorAll('svg');
+        for (var i = innere.length - 1; i >= 0; i--) {
+            var s = innere[i];
+            var x = parseFloat(s.getAttribute('x') || 0) || 0;
+            var y = parseFloat(s.getAttribute('y') || 0) || 0;
+            var w = parseFloat(s.getAttribute('width'));
+            var h = parseFloat(s.getAttribute('height'));
+            var vb = (s.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(parseFloat);
+
+            var tr;
+            if (vb.length === 4 && w > 0 && h > 0 && vb[2] > 0 && vb[3] > 0) {
+                tr = 'translate(' + x + ',' + y + ') scale(' + (w / vb[2]) + ',' +
+                    (h / vb[3]) + ') translate(' + (-vb[0]) + ',' + (-vb[1]) + ')';
+            } else {
+                tr = 'translate(' + x + ',' + y + ')';
+            }
+
+            var g = s.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('transform', tr);
+            while (s.firstChild) { g.appendChild(s.firstChild); }
+            s.parentNode.replaceChild(g, s);
+        }
+    }
+
+    /**
+     * Setzt eine Formel mit MathJax und bereitet das SVG fuer mPDF auf.
+     *
+     * Drei Umformungen, alle drei Pflicht - jede von ihnen scheitert in mPDF
+     * STILL, also ohne Fehlermeldung und ohne Platzhalter:
+     *
+     * 1. `currentColor` -> aufgeloeste Textfarbe DIESES Elements. mPDF kennt
+     *    das Schluesselwort nicht und malt den Pfad dann gar nicht (PDF-
+     *    Operator `n` statt `f`) - die Formel ist unsichtbar.
+     *    **Die Farbe wird je Formel aus dem DOM gelesen, nie fest
+     *    eingetragen.** Eine pauschale Farbe war in diesem Projekt schon
+     *    zweimal ein Fehler (N4b) und plaettet alle Blockfarben auf einen
+     *    Wert.
+     * 2. `ex` -> `px` in width/height. Siehe exInPx().
+     * 3. verschachtelte <svg> aufloesen. Siehe loeseVerschachtelteSvgAuf().
+     *
+     * @param {Object} item {id, element, isDisplay}
+     * @return {string|null} SVG-Markup, oder null fuer den Rasterweg
+     */
+    function setzeFormelAlsSvg(item) {
+        var el = item.element;
+        var latex = el.getAttribute('data-latex');
+        if (!latex) { return null; }
+
+        try {
+            // Beim ERSTEN Kontakt mit einem Zeichen aus einer nachgeladenen
+            // Schriftdatei wirft MathJax einmalig "retry -- an asynchronous
+            // action is required", obwohl die Daten laengst da sind. Ein
+            // zweiter Aufruf gelingt dann. In AP-1.3 gemessen: 15 von 100
+            // Proben beim ersten Durchgang, 0 beim zweiten - und alle 15
+            // waren deutsche Umlaute oder ss.
+            //
+            // Ohne diese Wiederholung fiele je Seitenaufruf die erste Formel
+            // mit Umlaut ohne Not auf den Rasterweg zurueck.
+            var knoten = null;
+            for (var versuch = 0; versuch < 2 && !knoten; versuch++) {
+                try {
+                    knoten = window.MathJax.tex2svg(latex, { display: !!item.isDisplay });
+                } catch (wieder) {
+                    if (versuch === 1 || !/retry/i.test(String(wieder))) { throw wieder; }
+                }
+            }
+            if (!knoten) { return null; }
+            if (knoten.querySelector('[data-mml-node="merror"], mjx-merror')) {
+                console.warn('[CBD PDF] MathJax kann diese Formel nicht setzen, ' +
+                    'Rueckfall auf den Rasterweg: ' + latex);
+                return null;
+            }
+
+            // WAECHTER GEGEN STILLE VERSTUEMMELUNG (Review Phase 1, Befund 1).
+            //
+            // Zwei Faelle, die beide ein scheinbar gueltiges SVG liefern und
+            // ohne diesen Waechter unbemerkt ins PDF wandern:
+            //
+            // 1. MEHRERE <svg>-Wurzeln. Sollte durch `linebreaks.inline =
+            //    false` nicht mehr vorkommen - aber genau darauf hat sich der
+            //    Durchstich verlassen, und genau da ist er hereingefallen.
+            //    Der Waechter macht die Annahme pruefbar, statt sie zu
+            //    glauben.
+            // 2. NULL Zeichenobjekte. Ein Zeichen, das MathJax nicht kennt
+            //    (z. B. CJK), ergibt ein SVG mit korrekter Breite, aber ohne
+            //    einen einzigen Pfad - im PDF eine unsichtbare Luecke, ohne
+            //    merror und ohne Ausnahme.
+            //
+            // In beiden Faellen ist der Rasterweg die bessere Antwort: Er
+            // liefert die Formel, wenn auch als Bild.
+            var wurzeln = knoten.querySelectorAll('svg');
+            if (wurzeln.length !== 1) {
+                console.warn('[CBD PDF] MathJax lieferte ' + wurzeln.length +
+                    ' SVG-Wurzeln statt einer (Zeilenumbruch?), Rueckfall auf ' +
+                    'den Rasterweg: ' + latex);
+                return null;
+            }
+            var svg = wurzeln[0];
+            if (svg.querySelectorAll('path, rect').length === 0) {
+                console.warn('[CBD PDF] MathJax lieferte ein SVG ohne ' +
+                    'Zeichenobjekte, Rueckfall auf den Rasterweg: ' + latex);
+                return null;
+            }
+
+            // (1) Farbe je Formel aus dem DOM
+            var farbe = el.ownerDocument.defaultView.getComputedStyle(el).color || '#333333';
+            svg.querySelectorAll('[fill="currentColor"]').forEach(function (n) {
+                n.setAttribute('fill', farbe);
+            });
+            svg.querySelectorAll('[stroke="currentColor"]').forEach(function (n) {
+                n.setAttribute('stroke', farbe);
+            });
+
+            // (2) ex -> px
+            var proExVal = exInPx(el);
+            ['width', 'height'].forEach(function (a) {
+                var v = svg.getAttribute(a);
+                var m = v && /^([\d.]+)ex$/.exec(v);
+                if (m) { svg.setAttribute(a, (parseFloat(m[1]) * proExVal).toFixed(2) + 'px'); }
+            });
+            // vertical-align ebenfalls: die ex-Angabe wirkt in mPDF nicht
+            var stil = svg.getAttribute('style') || '';
+            stil = stil.replace(/vertical-align:\s*(-?[\d.]+)ex/,
+                function (_, z) {
+                    return 'vertical-align: ' + (parseFloat(z) * proExVal).toFixed(2) + 'px';
+                });
+            svg.setAttribute('style', stil);
+
+            // (3) verschachtelte <svg>
+            loeseVerschachtelteSvgAuf(svg);
+
+            // Kennzeichnung, damit clean_block_html() im Generator dieses SVG
+            // NICHT entfernt. Dort wird jedes <svg> gestrichen (Bediensymbole
+            // gehoeren nicht ins PDF) - die Ausnahme haengt an genau dieser
+            // Klasse. Wer sie hier umbenennt, muss die Ausnahme in
+            // class-cbd-pdf-generator.php mitziehen, sonst verschwinden alle
+            // Formeln spurlos: Platzhalter korrekt ersetzt, im PDF eine
+            // Luecke, kein Eintrag im Log.
+            svg.setAttribute('class',
+                ((svg.getAttribute('class') || '') + ' cbd-formel-svg').trim());
+
+            return svg.outerHTML;
+        } catch (e) {
+            console.warn('[CBD PDF] MathJax-Satz fehlgeschlagen, Rueckfall auf ' +
+                'den Rasterweg: ' + latex, e);
+            return null;
+        }
+    }
+
     /**
      * Main export function - called by floating-pdf-button.js
      *
@@ -857,6 +1275,28 @@
             }
 
             var item = formulaElements[index];
+
+            // AP-1.2 (PLAN-Formeln-als-Vektor-im-PDF.md), Durchstich hinter
+            // einem Schalter: Statt die Bildschirmdarstellung zu rastern,
+            // wird der LaTeX-Quelltext von MathJax gesetzt und als SVG
+            // geschickt. Der Schalter ist provisorisch - Phase 2 macht
+            // daraus den Regelweg mit Rueckfall je Formel.
+            if (window.cbdFormelVektorProbe && window.MathJax && window.MathJax.tex2svg) {
+                var svgMarkup = setzeFormelAlsSvg(item);
+                if (svgMarkup) {
+                    formulas.push({
+                        id: item.id,
+                        svg: svgMarkup,
+                        isDisplay: item.isDisplay ? 1 : 0
+                    });
+                    index++;
+                    setTimeout(nextFormula, 0);
+                    return;
+                }
+                // Kein SVG zu bekommen: unveraendert weiter auf dem
+                // Rasterweg. Das ist der Rueckfall je Formel (A4).
+            }
+
             var mass = messeFormel(item.element);
 
             // Unsichtbare/leere Formeln überspringen (Fallback-Text greift)

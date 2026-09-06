@@ -33,6 +33,28 @@ class CBD_PDF_Generator {
     private $engine = 'none';
 
     /**
+     * Schutzmarker fuer gesetzte Formel-SVGs, je Anfrage neu gewuerfelt.
+     *
+     * `clean_block_html()` entfernt jedes <svg> - Bediensymbole gehoeren
+     * nicht ins PDF. Gesetzte Formeln muessen aber bleiben, und sie werden
+     * VOR dieser Reinigung eingesetzt (ihr Platzhalter traegt
+     * `data-cbd-formula-id`, und dieselbe Reinigung streicht alle
+     * `data-*`-Attribute).
+     *
+     * Der Marker ist bewusst NICHT erratbar (Review Phase 1, Befund 3): Eine
+     * feste Klasse waere eine Eintrittskarte an der Reinigung vorbei - ein
+     * <svg> mit dieser Klasse im BLOCKINHALT ginge ungereinigt an mPDF, denn
+     * CBD_SVG_Sanitizer sieht nur das Feld `svg` der Nutzlast. Heute faengt
+     * WordPress' kses das ab (seine Whitelist kennt <svg> nicht), aber ein
+     * Sicherheits-Plugin, das SVG fuer Icons freischaltet, oeffnete es
+     * wieder. Mit einem Wert, den nur dieser Lauf kennt, gibt es diesen Weg
+     * nicht.
+     *
+     * @var string
+     */
+    private $formel_marker = '';
+
+    /**
      * Get singleton instance
      */
     public static function get_instance() {
@@ -313,7 +335,12 @@ class CBD_PDF_Generator {
         // die clean_block_html gleich strippt). Formeln OHNE Bild behalten den
         // lesbaren Fallback-Text aus dem Client.
         foreach ($formulas as $formula) {
-            if (!empty($formula['id']) && !empty($formula['image'])) {
+            // AP-1.2: Seit dem Vektorweg genuegt AUCH ein 'svg'. Der Waechter
+            // verlangte hier frueher zwingend ein 'image' - dadurch war der
+            // SVG-Zweig in insert_formula_image() unerreichbar, und die
+            // Formeln blieben stumm als Fallback-Text stehen. Beim Bauen des
+            // Durchstichs genau so passiert.
+            if (!empty($formula['id']) && (!empty($formula['image']) || !empty($formula['svg']))) {
                 $html = $this->insert_formula_image($html, $formula);
             }
         }
@@ -427,8 +454,23 @@ class CBD_PDF_Generator {
         $html = preg_replace('/\s+data-[a-z][a-z0-9_-]*="[^"]*"/i', '', $html);
         $html = preg_replace("/\s+data-[a-z][a-z0-9_-]*='[^']*'/i", '', $html);
 
-        // Remove all <svg>...</svg> blocks (icon SVGs in controls, not needed in PDF)
-        $html = preg_replace('/<svg\b[^>]*>.*?<\/svg>/is', '', $html);
+        // Remove <svg>...</svg> blocks (icon SVGs in controls, not needed in PDF)
+        //
+        // AUSNAHME seit AP-1.2 (PLAN-Formeln-als-Vektor-im-PDF.md): SVGs mit
+        // der Klasse `cbd-formel-svg` sind gesetzte Formeln und muessen
+        // bleiben. Sie werden in Schritt 1.5 eingesetzt, also VOR dieser
+        // Reinigung - ohne die Ausnahme entfernt genau diese Zeile sie
+        // wieder. Beim Bauen des Durchstichs passiert: Die Platzhalter waren
+        // korrekt ersetzt, im PDF blieb an jeder Formelstelle eine Luecke,
+        // und weder Log noch Notbremse schlugen an, weil bis dahin alles
+        // richtig gelaufen war.
+        //
+        // Warum die Formeln nicht einfach NACH der Reinigung eingesetzt
+        // werden: Ihr Platzhalter traegt `data-cbd-formula-id`, und die
+        // beiden Zeilen darueber streichen alle `data-*`-Attribute. Nach der
+        // Reinigung waere die Formelstelle nicht mehr auffindbar.
+        $marker = preg_quote($this->formel_marker(), '/');
+        $html = preg_replace('/<svg(?![^>]*' . $marker . ')[^>]*>.*?<\/svg>/is', '', $html);
 
         // Remove inline scripts (not needed in PDF)
         $html = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $html);
@@ -565,6 +607,45 @@ class CBD_PDF_Generator {
      */
     private function insert_formula_image($html, $formula) {
         $formula_id = preg_quote($formula['id'], '/');
+
+        // AP-1.2 (PLAN-Formeln-als-Vektor-im-PDF.md): Liefert die Nutzlast
+        // statt eines Rasterbilds ein gesetztes SVG, wird dieses INLINE
+        // eingesetzt statt eines <img>. Der Zweig ist abwaertskompatibel -
+        // ein Eintrag mit 'image' verhaelt sich unveraendert wie zuvor,
+        // was der Rueckfall je Formel (A4) braucht.
+        $svg = $this->formel_svg_pruefen($formula);
+        if (null !== $svg) {
+            if (!empty($formula['isDisplay'])) {
+                return $this->formel_ersetzen($html, $formula_id,
+                    '<div style="text-align:center; margin:10px 0; page-break-inside:avoid;">'
+                    . $svg . '</div>');
+            }
+            return $this->formel_ersetzen($html, $formula_id, $svg);
+        }
+
+        // Kein Rasterbild in der Nutzlast? Dann bleibt der lesbare
+        // Fallback-Text des Clients stehen.
+        //
+        // WICHTIG, im Review von Phase 1 gefunden (Befund 2): Der Vektorweg
+        // schickt `{id, svg, isDisplay}` OHNE `image`. Weist die Notbremse
+        // oben das SVG ab, gab es hier frueher einen ungeprueften Zugriff
+        // auf `$formula['image']` - PHP-Warning, leerer String,
+        // `data:image/png;base64,` ohne Inhalt, und mPDF brach den GANZEN
+        // Export mit "Could not find image file" ab (HTTP 500). Ohne
+        // WP_DEBUG waere statt dessen mPDFs Fehler-Platzhalter im PDF
+        // gelandet.
+        //
+        // Die Notbremse verspricht einen Rueckfall auf den Rasterweg. Den
+        // kann sie nur einloesen, wenn ein Rasterbild da ist - sonst ist das
+        // Beste, was sie tun kann, den Fallback-Text stehen zu lassen. Der
+        // eigentliche Rueckfall gehoert an die andere Stelle: Der Client
+        // entscheidet vor dem Senden, ob er SVG oder Bild liefert.
+        if (empty($formula['image']) || !is_string($formula['image'])) {
+            $this->log_svg_abweisung($formula,
+                'weder brauchbares SVG noch Rasterbild - Fallback-Text bleibt stehen');
+            return $html;
+        }
+
         $image = $formula['image'];
 
         if (strpos($image, 'data:image/') !== 0) {
@@ -586,17 +667,159 @@ class CBD_PDF_Generator {
             $replacement = '<img src="' . $image . '" style="' . $size_style . 'vertical-align:middle;" />';
         }
 
-        // Platzhalter (span ODER div) samt Fallback-Text ersetzen. Der
-        // Platzhalter-Inhalt ist reiner Text (kein verschachteltes Markup),
-        // daher ist der non-greedy Match sicher.
-        $html = preg_replace(
+        return $this->formel_ersetzen($html, $formula_id, $replacement);
+    }
+
+    /**
+     * Platzhalter (span ODER div) samt Fallback-Text ersetzen. Der
+     * Platzhalter-Inhalt ist reiner Text (kein verschachteltes Markup),
+     * daher ist der non-greedy Match sicher.
+     *
+     * Herausgezogen in AP-1.2, damit der neue SVG-Zweig dieselbe Ersetzung
+     * benutzt und nicht eine zweite, leicht abweichende Fassung entsteht.
+     *
+     * @param string $html
+     * @param string $formula_id bereits durch preg_quote() gegangen
+     * @param string $ersatz
+     * @return string
+     */
+    /**
+     * Liefert den Schutzmarker dieses Laufs, beim ersten Zugriff gewuerfelt.
+     *
+     * @return string
+     */
+    private function formel_marker() {
+        if ('' === $this->formel_marker) {
+            $this->formel_marker = 'cbd-formel-' . substr(md5(uniqid('', true)), 0, 16);
+        }
+        return $this->formel_marker;
+    }
+
+    private function formel_ersetzen($html, $formula_id, $ersatz) {
+        $neu = preg_replace(
             '/<(?:div|span)[^>]*data-cbd-formula-id="' . $formula_id . '"[^>]*>.*?<\/(?:div|span)>/is',
-            $replacement,
+            // Backslashes und $-Zeichen im Ersatz sind fuer preg_replace
+            // Rueckverweise. SVG-Pfaddaten enthalten kein $, aber der
+            // Blockinhalt koennte eines tragen - deshalb maskieren.
+            str_replace(array('\\', '$'), array('\\\\', '\\$'), $ersatz),
             $html,
             1
         );
 
-        return $html;
+        // Bei einem PCRE-Fehler (Backtrack-Grenze, zu grosses Muster) liefert
+        // preg_replace() null - der GANZE Blockinhalt waere dann weg, ohne
+        // Meldung. Genau diese Fehlerklasse hat im Theme schon einmal ganze
+        // Seiten geleert (CLAUDE.md, "Nebenbefund am Theme"). Mit mehreren
+        // Kilobyte SVG je Formel ist sie hier naeher als frueher.
+        if (null === $neu) {
+            error_log('[CBD PDF] Formel-Ersetzung fehlgeschlagen (PCRE-Fehlercode '
+                . preg_last_error() . '), Block bleibt unveraendert, id='
+                . $formula_id);
+            return $html;
+        }
+
+        return $neu;
+    }
+
+    /**
+     * Prueft, ob eine Formel-Nutzlast ein brauchbares, gesetztes SVG traegt.
+     *
+     * DIE NOTBREMSE DIESES WEGES (Risiko R4 im Plan). Beide Muster, gegen
+     * die hier geprueft wird, scheitern in mPDF **still**:
+     *
+     * - `fill="currentColor"` kennt mPDF nicht. Es baut den Pfad und malt
+     *   ihn nicht (PDF-Operator `n` statt `f`) - die Formel ist unsichtbar,
+     *   ohne Fehler, ohne Platzhalter.
+     * - `ex`-Masse versteht mPDF nicht. Eine einzige Formel fuellte im
+     *   Versuch drei Viertel einer A4-Seite und verdraengte den Folgetext.
+     *
+     * Beides gehoert clientseitig umgeformt (AP-2.1). Kommt es trotzdem
+     * hier an, ist die Umformung kaputt - dann ist ein Rasterbild allemal
+     * besser als eine unsichtbare oder seitensprengende Formel.
+     *
+     * @param array $formula
+     * @return string|null entschaerftes SVG, oder null fuer den Rasterweg
+     */
+    private function formel_svg_pruefen($formula) {
+        if (empty($formula['svg']) || !is_string($formula['svg'])) {
+            return null;
+        }
+        $svg = $formula['svg'];
+
+        if (false === stripos($svg, '<svg')) {
+            $this->log_svg_abweisung($formula, 'kein <svg>-Element');
+            return null;
+        }
+        if (false !== stripos($svg, 'currentColor')) {
+            $this->log_svg_abweisung($formula, 'currentColor nicht aufgeloest');
+            return null;
+        }
+        if (preg_match('/(?:width|height)="[\d.]+ex"/i', $svg)) {
+            $this->log_svg_abweisung($formula, 'Masse noch in ex');
+            return null;
+        }
+
+        // Immer durch den vorhandenen Sanitizer. Seine Whitelist deckt die
+        // von MathJax mit fontCache:'none' erzeugten Bausteine vollstaendig
+        // ab (in AP-1.2 gemessen: path- und rect-Zahlen vorher wie nachher
+        // identisch, ueber sieben Formelarten). Sie darf NICHT aufgeweicht
+        // werden - <use>/xlink:href fehlen dort mit Absicht.
+        // Der Sanitizer wird sonst nur im Adminbereich geladen (Icon-Upload)
+        // und fehlt im PDF-Weg. Beim Bauen des Durchstichs genau so
+        // aufgetreten - die Notbremse meldete "CBD_SVG_Sanitizer fehlt" und
+        // jede Formel fiel auf ein leeres Rasterbild zurueck.
+        if (!class_exists('CBD_SVG_Sanitizer')
+            && defined('CBD_PLUGIN_DIR')
+            && file_exists(CBD_PLUGIN_DIR . 'includes/class-cbd-svg-sanitizer.php')) {
+            require_once CBD_PLUGIN_DIR . 'includes/class-cbd-svg-sanitizer.php';
+        }
+        if (!class_exists('CBD_SVG_Sanitizer')) {
+            $this->log_svg_abweisung($formula, 'CBD_SVG_Sanitizer fehlt');
+            return null;
+        }
+        $sauber = CBD_SVG_Sanitizer::sanitize($svg);
+        if (is_array($sauber)) {
+            $sauber = isset($sauber['svg']) ? $sauber['svg'] : reset($sauber);
+        }
+        if (!is_string($sauber) || false === stripos($sauber, '<svg')) {
+            $this->log_svg_abweisung($formula, 'Sanitizer lieferte kein SVG');
+            return null;
+        }
+
+        // Den Schutzmarker SERVERSEITIG setzen, nicht vom Client uebernehmen
+        // (Review Phase 1, Befund 3).
+        //
+        // `clean_block_html()` entfernt jedes <svg> ausser denen mit der
+        // Klasse `cbd-formel-svg`. Kaeme diese Klasse vom Client, waere sie
+        // eine erratbare Eintrittskarte an der Reinigung vorbei: Ein <svg>
+        // mit dieser Klasse im BLOCKINHALT ginge ungereinigt an mPDF - der
+        // Sanitizer sieht nur das Feld `svg` der Nutzlast, nicht den
+        // Blockinhalt. Heute faengt WordPress' kses das ab (seine
+        // Standard-Whitelist kennt <svg> nicht), aber ein Sicherheits-Plugin
+        // oder Theme, das SVG fuer Icons freischaltet, oeffnete es wieder.
+        //
+        // Deshalb: vorhandene class-Angabe verwerfen und die eigene setzen.
+        // Nur was DIESE Methode durchgelassen hat, traegt den Marker.
+        $sauber = preg_replace('/^(\s*<svg\b)([^>]*)>/i', '$1$2>', $sauber, 1);
+        $sauber = preg_replace('/^(\s*<svg\b)([^>]*?)\s*class="[^"]*"/i', '$1$2', $sauber, 1);
+        $sauber = preg_replace('/^(\s*<svg)/i',
+            '$1 class="' . $this->formel_marker() . '"', $sauber, 1);
+
+        return $sauber;
+    }
+
+    /**
+     * @param array  $formula
+     * @param string $grund
+     */
+    private function log_svg_abweisung($formula, $grund) {
+        // Wortlaut bewusst neutral: OB ein Rueckfall auf ein Rasterbild
+        // moeglich ist, haengt daran, ob der Client eines mitgeschickt hat.
+        // Die frueher hier stehende Zusage "Rueckfall auf Rasterbild" war
+        // irrefuehrend - im Vektorweg liegt kein Bild in der Nutzlast
+        // (Review Phase 1, Befund 2).
+        error_log('[CBD PDF] Formel-SVG nicht verwendet (' . $grund . '), id='
+            . (isset($formula['id']) ? $formula['id'] : '?'));
     }
 
     /**

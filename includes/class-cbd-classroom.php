@@ -2134,7 +2134,14 @@ class CBD_Classroom {
                 // serverseitige Tafelbilder aufzurufen - anderer Nonce-Name als
                 // 'nonce' oben (der gilt fuer 'cbd-pdf-nonce'/cbd_generate_pdf).
                 'pageId' => get_the_ID(),
-                'classroomNonce' => wp_create_nonce('cbd_classroom_nonce')
+                'classroomNonce' => wp_create_nonce('cbd_classroom_nonce'),
+                // AP-1.1 (PLAN-Formeln-als-Vektor-im-PDF.md): Basis fuer das
+                // Nachladen von MathJax beim Export. Gegenstueck zur selben
+                // Zeile in class-cbd-block-registration.php - cbdPDFData wird
+                // an zwei unabhaengigen Stellen lokalisiert, je nachdem ob die
+                // Seite den [cbd_classroom]-Shortcode traegt. Wer hier etwas
+                // ergaenzt, muss die andere Stelle mitziehen.
+                'pluginUrl' => CBD_PLUGIN_URL
             )
         );
 

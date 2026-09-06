@@ -215,6 +215,21 @@ class CBD_Ajax_Handler {
                             $entry['height']    = intval($formula['height'] ?? 0);
                             $entry['isDisplay'] = !empty($formula['isDisplay']);
                         }
+                        // AP-1.2 (PLAN-Formeln-als-Vektor-im-PDF.md): gesetztes
+                        // SVG statt Rasterbild. BEWUSST NICHT durch
+                        // sanitize_text_field() oder wp_kses_post() - beide
+                        // wuerden das SVG zerstoeren. Die Entschaerfung leistet
+                        // CBD_SVG_Sanitizer (Whitelist) in
+                        // CBD_PDF_Generator::formel_svg_pruefen(), unmittelbar
+                        // bevor das Markup ins PDF-HTML geht. Hier wird nur die
+                        // Groesse begrenzt, damit eine ueberlange Nutzlast nicht
+                        // den Speicher fuellt: 400 KB ist grosszuegig, die
+                        // gemessenen Formeln liegen bei 4 bis 15 KB.
+                        $svg = $formula['svg'] ?? '';
+                        if (is_string($svg) && $svg !== '' && strlen($svg) <= 409600) {
+                            $entry['svg']       = $svg;
+                            $entry['isDisplay'] = !empty($formula['isDisplay']);
+                        }
                         $sanitized['formulas'][] = $entry;
                     }
                 }
@@ -467,6 +482,21 @@ class CBD_Ajax_Handler {
                             $entry['image']     = $image;
                             $entry['width']     = intval($formula['width'] ?? 0);
                             $entry['height']    = intval($formula['height'] ?? 0);
+                            $entry['isDisplay'] = !empty($formula['isDisplay']);
+                        }
+                        // AP-1.2 (PLAN-Formeln-als-Vektor-im-PDF.md): gesetztes
+                        // SVG statt Rasterbild. BEWUSST NICHT durch
+                        // sanitize_text_field() oder wp_kses_post() - beide
+                        // wuerden das SVG zerstoeren. Die Entschaerfung leistet
+                        // CBD_SVG_Sanitizer (Whitelist) in
+                        // CBD_PDF_Generator::formel_svg_pruefen(), unmittelbar
+                        // bevor das Markup ins PDF-HTML geht. Hier wird nur die
+                        // Groesse begrenzt, damit eine ueberlange Nutzlast nicht
+                        // den Speicher fuellt: 400 KB ist grosszuegig, die
+                        // gemessenen Formeln liegen bei 4 bis 15 KB.
+                        $svg = $formula['svg'] ?? '';
+                        if (is_string($svg) && $svg !== '' && strlen($svg) <= 409600) {
+                            $entry['svg']       = $svg;
                             $entry['isDisplay'] = !empty($formula['isDisplay']);
                         }
                         $sanitized['formulas'][] = $entry;
