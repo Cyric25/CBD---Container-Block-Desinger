@@ -541,7 +541,7 @@
      *         -webkit-text-fill-color: ... !important; }
      *
      * Das war ein Rueckschritt und ist ENTFERNT: `latex-formulas.css` gibt
-     * Formeln bewusst `color: inherit` (Zeilen 25, 85, 92), damit sie die
+     * Formeln bewusst `color: inherit` (Zeilen 25, 61, 85, 92), damit sie die
      * Textfarbe ihres Blocks tragen - etwa #71230a in Spezialtext-Bloecken.
      * Die pauschale Erzwingung plaettete im PDF ALLE Glyphen auf #333333,
      * unabhaengig vom Block (am erzeugten PDF nachgemessen: 8 von 8 Formeln
