@@ -191,7 +191,33 @@
             // Muss VOR dem Laden stehen: MathJax liest window.MathJax beim Start.
             window.MathJax = {
                 startup: { typeset: false },
-                svg: { fontCache: 'none' },
+                svg: {
+                    fontCache: 'none',
+                    // FUENFTE Pflichteinstellung, im Review von Phase 1
+                    // gefunden - und die folgenreichste.
+                    //
+                    // MathJax 4 bricht Inline-Mathematik standardmaessig um
+                    // (`linebreaks: {inline: true, width: "100%"}`). Passt
+                    // eine Formel nicht in die angenommene Breite, gibt es
+                    // statt EINER <svg>-Wurzel MEHRERE nebeneinander - eine
+                    // je Zeile. Wer davon die erste nimmt, verliert den Rest.
+                    //
+                    // Gemessen an `\text{Ag}^+ + e^- \rightleftharpoons
+                    // \text{Ag}`: display:true -> 1 Wurzel, 9 Pfade;
+                    // display:false -> 3 Wurzeln, davon 3 Pfade in der
+                    // ersten. Auf der Pruefseite waren 10 von 22
+                    // Inline-Formeln betroffen.
+                    //
+                    // Das ist ein STILLER Fehler: kein merror, keine
+                    // Ausnahme, kein Log - der Export meldet Erfolg und
+                    // liefert eine mathematisch falsche Formel. "Ag+" statt
+                    // "Ag+ + e- -> Ag" ist schlimmer als eine Luecke.
+                    //
+                    // Im PDF gibt es keinen Grund umzubrechen: Jede Formel
+                    // wird einzeln gesetzt und als geschlossenes Bild in den
+                    // Text gestellt; den Zeilenumbruch besorgt mPDF.
+                    linebreaks: { inline: false }
+                },
                 tex: { inlineMath: [], displayMath: [] },
                 loader: { paths: { fonts: verzeichnis + '/fonts' } },
                 // Vierte Pflichteinstellung, beim Bauen von AP-1.1 gefunden:
@@ -406,11 +432,40 @@
                 }
             }
             if (!knoten) { return null; }
-            var svg = knoten.querySelector('svg');
-            if (!svg) { return null; }
             if (knoten.querySelector('[data-mml-node="merror"], mjx-merror')) {
                 console.warn('[CBD PDF] MathJax kann diese Formel nicht setzen, ' +
                     'Rueckfall auf den Rasterweg: ' + latex);
+                return null;
+            }
+
+            // WAECHTER GEGEN STILLE VERSTUEMMELUNG (Review Phase 1, Befund 1).
+            //
+            // Zwei Faelle, die beide ein scheinbar gueltiges SVG liefern und
+            // ohne diesen Waechter unbemerkt ins PDF wandern:
+            //
+            // 1. MEHRERE <svg>-Wurzeln. Sollte durch `linebreaks.inline =
+            //    false` nicht mehr vorkommen - aber genau darauf hat sich der
+            //    Durchstich verlassen, und genau da ist er hereingefallen.
+            //    Der Waechter macht die Annahme pruefbar, statt sie zu
+            //    glauben.
+            // 2. NULL Zeichenobjekte. Ein Zeichen, das MathJax nicht kennt
+            //    (z. B. CJK), ergibt ein SVG mit korrekter Breite, aber ohne
+            //    einen einzigen Pfad - im PDF eine unsichtbare Luecke, ohne
+            //    merror und ohne Ausnahme.
+            //
+            // In beiden Faellen ist der Rasterweg die bessere Antwort: Er
+            // liefert die Formel, wenn auch als Bild.
+            var wurzeln = knoten.querySelectorAll('svg');
+            if (wurzeln.length !== 1) {
+                console.warn('[CBD PDF] MathJax lieferte ' + wurzeln.length +
+                    ' SVG-Wurzeln statt einer (Zeilenumbruch?), Rueckfall auf ' +
+                    'den Rasterweg: ' + latex);
+                return null;
+            }
+            var svg = wurzeln[0];
+            if (svg.querySelectorAll('path, rect').length === 0) {
+                console.warn('[CBD PDF] MathJax lieferte ein SVG ohne ' +
+                    'Zeichenobjekte, Rueckfall auf den Rasterweg: ' + latex);
                 return null;
             }
 
