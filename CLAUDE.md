@@ -4339,6 +4339,12 @@ und Nenner zueinander verschoben sind, nicht der Ausschnitt.
 Rasterns** — siehe `PLAN-Formeln-als-Vektor-im-PDF.md`. Ein gesetztes SVG hat
 keine zweite Grundlinienquelle, auf keinem Browser.
 
+**Entscheidung des Betreibers (2026-09-06): hinnehmen, den Umbau abwarten.**
+Ein Ausgleich in der heutigen Rasterkette wäre genau die Art Schriftmessung,
+die in diesem Projekt schon zweimal danebenlag — und mit dem Umbau wieder
+hinfällig. **Bis dahin gilt als Betriebshinweis: PDFs mit Bruchformeln
+möglichst am Desktop erzeugen**, nicht auf einem iPad unter iPadOS 17.4.
+
 **3. `foreignObjectRendering` liefert auch im Fork eine leere Leinwand**
 (gemessen: 0 bemalte Pixel gegen 4045 beim Standard-Painter, drei
 Wiederholungen). Es gab also **keinen stillen Rendererwechsel** — gemessen
