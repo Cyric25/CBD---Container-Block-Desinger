@@ -687,14 +687,31 @@
      * N4a: Temporaerer senkrechter Innenabstand am Capture-Ziel einer
      * INLINE-Formel.
      *
-     * Warum das noetig ist (gemessen, nicht vermutet): html2canvas setzt
-     * Text ueber `ctx.fillText(text, bounds.left, bounds.top + baseline)`,
-     * wobei `baseline` aus seiner eigenen `FontMetrics`-Messung stammt
-     * (`img.offsetTop - span.offsetTop + 2` in einem Hilfs-<div> am
-     * document.body). Diese Messung faellt fuer die KaTeX-Schriften deutlich
-     * zu gross aus - fuer `18px KaTeX_Main` liefert sie 27 px, waehrend die
+     * ACHTUNG, seit AP-3.3 nur noch halb gueltig: Der urspruengliche Anlass
+     * ist mit dem Bibliothekstausch entfallen, die Polsterung bleibt aber.
+     * Der Absatz darunter beschreibt html2canvas 1.4.1 und ist als
+     * Geschichte zu lesen, nicht als heutige Begruendung.
+     *
+     * HEUTE (html2canvas-pro 2.4.1): Die Bibliothek nimmt die Grundlinie aus
+     * Canvas-`TextMetrics` (`fontBoundingBoxAscent ?? actualBoundingBoxAscent`)
+     * und kennt `offsetTop` gar nicht mehr - der systematische Versatz ist
+     * weg. Die Polsterung ist damit **Sicherheitsmarge, keine Korrektur**:
+     * Sie kostet nichts (der Tintenzuschnitt schneidet den Ueberschuss
+     * wieder weg) und faengt Restabweichungen ab, etwa auf Browsern, auf
+     * denen `fontBoundingBoxAscent` fehlt und die Bibliothek auf die
+     * glyphenbezogene zweite Stufe zurueckfaellt (Safari vor 17.4).
+     * Belegt: An 22 von 22 Inline-Formelbildern beginnt die Tinte in
+     * Zeile 2 und endet drei Zeilen vor dem unteren Rand - kein Randkontakt,
+     * aber auch keine Verschwendung.
+     *
+     * DAMALS (html2canvas 1.4.1, gemessen, nicht vermutet): Die Bibliothek
+     * setzte Text ueber `ctx.fillText(text, bounds.left, bounds.top +
+     * baseline)`, wobei `baseline` aus ihrer eigenen `FontMetrics`-Messung
+     * stammte (`img.offsetTop - span.offsetTop + 2` in einem Hilfs-<div> am
+     * document.body). Diese Messung fiel fuer die KaTeX-Schriften deutlich
+     * zu gross aus - fuer `18px KaTeX_Main` lieferte sie 27 px, waehrend die
      * echte Grundlinie rund 17 px unter der Textkastenoberkante liegt. Jede
-     * KaTeX-Glyphe wird dadurch rund 7-11 px zu tief gemalt.
+     * KaTeX-Glyphe wurde dadurch rund 7-11 px zu tief gemalt.
      *
      * Bei einer ABGESETZTEN Formel faellt das nicht auf: Ihr Ausschnitt ist
      * die Blockbox samt `padding: 15px 0` (gemessen 712,8x89,8 px), die

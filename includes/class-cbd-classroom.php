@@ -2082,11 +2082,16 @@ class CBD_Classroom {
         );
 
         // html2canvas for screenshot functionality
+        //
+        // AP-3.3: Zweite von zwei Einbindungsstellen - siehe die ausfuehrliche
+        // Begruendung in class-cbd-block-registration.php. Beide muessen
+        // zusammen geaendert werden, sonst laedt je nach Seitentyp eine
+        // andere Fassung der Bibliothek.
         wp_enqueue_script(
             'html2canvas',
-            CBD_PLUGIN_URL . 'assets/lib/html2canvas.min.js',
+            CBD_PLUGIN_URL . 'assets/lib/html2canvas-pro.min.js',
             array(),
-            '1.4.1',
+            '2.4.1',
             true
         );
 

@@ -3451,6 +3451,15 @@ gefunden.
 
 ## PDF-Export: Formeln als Bild — die Blankheitsprüfung (N2, Branch `nachtrag-flackern-und-pdf-formeln`, 2026-09-04)
 
+> **Stand 2026-09-06:** Die Bibliothek dieses Abschnitts ist inzwischen
+> ausgetauscht — `html2canvas` 1.4.1 durch den Fork `html2canvas-pro` 2.4.1
+> (Abschnitt „PDF-Export: Der Bruchstrich und der Bibliothekstausch"
+> weiter unten). **Alles hier Beschriebene gilt unverändert weiter**,
+> insbesondere `canvasIstBemalt()` und der Rückfall vom leeren
+> `foreignObject`-Pfad: Der Fork behebt diesen Defekt **nicht** (gemessen:
+> 0 bemalte Pixel gegen 4045 beim Standard-Painter). Geändert hat sich nur,
+> **wie** der Standard-Painter die Textgrundlinie bestimmt.
+
 **Der gemeldete Fehler:** Im erzeugten PDF fehlten die LaTeX-Formeln.
 **Die naheliegende Erklärung war falsch** und ist ausdrücklich widerlegt:
 Es fehlt nicht `katex.css` in mPDF — es geht überhaupt **kein KaTeX-HTML** an
@@ -3649,6 +3658,17 @@ Code und ist damit der Beleg, dass er läuft.
    zu haben ist.
 
 ## PDF-Export: Inline-Formeln und Formelfarbe (N4, Branch `nachtrag-n4-inline-formeln`, 2026-09-05)
+
+> **Stand 2026-09-06, wichtig für N4a:** Die in diesem Abschnitt
+> beschriebene Ursache — html2canvas 1.4.1 schätzt die Grundlinie über
+> `img.offsetTop - span.offsetTop + 2` — **existiert seit dem
+> Bibliothekstausch nicht mehr** (Abschnitt „PDF-Export: Der Bruchstrich
+> und der Bibliothekstausch"). Die Polsterung aus N4a **bleibt trotzdem**:
+> Sie ist jetzt **Sicherheitsmarge statt Korrektur**, kostet nichts (der
+> Tintenzuschnitt nimmt den Überschuss wieder weg) und fängt Browser ab,
+> auf denen der Fork auf seine zweite Grundlinienstufe zurückfällt
+> (Safari vor 17.4). Die N4b-Regel — **niemals eine feste Formelfarbe** —
+> gilt unverändert und ist nach dem Tausch gegengemessen worden.
 
 Nachtrag zum Abschnitt oben. Der N2-Fix hat die Formeln **sichtbar** gemacht;
 der Live-Test am echten PDF des Betreibers hat danach zwei weitere Fehler
@@ -4112,6 +4132,211 @@ derselben Momentaufnahme (`colorTextPrimary`). Gemessen nachher:
    trotzdem auf ☑ gebucht, weil seine Aussage — K1 als Ursache, K2/K3/K4
    ausgeschlossen — vollständig gemessen ist; AP-2.3 wurde für dieselbe
    Umgebungsgrenze konsequent auf ✗ gesetzt.
+
+## PDF-Export: Der Bruchstrich und der Bibliothekstausch (`PLAN-PDF-Formelfarbe-und-App-Download.md`, Phase 3, 2026-09-06)
+
+Vierter und vorerst letzter Nachtrag zum Formelweg, nach N2 (Formeln fehlten
+ganz), N4 (abgeschnitten, falsche Farbe) und Phase 1 (blass). Der Betreiber
+meldete beim Live-Test: **Der Bruchstrich läuft durch den Zähler**, und
+Icon und Titel stehen im PDF untereinander statt nebeneinander.
+
+### Icon und Titel: mPDF kennt kein Flexbox (AP-3.2, `b27ebe0`)
+
+`cbd-frontend-clean.css:1324` gestaltet die Kopfzeile mit
+`display: flex; justify-content: center`. **mPDF beherrscht kein Flexbox**
+und fällt auf Blocklayout zurück — das `<h3>` erzwingt dann einen Umbruch
+nach dem Icon.
+
+**Der Fund unterwegs, der die Erwartung widerlegte:** `text-align: center`
+an `.cbd-block-header` machte den Kopf zwar mittig, das Icon blieb aber in
+einer eigenen Zeile. **mPDF setzt `display: inline` an einem `<h3>` nicht
+um.** Erst die neue private Methode `kopfzeile_fuer_mpdf($html)` — Schritt 7
+der Block-Aufbereitung in `class-cbd-pdf-generator.php`, nach
+`embed_remote_images()` — stellt den Titel auf `<span>` um und löst es.
+
+**Nur im PDF-Weg.** Das gerenderte Frontend-HTML bleibt unangetastet; dort
+ist das `<h3>` semantisch richtig (Gliederung der Seite). Im PDF gibt es
+keine Gliederung, die es tragen müsste, und `.cbd-block-title` regelt
+Schriftgröße, Fettung und Farbe unverändert weiter. Die Umstellung hängt in
+`prepare_structured_block()` und damit **nur** am mPDF-Weg — der
+TCPDF-Rückfall geht über `prepare_html_for_pdf()` und bleibt unberührt.
+
+**Der Abstand sitzt am Bild, nicht am `<span>`:** mPDF setzt `margin` an
+einem inline gerenderten `<span>` nicht um (am PDF gemessen: Icon und Titel
+klebten aneinander). Der Abstand liegt deshalb am `<img>`
+(`margin-right: 7px`) bzw. bei den Symbolschriften per `padding-right`.
+
+**Die Klasse wird mit `(?=[\s"])` abgeschlossen, nicht mit `\b`** (seit
+AP-3.fix1): Ein Bindestrich ist kein Wortzeichen, `\b` hätte auch
+`cbd-block-title-wrapper` getroffen und dessen `<h3>` still umgeschrieben.
+Heute existiert keine solche Klasse — die Verschärfung ist Vorsorge.
+Geprüft an nachgebautem Markup, 10 Fälle.
+
+**Bekannte Einschränkung:** Die Icon-Größe im PDF ist mit 24 px fest gesetzt
+und folgt **nicht** dem Frontend-Regler `--cbd-icon-scale` (Abschnitt
+„Icon-Größen"). Das ist bewusst so — mPDF kennt keine CSS-Variablen —, aber
+wer den Regler stark verstellt, bekommt im PDF eine andere Proportion als
+auf dem Bildschirm.
+
+### Der Bruchstrich: die Ursache lag in html2canvas selbst (AP-3.3, `39e45b1`)
+
+**Der entscheidende Messwert zuerst:** Der Strich saß **richtig**. Die
+Glyphen wurden **15 CSS-px zu tief** gemalt. Genau daraus entstand die
+Durchstreichung.
+
+| Größe | DOM (Soll) | Leinwand (Ist, 1.4.1) |
+|---|---|---|
+| Bruchstrich | Zeile 77 | Zeile 76…78 ✓ |
+| oberste Glyphe (Zähler) | Zeile 30 | Zeile 60 ✗ |
+
+**Warum das passiert.** `html2canvas` bildet die Malstufe des Browsers in
+JavaScript nach. Es liest die Kastengeometrie aus dem DOM (Rahmen, Boxen —
+korrekt) und malt den **Text selbst** mit `ctx.fillText()`, wozu es die
+Grundlinie **erneut schätzen** muss: `FontMetrics.parseMetrics()` rechnet
+`img.offsetTop - span.offsetTop + 2` in einem Hilfs-`<div>`, das es an
+**das Originaldokument** hängt. **Damit gibt es zwei Wahrheitsquellen**, und
+genau dort driften Strich und Glyphen auseinander.
+
+**Deshalb kennen LaTeX-Editoren dieses Problem nicht:** Ein TeX-Setzer — und
+ebenso MathJax mit SVG-Ausgabe — **setzt** die Formel; Glyphenpositionen und
+Bruchstrich entstehen in **einem** Layoutdurchgang und **einem**
+Koordinatensystem. Es gibt keine zweite Instanz, die sie nachträglich noch
+einmal deutet.
+
+**Alle drei naheliegenden Auswege sind gemessen und tragen nicht:**
+
+| Weg | Ergebnis |
+|---|---|
+| `foreignObjectRendering` | **0 bemalte Pixel**, auch isoliert an einer einzelnen Formel |
+| Zeilenhöhe im Klon ändern | **wirkungslos** — html2canvas misst im **Original**dokument, nicht im Klon |
+| Zeilenhöhe an der laufenden Seite | verschiebt 60 → 46 (Soll 30) — halber Weg, und nur über einen Umbruch der **ganzen** Seite |
+
+**Ein Update gab es nicht: 1.4.1 ist die letzte Fassung des Originals**
+(`npm view html2canvas versions` endet dort). Die Empfehlung „neuere Fassung
+einspielen" war falsch; es gibt nur den Fork.
+
+**Die Lösung: `html2canvas-pro` 2.4.1** (MIT, wie das Original), lokal in
+`assets/lib/` — Projektregel, keine CDN. Er ersetzt die DOM-Messung durch
+Canvas-`TextMetrics` und enthält **kein `offsetTop`** mehr.
+
+**Am erzeugten PDF gemessen** — gleiche Seite, gleiche Formeln, gleiche
+Leinwandmaße:
+
+| | vorher (1.4.1) | nachher (pro 2.4.1) |
+|---|---|---|
+| Strichbilder mit durchgestrichenem Zähler | **13 von 13** | **0 von 13** |
+| Bänder in den Strichspalten | `59..89` · `118..148` — Zählerband **läuft über** Zeile 76 | `29..59` │ `76..78` │ `88..126` — getrennt |
+| Strichzeile | 77 / 84 | **unverändert** 77 / 84 |
+
+Die unveränderte Strichzeile ist der Beleg, dass sich die **Glyphen** bewegt
+haben, nicht der Strich.
+
+**Das Skript-Handle bleibt `'html2canvas'`.** Zwei Abhängigkeitslisten
+hängen daran (`class-cbd-block-registration.php`, `class-cbd-classroom.php`);
+ein Umbenennen hätte sie stillschweigend zerrissen. Der Fork setzt am
+Dateiende ebenfalls `window.html2canvas`, und alle benutzten Optionen
+existieren unverändert — `onclone` mit **derselben Signatur**
+`(documentClone, referenceElement)`. Daran hängen der Phase-1-Fix
+(fadeIn-Blende) und die Darkmode-Neutralisierung aus N2; beide tragen über
+den Tausch hinweg (im Härtefall `visibilityState: hidden` gemessen: maxAlpha
+255).
+
+### Sieben Aufrufstellen, nicht zwei — und was das bedeutet
+
+**In der ersten Fassung dieser Abnahme stand „genau zwei Aufrufstellen".
+Das war falsch**, entstanden aus einer Suche in nur einer Datei. Das
+unabhängige Review hat es widerlegt:
+
+| Fundstelle | Was dort gerastert wird |
+|---|---|
+| `pdf-server-side.js:878` | Formeln |
+| `pdf-server-side.js:1630` | Bildschirmfotos interaktiver Elemente |
+| `interactivity-store.js:456` | **Screenshot-Knopf** — ganze Container mit Fließtext |
+| `interactivity-store.js:674` | clientseitiger jsPDF-Rückfall |
+| `interactivity-fallback.js:478` | jQuery-Zwilling des Screenshot-Knopfs |
+| `html2pdf-loader.js:461` | älterer PDF-Weg |
+| `class-cbd-block-registration.php:778` | Inline-Skript; übergibt `logging: true` — im Fork schaltet das zusätzlich die Leistungsmessung ein |
+
+Die drei Screenshot-Wege rastern ganze Container mit **Fließtext**, also
+genau das, was der Tausch verändert. **Nachgeholt und angesehen:** Ein
+Container mit 896 Zeichen, gerastert mit den Optionen des Screenshot-Wegs —
+Schrift, Aufzählung, Fettauszeichnung und eingebettete SVG-Grafik sitzen
+korrekt. Am aussagekräftigsten sind die **Glossar-Unterstreichungen**: Sie
+sind CSS-gezeichnete Linien, die Glyphen malt die Bibliothek — dasselbe
+Gespann wie Bruchstrich und Zähler. Sie sitzen sauber unter der Schrift.
+
+**Tafelbilder und lokale Notizen laufen nie durch die Bibliothek.**
+`applyServerDrawings()` und `injectDrawingsFromStorage()` schreiben sie als
+`<img src="data:image/png;base64,…">` ins Klon-HTML; sie gehen unverändert
+an mPDF. Der Tausch kann sie strukturell nicht berühren.
+
+### Bekannte Einschränkungen des Tauschs — beide betreffen Apple-Geräte
+
+Das sind die wichtigsten Punkte dieses Abschnitts, weil sie ausgerechnet die
+Gruppe treffen, die `istAppleGeraet()` **bewusst auf genau diesen Weg
+umleitet** (Abschnitt „Screenshot auf Apple-Geräten").
+
+**1. Der Tausch hebt die Browser-Untergrenze an.** Gezählt im ausgelieferten
+Bündel: 63× `??`, 24× `?.`, 531× Pfeilfunktionen, 19× `class`, 47× `await`.
+In der alten Datei: **jeweils 0** — sie war reines ES5. **Unterhalb
+Chrome 80 / Firefox 74 / Safari 13.1 scheitert schon das Parsen der Datei.**
+Dann ist `html2canvas` undefiniert, alle Wächter im Plugin greifen, und es
+gibt **weder Formelbilder noch Screenshots**. Die Formel bleibt als lesbarer
+Ersatztext stehen, der Screenshot-Knopf versteckt sich. Offene Frage an den
+Betrieb: **Gibt es in den iPad-Klassen Geräte unterhalb iPadOS 13.4?**
+
+**2. Die Grundlinie entsteht browserabhängig.** Der Fork nimmt
+`fontBoundingBoxAscent ?? actualBoundingBoxAscent ?? fontSize`. **Stufe 1
+kennt Safari erst ab 17.4**; darunter gilt Stufe 2 — die Glyphen-, nicht die
+Schriftkastenoberkante. Dort säßen die Glyphen **zu hoch** statt zu tief. Das
+ist die gutartige Richtung (kein durchgestrichener Zähler, und der
+N4a-Zuschnitt fängt Inline-Formeln ohnehin auf), aber **auf Apple-Geräten
+ist der Bruchstrich-Fix unbelegt**. Genau dafür bleibt die N4a-Polsterung als
+Sicherheitsmarge stehen, auch wenn ihr ursprünglicher Anlass entfallen ist.
+
+**3. `foreignObjectRendering` liefert auch im Fork eine leere Leinwand**
+(gemessen: 0 bemalte Pixel gegen 4045 beim Standard-Painter, drei
+Wiederholungen). Es gab also **keinen stillen Rendererwechsel** — gemessen
+wurde derselbe Weg, der produktiv läuft. Der N2-Befund samt Rückfall
+(`canvasIstBemalt()`, `foRenderingLiefertLeerbild`) gilt unverändert weiter,
+und der aussichtslose Erstversuch wird weiterhin einmal je Seitenaufruf
+bezahlt.
+
+**4. Keine Dauer-Gegenüberstellung.** Ein Lauf mit derselben Auswahl auf dem
+alten Stand existiert nicht. Die Leinwandmaße sind vorher wie nachher
+identisch, die Arbeit je Formel also vergleichbar — ein gemessener Vergleich
+ist das aber nicht.
+
+**5. `modern-screenshot.min.js` liegt weiterhin in `assets/lib/` und wird
+nirgends eingebunden** — 28 802 Byte toter Ballast, schon vor diesem
+Vorhaben. Nicht entfernt, weil es außerhalb des AP-Zuschnitts lag.
+
+### Die Lehre, die über diesen Fall hinausgeht
+
+**Eine reine Zahlenmessung an Formelbildern genügt nicht.** Der
+Bruchstrich-Fehler hat drei Vorhaben überlebt, obwohl an jedem PDF gemessen
+wurde — gezählt wurden Deckkraft, Farbe und Tintenlage, nie die **Beziehung**
+zwischen Strich und Glyphen. Und das Messskript, das ihn schließlich fand,
+hatte selbst zwei Fehler, die erst beim **Ansehen** der Bilder auffielen:
+eine Längenschwelle `max(20, w//6)`, die bei 2040 px breiten Bildern 340 px
+verlangte und damit jeden echten Bruchstrich übersprang (reale Striche sind
+88–148 px lang), und keine Untergrenze gegen Serifen — vier Einzelglyphen
+(`E`, `L`, `R`, `Ω`) wurden als „durchgestrichen" gemeldet, weil ihre
+Fußserife wie ein Strich aussah.
+
+**Wer künftig am Formelweg misst: mindestens ein Formelbild extrahieren und
+ansehen.** Zahlen allein haben hier dreimal getrügt.
+
+### Die naheliegende Frage: warum nicht gleich MathJax?
+
+Weil der Rasterweg der eigentliche Konstruktionsfehler ist — aber sein Ersatz
+ein eigenes Vorhaben ist. Vorarbeit und Plan stehen in
+`PLAN-Formeln-als-Vektor-im-PDF.md`; die Machbarkeit ist an mPDF 8.2.7
+bereits gemessen (SVG wird **vektoriell** gezeichnet, `<path>`, `<use>`,
+`<rect>`), ebenso zwei **stille** Fallen: `fill="currentColor"` — MathJax'
+Vorgabe — erzeugt in mPDF den Operator `n` statt `f` und malt **gar
+nichts**, und `ex`-Maße versteht mPDF nicht (eine Formel füllte drei Viertel
+einer A4-Seite). Bis dahin gilt der hier beschriebene Rasterweg.
 
 ## Klassenmodus: Live-Aktualisierung (`PLAN-Klassenmodus-Live.md`, 2026-08-30 bis 2026-09-04, alle vier Phasen abgeschlossen und in `main` gemergt)
 

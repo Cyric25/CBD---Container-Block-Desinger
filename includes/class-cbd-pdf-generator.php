@@ -337,12 +337,80 @@ class CBD_PDF_Generator {
         // Step 6: Download and embed remote images as base64 for mPDF
         $html = $this->embed_remote_images($html);
 
+        // Step 7 (AP-3.2): Blocktitel fuer mPDF von <h3> auf <span> umstellen.
+        $html = $this->kopfzeile_fuer_mpdf($html);
+
         // Wrap in container for styling with inline page-break-inside for mPDF
         $output = '<div class="cbd-pdf-block" style="page-break-inside:avoid;">';
         $output .= $html;
         $output .= '</div>';
 
         return $output;
+    }
+
+    /**
+     * AP-3.2: Blocktitel fuer mPDF von <h3> auf <span> umstellen.
+     *
+     * WARUM das noetig ist, obwohl das Stylesheet schon `display: inline`
+     * setzt: **mPDF setzt `display: inline` an einem <h3> nicht um.** Am
+     * erzeugten PDF gemessen - mit `text-align: center` allein wurde der Kopf
+     * zwar mittig, das Icon blieb aber in einer eigenen Zeile ueber dem
+     * Titel, weil mPDF das <h3> weiterhin als Block behandelt und einen
+     * Umbruch erzwingt. Ein <span> rendert es zuverlaessig inline.
+     *
+     * Die Umstellung passiert **ausschliesslich im PDF-Weg**, ganz am Ende
+     * der Aufbereitung. Das gerenderte Frontend-HTML bleibt unangetastet -
+     * dort ist das <h3> semantisch richtig und traegt die
+     * Gliederungsstruktur der Seite. Im PDF gibt es keine Gliederung, die
+     * ein <h3> tragen muesste; dort zaehlt allein das Aussehen, und das
+     * regelt `.cbd-block-title` im Stylesheet (Schriftgroesse, Fettung,
+     * Farbe) unveraendert weiter.
+     *
+     * Bewusst mit einem engen regulaeren Ausdruck statt eines Parsers: Es
+     * geht um genau ein Element mit genau einer bekannten Klasse, das
+     * `CBD_Block_Registration::render_block()` selbst erzeugt
+     * (`<h3 class="cbd-block-title">`). Findet sich nichts, bleibt der
+     * Inhalt unveraendert - die Fehlerrichtung ist "sieht aus wie bisher",
+     * nicht "kaputt".
+     *
+     * @param string $html Aufbereitetes Block-HTML
+     * @return string HTML mit <span> statt <h3> im Blocktitel
+     */
+    private function kopfzeile_fuer_mpdf($html) {
+        if (false === strpos($html, 'cbd-block-title')) {
+            return $html;
+        }
+
+        // Oeffnendes Tag samt etwaiger weiterer Attribute uebernehmen.
+        //
+        // Die Klasse wird mit (?=[\s"]) abgeschlossen statt mit \b: Ein
+        // Bindestrich ist kein Wortzeichen, \b haette deshalb auch
+        // "cbd-block-title-wrapper" o. Ae. getroffen und dessen <h3> still
+        // umgeschrieben (Review-Befund 12 zu AP-3.3). Heute existiert keine
+        // solche Klasse -- die Verschaerfung ist Vorsorge, kein Bugfix.
+        $html = preg_replace(
+            '#<h3(\s[^>]*class="[^"]*\bcbd-block-title(?=[\s"])[^"]*"[^>]*)>#i',
+            '<span$1>',
+            $html
+        );
+
+        // Das zugehoerige schliessende Tag. Container-Bloecke enthalten in
+        // ihrem Kopf kein zweites <h3>, deshalb genuegt hier die einfache
+        // Ersetzung; ein <h3> im Blockinhalt liegt ausserhalb der Kopfzeile
+        // und wuerde von der Oeffnungs-Ersetzung oben gar nicht erfasst.
+        //
+        // Ohne Wachbedingung: Die frueher hier stehende Pruefung war tot --
+        // ihr zweiter Zweig (strpos auf 'cbd-block-title') war immer wahr,
+        // weil der vorzeitige Ausstieg oben diesen Fall bereits abfaengt
+        // (Review-Befund 11 zu AP-3.3). Ein preg_replace ohne Treffer ist
+        // ohnehin folgenlos.
+        $html = preg_replace(
+            '#(<span\s[^>]*class="[^"]*\bcbd-block-title(?=[\s"])[^"]*"[^>]*>.*?)</h3>#is',
+            '$1</span>',
+            $html
+        );
+
+        return $html;
     }
 
     /**
@@ -715,19 +783,71 @@ body {
     page-break-inside: avoid;
 }
 
-/* Block Header */
+/* Block Header
+ *
+ * AP-3.2 (PLAN-PDF-Formelfarbe-und-App-Download.md, 2026-09-06): Icon und
+ * Titel standen im PDF UNTEREINANDER und linksbuendig, waehrend sie im
+ * Frontend nebeneinander und mittig stehen.
+ *
+ * Ursache: assets/css/cbd-frontend-clean.css:1324 gestaltet die Kopfzeile mit
+ * `display: flex; align-items: center; justify-content: center`. **mPDF
+ * beherrscht kein Flexbox** und faellt auf Blocklayout zurueck - das <h3>
+ * des Titels erzwingt dann einen Zeilenumbruch nach dem Icon-<span>.
+ *
+ * Der Nachbau kommt deshalb ohne Flexbox aus: `text-align: center` an der
+ * Kopfzeile (mPDF setzt das zuverlaessig um und vererbt es an die
+ * Inline-Kinder) und `display: inline` am Titel, damit er nicht mehr seine
+ * eigene Zeile beansprucht. Das Icon-<span> ist ohnehin inline.
+ *
+ * `margin: 0` am Titel ist dabei nicht Kosmetik: Ein Blockabstand an einem
+ * inline gesetzten Element ignoriert mPDF zwar, ein verbleibender unterer
+ * Abstand wuerde die Zeile aber je nach mPDF-Fassung wieder aufreissen.
+ */
 .cbd-block-header {
     margin-bottom: 10px;
     padding: 8px 0;
     page-break-after: avoid;
+    text-align: center;
 }
 
 .cbd-block-title {
+    display: inline;
     font-size: 14pt;
     font-weight: bold;
     color: ' . $primary_text . ';
-    margin: 0 0 6px 0;
+    margin: 0;
     page-break-after: avoid;
+}
+
+/* Das Icon sitzt in derselben Zeile links vom Titel. vertical-align: middle
+ * richtet es an der Mittellinie des Titeltexts aus - dasselbe, was im
+ * Frontend `align-items: center` leistet. */
+.cbd-header-icon {
+    display: inline;
+    vertical-align: middle;
+}
+
+/* Der Abstand sitzt am Bild, NICHT am umgebenden <span>: mPDF setzt
+ * `margin` an einem inline gerenderten <span> nicht um (am erzeugten PDF
+ * gemessen - Icon und Titel klebten aneinander), an einem <img> dagegen
+ * schon. */
+.cbd-header-icon img,
+.cbd-custom-icon {
+    display: inline;
+    vertical-align: middle;
+    width: 24px;
+    height: 24px;
+    margin-right: 7px;
+}
+
+/* Dashicons und die uebrigen Symbolschriften sind Text, kein Bild - dort
+ * traegt der Abstand ein Wortzwischenraum-Ersatz am <span> selbst nicht,
+ * deshalb hier ueber padding, das mPDF auch inline anwendet. */
+.cbd-header-icon .dashicons,
+.cbd-header-icon .material-icons,
+.cbd-header-icon .cbd-emoji-icon {
+    vertical-align: middle;
+    padding-right: 7px;
 }
 
 /* Content Area - always visible in PDF */
