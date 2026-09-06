@@ -238,11 +238,27 @@
                 //    damit nicht nur fail-closed, sondern hat die
                 //    Fehlerquelle nicht.
                 //
-                // WELCHE Dateien hier stehen muessen, wird gemessen, nicht
-                // geraten - siehe AP-1.3. `latin` deckt die deutschen
-                // Umlaute ab (oe, ue, Oe); ss, µ, ° und Ω sind bereits im
-                // Grundbestand von tex-svg.js.
-                var erweiterungen = ['latin'];
+                // WELCHE Dateien hier stehen muessen, ist GEMESSEN, nicht
+                // geraten (AP-1.3): Der gesamte Formelbestand der Website
+                // wurde ausgewertet - 5655 Vorkommen, 3096 eindeutige
+                // Formeln auf 246 Seiten, 16 verschiedene Sonderzeichen -
+                // und MathJax hat selbst benannt, welche Dateien es dafuer
+                // anfordert. Es sind genau diese drei:
+                //
+                //   latin    aufrecht  (\text{ae}, \mathrm{...})
+                //   latin-b  fett      (\mathbf, \textbf)
+                //   latin-i  kursiv    (Sonderzeichen im Mathe-Modus)
+                //
+                // Ausloeser sind ausschliesslich die deutschen Umlaute und
+                // ss. Alles andere im Bestand - °, →, ⇌, ≡, ‡, µ, α, β,
+                // Tiefstellungen - steckt bereits im Grundbestand von
+                // tex-svg.js (85 von 100 Pruefungen liefen ohne Nachladung).
+                //
+                // Wer neue Sonderzeichen in Formeln einfuehrt (kyrillisch,
+                // hebraeisch, Braille), muss die Liste erweitern. Das
+                // Verfahren dafuer steht in docs/inventar-formeln.md:
+                // MathJax anfordern lassen, nicht raten.
+                var erweiterungen = ['latin', 'latin-b', 'latin-i'];
                 return Promise.all(erweiterungen.map(function (name) {
                     return ladeSkript(verzeichnis + '/fonts/mathjax-newcm-font/svg/dynamic/'
                         + name + '.js');
@@ -372,7 +388,24 @@
         if (!latex) { return null; }
 
         try {
-            var knoten = window.MathJax.tex2svg(latex, { display: !!item.isDisplay });
+            // Beim ERSTEN Kontakt mit einem Zeichen aus einer nachgeladenen
+            // Schriftdatei wirft MathJax einmalig "retry -- an asynchronous
+            // action is required", obwohl die Daten laengst da sind. Ein
+            // zweiter Aufruf gelingt dann. In AP-1.3 gemessen: 15 von 100
+            // Proben beim ersten Durchgang, 0 beim zweiten - und alle 15
+            // waren deutsche Umlaute oder ss.
+            //
+            // Ohne diese Wiederholung fiele je Seitenaufruf die erste Formel
+            // mit Umlaut ohne Not auf den Rasterweg zurueck.
+            var knoten = null;
+            for (var versuch = 0; versuch < 2 && !knoten; versuch++) {
+                try {
+                    knoten = window.MathJax.tex2svg(latex, { display: !!item.isDisplay });
+                } catch (wieder) {
+                    if (versuch === 1 || !/retry/i.test(String(wieder))) { throw wieder; }
+                }
+            }
+            if (!knoten) { return null; }
             var svg = knoten.querySelector('svg');
             if (!svg) { return null; }
             if (knoten.querySelector('[data-mml-node="merror"], mjx-merror')) {

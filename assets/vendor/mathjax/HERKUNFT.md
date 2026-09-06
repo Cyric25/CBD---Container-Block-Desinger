@@ -9,7 +9,9 @@ CDN-Einbindungen erlaubt (DSGVO).
 | Datei | Größe | Herkunft | Lizenz |
 |---|---|---|---|
 | `tex-svg.js` | 1,85 MB | npm `mathjax@4.1.3`, Datei `tex-svg.js` | Apache-2.0 (siehe `LICENSE`) |
-| `fonts/mathjax-newcm-font/svg/dynamic/latin.js` | 359 KB | npm `@mathjax/mathjax-newcm-font@4.1.3`, Datei `svg/dynamic/latin.js` | Apache-2.0 (laut `package.json` des Pakets; es liegt dort keine eigene Lizenzdatei bei) |
+| `fonts/…/svg/dynamic/latin.js` | 359 KB | npm `@mathjax/mathjax-newcm-font@4.1.3` | Apache-2.0 (laut `package.json` des Pakets; es liegt dort keine eigene Lizenzdatei bei) |
+| `fonts/…/svg/dynamic/latin-b.js` | 299 KB | dito | dito |
+| `fonts/…/svg/dynamic/latin-i.js` | 490 KB | dito | dito |
 
 Aus beiden Paketen ist **nur** das Genannte übernommen — keine
 MathML-Eingabe, keine CommonHTML-Ausgabe, keine WOFF-Schriftdateien, keine
@@ -46,7 +48,20 @@ Verfügbar sind im Paket `@mathjax/mathjax-newcm-font` unter `svg/dynamic/`
 unter anderem `latin-b.js`, `latin-i.js`, `latin-bi.js` (fett/kursiv),
 `greek.js`, `cyrillic.js`, `arrows.js`, `math.js`.
 
-**Welche gebraucht werden, wird nicht geraten, sondern gemessen:** Alle
-Formeln des Bestands mit gesetztem lokalem Pfad durchsetzen und
-protokollieren, welche Dateien MathJax anfordert. Das ist die Aufgabe von
-`AP-1.3` in `PLAN-Formeln-als-Vektor-im-PDF.md`.
+**Welche gebraucht werden, ist gemessen, nicht geraten — `AP-1.3` ist
+erledigt.** Über den gesamten Bestand (5655 Formelvorkommen, 3096
+eindeutige, 246 Seiten, 16 Sonderzeichen) hat MathJax genau **drei** Dateien
+angefordert: `latin`, `latin-b`, `latin-i`. Ausgelöst werden sie
+ausschließlich von den deutschen Umlauten und `ß`; alles andere — `°`, `→`,
+`⇌`, `≡`, `‡`, `µ`, `α`, `β`, Tiefstellungen und sämtliche geprüften
+Makros einschließlich `\xrightarrow`, `\sqrt`, `\sum` — steckt im
+Grundbestand.
+
+**Der Erstkontakt-Effekt:** Beim ersten Zeichen aus einer nachgeladenen
+Datei wirft MathJax einmalig `retry`, obwohl die Daten da sind. Ein zweiter
+Aufruf gelingt — `setzeFormelAlsSvg()` wiederholt deshalb genau einmal.
+Ohne das fiele je Seitenaufruf die erste Formel mit Umlaut ohne Not auf den
+Rasterweg zurück.
+
+Vollständiger Bericht samt Verfahren für künftige Zeichen:
+**`docs/inventar-formeln.md`**.
