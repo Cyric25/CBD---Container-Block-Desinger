@@ -34,13 +34,19 @@ braucht je nach Schriftlage eine andere Datei** (aufrecht `latin`, fett
 
 | | |
 |---|---|
-| Seiten mit Formeln | **246** |
+| Seiten mit `$` im Inhalt | **246** (von 359 veröffentlichten) |
+| davon Seiten mit erkannten Formeln | **234** |
 | Formelvorkommen | **5655** |
 | eindeutige Formeln | **3096** |
 | verschiedene Makros | **84** |
 | verschiedene Sonderzeichen | **16** |
 
 ### Die häufigsten Makros
+
+> Gezählt wird hier, in **wie vielen der 3096 eindeutigen Formeln** ein
+> Makro vorkommt — nicht, wie oft es im Bestand steht. Nach Häufigkeit
+> gewichtet verschieben sich die Zahlen (`\mathrm` 2731, `\text` 2317,
+> `\xrightarrow` 89) und die beiden häufigsten tauschen die Plätze.
 
 | Makro | Vorkommen | | Makro | Vorkommen |
 |---|---|---|---|---|
@@ -54,7 +60,7 @@ braucht je nach Schriftlage eine andere Datei** (aufrecht `latin`, fett
 | `\longrightarrow` | 123 | | `\delta` | 31 |
 | `\quad` | 108 | | `\sqrt` | 20 |
 
-**`\xrightarrow` kommt 86-mal vor.** Das ist genau das Konstrukt, an dem
+**`\xrightarrow` kommt in 86 verschiedenen Formeln vor (89 Vorkommen im Bestand).** Das ist genau das Konstrukt, an dem
 mPDF in `AP-1.2` gescheitert ist (MathJax streckt es mit einem
 verschachtelten `<svg>`) — die dort eingebaute dritte Umformung betrifft
 also realen Inhalt, keine Testkonstruktion.
@@ -84,16 +90,43 @@ Alles Übrige steht im Mathe-Modus und wird damit **kursiv** gesetzt.
 
 ---
 
-## 3. Kann MathJax den Bestand setzen? — Ja, 3093 von 3096
+## 3. Kann MathJax den Bestand setzen? — ja, bis auf fünf Stellen
 
-| Ergebnis | Anzahl |
+| Ergebnis (Lauf unter Node) | Anzahl |
 |---|---|
 | gesetzt | **3093** |
 | Fehler (`merror`) | **3** |
 | Ausnahmen | 0 |
 
-**Die drei Fehlschläge sind alle derselbe Fall: `\ce{…}` aus der
-mhchem-Erweiterung.**
+> **Richtiggestellt am 2026-09-06 nach dem Review von Phase 1 (Befund 5).**
+> Hier stand zuerst: „Die drei Fehlschläge sind alle derselbe Fall:
+> `\ce{…}` aus mhchem." **Das war falsch.** Die Messdatei sagt etwas
+> anderes, und ich habe alle fünf Stellen einzeln nachgeprüft — in beiden
+> Maschinen.
+
+### Was tatsächlich scheitert
+
+**(a) Zwei Formeln mit einem echten LaTeX-Fehler**, beide auf **Seite 872**:
+
+```
+\Delta G^0' \approx -9790~\text{kJ/mol}
+\Delta G^0' \approx 106 \times 30,5~\text{kJ/mol} = 3233~\text{kJ/mol}
+```
+
+| Maschine | Meldung |
+|---|---|
+| MathJax | `merror`: „Prime causes double exponent: use braces to clarify" |
+| KaTeX (heute, am Bildschirm) | `ParseError`: „Double superscript" |
+
+`G^0'` ist zweimal hochgestellt — einmal die `0`, einmal der Strich. **Das
+ist ein Inhaltsfehler, kein Werkzeugproblem, und er zeigt sich heute schon
+auf der Website.** Geschrieben als `\Delta G^{0'}` setzen **beide**
+Maschinen die Formel korrekt (gegengeprüft).
+
+> **Befund für den Betreiber:** Zwei Stellen auf Seite 872 in `G^{0'}`
+> ändern — dann sind sie am Bildschirm und im PDF richtig.
+
+**(b) Drei Formeln mit `\ce{…}` aus mhchem:**
 
 ```
 \ce{α-Anomer <=>[H+][H2O] offenkettige Form <=>[H+][H2O] β-Anomer}
@@ -101,16 +134,41 @@ k_{obs} = k_0 + k_H [\ce{H+}] + k_{OH} [\ce{OH-}]
 \ce{-S-S-}
 ```
 
-> **Befund für den Betreiber, unabhängig von diesem Vorhaben:** Diese drei
-> Formeln sind **heute schon kaputt** — das Plugin bindet KaTeX **ohne**
-> mhchem-Erweiterung ein (`class-latex-parser.php` lädt nur `katex.min.js`
-> und `auto-render.min.js`). Sie erscheinen also bereits auf dem Bildschirm
-> nicht als Formel. Der Umbau macht das weder besser noch schlechter.
->
-> Wer sie retten will, hat zwei Wege: die drei Stellen von Hand in
-> gewöhnliches LaTeX umschreiben (bei drei Vorkommen der naheliegende Weg),
-> oder mhchem in **beiden** Maschinen nachrüsten — dann müsste die
-> Erweiterung sowohl bei KaTeX als auch bei MathJax mitgeliefert werden.
+**Diese drei erzeugen kein `merror`, sondern `retry`** — MathJax versucht,
+die mhchem-Erweiterung nachzuladen, findet sie lokal nicht (404) und bricht
+sauber ab. Im Exportweg heißt das: **Rückfall auf den Rasterweg**, die
+Formel kommt als Bild ins PDF. Das ist die gutartige Richtung.
+
+**Auch sie sind heute schon kaputt** — das Plugin bindet KaTeX **ohne**
+mhchem ein. Gegengeprüft mit `throwOnError: true`: „Undefined control
+sequence: `\ce`". Mit der üblichen Einstellung `throwOnError: false`
+schluckt KaTeX den Fehler und setzt `\ce{-S-S-}` als **roten Text** —
+deshalb fällt es im Alltag kaum auf. Bei drei Vorkommen ist Umschreiben in
+gewöhnliches LaTeX der naheliegende Weg.
+
+### Was die Zahl „3093 gesetzt" wirklich sagt — und was nicht
+
+> **Ebenfalls richtiggestellt (Review-Befund 6).**
+
+Der Volllauf zählt ausschließlich, ob `merror` im Ergebnis steht. Damit
+beantwortet er die Frage, für die er gebaut wurde — **kennt MathJax die
+Makros dieser Website?** — und mehr nicht. Er belegt **nicht**, dass jede
+Formel im Exportweg korrekt herauskommt:
+
+- Er lief unter **Node** mit `tex2svgPromise()`, nicht im Browser mit dem
+  synchronen `tex2svg()`, das produktiv benutzt wird.
+- Er lief **ohne** die drei Umformungen und ohne mPDF.
+- **Eine verstümmelte Formel erzeugt kein `merror`.** Genau das war der
+  schwerste Fehler dieses Vorhabens: MathJax bricht Inline-Mathematik
+  standardmäßig um und liefert dann mehrere `<svg>`-Wurzeln; wer die erste
+  nimmt, verliert den Rest — lautlos. Auf der Prüfseite waren **10 von 22**
+  Inline-Formeln betroffen (behoben in `AP-1.fix1`).
+
+**Die belastbare Zahl steht in Abschnitt 4 der Prüfmatrix**, und sie wird in
+Phase 2 mit der Produktionsmethode neu erhoben: synchroner Aufruf, echte
+`isDisplay`-Herkunft, und als Erfolgskriterium nicht „kein merror", sondern
+**genau eine `<svg>`-Wurzel, Zeichenobjekte vorhanden, Breite plausibel
+gegen die KaTeX-Breite**.
 
 ---
 
