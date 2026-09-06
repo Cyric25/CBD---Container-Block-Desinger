@@ -4285,14 +4285,59 @@ gibt **weder Formelbilder noch Screenshots**. Die Formel bleibt als lesbarer
 Ersatztext stehen, der Screenshot-Knopf versteckt sich. Offene Frage an den
 Betrieb: **Gibt es in den iPad-Klassen Geräte unterhalb iPadOS 13.4?**
 
-**2. Die Grundlinie entsteht browserabhängig.** Der Fork nimmt
-`fontBoundingBoxAscent ?? actualBoundingBoxAscent ?? fontSize`. **Stufe 1
-kennt Safari erst ab 17.4**; darunter gilt Stufe 2 — die Glyphen-, nicht die
-Schriftkastenoberkante. Dort säßen die Glyphen **zu hoch** statt zu tief. Das
-ist die gutartige Richtung (kein durchgestrichener Zähler, und der
-N4a-Zuschnitt fängt Inline-Formeln ohnehin auf), aber **auf Apple-Geräten
-ist der Bruchstrich-Fix unbelegt**. Genau dafür bleibt die N4a-Polsterung als
-Sicherheitsmarge stehen, auch wenn ihr ursprünglicher Anlass entfallen ist.
+**2. Die Grundlinie entsteht browserabhängig — und auf Safari vor 17.4 ist
+der Bruchstrich WIEDER falsch.** Der Fork nimmt
+`fontBoundingBoxAscent ?? actualBoundingBoxAscent ?? fontSize`
+(`dist/lib/render/canvas/font-utils.js`, Probetext `'Mg'`). **Stufe 1 kennt
+Safari erst ab 17.4**; darunter gilt Stufe 2 — die Glyphen-, nicht die
+Schriftkastenoberkante.
+
+**Das ist gemessen, nicht erschlossen.** Stufe 2 lässt sich erzwingen, indem
+man `CanvasRenderingContext2D.prototype.measureText` so umhüllt, dass
+`fontBoundingBoxAscent` als `undefined` zurückkommt. Erst der Unterschied der
+beiden Metriken:
+
+| Schrift | fontBox | glyphBox | Differenz |
+|---|---|---|---|
+| `21,6px KaTeX_Main` | 20 | 15 | **5 px** |
+| `25px KaTeX_Main` | 23 | 17 | **6 px** |
+| `21,6px KaTeX_Size1` | 19 | 15 | 4 px |
+| `21,6px KaTeX_Math` | 15 | 15 | 0 px |
+
+**37 von 40 geprüften Schrift-/Größen-Kombinationen weichen ab**, um 1 bis
+6 px. Eine kleinere Grundlinie malt Glyphen **höher** — und höher heißt beim
+Bruch: **der Nenner wandert in den Strich**.
+
+Dieselbe Formel (`rac{K_L}{[	ext{Cl}^-]}`), einmal normal, einmal mit
+erzwungener Stufe 2, Bänder in den Strichspalten:
+
+| | Bänder | Urteil |
+|---|---|---|
+| normal | `29..66` │ **`77..78`** │ `89..132` | Zähler, Strich, Nenner getrennt |
+| Stufe 2 | `29..66` │ **`77..122`** | **Strich und Nenner verschmolzen**, Band 46 px |
+
+**Angesehen, nicht nur gemessen:** Im Bild sitzt der Bruchstrich direkt auf
+den Klammern von `[Cl⁻]`; der Abstand darunter ist weg. Es ist keine
+Durchstreichung wie beim alten Fehler (dort lief der Strich mitten durch den
+Zähler), aber es ist derselbe Defekt in der anderen Richtung und deutlich
+sichtbar.
+
+**Ein Review hatte diese Richtung als „gutartig" eingeschätzt, und ich
+hätte das übernommen. Die Messung widerlegt es.** Auf Geräten mit
+iPadOS 14–17.3 — laut Betreiber im Einsatz — sind PDF-Formelbilder, die
+**auf diesen Geräten erzeugt werden**, davon betroffen. **Nicht betroffen
+sind PDFs, die auf einem Desktop-Browser erzeugt wurden**, auch wenn sie
+danach auf dem iPad gelesen werden — der Fehler entsteht beim Erzeugen, nicht
+beim Anzeigen.
+
+Die N4a-Polsterung bleibt als Sicherheitsmarge stehen und fängt den Fall bei
+**Inline**-Formeln ab (der Tintenzuschnitt schneidet auf den bemalten Bereich
+zu); bei **abgesetzten** Formeln mit Bruch hilft sie nicht, weil dort Strich
+und Nenner zueinander verschoben sind, nicht der Ausschnitt.
+
+**Der saubere Ausweg ist nicht ein weiterer Ausgleich, sondern das Ende des
+Rasterns** — siehe `PLAN-Formeln-als-Vektor-im-PDF.md`. Ein gesetztes SVG hat
+keine zweite Grundlinienquelle, auf keinem Browser.
 
 **3. `foreignObjectRendering` liefert auch im Fork eine leere Leinwand**
 (gemessen: 0 bemalte Pixel gegen 4045 beim Standard-Painter, drei
