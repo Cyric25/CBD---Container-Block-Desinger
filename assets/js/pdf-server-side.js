@@ -1812,14 +1812,26 @@
                     // (Begruendung an zeigeDownloadSchaltflaeche()). Im
                     // Fehlerfall muss es weiterhin verschwinden, sonst
                     // blockierte es im App-Fenster die ganze Anwendung.
-                    if (response.success) {
+                    // AP-2.fix1 (Review-Befund G1): `response &&` vorangestellt
+                    // und der automatische Versuch gekapselt. Wirft
+                    // downloadPDF() - oder schon der Zugriff auf .success bei
+                    // einer leeren Antwort -, liefe die Ausnahme sonst am
+                    // Overlay vorbei und es bliebe ohne Ausweg stehen; vor
+                    // AP-2.2 deckte das vorgezogene $overlay.remove() diesen
+                    // Fall mit ab. Die Regel "in JEDEM Fehlerfall entfernen"
+                    // gilt auch fuer Ausnahmen.
+                    if (response && response.success) {
                         window.cbdDebug && console.log('[CBD PDF] PDF generated with engine:', response.engine);
-                        downloadPDF(response.url, response.filename || filename);
+                        try {
+                            downloadPDF(response.url, response.filename || filename);
+                        } catch (e) {
+                            console.warn('[CBD PDF] Automatischer Download fehlgeschlagen, Schaltflaeche bleibt:', e);
+                        }
                         zeigeDownloadSchaltflaeche($overlay, response.url, response.filename || filename);
                     } else {
                         $overlay.remove();
-                        console.error('[CBD PDF] Server error:', response.message);
-                        handleError(response.message || 'Unbekannter Fehler');
+                        console.error('[CBD PDF] Server error:', response && response.message);
+                        handleError((response && response.message) || 'Unbekannter Fehler');
                     }
                 },
                 error: function (xhr, status, error) {
@@ -1857,13 +1869,19 @@
                 // AP-2.2: wie im REST-Zweig oben - im Erfolgsfall bleibt das
                 // Overlay stehen und traegt die Download-Schaltflaeche, im
                 // Fehlerfall wird es entfernt.
-                if (response.success) {
+                // AP-2.fix1 (Review-Befund G1): dieselbe Absicherung wie im
+                // REST-Zweig oben - siehe die Begruendung dort.
+                if (response && response.success && response.data) {
                     window.cbdDebug && console.log('[CBD PDF] PDF generated via AJAX, engine:', response.data.engine);
-                    downloadPDF(response.data.url, response.data.filename || filename);
+                    try {
+                        downloadPDF(response.data.url, response.data.filename || filename);
+                    } catch (e) {
+                        console.warn('[CBD PDF] Automatischer Download fehlgeschlagen, Schaltflaeche bleibt:', e);
+                    }
                     zeigeDownloadSchaltflaeche($overlay, response.data.url, response.data.filename || filename);
                 } else {
                     $overlay.remove();
-                    var errorMsg = response.data ? response.data.message : 'Unbekannter Fehler';
+                    var errorMsg = (response && response.data) ? response.data.message : 'Unbekannter Fehler';
                     console.error('[CBD PDF] AJAX error:', errorMsg);
                     handleError(errorMsg);
                 }
@@ -1952,9 +1970,13 @@
      * AJAX-Erfolgszweig, also lange nach dem Klick des Nutzers. Chromes
      * transiente Nutzeraktivierung haelt gemessen **5003 ms**; schon ein
      * Export mit fuenf Containern braucht **6872 ms**, eine echte
-     * Inhaltsseite 51-337 s. Der programmgesteuerte Klick trifft die
-     * Aktivierung also NIE an - Chrome behandelt den Download damit als
-     * "automatisch". Wird er dabei blockiert, erscheint der Hinweis als
+     * Inhaltsseite 51-337 s. Auf JEDER realen Inhaltsseite trifft der
+     * programmgesteuerte Klick die Aktivierung deshalb nicht mehr an -
+     * Chrome behandelt den Download dann als "automatisch".
+     * (AP-2.fix1, Review-Befund G4: Hier stand "NIE"; das ueberschrieb die
+     * eigene Messung - ein Miniexport mit einem Container und ohne Formel
+     * blieb unter 5 s und hatte die Aktivierung noch.)
+     * Wird der Download blockiert, erscheint der Hinweis als
      * Symbol IN DER ADRESSLEISTE - und die gibt es im installierten
      * App-Fenster nicht. Der Nutzer sieht dann buchstaeblich nichts, weil
      * das Overlay im selben Moment verschwindet. Genau so lautete die
