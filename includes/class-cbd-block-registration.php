@@ -623,11 +623,29 @@ class CBD_Block_Registration {
         }
 
         // Enqueue html2canvas for screenshot functionality
+        //
+        // AP-3.3 (PLAN-PDF-Formelfarbe-und-App-Download.md, 2026-09-06):
+        // Ausgeliefert wird seither der Fork html2canvas-pro 2.4.1 statt
+        // html2canvas 1.4.1. Grund: 1.4.1 malt Text ueber eine SELBST
+        // geschaetzte Grundlinie (`FontMetrics.parseMetrics()`, DOM-Messung
+        // ueber offsetTop) und setzt Glyphen dadurch rund 15 px zu tief,
+        // waehrend Rahmen - und damit der KaTeX-Bruchstrich - an der
+        // richtigen Stelle landen. Ergebnis war ein Bruchstrich quer durch
+        // den Zaehler. Der Fork nimmt die Grundlinie aus der Canvas-API
+        // (`TextMetrics.fontBoundingBoxAscent`), also aus der Schrift selbst.
+        //
+        // **Das Handle bleibt bewusst 'html2canvas'** - zwei Skripte fuehren
+        // es in ihrem Abhaengigkeits-Array (hier und in
+        // class-cbd-classroom.php). Nur Datei und Version wechseln.
+        //
+        // 1.4.1 ist NICHT veraltet im ueblichen Sinn: Es ist die letzte
+        // Veroeffentlichung des Originalprojekts, ein Update gibt es nicht.
+        // Der Fork ist ein anderes Projekt mit eigenem Betreuer.
         wp_enqueue_script(
             'html2canvas',
-            CBD_PLUGIN_URL . 'assets/lib/html2canvas.min.js',
+            CBD_PLUGIN_URL . 'assets/lib/html2canvas-pro.min.js',
             array(),
-            '1.4.1',
+            '2.4.1',
             true
         );
 
