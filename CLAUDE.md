@@ -4389,6 +4389,183 @@ Vorgabe — erzeugt in mPDF den Operator `n` statt `f` und malt **gar
 nichts**, und `ex`-Maße versteht mPDF nicht (eine Formel füllte drei Viertel
 einer A4-Seite). Bis dahin gilt der hier beschriebene Rasterweg.
 
+## PDF-Export: Formeln als Vektor statt als Bild (`PLAN-Formeln-als-Vektor-im-PDF.md`, Phase 1, 2026-09-06)
+
+**Der Ansatzpunkt:** Seit v3.1.58 wird jede Formel im Browser mit
+`html2canvas` zu einem PNG gerastert. Aus dieser **einen** Entscheidung
+stammt **jeder** Formelfehler der letzten vier Vorhaben — fehlende Formeln
+(N2), abgeschnittene Inline-Formeln (N4a), geplättete Blockfarben (N4b),
+blasse Formeln (Phase 1 des Vorgängerplans), durchgestrichene Brüche
+(AP-3.1/3.3). Alle sind behoben, aber die Ursache blieb: **Ein Bild der
+Bildschirmdarstellung ist etwas anderes als eine gesetzte Formel.**
+
+Phase 1 ist der **Machbarkeitsnachweis**, kein Produktivumbau. Der
+Rasterweg läuft unverändert weiter; der neue Weg hängt hinter dem Schalter
+`window.cbdFormelVektorProbe` und ist ohne ihn nicht erreichbar.
+
+### Was gemessen ist
+
+| | Vektorweg | Rasterweg |
+|---|---|---|
+| Rasterbilder im PDF | **0** | eines je Formel |
+| Zeichenobjekte | 162 | 9 |
+| **PDF-Textebene** | **identisch mit dem Rasterlauf** | |
+| Dauer je Formel | **10 ms** | **1009 ms** |
+
+Der Faktor rund **100** je Formel stammt aus einer unabhängigen Messung im
+Review, nicht aus der Selbstauskunft.
+
+### Der Weg
+
+`data-latex` (steht seit je an jeder Formel) → MathJax `tex2svg()` → drei
+Umformungen → Nutzlastfeld `svg` → `CBD_SVG_Sanitizer` → inline ins
+PDF-HTML → mPDF zeichnet vektoriell.
+
+**mPDF kann SVG** — am eigenen Aufbau geprüft, nicht recherchiert: `<path>`,
+`<use>`+`<defs>`, `<rect>`, verschachtelte `<g transform>` alle vektoriell,
+über sieben Formelarten (Bruch, Wurzel, Summe mit Grenzen, große Klammern,
+Text mit Hoch-/Tiefstellung, Doppelbruch, beschrifteter Pfeil).
+
+### FÜNF Pflichteinstellungen — vier davon erst beim Bauen gefunden
+
+Alle fünf scheitern **still**: kein Fehler, kein Log, kein Platzhalter.
+
+1. **`startup.typeset: false` + leere Delimiter.** Sonst durchsucht MathJax
+   beim Laden das ganze Dokument und fasst die von KaTeX bereits
+   gerenderten Formeln der **laufenden Seite** an.
+
+2. **`loader.paths.fonts` lokal.** MathJax 4 hat die Schriften aus dem
+   Hauptbündel ausgelagert und lädt fehlende Zeichen zur Laufzeit nach —
+   **Voreinstellung `https://cdn.jsdelivr.net/npm/@mathjax`**. Ausgelöst
+   wird das von `ö`, `ü`, `Ö`; ein „Lösung" in einer Formel hätte also
+   stillschweigend einen Drittanbieter kontaktiert. **DSGVO-relevant und im
+   Betrieb unsichtbar.** Mit lokalem Pfad ist der Weg **fail-closed**:
+   Fehlt eine Datei, fällt die eine Formel auf den Rasterweg zurück.
+   **Im Review angegriffen:** zwölf Proben aus sechs Schriftsystemen lösten
+   acht Nachladeversuche aus — **alle lokal 404, null Anfragen nach außen**,
+   auch über den Sprachausgabe-Worker und die mhchem-Autoload-Kette.
+
+3. **`svg.fontCache: 'none'`.** Jeder Glyph wird ein eigenes `<path>` statt
+   einer `<use>`-Referenz. **Zwingend**, denn `CBD_SVG_Sanitizer` lässt
+   `<use>` und `xlink:href` bewusst **nicht** durch (sie können auf fremde
+   Dokumente zeigen). Mit `'local'` kämen die Formeln **leer** im PDF an.
+
+4. **`svg.linebreaks: { inline: false }` — der folgenreichste.**
+   MathJax 4 bricht Inline-Mathematik standardmäßig um und liefert dann
+   **mehrere `<svg>`-Wurzeln** statt einer. Wer die erste nimmt, verliert
+   den Rest. Gemessen an `\text{Ag}^+ + e^- \rightleftharpoons \text{Ag}`:
+   `display: true` → 1 Wurzel, 9 Pfade; `display: false` → **3 Wurzeln,
+   davon 3 Pfade in der ersten**. Auf der Prüfseite waren **10 von 22**
+   Inline-Formeln betroffen — der Export meldete Erfolg und lieferte
+   `Ag⁺` statt `Ag⁺ + e⁻ ⇌ Ag`.
+   **Für einen Chemielehrer ist das schlimmer als eine Lücke.**
+
+5. **Schrifterweiterungen selbst einreihen.** MathJax' eigener Nachlader
+   scheitert an diesen Dateien, obwohl sie korrekt ausgeliefert werden
+   (HTTP 200, volle Größe) und von Hand ausgeführt ihre Glyphen
+   registrieren. Er meldet „dynamic file failed to load", und
+   `tex2svgPromise()` wird dann **nie erfüllt** — ein Aufruf blieb über
+   45 s unerledigt. Deshalb gilt auch: **`tex2svg()` benutzen, nicht
+   `tex2svgPromise()`.**
+
+### Drei Umformungen am SVG — alle drei Pflicht
+
+| # | Was | Warum |
+|---|---|---|
+| 1 | `currentColor` → aufgelöste Blockfarbe | mPDF kennt das Schlüsselwort nicht und malt den Pfad **gar nicht** (PDF-Operator `n` statt `f`) — die Formel ist unsichtbar |
+| 2 | `ex` → `px` | mPDF versteht die Einheit nicht; **eine** Formel füllte im Versuch drei Viertel einer A4-Seite |
+| 3 | verschachtelte `<svg>` auflösen | MathJax streckt `\xrightarrow` u.ä. mit einem inneren `<svg>` samt `viewBox`; mPDF kann das nicht — vom Pfeil blieb ein Strichlein |
+
+**Die Farbe wird JE FORMEL aus dem DOM gelesen**
+(`getComputedStyle(el).color`), nie fest eingetragen. Das ist die N4b-Regel
+in ihrer neuen Form — eine pauschale Farbe war in diesem Projekt schon
+zweimal ein Fehler.
+
+**Umformung 3 betrifft realen Inhalt:** `\xrightarrow` kommt im Bestand
+**89-mal** vor.
+
+### Der Wächter — wichtiger als jede einzelne Einstellung
+
+`setzeFormelAlsSvg()` verlangt **genau eine `<svg>`-Wurzel und mindestens
+ein Zeichenobjekt**, sonst Rückfall auf den Rasterweg. Er fängt zweierlei:
+den Zeilenumbruch aus Punkt 4 (falls die Einstellung je verloren geht) und
+Zeichen, die MathJax gar nicht kennt — CJK liefert ein SVG mit korrekter
+Breite und **null** Pfaden.
+
+**Der Durchstich hatte sich darauf verlassen, dass eine Wurzel herauskommt.
+Genau daran ist er gescheitert.** Der Wächter macht die Annahme prüfbar
+statt sie zu glauben.
+
+### Serverseitig
+
+- **`formel_svg_pruefen()`** ist die Notbremse: lehnt SVG mit
+  `currentColor` oder `ex`-Maßen ab. Findet sich **kein** Rasterbild in der
+  Nutzlast, bleibt der lesbare Fallbacktext stehen — früher gab es dort
+  einen ungeprüften Zugriff, der den **ganzen** Export mit HTTP 500
+  abbrach.
+- **Der Schutzmarker wird SERVERSEITIG vergeben und ist je Anfrage
+  zufällig.** `clean_block_html()`
+  entfernt **jedes** `<svg>` (Bediensymbole gehören nicht ins PDF) und
+  läuft **nach** dem Einsetzen der Formeln. Die Ausnahme dafür darf nicht
+  an einem erratbaren Namen hängen: Ein `<svg>` mit diesem Namen im
+  **Blockinhalt** ginge sonst ungereinigt an mPDF — der Sanitizer sieht nur
+  das Nutzlastfeld. Angriffsprobe: eingeschmuggeltes SVG ergibt exakt das
+  Kontrollbild, wird also abgewehrt.
+- **Warum die Formeln nicht einfach nach der Reinigung eingesetzt werden:**
+  Ihr Platzhalter trägt `data-cbd-formula-id`, und dieselbe Reinigung
+  streicht alle `data-*`-Attribute.
+
+### Schriftdateien — gemessen, nicht geraten
+
+Über den **gesamten** Bestand (5655 Formelvorkommen, 3096 eindeutige
+Formeln, 234 Seiten, 16 Sonderzeichen) hat MathJax **genau drei** Dateien
+angefordert: `latin` (aufrecht), `latin-b` (fett), `latin-i` (kursiv).
+Ausgelöst ausschließlich von deutschen Umlauten und `ß` — `°`, `→`, `⇌`,
+`≡`, `‡`, `µ`, `α`, `β`, Tiefstellungen und **sämtliche** geprüften
+Makros stecken im Grundbestand (85 von 100 Prüfungen ohne Nachladung).
+
+**Erstkontakt-Effekt:** Beim ersten Zeichen aus einer nachgeladenen Datei
+wirft MathJax einmalig `retry`, obwohl die Daten da sind. Ein zweiter
+Aufruf gelingt — `setzeFormelAlsSvg()` wiederholt deshalb genau einmal.
+
+Vollständiger Bericht samt Verfahren für künftige Zeichen:
+**`docs/inventar-formeln.md`**. Herkunft und Umfang der Dateien:
+**`assets/vendor/mathjax/HERKUNFT.md`**.
+
+### Die Prüfregel, die aus Phase 1 folgt
+
+Bisher galt (nach dem Bruchstrich-Fall): **nicht nur zählen, ansehen.**
+Das reicht nicht. Eine verstümmelte Formel **sieht aus wie eine Formel** —
+`Ag⁺` ist ein plausibles Bild, nur eben nicht die richtige Formel.
+
+> **Neue Regel: Vektor- und Rasterlauf desselben Containers nebeneinander
+> legen und die PDF-Textebenen vergleichen.** Der Fehler, der zwei
+> Arbeitspakete überlebt hat, wäre so in einer Minute aufgefallen.
+
+### Bekannte Einschränkungen (Stand Phase 1)
+
+1. **Die senkrechte Ausrichtung sitzt noch nicht.** Die Umformung `ex →
+   px` findet auch für `vertical-align` statt, aber mPDF setzt sie
+   offenbar nicht um — die Formeln schweben sichtbar über der Zeile. Erst
+   zu messen, ob mPDF `vertical-align` in px an einem inline `<svg>`
+   überhaupt auswertet; sonst bleibt `vertical-align: middle` plus
+   Höhenausgleich. **Abnahmekriterium von AP-2.1.**
+2. **Zwei Formeln auf Seite 872 sind inhaltlich fehlerhaft** —
+   `\Delta G^0'` ist zweimal hochgestellt. MathJax **und** KaTeX lehnen das
+   ab; sie sind **heute schon** am Bildschirm kaputt. Als `\Delta G^{0'}`
+   geschrieben funktionieren beide.
+3. **Drei Formeln benutzen `\ce{…}` (mhchem)**, das KaTeX hier nicht
+   geladen hat — ebenfalls heute schon kaputt. Im Vektorweg fallen sie
+   sauber auf den Rasterweg zurück.
+4. **`enableSpeech`/`enableEnrichment` wirken nicht** — jedes SVG trägt die
+   vollen `data-semantic-*`-Attribute, rund zwei Drittel des Markups. Kein
+   Datenschutzrisiko (0 CDN-Anfragen), aber unnötige Nutzlast.
+5. **`preserveAspectRatio` wird beim Auflösen verschachtelter `<svg>` nicht
+   gelesen.** Heute folgenlos (über elf Konstrukte gemessen: immer
+   `sx = sy = 1`), aber ungeprüft.
+6. **Der Rasterweg bleibt der Regelweg.** Ohne den Schalter verhält sich
+   der Export unverändert.
+
 ## Klassenmodus: Live-Aktualisierung (`PLAN-Klassenmodus-Live.md`, 2026-08-30 bis 2026-09-04, alle vier Phasen abgeschlossen und in `main` gemergt)
 
 Gibt eine Lehrperson im Klassenmodus einen Container-Block frei, sieht der
