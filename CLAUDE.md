@@ -3605,6 +3605,14 @@ PDF eingebetteten** Bildern (SMask-Alphakanal ausgezählt):
 | erfasste Formeln (Volllauf, 23 Blöcke) | Lauf brach ab, u. a. `0/1`, `0/5` | **76/76** |
 | PNGs mit opaken Pixeln | **0 von 21** (0,00 %) | **76 von 76**, 1,03–16,17 % |
 | Formelbilder im PDF mit sichtbarem Inhalt | — | **69 von 69**, 0 leer |
+
+**Nachtrag 2026-09-06 zu dieser Zeile:** „sichtbarer Inhalt" hieß hier
+„mindestens ein Pixel mit Alpha > 0" — **nicht** „voll deckend". Genau in
+dieser Lücke saß der nächste Fehler: Die Bilder waren da und trugen die
+richtige Farbe, ihre Glyphen erreichten aber nur Alpha 19…155 statt 255.
+Siehe den Abschnitt „PDF-Export: blasse Formeln — die Deckkraft im Klon"
+weiter unten. **Lehre für künftige Messungen an Formelbildern: maxAlpha
+auswerten, nicht die bloße Anwesenheit von Tinte.**
 | Exportdauer, 21 Formeln, gleiche Bedingungen | **263 s** | **18,5 s** |
 | Exportdauer, Volllauf 76 Formeln | > 454 s (unvollendet) | **51 s** |
 | PDF-Textebene | `E=E0+n⋅FR⋅T…` | `E=E` 0×, `lnc(` 0×, `logc(` 0× |
@@ -3731,7 +3739,7 @@ selbst herumoperieren oder der laufenden Seite die Zeilenhöhe umstellen.
 ```
 
 Das war **falsch** und ist gestrichen. `assets/css/latex-formulas.css` gibt
-Formeln bewusst `color: inherit` (Zeilen 25, 85, 92), damit sie die Textfarbe
+Formeln bewusst `color: inherit` (Zeilen 25, 61, 85, 92), damit sie die Textfarbe
 ihres Blocks tragen — etwa `#71230a` in Spezialtext-Blöcken. Die pauschale
 Regel plättete im PDF **alle** Glyphen auf `#333333`, unabhängig vom Block;
 am erzeugten Prüf-PDF nachgemessen: 8 von 8 Formeln grau, auch im Block mit
@@ -3780,6 +3788,203 @@ zugeschnitten (N4a) - erste Formel: 17x14 CSS-px.
 
 Sie steht wie die N2-Zeile bewusst **nicht** hinter `window.cbdDebug` und
 erscheint einmal je Seitenaufruf.
+
+## PDF-Export: blasse Formeln — die Deckkraft im Klon (`PLAN-PDF-Formelfarbe-und-App-Download.md`, Phase 1, 2026-09-05/06)
+
+Dritter Nachtrag zum Formelweg, nach N2 (Formeln fehlten ganz) und N4
+(abgeschnitten, falsche Farbe). Der Betreiber meldete: Die Formeln sind da,
+in der richtigen Farbe, aber **blass und ausgewaschen** gegenüber dem Text um
+sie herum. Betroffen ist ausschließlich `assets/js/pdf-server-side.js`;
+`class-cbd-pdf-generator.php` und `assets/css/latex-formulas.css` sind
+unverändert.
+
+### Die Ursache — gemessen, nicht vermutet
+
+`assets/css/latex-formulas.css:169` gibt jeder erfolgreich gerenderten Formel
+eine Einblendblende:
+
+```css
+.cbd-latex-rendered { animation: fadeIn 0.3s ease-in; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+```
+
+Der Klon, den html2canvas vor dem Malen anlegt, ist ein **frisches Dokument in
+einem `<iframe>`** — CSS-Animationen beginnen dort von vorn. html2canvas
+rastert, während die Blende noch läuft, und das Formelbild trägt nur die
+Teil-Deckkraft dieses Augenblicks.
+
+**Die Deckkraft ist damit ein Wettlauf** zwischen der 300-ms-Blende und der
+Zeit, die html2canvas zwischen Klonaufbau und Rasterung braucht. Genau deshalb
+trat der Fehler nicht immer auf — und genau deshalb war er so schwer zu
+fassen: Ein großes Dokument gewinnt den Wettlauf, eine kleine Prüfseite
+verliert ihn.
+
+**Messreihe an derselben Formel, Phase im Klon gezielt über einen negativen
+`animation-delay` gesetzt:**
+
+| Phase im Klon | 0 ms | 60 ms | 120 ms | 180 ms | 240 ms | 300 ms |
+|---|---|---|---|---|---|---|
+| maxAlpha | 0 | 16 | 55 | 109 | 176 | **255** |
+
+**Vier vom Betreiber selbst erzeugte PDFs** lagen bei maxAlpha **19…155** mit
+**null** Pixeln >= 250, ein fünftes, großes (10 Seiten) bei durchgängig 255 —
+alle 15 Einzelwerte liegen auf dieser Kurve. Die Streuung **innerhalb** eines
+PDFs erklärt sich daraus, dass `captureFormulaImages()` html2canvas **je
+Formel einzeln** aufruft; jeder Aufruf legt einen eigenen Klon an, in dem die
+Blende erneut bei 0 beginnt.
+
+**Die zweite naheliegende Erklärung ist geprüft und ausgeschlossen:** Die
+Ladeanzeige-Regel `.cbd-latex-formula:not(.cbd-latex-rendered)
+.cbd-latex-content { opacity: 0.3; animation: pulse … }`
+(`latex-formulas.css:278`) greift auf **keiner** Formel — auf drei echten
+Inhaltsseiten tragen **220 von 220** Formeln die Klasse `cbd-latex-rendered`,
+**0** tragen `data-cbd-latex-failed`. Ein Regelinventar über alle geladenen
+Stylesheets bestätigt: Genau **eine** Regel setzt überhaupt `opacity` oder
+`animation` auf einer Formel, nämlich die `fadeIn`-Blende oben.
+
+### Der Fix: `entblasseFormelnImKlon()`
+
+Neue Funktion in `assets/js/pdf-server-side.js`, zusammen mit
+`neutralisiereDarkmodeImKlon()` aus dem neuen gemeinsamen `onclone`-Rückruf
+`bereiteKlonVor()` aufgerufen:
+
+```css
+.cbd-latex-formula, .cbd-latex-formula * {
+    opacity: 1 !important;
+    animation: none !important;
+    transition: none !important;
+}
+```
+
+**Drei Grenzen, jede mit Grund:**
+
+| Grenze | Warum |
+|---|---|
+| **Niemals `color`** oder `-webkit-text-fill-color` | Das war der N4b-Rückschritt (Abschnitt oben): Eine pauschale Farbregel plättete im PDF alle Glyphen auf `#333333`, unabhängig von der Blocktextfarbe. `latex-formulas.css` gibt Formeln bewusst `color: inherit` (Zeilen 25, 61, 85, 92). **Wer hier je wieder eine feste Farbe erzwingt, macht denselben Fehler zum dritten Mal.** |
+| **Niemals `display`** | Das bräche `polstereInlineFormel()`, die auf `getComputedStyle(el).display === 'inline'` prüft — und damit den N4a-Inline-Zuschnitt. Genau deshalb wurde der vorhandene, aber ungenutzte Haken `window.cbdPrepareFormulasForPDF()` / `.cbd-latex-formula[data-pdf-ready="true"]` (`latex-formulas.css:309-314`) **nicht** verwendet: Jene Regel setzt neben `opacity: 1` auch `display: block !important`. Sie bleibt damit weiterhin von `pdf-server-side.js` ungenutzt. |
+| **Selektor eng auf `.cbd-latex-formula`** und deren Nachfahren | Eine Regel auf `*`, `body` oder `.cbd-container-block` könnte im PDF Markup sichtbar machen, das absichtlich per `opacity: 0` versteckt ist. |
+
+**Zwei getrennte Funktionen statt einer erweiterten:** Der Docblock von
+`neutralisiereDarkmodeImKlon()` beschreibt ausschließlich die
+Darkmode-Neutralisierung und trägt die N4b-Warnung. Ein zweiter, thematisch
+fremder Eingriff in derselben Funktion hätte diesen Docblock stillschweigend
+falsch gemacht.
+
+**Die Alpha-Schwelle 10** in `canvasIstBemalt()` und `beschneideAufTinte()`
+bleibt bewusst unverändert — sie ist so niedrig, damit ein Bruchstrich oder
+ein Komma nicht als „leer" gilt. Ihre Folge ist allerdings bemerkenswert: Bei
+Phase 0 ms liefert der Capture maxAlpha 0 und **0 Pixel > 10**,
+`canvasIstBemalt()` verwirft ihn, beide Painter scheitern, und die Formel
+fällt **ganz** aus dem PDF heraus — der Fallbacktext bleibt stehen. Blass und
+fehlend sind also zwei Ausprägungen desselben Fehlers.
+
+**Beleg-Konsolenzeile**, einmal je Seitenaufruf, bewusst **nicht** hinter
+`window.cbdDebug` (die HTTP-Cache-Falle macht `transferSize` untauglich —
+dieselbe Technik wie die N2- und N4a-Zeilen):
+
+```
+[CBD PDF] Formeln werden im Klon auf volle Deckkraft gesetzt
+(fadeIn-Blende neutralisiert, AP-1.2).
+```
+
+### Wie das nachgewiesen wurde
+
+Prüfseite eigens angelegt und danach restlos entfernt: zwei Container mit
+denselben vier Formeln (drei inline, eine abgesetzt), Block A in `#333333`,
+Block B mit echter Absatz-Textfarbe `#71230a`, dazu eine absichtlich
+fehlerhafte Formel. Für die Vorher-Messung wurde der Stand `afc60f6` auf den
+Testserver gespielt, danach der neue Stand. Gemessen wurde am **erzeugten
+PDF** (SMask-Alphakanal), nicht an Zwischenwerten:
+
+| | vorher | nachher |
+|---|---|---|
+| Formelbilder im PDF | **0 von 9** | **9 von 9** |
+| maxAlpha | — | **255 durchgängig** |
+| Glyphenfarbe Block A | — | `#333333` |
+| Glyphenfarbe Block B | — | **`#71230a`** |
+| Fehlerformel (KaTeX `errorColor`) | — | `#cc0000` |
+| Inline-Bild, kurz | — | 34 x 29, Tinte Zeile 2..26 |
+| Inline-Bild, mittel | — | 127 x 30, Tinte Zeile 2..27 |
+| Inline-Bild, lang | — | 240 x 37, Tinte Zeile 2..34 |
+| Textlänge der PDF-Textebene | 361 Zeichen | 229 Zeichen |
+
+Die drei Inline-Maße sind **zeichengleich mit dem N4a-Protokoll** oben — der
+Zuschnitt ist unangetastet. **Drei verschiedene Glyphenfarben** in einem PDF
+sind zugleich der Beweis, dass keine feste Farbe im Spiel ist. Ein
+Zeichen-Diff der beiden Textebenen liefert **ausschließlich neun Löschungen**,
+jede davon ein Formel-Fallbacktext — **nichts wurde hinzugefügt**, es taucht
+also kein zuvor unsichtbares Element im PDF auf.
+
+**Darkmode-Export:** inhaltlich identisch mit dem Hellmodus-Export (gleiche
+Größe, gleiche 9 Bilder, gleiche Farben, keine weißen Glyphen; die Dateien
+unterscheiden sich nur in `/CreationDate`, `/ModDate` und `/ID` des Trailers).
+Nach dem Export steht `data-theme` der laufenden Seite unverändert auf
+`dark` — die Seite wurde nicht angefasst, kein Flackern.
+
+**Vollexport Seite 1676** (20 Container, 47 Formeln, 16 PDF-Seiten):
+**18 von 18 Bildern** mit maxAlpha 255, darunter ein unverändert
+durchlaufendes Bildschirmfoto eines interaktiven Elements. Der Kontrolllauf
+mit dem alten Stand lieferte **1** Bild — eben jenes Bildschirmfoto — und
+**0** Formelbilder. **Dauer 337 s (neu) gegen 318 s (alt)**, derselbe
+Rechner, dieselbe Seite: rund 6 % Aufschlag für die Arbeit, die der alte
+Stand weggelassen hat. **Der N2-Protokollwert von 51 s ist hier NICHT der
+richtige Vergleich** — er stammt aus einem ungedrosselten Browser.
+
+### Richtigstellung zu N2
+
+**`foreignObjectRendering` liefert auch nach diesem Fix eine leere Leinwand.**
+Die N2-Warnzeile erscheint unverändert. Ein während der Diagnose geäußerter
+Verdacht, der dortige Befund könnte in Wahrheit die `fadeIn`-Blende gewesen
+sein, ist damit **widerlegt** — der N2-Befund steht unabhängig, seine
+Erklärung war nicht unvollständig.
+
+### Zwei Feststellungen zur Farblage der heutigen Inhalte
+
+1. **Alle 22 aktiven Block-Designs haben `text=#333333`** (`styles`-JSON in
+   `{$wpdb->prefix}cbd_blocks`). Einen Container mit `#71230a` gibt es nicht.
+2. **Die Klasse `has-special-text-color` existiert im Theme nicht.** Sie kommt
+   ausschließlich im mPDF-Stylesheet vor
+   (`includes/class-cbd-pdf-generator.php:911`); das Theme kennt nur die
+   CSS-Variable `--color-special-text`, aber keine Block-Farbpalette, die
+   diese Klasse erzeugt. Auf drei geprüften Inhaltsseiten kommt sie **0-mal**
+   vor.
+
+**Zusammen heißt das: Auf den heutigen Inhalten tragen Formeln ausnahmslos
+`#333333`** — der N4b-Farbfehler wäre dort gar nicht aufgefallen. Er ist
+trotzdem real, wie Block B der Prüfseite zeigt, und die Grenze aus N4b gilt
+unverändert.
+
+### Bekannte, bewusst nicht behobene Einschränkung
+
+**Formeln in zugeklappten Unterabschnitten werden weiterhin nicht erfasst.**
+Beim Rauchtest auf Seite 1676 blieben 7 von 12 Formeln aus — alle sieben mit
+`getBoundingClientRect()` 0x0 in Bereichen, die `expandAllBlocks()` nicht
+aufklappt (verschachtelte Klappabschnitte, Accordion-Panels). `messeFormel()`
+liefert dort `null`, die Formel wird übersprungen und der Fallbacktext bleibt
+stehen. **Bestand, nicht von diesem Fix verursacht** — der Klon-Eingriff setzt
+nur CSS im Klon und berührt keine Messung; derselbe Punkt steht bereits im
+N2-Abschnitt oben („die 40 Formeln mit Maß 0 lagen ausnahmslos in
+zugeklappten Containern"). Auf einer Prüfseite mit ausschließlich sichtbaren
+Formeln wurden **9 von 9** erfasst.
+
+### Fallstrick der Prüfumgebung — für künftige Messungen
+
+Wer diesen Weg in einem eingebetteten oder verborgenen Browser nachmisst,
+tappt in zwei Fallen, die beide wie ein Codefehler aussehen:
+
+1. **Ohne erzwungene Fenstergröße ist der Viewport `0x0`.** Alle abgesetzten
+   Formeln haben dann Breite 0, `messeFormel()` liefert `null`, und es
+   entsteht **kein einziges** Formelbild — unabhängig von jedem Fix. Vor
+   jeder Messung die Fenstergröße setzen (z. B. 1280x900) und den Viewport
+   prüfen.
+2. **Bei `document.visibilityState === 'hidden'` steht die Animationsuhr**
+   (`document.timeline.currentTime` bewegt sich nicht, `requestAnimationFrame`
+   feuert nie). Die `fadeIn`-Blende bleibt dann bei Phase 0 ms stehen — der
+   Härtefall der Kurve oben. Das ist für eine Fix-Prüfung sogar nützlich,
+   macht aber jede Messung am **laufenden** Seitenzustand unbrauchbar:
+   Formeln melden dort `opacity: 0`, obwohl sie im Browser des Betreibers
+   normal sichtbar sind. Wer die Animationsphase braucht, **setzt** sie per
+   negativem `animation-delay`, statt sie ablaufen zu lassen.
 
 ## Klassenmodus: Live-Aktualisierung (`PLAN-Klassenmodus-Live.md`, 2026-08-30 bis 2026-09-04, alle vier Phasen abgeschlossen und in `main` gemergt)
 
