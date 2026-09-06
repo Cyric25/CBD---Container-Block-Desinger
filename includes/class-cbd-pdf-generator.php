@@ -382,8 +382,14 @@ class CBD_PDF_Generator {
         }
 
         // Oeffnendes Tag samt etwaiger weiterer Attribute uebernehmen.
+        //
+        // Die Klasse wird mit (?=[\s"]) abgeschlossen statt mit \b: Ein
+        // Bindestrich ist kein Wortzeichen, \b haette deshalb auch
+        // "cbd-block-title-wrapper" o. Ae. getroffen und dessen <h3> still
+        // umgeschrieben (Review-Befund 12 zu AP-3.3). Heute existiert keine
+        // solche Klasse -- die Verschaerfung ist Vorsorge, kein Bugfix.
         $html = preg_replace(
-            '#<h3(\s[^>]*class="[^"]*\bcbd-block-title\b[^"]*"[^>]*)>#i',
+            '#<h3(\s[^>]*class="[^"]*\bcbd-block-title(?=[\s"])[^"]*"[^>]*)>#i',
             '<span$1>',
             $html
         );
@@ -392,14 +398,17 @@ class CBD_PDF_Generator {
         // ihrem Kopf kein zweites <h3>, deshalb genuegt hier die einfache
         // Ersetzung; ein <h3> im Blockinhalt liegt ausserhalb der Kopfzeile
         // und wuerde von der Oeffnungs-Ersetzung oben gar nicht erfasst.
-        if (false !== strpos($html, '<span class="cbd-block-title"')
-            || false !== strpos($html, 'cbd-block-title')) {
-            $html = preg_replace(
-                '#(<span\s[^>]*class="[^"]*\bcbd-block-title\b[^"]*"[^>]*>.*?)</h3>#is',
-                '$1</span>',
-                $html
-            );
-        }
+        //
+        // Ohne Wachbedingung: Die frueher hier stehende Pruefung war tot --
+        // ihr zweiter Zweig (strpos auf 'cbd-block-title') war immer wahr,
+        // weil der vorzeitige Ausstieg oben diesen Fall bereits abfaengt
+        // (Review-Befund 11 zu AP-3.3). Ein preg_replace ohne Treffer ist
+        // ohnehin folgenlos.
+        $html = preg_replace(
+            '#(<span\s[^>]*class="[^"]*\bcbd-block-title(?=[\s"])[^"]*"[^>]*>.*?)</h3>#is',
+            '$1</span>',
+            $html
+        );
 
         return $html;
     }
