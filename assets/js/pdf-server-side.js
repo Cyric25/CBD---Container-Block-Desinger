@@ -376,8 +376,39 @@
 
             var tr;
             if (vb.length === 4 && w > 0 && h > 0 && vb[2] > 0 && vb[3] > 0) {
-                tr = 'translate(' + x + ',' + y + ') scale(' + (w / vb[2]) + ',' +
-                    (h / vb[3]) + ') translate(' + (-vb[0]) + ',' + (-vb[1]) + ')';
+                var sx = w / vb[2];
+                var sy = h / vb[3];
+
+                // preserveAspectRatio beachten (Review Phase 1, Befund 9).
+                //
+                // Die Umrechnung mit zwei getrennten Faktoren ist nur fuer
+                // `none` richtig. Fehlt das Attribut, gilt die SVG-Vorgabe
+                // `xMidYMid meet`: gleichmaessige Skalierung mit dem
+                // KLEINEREN Faktor, Rest zentriert.
+                //
+                // Ueber elf MathJax-Konstrukte gemessen ist immer
+                // sx === sy === 1 - der Unterschied traegt heute also nichts
+                // aus. Das ist aber Zufall der Erzeugung, keine Zusicherung:
+                // Wer sich darauf verlaesst, baut auf Sand.
+                var par = (s.getAttribute('preserveAspectRatio') || '').trim();
+                var dx = 0, dy = 0;
+                if (par !== 'none') {
+                    var gleich = Math.min(sx, sy);
+                    if (Math.abs(sx - sy) > 1e-9) {
+                        // Rest zentrieren (xMidYMid; andere Ausrichtungen
+                        // erzeugt MathJax nicht)
+                        dx = (w - vb[2] * gleich) / 2;
+                        dy = (h - vb[3] * gleich) / 2;
+                        console.warn('[CBD PDF] verschachteltes <svg> mit ungleicher ' +
+                            'Skalierung (' + sx.toFixed(3) + '/' + sy.toFixed(3) +
+                            '), preserveAspectRatio="' + (par || 'xMidYMid meet') +
+                            '" - gleichmaessig skaliert.');
+                    }
+                    sx = sy = gleich;
+                }
+
+                tr = 'translate(' + (x + dx) + ',' + (y + dy) + ') scale(' + sx + ',' +
+                    sy + ') translate(' + (-vb[0]) + ',' + (-vb[1]) + ')';
             } else {
                 tr = 'translate(' + x + ',' + y + ')';
             }
@@ -386,6 +417,158 @@
             g.setAttribute('transform', tr);
             while (s.firstChild) { g.appendChild(s.firstChild); }
             s.parentNode.replaceChild(g, s);
+        }
+    }
+
+    /**
+     * Bereitet ein MathJax-SVG fuer mPDF auf. VIER Umformungen, jede Pflicht.
+     *
+     * Herausgezogen in AP-2.1, damit die Regeln an EINER Stelle stehen und
+     * einzeln pruefbar sind (`tools/test-svg-aufbereitung.js`). Jede der vier
+     * scheitert in mPDF **still** - ohne Fehler, ohne Platzhalter, ohne
+     * Logzeile. Genau deshalb brauchen sie einen Ort und einen Harnisch.
+     *
+     * Die Funktion arbeitet auf dem uebergebenen Element (in place) und
+     * bekommt alle Messwerte hereingereicht - sie liest selbst nichts aus
+     * dem DOM. Nur so ist sie ohne Browser testbar.
+     *
+     * @param {SVGElement} svg       Wurzel-<svg> aus MathJax
+     * @param {number}     proEx     px je ex, GEMESSEN am Formelelement
+     * @param {string}     farbe     aufgeloeste Textfarbe dieses Blocks
+     * @param {boolean}    istBlock  abgesetzte Formel? Dann entfaellt die
+     *                               Grundlinien-Korrektur (siehe dort)
+     */
+    function bereiteSvgFuerMpdfAuf(svg, proEx, farbe, istBlock) {
+        // ---------------------------------------------------------------
+        // (1) currentColor -> aufgeloeste Blockfarbe
+        //
+        // mPDF kennt das Schluesselwort nicht: Es baut den Pfad und malt ihn
+        // NICHT (PDF-Operator `n` statt `f`) - die Formel ist unsichtbar.
+        //
+        // Die Farbe wird JE FORMEL hereingereicht, nie fest eingetragen. Eine
+        // pauschale Farbe war in diesem Projekt schon zweimal ein Fehler
+        // (N4b) und plaettet alle Blockfarben auf einen Wert.
+        // ---------------------------------------------------------------
+        ['fill', 'stroke'].forEach(function (attr) {
+            var treffer = svg.querySelectorAll('[' + attr + '="currentColor"]');
+            for (var i = 0; i < treffer.length; i++) {
+                treffer[i].setAttribute(attr, farbe);
+            }
+        });
+        if (svg.getAttribute('fill') === 'currentColor') { svg.setAttribute('fill', farbe); }
+        if (svg.getAttribute('stroke') === 'currentColor') { svg.setAttribute('stroke', farbe); }
+
+        // ---------------------------------------------------------------
+        // (2) ex -> px
+        //
+        // mPDF versteht die Einheit nicht; eine einzige Formel fuellte im
+        // Versuch drei Viertel einer A4-Seite und verdraengte den Folgetext.
+        // ---------------------------------------------------------------
+        var masse = {};
+        ['width', 'height'].forEach(function (a) {
+            var v = svg.getAttribute(a);
+            var m = v && /^([\d.]+)ex$/.exec(v);
+            if (m) {
+                masse[a] = parseFloat(m[1]) * proEx;
+                svg.setAttribute(a, masse[a].toFixed(2) + 'px');
+            } else if (v && /^([\d.]+)px$/.test(v)) {
+                masse[a] = parseFloat(v);
+            }
+        });
+
+        // ---------------------------------------------------------------
+        // (3) Grundlinie - die Umformung, die AP-1.2 noch fehlte
+        //
+        // ZWEI MESSUNGEN AN mPDF, beide in AP-2.1 erhoben:
+        //
+        //   a) mPDF wertet `vertical-align` an einem inline <svg>
+        //      UEBERHAUPT NICHT aus - weder in px noch in ex, middle,
+        //      baseline oder Prozent. Alle sechs Varianten setzten die
+        //      UNTERKANTE des <svg> exakt auf die Textgrundlinie (0,00 pt
+        //      Abweichung).
+        //   b) mPDF BESCHNEIDET NICHT: Inhalt ausserhalb der viewBox wird
+        //      trotzdem gezeichnet (drei von drei Kontrollrechtecken).
+        //
+        // MathJax gibt `style="vertical-align: -D ex"` an. Das heisst: Die
+        // Formelgrundlinie liegt D ueber der Unterkante des Kastens. Weil
+        // mPDF die Unterkante auf die Textgrundlinie legt, sitzt die Formel
+        // genau um D zu hoch - sichtbar als "schwebende" Formel.
+        //
+        // Die Korrektur nutzt (b) aus: Den Kasten unten um D kuerzen, dann
+        // IST die Unterkante die Formelgrundlinie. Die Unterlaengen ragen
+        // darunter hinaus und werden dank (b) weiterhin gezeichnet.
+        //
+        // Die viewBox wird proportional mitgekuerzt - ihr oberer Rand
+        // (`minY`) bleibt, nur die Hoehe schrumpft.
+        // ---------------------------------------------------------------
+        // NUR fuer INLINE-Formeln. Bei einer abgesetzten Formel ist die
+        // Korrektur nicht bloss ueberfluessig, sondern schaedlich - im
+        // Versuch hat sie die Nenner zerschossen:
+        //
+        // Eine abgesetzte Formel steht in einem eigenen, zentrierten Block
+        // (siehe insert_formula_image()); eine Grundlinie, an der sie
+        // auszurichten waere, gibt es dort gar nicht. Ihre
+        // "Grundlinientiefe" ist zudem riesig - beim Nernst-Bruch 1,927 von
+        // 5,001 ex, also fast 40 % der Hoehe, denn unterhalb der
+        // Formelgrundlinie liegt der GANZE NENNER. Kuerzt man den Kasten
+        // darum, wird er zu kurz: Der Folgetext rueckt hoch und der Nenner
+        // liegt darunter im Nichts.
+        //
+        // Am erzeugten PDF gesehen: Bruchstrich da, Nenner weg. Die
+        // Zeichenbefehle waren dabei unveraendert (162 Objekte, 3181
+        // Befehle vorher wie nachher) - es fehlte nichts, es sass nur
+        // falsch. Ein reiner Zahlenvergleich haette das NICHT gefunden.
+        var stil = svg.getAttribute('style') || '';
+        var va = !istBlock && /vertical-align:\s*(-?[\d.]+)(ex|px)/.exec(stil);
+        if (va && masse.height > 0) {
+            var tiefe = Math.abs(parseFloat(va[1])) * (va[2] === 'ex' ? proEx : 1);
+            // Nie mehr als die halbe Hoehe abschneiden - eine unplausible
+            // Angabe darf die Formel nicht zerstoeren.
+            if (tiefe > 0 && tiefe < masse.height * 0.5) {
+                var neueHoehe = masse.height - tiefe;
+                var vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(parseFloat);
+                if (vb.length === 4 && vb[3] > 0) {
+                    svg.setAttribute('viewBox',
+                        vb[0] + ' ' + vb[1] + ' ' + vb[2] + ' ' +
+                        (vb[3] * (neueHoehe / masse.height)).toFixed(3));
+                }
+                svg.setAttribute('height', neueHoehe.toFixed(2) + 'px');
+                masse.height = neueHoehe;
+            }
+        }
+        // `vertical-align` selbst entfernen: mPDF wertet es ohnehin nicht
+        // aus, und stehen zu lassen, was nicht wirkt, ist irrefuehrend.
+        stil = stil.replace(/vertical-align:\s*[^;]*;?\s*/g, '').trim();
+        if (stil) { svg.setAttribute('style', stil); } else { svg.removeAttribute('style'); }
+
+        // ---------------------------------------------------------------
+        // (4) verschachtelte <svg> aufloesen
+        // ---------------------------------------------------------------
+        loeseVerschachtelteSvgAuf(svg);
+
+        // ---------------------------------------------------------------
+        // Ballast abwerfen: MathJax haengt an jeden Knoten
+        // `data-semantic-*`- und `data-mml-node`-Attribute fuer die
+        // Sprachausgabe. Sie machen rund zwei Drittel des Markups aus, gehen
+        // durch die Leitung und zaehlen gegen die 400-KB-Grenze der
+        // Nutzlast - im PDF haben sie keine Wirkung. Der Sanitizer wuerde
+        // sie serverseitig ohnehin verwerfen; billiger ist es hier.
+        //
+        // (Der saubere Weg waere, sie gar nicht erst erzeugen zu lassen -
+        // `enableSpeech`/`enableEnrichment` sind aber in MathJax 4 an dieser
+        // Stelle keine gueltigen Optionen, siehe Review Phase 1, Befund 8.)
+        // ---------------------------------------------------------------
+        var alle = svg.querySelectorAll('*');
+        for (var i = 0; i < alle.length; i++) {
+            var n = alle[i];
+            for (var j = n.attributes.length - 1; j >= 0; j--) {
+                var name = n.attributes[j].name;
+                if (name.indexOf('data-semantic') === 0 || name === 'data-mml-node'
+                    || name === 'data-latex' || name === 'data-c'
+                    || name === 'data-mjx-texclass') {
+                    n.removeAttribute(name);
+                }
+            }
         }
     }
 
@@ -469,42 +652,9 @@
                 return null;
             }
 
-            // (1) Farbe je Formel aus dem DOM
-            var farbe = el.ownerDocument.defaultView.getComputedStyle(el).color || '#333333';
-            svg.querySelectorAll('[fill="currentColor"]').forEach(function (n) {
-                n.setAttribute('fill', farbe);
-            });
-            svg.querySelectorAll('[stroke="currentColor"]').forEach(function (n) {
-                n.setAttribute('stroke', farbe);
-            });
-
-            // (2) ex -> px
-            var proExVal = exInPx(el);
-            ['width', 'height'].forEach(function (a) {
-                var v = svg.getAttribute(a);
-                var m = v && /^([\d.]+)ex$/.exec(v);
-                if (m) { svg.setAttribute(a, (parseFloat(m[1]) * proExVal).toFixed(2) + 'px'); }
-            });
-            // vertical-align ebenfalls: die ex-Angabe wirkt in mPDF nicht
-            var stil = svg.getAttribute('style') || '';
-            stil = stil.replace(/vertical-align:\s*(-?[\d.]+)ex/,
-                function (_, z) {
-                    return 'vertical-align: ' + (parseFloat(z) * proExVal).toFixed(2) + 'px';
-                });
-            svg.setAttribute('style', stil);
-
-            // (3) verschachtelte <svg>
-            loeseVerschachtelteSvgAuf(svg);
-
-            // Kennzeichnung, damit clean_block_html() im Generator dieses SVG
-            // NICHT entfernt. Dort wird jedes <svg> gestrichen (Bediensymbole
-            // gehoeren nicht ins PDF) - die Ausnahme haengt an genau dieser
-            // Klasse. Wer sie hier umbenennt, muss die Ausnahme in
-            // class-cbd-pdf-generator.php mitziehen, sonst verschwinden alle
-            // Formeln spurlos: Platzhalter korrekt ersetzt, im PDF eine
-            // Luecke, kein Eintrag im Log.
-            svg.setAttribute('class',
-                ((svg.getAttribute('class') || '') + ' cbd-formel-svg').trim());
+            bereiteSvgFuerMpdfAuf(svg, exInPx(el),
+                el.ownerDocument.defaultView.getComputedStyle(el).color || '#333333',
+                !!item.isDisplay);
 
             return svg.outerHTML;
         } catch (e) {
