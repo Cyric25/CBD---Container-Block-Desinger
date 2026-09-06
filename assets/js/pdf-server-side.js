@@ -270,6 +270,163 @@
     window.cbdLadeMathJax = ladeMathJax;
 
     /**
+     * 1 ex der Formelschrift in px - GEMESSEN, nicht geschaetzt.
+     *
+     * MathJax gibt Breite, Hoehe und Grundlinienversatz in `ex` an. mPDF
+     * kennt die Einheit nicht und setzt die Grafik dann riesig (im Versuch
+     * fuellte EINE Formel drei Viertel einer A4-Seite und verdraengte den
+     * Folgetext). Der Umrechnungsfaktor haengt an der Schrift des jeweiligen
+     * Elements und wird deshalb dort gemessen, statt als Konstante zu raten.
+     *
+     * @param {Element} el
+     * @return {number} px je ex
+     */
+    function exInPx(el) {
+        try {
+            var probe = el.ownerDocument.createElement('div');
+            probe.style.cssText = 'position:absolute;visibility:hidden;' +
+                'width:1ex;height:1ex;padding:0;border:0;';
+            el.appendChild(probe);
+            var px = probe.getBoundingClientRect().height;
+            el.removeChild(probe);
+            if (px > 0.5 && px < 100) { return px; }
+        } catch (e) { }
+        // Ersatzwert: rund die halbe Schriftgroesse, so wie bei den meisten
+        // Serifenschriften. Nur Notnagel - der Messweg oben greift praktisch
+        // immer.
+        var fs = parseFloat(el.ownerDocument.defaultView.getComputedStyle(el).fontSize);
+        return (fs > 0 ? fs : 16) * 0.45;
+    }
+
+    /**
+     * Loest verschachtelte <svg>-Elemente in gleichwertige <g transform>
+     * auf.
+     *
+     * DRITTE PFLICHTUMFORMUNG, in AP-1.2 gefunden - sie stand nicht im Plan.
+     * MathJax streckt Operatoren (\xrightarrow, \xleftarrow, \overbrace,
+     * lange Pfeile) mit einem INNEREN <svg> samt eigenem viewBox:
+     *
+     *   <svg width="3237.1" height="188" x="0" y="156"
+     *        viewBox="809.3 156 3237.1 188">
+     *
+     * **mPDF kann verschachtelte <svg> nicht** und laesst deren Inhalt
+     * weg - gemessen an `\xrightarrow{\text{Oxidation}}`: 107 statt 427
+     * Zeichenbefehle, im PDF blieb vom Pfeil ein Strichlein uebrig, die
+     * Beschriftung fehlte ganz. Der Sanitizer ist unschuldig, er laesst das
+     * Element durch (Pfadzahl vorher wie nachher 18).
+     *
+     * Ein solches Element ist gleichwertig zu
+     *   translate(x, y) scale(w/vbW, h/vbH) translate(-vbX, -vbY)
+     * Nach der Umformung: 427 Zeichenbefehle, Pfeil und Beschriftung
+     * vollstaendig im PDF.
+     *
+     * @param {SVGElement} wurzel
+     */
+    function loeseVerschachtelteSvgAuf(wurzel) {
+        var innere = wurzel.querySelectorAll('svg');
+        for (var i = innere.length - 1; i >= 0; i--) {
+            var s = innere[i];
+            var x = parseFloat(s.getAttribute('x') || 0) || 0;
+            var y = parseFloat(s.getAttribute('y') || 0) || 0;
+            var w = parseFloat(s.getAttribute('width'));
+            var h = parseFloat(s.getAttribute('height'));
+            var vb = (s.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(parseFloat);
+
+            var tr;
+            if (vb.length === 4 && w > 0 && h > 0 && vb[2] > 0 && vb[3] > 0) {
+                tr = 'translate(' + x + ',' + y + ') scale(' + (w / vb[2]) + ',' +
+                    (h / vb[3]) + ') translate(' + (-vb[0]) + ',' + (-vb[1]) + ')';
+            } else {
+                tr = 'translate(' + x + ',' + y + ')';
+            }
+
+            var g = s.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('transform', tr);
+            while (s.firstChild) { g.appendChild(s.firstChild); }
+            s.parentNode.replaceChild(g, s);
+        }
+    }
+
+    /**
+     * Setzt eine Formel mit MathJax und bereitet das SVG fuer mPDF auf.
+     *
+     * Drei Umformungen, alle drei Pflicht - jede von ihnen scheitert in mPDF
+     * STILL, also ohne Fehlermeldung und ohne Platzhalter:
+     *
+     * 1. `currentColor` -> aufgeloeste Textfarbe DIESES Elements. mPDF kennt
+     *    das Schluesselwort nicht und malt den Pfad dann gar nicht (PDF-
+     *    Operator `n` statt `f`) - die Formel ist unsichtbar.
+     *    **Die Farbe wird je Formel aus dem DOM gelesen, nie fest
+     *    eingetragen.** Eine pauschale Farbe war in diesem Projekt schon
+     *    zweimal ein Fehler (N4b) und plaettet alle Blockfarben auf einen
+     *    Wert.
+     * 2. `ex` -> `px` in width/height. Siehe exInPx().
+     * 3. verschachtelte <svg> aufloesen. Siehe loeseVerschachtelteSvgAuf().
+     *
+     * @param {Object} item {id, element, isDisplay}
+     * @return {string|null} SVG-Markup, oder null fuer den Rasterweg
+     */
+    function setzeFormelAlsSvg(item) {
+        var el = item.element;
+        var latex = el.getAttribute('data-latex');
+        if (!latex) { return null; }
+
+        try {
+            var knoten = window.MathJax.tex2svg(latex, { display: !!item.isDisplay });
+            var svg = knoten.querySelector('svg');
+            if (!svg) { return null; }
+            if (knoten.querySelector('[data-mml-node="merror"], mjx-merror')) {
+                console.warn('[CBD PDF] MathJax kann diese Formel nicht setzen, ' +
+                    'Rueckfall auf den Rasterweg: ' + latex);
+                return null;
+            }
+
+            // (1) Farbe je Formel aus dem DOM
+            var farbe = el.ownerDocument.defaultView.getComputedStyle(el).color || '#333333';
+            svg.querySelectorAll('[fill="currentColor"]').forEach(function (n) {
+                n.setAttribute('fill', farbe);
+            });
+            svg.querySelectorAll('[stroke="currentColor"]').forEach(function (n) {
+                n.setAttribute('stroke', farbe);
+            });
+
+            // (2) ex -> px
+            var proExVal = exInPx(el);
+            ['width', 'height'].forEach(function (a) {
+                var v = svg.getAttribute(a);
+                var m = v && /^([\d.]+)ex$/.exec(v);
+                if (m) { svg.setAttribute(a, (parseFloat(m[1]) * proExVal).toFixed(2) + 'px'); }
+            });
+            // vertical-align ebenfalls: die ex-Angabe wirkt in mPDF nicht
+            var stil = svg.getAttribute('style') || '';
+            stil = stil.replace(/vertical-align:\s*(-?[\d.]+)ex/,
+                function (_, z) {
+                    return 'vertical-align: ' + (parseFloat(z) * proExVal).toFixed(2) + 'px';
+                });
+            svg.setAttribute('style', stil);
+
+            // (3) verschachtelte <svg>
+            loeseVerschachtelteSvgAuf(svg);
+
+            // Kennzeichnung, damit clean_block_html() im Generator dieses SVG
+            // NICHT entfernt. Dort wird jedes <svg> gestrichen (Bediensymbole
+            // gehoeren nicht ins PDF) - die Ausnahme haengt an genau dieser
+            // Klasse. Wer sie hier umbenennt, muss die Ausnahme in
+            // class-cbd-pdf-generator.php mitziehen, sonst verschwinden alle
+            // Formeln spurlos: Platzhalter korrekt ersetzt, im PDF eine
+            // Luecke, kein Eintrag im Log.
+            svg.setAttribute('class',
+                ((svg.getAttribute('class') || '') + ' cbd-formel-svg').trim());
+
+            return svg.outerHTML;
+        } catch (e) {
+            console.warn('[CBD PDF] MathJax-Satz fehlgeschlagen, Rueckfall auf ' +
+                'den Rasterweg: ' + latex, e);
+            return null;
+        }
+    }
+
+    /**
      * Main export function - called by floating-pdf-button.js
      *
      * @param {jQuery|Array} containerBlocks jQuery collection or array of jQuery elements
@@ -1030,6 +1187,28 @@
             }
 
             var item = formulaElements[index];
+
+            // AP-1.2 (PLAN-Formeln-als-Vektor-im-PDF.md), Durchstich hinter
+            // einem Schalter: Statt die Bildschirmdarstellung zu rastern,
+            // wird der LaTeX-Quelltext von MathJax gesetzt und als SVG
+            // geschickt. Der Schalter ist provisorisch - Phase 2 macht
+            // daraus den Regelweg mit Rueckfall je Formel.
+            if (window.cbdFormelVektorProbe && window.MathJax && window.MathJax.tex2svg) {
+                var svgMarkup = setzeFormelAlsSvg(item);
+                if (svgMarkup) {
+                    formulas.push({
+                        id: item.id,
+                        svg: svgMarkup,
+                        isDisplay: item.isDisplay ? 1 : 0
+                    });
+                    index++;
+                    setTimeout(nextFormula, 0);
+                    return;
+                }
+                // Kein SVG zu bekommen: unveraendert weiter auf dem
+                // Rasterweg. Das ist der Rueckfall je Formel (A4).
+            }
+
             var mass = messeFormel(item.element);
 
             // Unsichtbare/leere Formeln überspringen (Fallback-Text greift)
