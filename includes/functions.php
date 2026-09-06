@@ -126,6 +126,25 @@ if (!function_exists('cbd_sanitize_klassenpuls_takt')) {
 }
 
 /**
+ * Sollen Formeln im PDF als Vektor gesetzt werden?
+ *
+ * Die Reissleine des Vorhabens "Formeln als Vektor im PDF" (Abschnitt 5
+ * des Plans, AP-2.3), nach dem Vorbild von `cbd_klassenpuls_takt = 0`.
+ * Abgeschaltet verhaelt sich der Export wie vor dem Vorhaben: Jede Formel
+ * wird im Browser gerastert.
+ *
+ * VORGABE IST AN. Wer die Option nie angefasst hat, bekommt den Vektorweg -
+ * er ist seit AP-2.2 der Regelweg.
+ *
+ * @return bool
+ */
+if (!function_exists('cbd_formeln_als_vektor')) {
+    function cbd_formeln_als_vektor() {
+        return (bool) get_option('cbd_formeln_als_vektor', 1);
+    }
+}
+
+/**
  * Gespeicherter Prozentwert.
  *
  * @return int

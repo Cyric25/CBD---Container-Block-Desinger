@@ -67,6 +67,11 @@ if (isset($_POST['cbd_save_settings']) && wp_verify_nonce($_POST['cbd_settings_n
     // liest CBD_Klassenpuls::takt() im Frontend, damit beide nie auseinanderlaufen.
     update_option('cbd_klassenpuls_takt', cbd_sanitize_klassenpuls_takt($_POST['klassenpuls_takt'] ?? ''));
 
+    // Formeln im PDF als Vektor (Vorgabe an). Ein Kontrollkaestchen sendet
+    // nichts, wenn es leer ist - deshalb die isset()-Form, sonst liesse sich
+    // die Option nie abschalten.
+    update_option('cbd_formeln_als_vektor', isset($_POST['formeln_als_vektor']) ? 1 : 0);
+
     update_option('cbd_html_annotation', isset($_POST['html_annotation']) ? 1 : 0);
 
     // Icon-Größe: Begrenzung und Standardwert stecken in
@@ -114,6 +119,7 @@ $default_status = get_option('cbd_default_block_status', 'draft');
 $enable_caching = get_option('cbd_enable_block_caching', 1);
 $classroom_enabled = get_option('cbd_classroom_enabled', 0);
 $klassenpuls_takt = (int) get_option('cbd_klassenpuls_takt', 10);
+$formeln_als_vektor = function_exists('cbd_formeln_als_vektor') ? cbd_formeln_als_vektor() : true;
 $html_annotation = get_option('cbd_html_annotation', 1);
 $notes_manager_mode = get_option('cbd_personal_notes_manager', 'disabled');
 $notes_manager_pages = get_option('cbd_notes_manager_pages', array());
@@ -327,6 +333,21 @@ $needs_migration = !$is_default_exists || !$classroom_tables_exist || version_co
                             <?php esc_html_e('Wie oft der Browser der Schülerinnen und Schüler nachfragt, ob etwas freigegeben wurde. Empfohlen: 10. Zulässig: 5 bis 300.', 'container-block-designer'); ?>
                             <strong><?php esc_html_e('0 schaltet die Live-Aktualisierung ab', 'container-block-designer'); ?></strong>
                             <?php esc_html_e('– der Klassenmodus verhält sich dann wie zuvor, Freigaben erscheinen erst beim Neuladen.', 'container-block-designer'); ?>
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row"><?php esc_html_e('Formeln im PDF', 'container-block-designer'); ?></th>
+                    <td>
+                        <label>
+                            <input type="checkbox" name="formeln_als_vektor" value="1" <?php checked($formeln_als_vektor, true); ?>>
+                            <?php esc_html_e('Formeln als Vektor setzen (empfohlen)', 'container-block-designer'); ?>
+                        </label>
+                        <p class="description">
+                            <?php esc_html_e('Formeln werden beim Export aus ihrem LaTeX-Quelltext gesetzt und als Vektorgrafik ins PDF gelegt: scharf in jeder Vergrösserung, kleinere Datei.', 'container-block-designer'); ?>
+                            <strong><?php esc_html_e('Abgeschaltet werden Formeln wie früher als Bild aus der Bildschirmdarstellung erfasst', 'container-block-designer'); ?></strong>
+                            <?php esc_html_e('– nur nötig, falls eine Formel im PDF Probleme macht.', 'container-block-designer'); ?>
                         </p>
                     </td>
                 </tr>

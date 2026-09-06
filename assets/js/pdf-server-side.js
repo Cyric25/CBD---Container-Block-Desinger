@@ -109,6 +109,9 @@
     // Formelfarben dieses Exportlaufs, gemessen VOR jeder Veraenderung am
     // DOM (siehe sammleFormelfarben()). Wird bei jedem Export neu gefuellt.
     var formelfarbenKarte = null;
+
+    // Einmal je Seitenaufruf melden, dass der Vektorweg abgeschaltet ist.
+    var vektorAusGemeldet = false;
     var mathJaxGemeldet = false;
 
     /**
@@ -229,6 +232,29 @@
             bilanz.push(lagen[i][0] + (gelungen ? '' : ' OFFEN'));
         }
         return bilanz.join(', ');
+    }
+
+    /**
+     * Ist der Vektorweg eingeschaltet? (Option `cbd_formeln_als_vektor`)
+     *
+     * FAIL-OPEN, mit Absicht: Nur ein ausdrueckliches `false` schaltet ab.
+     * `cbdPDFData` wird an ZWEI unabhaengigen Stellen lokalisiert
+     * (class-cbd-block-registration.php und class-cbd-classroom.php), und
+     * genau diese Doppelung hat bei `pageId` schon einmal dazu gefuehrt,
+     * dass ein Wert auf gewoehnlichen Seiten fehlte. Wuerde ein fehlender
+     * Wert hier als "aus" gelten, schaltete ein vergessener Eintrag den
+     * Regelweg still ab - der schlimmere Fehler.
+     *
+     * Der Wert kommt VERSCHACHTELT unter `optionen`, damit
+     * wp_localize_script() ihn nicht in eine Zeichenkette giesst: Aus einer
+     * 0 der obersten Ebene wuerde "0", und das ist in JavaScript wahr.
+     *
+     * @return {boolean}
+     */
+    function vektorwegEingeschaltet() {
+        return !(typeof cbdPDFData !== 'undefined'
+            && cbdPDFData.optionen
+            && cbdPDFData.optionen.formelnAlsVektor === false);
     }
 
     function ladeMathJax() {
@@ -713,7 +739,14 @@
     function setzeFormelAlsSvg(item, farbe) {
         var el = item.element;
         var latex = el.getAttribute('data-latex');
-        if (!latex) { return null; }
+        if (!latex) {
+            // Der einzige Rueckfall, der frueher STILL war. Er kommt vor,
+            // wenn eine Formel nicht von CBD_LaTeX_Parser stammt, sondern
+            // clientseitig nachgerendert wurde.
+            console.warn('[CBD PDF] Formel ohne data-latex, Rueckfall auf den ' +
+                'Rasterweg: ' + (item.id || '(ohne id)'));
+            return null;
+        }
 
         try {
             // Beim ERSTEN Kontakt mit einem Zeichen aus einer nachgeladenen
@@ -839,7 +872,17 @@
 
         // Die Formelfarben JETZT messen - vor jeder Veraenderung am DOM.
         // Warum nicht spaeter, je Block: siehe sammleFormelfarben().
-        sammleFormelfarben(containerBlocks);
+        //
+        // Nur wenn der Vektorweg ueberhaupt laeuft. Abgeschaltet soll der
+        // Export sich verhalten wie vor diesem Vorhaben, und dazu gehoert,
+        // dass gar nichts Zusaetzliches am DOM misst: Der Aufruf erzwingt
+        // eine Stilberechnung, und im Vergleich zweier PDFs war genau EIN
+        // Formelbild dadurch anders zugeschnitten (242x34 statt 2038x128).
+        if (mode !== 'text' && vektorwegEingeschaltet()) {
+            sammleFormelfarben(containerBlocks);
+        } else {
+            formelfarbenKarte = null;
+        }
 
         // Step 1: Expand all collapsed blocks
         var collapsedStates = expandAllBlocks(containerBlocks);
@@ -853,7 +896,15 @@
         // also auf genau das Verhalten vor diesem Vorhaben. Deshalb wird die
         // Ablehnung hier verschluckt und nur gemeldet.
         var mathJaxBereit;
-        if (mode === 'text') {
+        if (mode === 'text' || !vektorwegEingeschaltet()) {
+            // Abgeschaltet: MathJax wird gar nicht erst geladen, und
+            // captureFormulaImages() findet kein window.MathJax.tex2svg vor -
+            // der Export verhaelt sich wie vor diesem Vorhaben.
+            if (!vektorwegEingeschaltet() && !vektorAusGemeldet) {
+                vektorAusGemeldet = true;
+                console.log('[CBD PDF] Formeln als Vektor ist abgeschaltet ' +
+                    '(Einstellung cbd_formeln_als_vektor) - Formeln werden gerastert.');
+            }
             mathJaxBereit = Promise.resolve(null);
         } else {
             mathJaxBereit = ladeMathJax().catch(function (fehler) {
@@ -1605,7 +1656,7 @@
             while (index < formulaElements.length) {
                 var kandidat = formulaElements[index];
 
-                if (window.MathJax && window.MathJax.tex2svg) {
+                if (vektorwegEingeschaltet() && window.MathJax && window.MathJax.tex2svg) {
                     var svgMarkup = setzeFormelAlsSvg(kandidat, formelfarbe(kandidat.element));
                     if (svgMarkup) {
                         formulas.push({
