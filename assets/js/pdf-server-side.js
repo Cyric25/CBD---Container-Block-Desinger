@@ -34,6 +34,19 @@
     var colorBackground = rootStyles.getPropertyValue('--color-background').trim() || '#ffffff';
     var colorBorderLight = rootStyles.getPropertyValue('--color-border-light').trim() || '#eeeeee';
     var colorTextMuted = rootStyles.getPropertyValue('--color-text-muted').trim() || '#666666';
+    // AP-2.2: Text auf der orangen Akzentflaeche. NICHT --color-background
+    // nehmen - die wird im Darkmode dunkel, waehrend die Akzentflaeche hell
+    // bleibt; genau dieser Kontrastfehler ist in floating-pdf-button.js schon
+    // einmal aufgetreten (CLAUDE.md, Abschnitt "Darkmode"). Diese Variable ist
+    // in beiden Modi #ffffff.
+    var colorOnAccent = rootStyles.getPropertyValue('--color-text-on-accent').trim() || '#ffffff';
+    // AP-2.2: Textfarbe im Overlay-Kasten. Muss aus DERSELBEN Momentaufnahme
+    // stammen wie colorBackground oben, sonst laufen Flaeche und Schrift
+    // auseinander: Wer die Seite hell laedt und dann auf dunkel umschaltet,
+    // haette sonst eine weisse Flaeche (gelesener Wert) mit heller,
+    // vererbter Schrift darauf - praktisch unlesbar. Live im Dunkelmodus
+    // gesehen und deshalb ergaenzt.
+    var colorTextPrimary = rootStyles.getPropertyValue('--color-text-primary').trim() || '#333333';
 
     // iOS detection
     var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
@@ -77,6 +90,11 @@
     // volle Deckkraft gesetzt werden. Aus demselben Grund wie oben bewusst
     // NICHT hinter window.cbdDebug.
     var formelDeckkraftGemeldet = false;
+
+    // AP-2.2: Einmal je Seitenaufruf gemeldet, dass das Overlay nach fertigem
+    // PDF eine Download-Schaltflaeche zeigt. Aus demselben Grund wie oben
+    // bewusst NICHT hinter window.cbdDebug.
+    var downloadSchaltflaecheGemeldet = false;
 
     /**
      * Main export function - called by floating-pdf-button.js
@@ -1789,14 +1807,31 @@
                     css_variables: cssVariables
                 }),
                 success: function (response) {
-                    $overlay.remove();
-
-                    if (response.success) {
+                    // AP-2.2: Das Overlay wird im Erfolgsfall NICHT mehr hier
+                    // entfernt - es traegt jetzt die Download-Schaltflaeche
+                    // (Begruendung an zeigeDownloadSchaltflaeche()). Im
+                    // Fehlerfall muss es weiterhin verschwinden, sonst
+                    // blockierte es im App-Fenster die ganze Anwendung.
+                    // AP-2.fix1 (Review-Befund G1): `response &&` vorangestellt
+                    // und der automatische Versuch gekapselt. Wirft
+                    // downloadPDF() - oder schon der Zugriff auf .success bei
+                    // einer leeren Antwort -, liefe die Ausnahme sonst am
+                    // Overlay vorbei und es bliebe ohne Ausweg stehen; vor
+                    // AP-2.2 deckte das vorgezogene $overlay.remove() diesen
+                    // Fall mit ab. Die Regel "in JEDEM Fehlerfall entfernen"
+                    // gilt auch fuer Ausnahmen.
+                    if (response && response.success) {
                         window.cbdDebug && console.log('[CBD PDF] PDF generated with engine:', response.engine);
-                        downloadPDF(response.url, response.filename || filename);
+                        try {
+                            downloadPDF(response.url, response.filename || filename);
+                        } catch (e) {
+                            console.warn('[CBD PDF] Automatischer Download fehlgeschlagen, Schaltflaeche bleibt:', e);
+                        }
+                        zeigeDownloadSchaltflaeche($overlay, response.url, response.filename || filename);
                     } else {
-                        console.error('[CBD PDF] Server error:', response.message);
-                        handleError(response.message || 'Unbekannter Fehler');
+                        $overlay.remove();
+                        console.error('[CBD PDF] Server error:', response && response.message);
+                        handleError((response && response.message) || 'Unbekannter Fehler');
                     }
                 },
                 error: function (xhr, status, error) {
@@ -1831,13 +1866,22 @@
                 is_rest_fallback: '1'
             },
             success: function (response) {
-                $overlay.remove();
-
-                if (response.success) {
+                // AP-2.2: wie im REST-Zweig oben - im Erfolgsfall bleibt das
+                // Overlay stehen und traegt die Download-Schaltflaeche, im
+                // Fehlerfall wird es entfernt.
+                // AP-2.fix1 (Review-Befund G1): dieselbe Absicherung wie im
+                // REST-Zweig oben - siehe die Begruendung dort.
+                if (response && response.success && response.data) {
                     window.cbdDebug && console.log('[CBD PDF] PDF generated via AJAX, engine:', response.data.engine);
-                    downloadPDF(response.data.url, response.data.filename || filename);
+                    try {
+                        downloadPDF(response.data.url, response.data.filename || filename);
+                    } catch (e) {
+                        console.warn('[CBD PDF] Automatischer Download fehlgeschlagen, Schaltflaeche bleibt:', e);
+                    }
+                    zeigeDownloadSchaltflaeche($overlay, response.data.url, response.data.filename || filename);
                 } else {
-                    var errorMsg = response.data ? response.data.message : 'Unbekannter Fehler';
+                    $overlay.remove();
+                    var errorMsg = (response && response.data) ? response.data.message : 'Unbekannter Fehler';
                     console.error('[CBD PDF] AJAX error:', errorMsg);
                     handleError(errorMsg);
                 }
@@ -1863,11 +1907,49 @@
     }
 
     /**
+     * AP-2.2: Schema der PDF-Adresse an die laufende Seite angleichen.
+     *
+     * WARUM: Die Adresse entsteht serverseitig aus
+     * `wp_upload_dir()['baseurl']` (class-cbd-pdf-generator.php:250 und
+     * :1031). Dieser Wert leitet sich aus der Option `siteurl` ab, NICHT aus
+     * dem Schema der laufenden Anfrage. Auf einer ueber https aufgerufenen
+     * Seite, deren `siteurl` noch als http gespeichert ist, entstuende damit
+     * ein http-Link auf einer https-Seite - Chrome blockt das als unsicheren
+     * Download, und der Hinweis erscheint NUR in der Adresszeile, die es im
+     * App-Fenster nicht gibt.
+     *
+     * Angeglichen wird ausschliesslich das Schema, und nur bei GLEICHEM Host
+     * samt Port. Eine fremde Herkunft bleibt unangetastet - dort waere ein
+     * Schemawechsel eine Aenderung des Ziels, nicht eine Korrektur. Bei
+     * jedem Zweifel (nicht parsbar, anderer Host) kommt die Adresse
+     * unveraendert zurueck: Die Fehlerrichtung bleibt "so wie bisher".
+     *
+     * Auf dem Testserver ist der Fall nicht reproduzierbar (dort sind
+     * `siteurl`, `home` und `baseurl` alle http) - die Angleichung ist
+     * Vorsorge fuer die Produktivseite, gemessen begruendet in AP-2.1.
+     *
+     * @param {string} url Vom Server gemeldete Adresse
+     * @return {string} Adresse, ggf. mit angeglichenem Schema
+     */
+    function gleicheSchemaAn(url) {
+        try {
+            var ziel = new URL(url, window.location.href);
+            if (ziel.host === window.location.host && ziel.protocol !== window.location.protocol) {
+                ziel.protocol = window.location.protocol;
+                return ziel.href;
+            }
+        } catch (e) {
+            // Nicht parsbar - unveraendert weiterreichen (bisheriges Verhalten).
+        }
+        return url;
+    }
+
+    /**
      * Download PDF file
      */
     function downloadPDF(url, filename) {
         var link = document.createElement('a');
-        link.href = url;
+        link.href = gleicheSchemaAn(url);
         link.download = filename;
 
         if (isIOS) {
@@ -1877,6 +1959,117 @@
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    }
+
+    /**
+     * AP-2.2: Das Fortschritts-Overlay wird nach fertigem PDF nicht mehr
+     * wortlos entfernt, sondern zeigt eine sichtbare Schaltflaeche
+     * "PDF speichern".
+     *
+     * WARUM (gemessen in AP-2.1): `downloadPDF()` laeuft aus dem
+     * AJAX-Erfolgszweig, also lange nach dem Klick des Nutzers. Chromes
+     * transiente Nutzeraktivierung haelt gemessen **5003 ms**; schon ein
+     * Export mit fuenf Containern braucht **6872 ms**, eine echte
+     * Inhaltsseite 51-337 s. Auf JEDER realen Inhaltsseite trifft der
+     * programmgesteuerte Klick die Aktivierung deshalb nicht mehr an -
+     * Chrome behandelt den Download dann als "automatisch".
+     * (AP-2.fix1, Review-Befund G4: Hier stand "NIE"; das ueberschrieb die
+     * eigene Messung - ein Miniexport mit einem Container und ohne Formel
+     * blieb unter 5 s und hatte die Aktivierung noch.)
+     * Wird der Download blockiert, erscheint der Hinweis als
+     * Symbol IN DER ADRESSLEISTE - und die gibt es im installierten
+     * App-Fenster nicht. Der Nutzer sieht dann buchstaeblich nichts, weil
+     * das Overlay im selben Moment verschwindet. Genau so lautete die
+     * Meldung des Betreibers: "gar nichts, der Knopf reagiert, aber keine
+     * Datei."
+     *
+     * Ein Klick auf diese Schaltflaeche erzeugt eine FRISCHE Aktivierung und
+     * ist zugleich das sichtbare Feedback, das dem App-Fenster sonst fehlt.
+     * Der automatische Versuch in `downloadPDF()` bleibt als erster Weg
+     * erhalten - im normalen Browser-Tab funktioniert er heute, und ein
+     * zweiter Download auf Klick ist harmlos.
+     *
+     * KEIN Zeitschloss: Das Overlay geht nur auf Klick weg. Ein automatisches
+     * Schliessen traefe genau den langsamen Fall, fuer den das hier gebaut
+     * ist.
+     *
+     * @param {jQuery} $overlay Das laufende Fortschritts-Overlay
+     * @param {string} url      Vom Server gemeldete Adresse
+     * @param {string} filename Dateiname fuer das download-Attribut
+     */
+    function zeigeDownloadSchaltflaeche($overlay, url, filename) {
+        try {
+            var ziel = gleicheSchemaAn(url);
+            var $kasten = $overlay.children().first();
+            if (!$kasten.length) {
+                // Ohne Kasten kein Umbau - Overlay entfernen und den
+                // automatischen Versuch wirken lassen (bisheriges Verhalten).
+                $overlay.remove();
+                return;
+            }
+
+            $kasten.empty();
+            $('<h3></h3>')
+                .text('PDF ist fertig')
+                .css({ margin: '0 0 15px 0', 'font-size': '18px', color: colorTextPrimary })
+                .appendTo($kasten);
+
+            $('<a class="cbd-pdf-speichern"></a>')
+                .attr({ href: ziel, download: filename })
+                .text('PDF speichern')
+                .css({
+                    display: 'inline-block',
+                    padding: '10px 22px',
+                    'margin-bottom': '12px',
+                    background: colorUiSurface,
+                    // Text auf der Akzentflaeche: --color-text-on-accent, NICHT
+                    // --color-background. Letztere wird im Darkmode dunkel,
+                    // waehrend die orange Flaeche hell bleibt - genau dieser
+                    // Kontrastfehler ist in floating-pdf-button.js schon
+                    // einmal aufgetreten (CLAUDE.md, Abschnitt "Darkmode").
+                    color: colorOnAccent,
+                    'border-radius': '8px',
+                    'text-decoration': 'none',
+                    'font-size': '15px',
+                    'font-weight': '600'
+                })
+                .appendTo($kasten);
+
+            $('<p></p>')
+                .text('Der Download startet normalerweise von selbst. '
+                    + 'Passiert nichts, hier tippen.')
+                .css({ margin: '0 0 14px 0', color: colorTextMuted, 'font-size': '13px' })
+                .appendTo($kasten);
+
+            $('<button type="button" class="cbd-pdf-schliessen"></button>')
+                .text('Schliessen')
+                .css({
+                    display: 'block',
+                    margin: '0 auto',
+                    padding: '7px 18px',
+                    background: 'transparent',
+                    color: colorTextMuted,
+                    border: '1px solid ' + colorBorderLight,
+                    'border-radius': '6px',
+                    cursor: 'pointer',
+                    'font-size': '13px'
+                })
+                .on('click', function () { $overlay.remove(); })
+                .appendTo($kasten);
+
+            if (!downloadSchaltflaecheGemeldet) {
+                downloadSchaltflaecheGemeldet = true;
+                // Bewusst NICHT hinter window.cbdDebug: Beleg, dass der
+                // reparierte Codestand laeuft (HTTP-Cache-Falle, siehe
+                // CLAUDE.md).
+                console.log('[CBD PDF] Download-Schaltflaeche im Overlay aktiv (App-Fenster-Fix, AP-2.2).');
+            }
+        } catch (e) {
+            // Schlaegt der Umbau fehl, darf das Overlay nicht stehen bleiben -
+            // im App-Fenster blockierte es sonst die ganze Anwendung.
+            console.warn('[CBD PDF] Download-Schaltflaeche konnte nicht aufgebaut werden:', e);
+            $overlay.remove();
+        }
     }
 
     /**
@@ -1935,7 +2128,12 @@
             'align-items:center; justify-content:center;">' +
             '<div style="background:' + colorBackground + '; padding:30px 40px; border-radius:12px; ' +
             'text-align:center; min-width:300px; box-shadow:0 10px 40px rgba(0,0,0,0.3);">' +
-            '<h3 style="margin:0 0 15px 0; font-size:18px;">PDF wird erstellt</h3>' +
+            // AP-2.2: color explizit aus derselben Momentaufnahme wie der
+            // Kastenhintergrund. Ohne die Angabe erbte die Ueberschrift die
+            // Textfarbe der Seite - im Dunkelmodus hell auf weisser Flaeche
+            // und damit unlesbar (live gesehen). Betrifft auch den bisherigen
+            // Fortschrittstext waehrend des gesamten Exports.
+            '<h3 style="margin:0 0 15px 0; font-size:18px; color:' + colorTextPrimary + ';">PDF wird erstellt</h3>' +
             '<div class="cbd-pdf-progress-bar" style="background:' + colorBorderLight + '; border-radius:8px; ' +
             'height:8px; margin:0 0 12px 0; overflow:hidden;">' +
             '<div class="cbd-pdf-progress-fill" style="background:' + colorUiSurface + '; height:100%; ' +

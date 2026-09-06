@@ -3986,6 +3986,133 @@ tappt in zwei Fallen, die beide wie ein Codefehler aussehen:
    normal sichtbar sind. Wer die Animationsphase braucht, **setzt** sie per
    negativem `animation-delay`, statt sie ablaufen zu lassen.
 
+## PDF-Download in der installierten App (`PLAN-PDF-Formelfarbe-und-App-Download.md`, Phase 2, 2026-09-06)
+
+Der Betreiber meldete: Ist die Website über Chrome/Edge **als App
+installiert**, führt der PDF-Export nicht zur Datei — „gar nichts, der Knopf
+reagiert, aber keine Datei". Im normalen Browser-Tab funktioniert derselbe
+Weg. Betroffen sind Android-PWA und Desktop-PWA; iOS ist ausdrücklich nicht
+Gegenstand.
+
+### Die Ursache — gemessen, nicht vermutet
+
+`downloadPDF()` (`assets/js/pdf-server-side.js`) legt ein `<a download>` an
+und klickt es **programmgesteuert**. Der Aufruf steht im AJAX-Erfolgszweig,
+also lange nach dem Klick des Nutzers. Chromes **transiente
+Nutzeraktivierung** hält aber nur kurz:
+
+| | Wert |
+|---|---|
+| Aktivierungsfenster, Chromium 148, mit echtem Klick gemessen | **5003 ms** |
+| Export, 1 Container, 0 Formeln | < 5 s → `userActivation.isActive` **true** |
+| Export, 5 Container, 15 Formeln | **6872 ms** → **false** |
+| Vollexport echte Inhaltsseite (20 Container, 47 Formeln) | 72–337 s → **false** |
+
+**Auf jeder realen Inhaltsseite ist die Aktivierung beim Download also
+abgelaufen.** Chrome behandelt den Download damit als „automatisch". Wird er
+dabei blockiert, erscheint der Hinweis als Symbol **in der Adressleiste** —
+und die gibt es im installierten App-Fenster nicht. Zusammen mit dem
+Umstand, dass das Fortschritts-Overlay im selben Moment verschwand, sah der
+Nutzer nach einem minutenlangen Export buchstäblich nichts.
+
+**Drei weitere Kandidaten sind gemessen und ausgeschlossen** (auf dem
+Testserver):
+
+| Kandidat | Messung |
+|---|---|
+| `Content-Disposition` fehlt | `.htaccess` vorhanden, `mod_headers` geladen, Antwortkopf trägt `Content-Disposition: attachment` |
+| Mixed Content | erzeugte URL und `location.origin` beide `http://fos.localhost:8080` |
+| Cross-Origin | dieselbe Messung; `siteurl`, `home` und `wp_upload_dir()['baseurl']` stimmen überein |
+
+**Für die Produktivseite bleiben Mixed Content und Cross-Origin offen**:
+`wp_upload_dir()['baseurl']` leitet sich aus der Option `siteurl` ab, **nicht**
+aus dem Schema der laufenden Anfrage. Eine über `https` ausgelieferte Seite
+mit `http`-`siteurl` erzeugte einen unsicheren Download — wieder nur in der
+Adressleiste sichtbar.
+
+### Die Lösung: eine sichtbare Schaltfläche
+
+`zeigeDownloadSchaltflaeche($overlay, url, filename)` baut das
+Fortschritts-Overlay nach fertigem PDF zu einer Abschlussanzeige um:
+Überschrift „PDF ist fertig", ein echter
+`<a class="cbd-pdf-speichern" href download>` „PDF speichern", ein
+Hinweissatz und ein „Schliessen"-Knopf. **Der automatische Versuch in
+`downloadPDF()` bleibt der erste Weg** — im normalen Tab funktioniert er.
+
+Ein Klick auf die Schaltfläche erzeugt eine **frische** Aktivierung (live
+gemessen: `userActivation.isActive === true`) und ist zugleich das sichtbare
+Feedback, das dem App-Fenster ohne Adressleiste sonst fehlt. **Damit deckt
+die Lösung alle vier Kandidaten ab**, unabhängig davon, welcher zutrifft.
+
+`gleicheSchemaAn(url)` zieht das Schema der Server-Adresse auf das der
+laufenden Seite — **nur bei gleichem Host samt Port** (`host`, nicht
+`hostname`, also portgenau); alles andere kommt unverändert zurück. Sie kann
+ein Ziel **nicht** auf eine fremde Herkunft umlenken. Damit ist der
+Mixed-Content-Fall clientseitig entschärft, ohne
+`includes/class-cbd-pdf-generator.php` anzufassen.
+
+### Die Overlay-Regel, die niemand umdrehen darf
+
+**Im Erfolgsfall bleibt das Overlay stehen und trägt die Schaltfläche; in
+JEDEM Fehlerfall wird es entfernt.** Ein stehen gebliebenes Overlay
+blockierte im App-Fenster die gesamte Anwendung. Die Regel gilt an zehn
+Stellen: beide `else`-Zweige der Erfolgs-Handler, der `error`-Handler des
+admin-ajax-Zweigs (inklusive Timeout), der Diagnose-Abbruch, der `catch` und
+der Fall „kein Kasten" in `zeigeDownloadSchaltflaeche()` selbst sowie der
+Schliessen-Knopf. Der REST-`error`-Zweig entfernt bewusst nichts — er reicht
+das Overlay an den admin-ajax-Rückfall weiter, der es vollständig
+weiterbehandelt.
+
+**Seit AP-2.fix1 gilt die Regel auch für Ausnahmen:** Beide Erfolgszweige
+prüfen `response &&` (der admin-ajax-Zweig zusätzlich `response.data`), und
+der automatische Versuch liegt in `try/catch`. Vorher hätte eine Ausnahme in
+`downloadPDF()` — oder schon der Zugriff auf `.success` bei einer leeren
+Antwort — am Overlay vorbeilaufen können.
+
+**Kein Zeitschloss.** Das Overlay geht nur auf Klick weg; ein automatisches
+Schließen träfe genau den langsamen Fall, für den die Anzeige gebaut ist.
+
+### Nebenbei behobener Bestandsfehler: Kontrast im Overlay
+
+Die Überschrift „PDF wird erstellt" in `createProgressOverlay()` erbte die
+Textfarbe der **Seite**, während der Kasten `colorBackground` aus der
+Momentaufnahme beim Laden trägt. Wer die Seite hell lädt und dann auf dunkel
+umschaltet, sah **helle Schrift auf weißer Fläche** — über den gesamten
+Export hinweg. Beide Überschriften setzen `color` jetzt explizit aus
+derselben Momentaufnahme (`colorTextPrimary`). Gemessen nachher:
+`rgb(51,51,51)` auf `rgb(255,255,255)`.
+
+### Bekannte, bewusst nicht behobene Einschränkungen
+
+1. **Der Nachweis im echten App-Fenster fehlt.** Das Browserfenster der
+   Entwicklungsumgebung lässt sich nicht als App installieren
+   (`display-mode: standalone` immer `false`), ein Android-Gerät stand nicht
+   zur Verfügung. Die Kette „Aktivierung abgelaufen → Chrome behandelt den
+   Download als automatisch → der Hinweis erscheint in der Adressleiste →
+   die gibt es im App-Fenster nicht" ist in ihren **ersten beiden Gliedern
+   gemessen** und in den beiden letzten plausibel, aber **nicht belegt**. Die
+   Prüfung ist mit einer Klickliste an den Betreiber übergeben
+   (`PLAN-PDF-Formelfarbe-und-App-Download.md`, AP-2.3).
+2. **`gleicheSchemaAn()` wirkt symmetrisch.** Auf einer `http`-Seite mit
+   `https`-Uploadadresse (gleicher Host) stuft sie **herab** statt herauf.
+   Der Fall setzt eine in sich widersprüchliche Installation voraus; eine
+   Einbahnregel wäre schwerer zu lesen als der Gewinn.
+3. **Auf iOS verhält sich die neue Schaltfläche anders als der automatische
+   Weg.** `downloadPDF()` setzt für iOS `target = '_blank'`, der neue `<a>`
+   nicht. Auf iOS-Safari ignoriert der Browser `download`; ein Tipp
+   navigiert das Fenster dann auf die PDF-Datei. iOS ist Nicht-Ziel dieses
+   Vorhabens, der `isIOS`-Zweig selbst blieb unverändert.
+4. **Prozessbefund:** Der Kontrastfehler oben wurde behoben, obwohl er
+   außerhalb des Arbeitspaket-Scopes lag. Er war offen deklariert, nicht
+   stillschweigend mitgenommen — die Regel „außerhalb des Scopes notieren,
+   nicht umsetzen" gilt trotzdem.
+5. **Drei Akzeptanzkriterien von AP-2.1 sind umgebungsbedingt unbelegt**
+   (Messwerte für Standalone und normalen Tab nebeneinander, ein Blick in
+   `chrome://downloads`, ein ausdrücklicher Android-Vermerk). Das AP ist
+   trotzdem auf ☑ gebucht, weil seine Aussage — K1 als Ursache, K2/K3/K4
+   ausgeschlossen — vollständig gemessen ist; AP-2.3 wurde für dieselbe
+   Umgebungsgrenze konsequent auf ✗ gesetzt.
+
 ## Klassenmodus: Live-Aktualisierung (`PLAN-Klassenmodus-Live.md`, 2026-08-30 bis 2026-09-04, alle vier Phasen abgeschlossen und in `main` gemergt)
 
 Gibt eine Lehrperson im Klassenmodus einen Container-Block frei, sieht der
