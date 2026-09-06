@@ -248,84 +248,72 @@ console.log('\n--- Gruppe 3: (2) ex -> px ---');
         Math.abs(b / parseFloat(svg2.getAttribute('width')) - 2) < 0.01);
 }
 
-console.log('\n--- Gruppe 4: (3) Grundlinie - Kasten unten kuerzen ---');
+console.log('\n--- Gruppe 4: (3) vertical-align wird nur ENTFERNT ---');
 {
+    // Zwei Fehlversuche stecken in dieser Gruppe, beide am PDF nachgewiesen:
+    //
+    //  - AP-2.1 hat den Kasten unten um die Grundlinientiefe gekuerzt, weil
+    //    eine Messung sagte, mPDF beschneide nicht. Die Messung zaehlte
+    //    Zeichenobjekte im Inhaltsstrom - die stehen auch dann darin, wenn
+    //    sie beschnitten sind. mPDF beschneidet sehr wohl an der viewBox;
+    //    im Vollexport fiel der Nenner des Bruchs `L = 1/R` weg.
+    //  - Ein Laengenwert in `vertical-align` half auch nicht: mPDF wertet an
+    //    einem <img> nur die Schluesselwoerter aus (gemessen ueber vier
+    //    Zeilenhoehen und vier Werte).
+    //
+    // Ergebnis: Am SVG wird nichts mehr veraendert ausser dem Entfernen der
+    // wirkungslosen Angabe. Die Ausrichtung macht die Serverseite mit
+    // `vertical-align: middle` am <img>.
     const roh = fs.readFileSync(path.join(FIXTURES, 'unterlaenge.svg'), 'utf8');
-    const hoeheVorher = parseFloat(/height="([\d.]+)ex"/.exec(roh)[1]) * PRO_EX;
-    const tiefe = Math.abs(parseFloat(/vertical-align:\s*(-?[\d.]+)ex/.exec(roh)[1])) * PRO_EX;
+    const hoeheRoh = parseFloat(/height="([\d.]+)ex"/.exec(roh)[1]) * PRO_EX;
+    const breiteRoh = parseFloat(/width="([\d.]+)ex"/.exec(roh)[1]) * PRO_EX;
+    const vbRoh = /viewBox="([^"]+)"/.exec(roh)[1].replace(/\s+/g, ' ').trim();
+    pruefe('Fixture traegt ueberhaupt ein vertical-align',
+        /vertical-align/.test(roh));
+
     const svg = fixture('unterlaenge');
     F.bereiteSvgFuerMpdfAuf(svg, PRO_EX, FARBE);
-    const hoeheNachher = parseFloat(svg.getAttribute('height'));
-    pruefe('Hoehe ist um genau die Grundlinientiefe gekuerzt',
-        Math.abs((hoeheVorher - tiefe) - hoeheNachher) < 0.05,
-        'vorher ' + hoeheVorher.toFixed(2) + ', Tiefe ' + tiefe.toFixed(2) +
-        ', nachher ' + hoeheNachher.toFixed(2));
-    pruefe('vertical-align ist entfernt (mPDF wertet es nicht aus)',
+
+    pruefe('vertical-align ist aus dem style entfernt',
         (svg.getAttribute('style') || '').indexOf('vertical-align') === -1);
-    const vb = svg.getAttribute('viewBox').split(/\s+/).map(Number);
-    const vbRoh = /viewBox="([^"]+)"/.exec(roh)[1].split(/\s+/).map(Number);
-    pruefe('viewBox oben unveraendert, nur die Hoehe geschrumpft',
-        vb[0] === vbRoh[0] && vb[1] === vbRoh[1] && vb[2] === vbRoh[2] && vb[3] < vbRoh[3]);
-    pruefe('viewBox proportional gekuerzt',
-        Math.abs(vb[3] / vbRoh[3] - hoeheNachher / hoeheVorher) < 0.001,
-        'viewBox-Verhaeltnis ' + (vb[3] / vbRoh[3]).toFixed(4) +
-        ' gegen Hoehen-Verhaeltnis ' + (hoeheNachher / hoeheVorher).toFixed(4));
-}
-{
-    // Unplausible Angabe darf die Formel nicht zerstoeren
-    const svg = fixture('inline-bruch');
-    svg.setAttribute('style', 'vertical-align: -99ex;');
-    const hoeheRoh = svg.getAttribute('height');
-    F.bereiteSvgFuerMpdfAuf(svg, PRO_EX, FARBE);
-    const erwartet = parseFloat(/^([\d.]+)ex$/.exec(hoeheRoh)[1]) * PRO_EX;
-    pruefe('unplausible Grundlinientiefe wird verworfen, Hoehe bleibt',
-        Math.abs(parseFloat(svg.getAttribute('height')) - erwartet) < 0.05,
-        'Mehr als die halbe Hoehe abzuschneiden wuerde die Formel zerstoeren.');
-}
-{
-    const svg = fixture('inline-bruch');
-    svg.removeAttribute('style');
-    F.bereiteSvgFuerMpdfAuf(svg, PRO_EX, FARBE);
-    pruefe('ohne vertical-align laeuft die Aufbereitung durch',
-        /^[\d.]+px$/.test(svg.getAttribute('height')));
+    pruefe('und steht auch sonst nirgends mehr im Markup',
+        svg.outerHTML.indexOf('vertical-align') === -1);
+    pruefe('die Hoehe bleibt UNVERAENDERT (kein Kuerzen)',
+        Math.abs(parseFloat(svg.getAttribute('height')) - hoeheRoh) < 0.05,
+        'ist ' + svg.getAttribute('height') + ', soll ' + hoeheRoh.toFixed(2) + 'px');
+    pruefe('die Breite bleibt unveraendert',
+        Math.abs(parseFloat(svg.getAttribute('width')) - breiteRoh) < 0.05);
+    pruefe('die viewBox bleibt UNVERAENDERT',
+        svg.getAttribute('viewBox').replace(/\s+/g, ' ').trim() === vbRoh,
+        'ist ' + svg.getAttribute('viewBox') + ', soll ' + vbRoh);
 }
 
-console.log('\n--- Gruppe 4b: Grundlinie gilt NUR fuer Inline-Formeln ---');
+console.log('\n--- Gruppe 4b: kein Unterschied zwischen inline und abgesetzt ---');
 {
-    // Genau hier steckte ein Rueckschritt: Die Korrektur auch auf
-    // abgesetzte Formeln anzuwenden hat im PDF die NENNER zerschossen.
-    // Deren "Grundlinientiefe" ist fast 40 % der Hoehe, denn unterhalb der
-    // Formelgrundlinie liegt der ganze Nenner.
+    // Frueher entschied hier ein Parameter istBlock ueber eine
+    // Grundlinien-Korrektur. Den gibt es nicht mehr: Ob eine Formel inline
+    // oder abgesetzt gesetzt wird, entscheidet allein die Serverseite
+    // anhand von `isDisplay` in der Nutzlast. Diese Pruefung haelt fest,
+    // dass die Aufbereitung davon nichts wissen muss.
+    pruefe('bereiteSvgFuerMpdfAuf nimmt genau drei Parameter',
+        F.bereiteSvgFuerMpdfAuf.length === 3,
+        'ist ' + F.bereiteSvgFuerMpdfAuf.length);
+
+    const a = fixture('display-nernst');
+    const b = fixture('display-nernst');
+    F.bereiteSvgFuerMpdfAuf(a, PRO_EX, FARBE);
+    F.bereiteSvgFuerMpdfAuf(b, PRO_EX, FARBE, true);   // vierter Wert ignoriert
+    pruefe('ein zusaetzlicher Parameter aendert nichts',
+        a.outerHTML === b.outerHTML);
+
     const roh = fs.readFileSync(path.join(FIXTURES, 'display-nernst.svg'), 'utf8');
-    const hoeheRoh = parseFloat(/height="([\d.]+)ex"/.exec(roh)[1]) * PRO_EX;
-
-    const alsBlock = fixture('display-nernst');
-    F.bereiteSvgFuerMpdfAuf(alsBlock, PRO_EX, FARBE, true);
-    pruefe('abgesetzte Formel behaelt ihre volle Hoehe',
-        Math.abs(parseFloat(alsBlock.getAttribute('height')) - hoeheRoh) < 0.05,
-        'Kuerzen wuerde den Nenner aus dem Kasten schieben. ist: '
-        + alsBlock.getAttribute('height') + ', soll: ' + hoeheRoh.toFixed(2) + 'px');
-
-    const vbRoh = /viewBox="([^"]+)"/.exec(roh)[1];
-    pruefe('abgesetzte Formel behaelt ihre viewBox unveraendert',
-        alsBlock.getAttribute('viewBox').replace(/\s+/g, ' ').trim()
-            === vbRoh.replace(/\s+/g, ' ').trim());
-
-    const alsInline = fixture('display-nernst');
-    F.bereiteSvgFuerMpdfAuf(alsInline, PRO_EX, FARBE, false);
-    pruefe('dieselbe Formel inline WIRD gekuerzt (der Unterschied ist der Punkt)',
-        parseFloat(alsInline.getAttribute('height')) < hoeheRoh - 1,
-        'ist: ' + alsInline.getAttribute('height'));
-
-    pruefe('abgesetzt und inline ergeben verschiedene Hoehen',
-        alsBlock.getAttribute('height') !== alsInline.getAttribute('height'));
-
-    // Die uebrigen drei Umformungen muessen auch im Blockfall greifen
-    const html = alsBlock.outerHTML;
-    pruefe('im Blockfall greifen die uebrigen Umformungen trotzdem',
-        html.indexOf('currentColor') === -1
-        && !/(width|height)="[\d.]+ex"/.test(html)
-        && html.indexOf('vertical-align') === -1);
+    pruefe('auch die abgesetzte Formel behaelt ihre volle Hoehe',
+        Math.abs(parseFloat(a.getAttribute('height'))
+            - parseFloat(/height="([\d.]+)ex"/.exec(roh)[1]) * PRO_EX) < 0.05);
+    pruefe('die uebrigen Umformungen greifen trotzdem',
+        a.outerHTML.indexOf('currentColor') === -1
+        && !/(width|height)="[\d.]+ex"/.test(a.outerHTML)
+        && a.outerHTML.indexOf('vertical-align') === -1);
 }
 
 console.log('\n--- Gruppe 5: (4) verschachtelte <svg> aufloesen ---');
@@ -421,14 +409,18 @@ NAMEN.forEach(n => {
 
 console.log('\n--- Gruppe 8: Waechter gegen Wiederholung ---');
 {
-    // Zweimal aufbereiten darf nicht doppelt kuerzen
+    // Zweimal aufbereiten muss dieselben Masse liefern - und beim zweiten
+    // Mal KEINE Tiefe mehr melden: vertical-align ist beim ersten Mal
+    // entfernt worden. Wer die Tiefe braucht, merkt sie sich beim ersten
+    // Aufruf (so macht es setzeFormelAlsSvg()).
     const svg = fixture('unterlaenge');
     F.bereiteSvgFuerMpdfAuf(svg, PRO_EX, FARBE);
-    const h1 = svg.getAttribute('height');
+    const html1 = svg.outerHTML;
     F.bereiteSvgFuerMpdfAuf(svg, PRO_EX, FARBE);
-    pruefe('zweite Aufbereitung kuerzt nicht noch einmal',
-        svg.getAttribute('height') === h1,
-        'vertical-align ist beim ersten Mal entfernt worden, also greift (3) nicht erneut.');
+    pruefe('zweite Aufbereitung aendert nichts mehr',
+        svg.outerHTML === html1,
+        'Die Aufbereitung muss idempotent sein - sie laeuft je Formel nur'
+        + ' einmal, aber ein Harnisch darf sich darauf nicht verlassen.');
 }
 
 console.log('\n=========================================================');

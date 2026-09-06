@@ -105,6 +105,10 @@
     // Normalfall, denn ein gewoehnlicher Seitenaufruf ruft ladeMathJax()
     // nicht auf.
     var mathJaxVersprechen = null;
+
+    // Formelfarben dieses Exportlaufs, gemessen VOR jeder Veraenderung am
+    // DOM (siehe sammleFormelfarben()). Wird bei jedem Export neu gefuellt.
+    var formelfarbenKarte = null;
     var mathJaxGemeldet = false;
 
     /**
@@ -166,6 +170,65 @@
             };
             document.head.appendChild(s);
         });
+    }
+
+    /**
+     * Deutsche Sonderzeichen, die MathJax aus einer nachgeladenen
+     * Schriftdatei holen muss. Gemessen, nicht geraten (AP-1.3): Sie sind
+     * die EINZIGEN Ausloeser im gesamten Formelbestand der Website.
+     */
+    var AUFWAERM_ZEICHEN = '\u00e4\u00f6\u00fc\u00c4\u00d6\u00dc\u00df';
+
+    /**
+     * Waermt die drei Schriftlagen einmal je Seitenaufruf auf.
+     *
+     * DER GRUND, IN AP-2.2 GEMESSEN: MathJax wirft `retry` nicht einmal je
+     * Schriftdatei, sondern beim ERSTEN KONTAKT MIT JEDEM ZEICHEN je
+     * Schriftlage - obwohl die Datei laengst geladen und registriert ist.
+     * Eine Formel, die mehrere solcher Zeichen zugleich einfuehrt, braucht
+     * also mehrere Anlaeufe. Die Wiederholung in setzeFormelAlsSvg() ist
+     * dafuer bewusst knapp gehalten (sie soll keine kaputte Formel minutenlang
+     * durchprobieren), und genau daran ist beim Bauen dieses APs eine echte
+     * Formel gescheitert:
+     *
+     *   E_{\text{Membran}} = E_{\text{aussen}} - ... - pH_{aussen}
+     *
+     * Sie fuehrt das scharfe s aufrecht UND kursiv zugleich ein, brauchte drei Anlaeufe
+     * und fiel deshalb als einzige Formel der Seite auf den Rasterweg
+     * zurueck. Schlimmer noch: ein \textbf{} mit Umlaut kam auch nach ZWANZIG
+     * Anlaeufen nicht durch, solange die aufrechte Lage kalt war.
+     *
+     * Nach dem Aufwaermen gelingt jeder dieser Faelle im ERSTEN Anlauf -
+     * auch der bis dahin unerreichbare Fettsatz. Kosten: einmalig rund
+     * 135 ms je Seitenaufruf, gemessen, gegen bis zu einer verlorenen
+     * Formel je Schriftlage.
+     *
+     * Die Saetze werden nur erzeugt und weggeworfen; sie beruehren das
+     * Dokument nicht.
+     *
+     * @return {string} kurze Bilanz fuer die Konsolenzeile
+     */
+    function waermeSchriftenAuf() {
+        var lagen = [
+            ['aufrecht', '\\text{' + AUFWAERM_ZEICHEN + '}'],
+            ['kursiv', '\\textit{' + AUFWAERM_ZEICHEN + '}'],
+            ['fett', '\\textbf{' + AUFWAERM_ZEICHEN + '}']
+        ];
+        var bilanz = [];
+        for (var i = 0; i < lagen.length; i++) {
+            var gelungen = false;
+            // Ein Anlauf je Zeichen plus einer - mehr kann es der Messung
+            // nach nicht brauchen, und eine feste Obergrenze verhindert eine
+            // Endlosschleife, falls sich MathJax kuenftig anders verhaelt.
+            for (var v = 0; v < AUFWAERM_ZEICHEN.length + 2 && !gelungen; v++) {
+                try {
+                    window.MathJax.tex2svg(lagen[i][1], { display: false });
+                    gelungen = true;
+                } catch (e) { /* retry - genau dafuer ist die Schleife da */ }
+            }
+            bilanz.push(lagen[i][0] + (gelungen ? '' : ' OFFEN'));
+        }
+        return bilanz.join(', ');
     }
 
     function ladeMathJax() {
@@ -290,10 +353,12 @@
                         + name + '.js');
                 }));
             }).then(function () {
+                var warm = waermeSchriftenAuf();
                 if (!mathJaxGemeldet) {
                     mathJaxGemeldet = true;
                     console.log('[CBD PDF] MathJax mit SVG-Ausgabe nachgeladen ' +
-                        '(nur fuer den Export, Schriften lokal und vorab, AP-1.1).');
+                        '(nur fuer den Export, Schriften lokal und vorab, AP-1.1). ' +
+                        'Aufwaermen: ' + warm + ' (AP-2.2).');
                 }
                 erfuellen(window.MathJax);
             }).catch(ablehnen);
@@ -306,9 +371,10 @@
         return mathJaxVersprechen;
     }
 
-    // Fuer die Abnahme von AP-1.1 und die Messungen in AP-1.2/AP-1.3 von
-    // aussen erreichbar. Kein oeffentlicher Vertrag - der entsteht erst mit
-    // Phase 2.
+    // Von aussen erreichbar fuer Messungen und Abnahmen (AP-1.1 bis AP-2.2).
+    // Seit AP-2.2 ruft der Export die Funktion selbst auf - ein Aufruf von
+    // aussen ist nur noch fuers Pruefen noetig und wegen des gemerkten
+    // Versprechens folgenlos.
     window.cbdLadeMathJax = ladeMathJax;
 
     /**
@@ -432,13 +498,11 @@
      * bekommt alle Messwerte hereingereicht - sie liest selbst nichts aus
      * dem DOM. Nur so ist sie ohne Browser testbar.
      *
-     * @param {SVGElement} svg       Wurzel-<svg> aus MathJax
-     * @param {number}     proEx     px je ex, GEMESSEN am Formelelement
-     * @param {string}     farbe     aufgeloeste Textfarbe dieses Blocks
-     * @param {boolean}    istBlock  abgesetzte Formel? Dann entfaellt die
-     *                               Grundlinien-Korrektur (siehe dort)
+     * @param {SVGElement} svg   Wurzel-<svg> aus MathJax
+     * @param {number}     proEx px je ex, GEMESSEN am Formelelement
+     * @param {string}     farbe aufgeloeste Textfarbe dieses Blocks
      */
-    function bereiteSvgFuerMpdfAuf(svg, proEx, farbe, istBlock) {
+    function bereiteSvgFuerMpdfAuf(svg, proEx, farbe) {
         // ---------------------------------------------------------------
         // (1) currentColor -> aufgeloeste Blockfarbe
         //
@@ -477,67 +541,48 @@
         });
 
         // ---------------------------------------------------------------
-        // (3) Grundlinie - die Umformung, die AP-1.2 noch fehlte
+        // (3) Grundlinie - nur MESSEN, nicht mehr am SVG herumschneiden
         //
-        // ZWEI MESSUNGEN AN mPDF, beide in AP-2.1 erhoben:
+        // VORGESCHICHTE, damit der Fehler nicht ein drittes Mal gemacht
+        // wird. Drei Messungen an mPDF, die dritte hat die zweite widerlegt:
         //
         //   a) mPDF wertet `vertical-align` an einem inline <svg>
         //      UEBERHAUPT NICHT aus - weder in px noch in ex, middle,
         //      baseline oder Prozent. Alle sechs Varianten setzten die
-        //      UNTERKANTE des <svg> exakt auf die Textgrundlinie (0,00 pt
-        //      Abweichung).
-        //   b) mPDF BESCHNEIDET NICHT: Inhalt ausserhalb der viewBox wird
-        //      trotzdem gezeichnet (drei von drei Kontrollrechtecken).
+        //      UNTERKANTE des Kastens exakt auf die Textgrundlinie
+        //      (Abweichung 0,00 pt). Dasselbe gilt fuer `margin-bottom`.
+        //      Gemessen in AP-2.1, in AP-2.2 bestaetigt.
         //
-        // MathJax gibt `style="vertical-align: -D ex"` an. Das heisst: Die
-        // Formelgrundlinie liegt D ueber der Unterkante des Kastens. Weil
-        // mPDF die Unterkante auf die Textgrundlinie legt, sitzt die Formel
-        // genau um D zu hoch - sichtbar als "schwebende" Formel.
+        //   b) AP-2.1 schloss daraus: den Kasten unten um die
+        //      Grundlinientiefe kuerzen, dann IST die Unterkante die
+        //      Formelgrundlinie; die Unterlaengen ragen darunter hinaus.
+        //      Grundlage war die Messung "mPDF beschneidet nicht".
         //
-        // Die Korrektur nutzt (b) aus: Den Kasten unten um D kuerzen, dann
-        // IST die Unterkante die Formelgrundlinie. Die Unterlaengen ragen
-        // darunter hinaus und werden dank (b) weiterhin gezeichnet.
+        //   c) DIESE MESSUNG WAR FALSCH. Sie zaehlte Zeichenobjekte im
+        //      PDF-Inhaltsstrom - die stehen auch dann darin, wenn sie
+        //      beschnitten sind. Am Bild nachgesehen: mPDF beschneidet
+        //      sehr wohl an der viewBox. Im Vollexport der Seite 1676 war
+        //      der NENNER des Inline-Bruchs `L = 1/R` abgeschnitten, vom
+        //      `R` blieb ein Streifen. Isoliert nachgestellt: mit vollem
+        //      Kasten vollstaendig, mit gekuerztem Kasten abgeschnitten.
         //
-        // Die viewBox wird proportional mitgekuerzt - ihr oberer Rand
-        // (`minY`) bleibt, nur die Hoehe schrumpft.
+        // KONSEQUENZ: Am SVG wird nichts mehr gekuerzt. Die Ausrichtung
+        // loest die Serverseite - sie setzt das SVG als
+        // <img src="data:image/svg+xml;base64,...">, und an einem <img>
+        // wertet mPDF `vertical-align` sehr wohl aus (gemessen: der Bruch
+        // sitzt damit auf der Zeile, vollstaendig, ohne Beschnitt). mPDF
+        // zeichnet ein solches <img> weiterhin VEKTORIELL - im Versuch
+        // 0 Rasterbilder, 62 Zeichenobjekte.
+        //
+        // Hier wird `vertical-align` deshalb nur noch ENTFERNT. Die
+        // Ausrichtung entscheidet die Serverseite, indem sie das SVG als
+        // <img style="vertical-align:middle"> setzt - Naeheres samt
+        // Messreihe in CBD_PDF_Generator::insert_formula_image().
+        //
+        // Stehenlassen waere schlimmer als entfernen: Die Angabe sieht aus,
+        // als wuerde sie etwas bewirken, tut es aber nicht.
         // ---------------------------------------------------------------
-        // NUR fuer INLINE-Formeln. Bei einer abgesetzten Formel ist die
-        // Korrektur nicht bloss ueberfluessig, sondern schaedlich - im
-        // Versuch hat sie die Nenner zerschossen:
-        //
-        // Eine abgesetzte Formel steht in einem eigenen, zentrierten Block
-        // (siehe insert_formula_image()); eine Grundlinie, an der sie
-        // auszurichten waere, gibt es dort gar nicht. Ihre
-        // "Grundlinientiefe" ist zudem riesig - beim Nernst-Bruch 1,927 von
-        // 5,001 ex, also fast 40 % der Hoehe, denn unterhalb der
-        // Formelgrundlinie liegt der GANZE NENNER. Kuerzt man den Kasten
-        // darum, wird er zu kurz: Der Folgetext rueckt hoch und der Nenner
-        // liegt darunter im Nichts.
-        //
-        // Am erzeugten PDF gesehen: Bruchstrich da, Nenner weg. Die
-        // Zeichenbefehle waren dabei unveraendert (162 Objekte, 3181
-        // Befehle vorher wie nachher) - es fehlte nichts, es sass nur
-        // falsch. Ein reiner Zahlenvergleich haette das NICHT gefunden.
         var stil = svg.getAttribute('style') || '';
-        var va = !istBlock && /vertical-align:\s*(-?[\d.]+)(ex|px)/.exec(stil);
-        if (va && masse.height > 0) {
-            var tiefe = Math.abs(parseFloat(va[1])) * (va[2] === 'ex' ? proEx : 1);
-            // Nie mehr als die halbe Hoehe abschneiden - eine unplausible
-            // Angabe darf die Formel nicht zerstoeren.
-            if (tiefe > 0 && tiefe < masse.height * 0.5) {
-                var neueHoehe = masse.height - tiefe;
-                var vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(parseFloat);
-                if (vb.length === 4 && vb[3] > 0) {
-                    svg.setAttribute('viewBox',
-                        vb[0] + ' ' + vb[1] + ' ' + vb[2] + ' ' +
-                        (vb[3] * (neueHoehe / masse.height)).toFixed(3));
-                }
-                svg.setAttribute('height', neueHoehe.toFixed(2) + 'px');
-                masse.height = neueHoehe;
-            }
-        }
-        // `vertical-align` selbst entfernen: mPDF wertet es ohnehin nicht
-        // aus, und stehen zu lassen, was nicht wirkt, ist irrefuehrend.
         stil = stil.replace(/vertical-align:\s*[^;]*;?\s*/g, '').trim();
         if (stil) { svg.setAttribute('style', stil); } else { svg.removeAttribute('style'); }
 
@@ -573,6 +618,78 @@
     }
 
     /**
+     * Textfarbe je Formel, EINMAL zu Beginn des Exports gemessen.
+     *
+     * DER FEHLER, DEN DAS VERHINDERT - im Dunkelmodus gemessen: Die Farbe
+     * kommt aus `getComputedStyle(el).color` der LAUFENDEN Seite. Steht die
+     * auf dunkel, ist das rgb(232,232,232) - im PDF also fast weisse Glyphen
+     * auf weissem Papier. Am erzeugten PDF nachgezaehlt: 470 von 727
+     * Zeichenobjekten unlesbar.
+     *
+     * Der Rasterweg hat das Problem nicht: Er malt in einem Klon, dem
+     * `neutralisiereDarkmodeImKlon()` das Attribut `data-theme` abnimmt.
+     * Einen solchen Klon gibt es hier nicht - MathJax setzt aus dem
+     * LaTeX-Quelltext, nicht aus dem DOM.
+     *
+     * WARUM ZU BEGINN UND NICHT JE BLOCK - das ist der Kern:
+     * Dasselbe Verfahren mitten im Lauf (je Block, in captureFormulaImages)
+     * hat NICHT funktioniert. Gemessen: `data-theme` war nachweislich
+     * entfernt (Attribut === null), und getComputedStyle lieferte trotzdem
+     * weiter den Dunkelmodus-Wert - fuer 30 von 47 Formeln. Auch ein
+     * erzwungener Reflow (`offsetHeight`) half nicht. Im ruhigen Zustand vor
+     * dem Export dagegen liefert dieselbe Abfolge fuer ALLE Formeln den
+     * Hellmodus-Wert. Deshalb wird hier gemessen, bevor `expandAllBlocks()`
+     * das erste Inline-Stil setzt.
+     *
+     * Kein Flackern: Entfernen, Messen und Wiederherstellen liegen in EINEM
+     * synchronen Block ohne Rueckkehr in die Ereignisschleife - der Browser
+     * malt erst dazwischen. Ein Umschalten mit dazwischenliegendem `await`
+     * waere sichtbar; genau das ist auf diesem Weg schon einmal vermieden
+     * worden (N2).
+     *
+     * @param {jQuery} containerBlocks die zu exportierenden Bloecke
+     */
+    function sammleFormelfarben(containerBlocks) {
+        formelfarbenKarte = new Map();
+
+        var elemente = [];
+        containerBlocks.each(function () {
+            var treffer = this.querySelectorAll('.cbd-latex-formula');
+            for (var i = 0; i < treffer.length; i++) { elemente.push(treffer[i]); }
+        });
+        if (!elemente.length) { return; }
+
+        var wurzel = document.documentElement;
+        var vorher = wurzel.getAttribute('data-theme');
+        if (vorher === 'dark') { wurzel.removeAttribute('data-theme'); }
+
+        for (var j = 0; j < elemente.length; j++) {
+            var farbe = '';
+            try {
+                farbe = getComputedStyle(elemente[j]).color;
+            } catch (e) { }
+            formelfarbenKarte.set(elemente[j], farbe || '#333333');
+        }
+
+        if (vorher === 'dark') { wurzel.setAttribute('data-theme', vorher); }
+    }
+
+    /**
+     * @param {Element} el
+     * @return {string} gemessene Farbe, ersatzweise die Vorgabe
+     */
+    function formelfarbe(el) {
+        if (formelfarbenKarte && formelfarbenKarte.has(el)) {
+            return formelfarbenKarte.get(el);
+        }
+        // Kein Eintrag: Die Formel gehoerte nicht zur gemessenen Auswahl.
+        // Dann lieber die Blockfarbe von jetzt als gar keine - im Hellmodus
+        // ist sie richtig, im Dunkelmodus faellt es auf.
+        try { return getComputedStyle(el).color || '#333333'; } catch (e) { }
+        return '#333333';
+    }
+
+    /**
      * Setzt eine Formel mit MathJax und bereitet das SVG fuer mPDF auf.
      *
      * Drei Umformungen, alle drei Pflicht - jede von ihnen scheitert in mPDF
@@ -588,10 +705,12 @@
      * 2. `ex` -> `px` in width/height. Siehe exInPx().
      * 3. verschachtelte <svg> aufloesen. Siehe loeseVerschachtelteSvgAuf().
      *
-     * @param {Object} item {id, element, isDisplay}
-     * @return {string|null} SVG-Markup, oder null fuer den Rasterweg
+     * @param {Object} item  {id, element, isDisplay}
+     * @param {string} farbe im Hellmodus gemessene Textfarbe dieser Formel
+     * @return {string|null} aufbereitetes SVG-Markup, oder null fuer den
+     *         Rasterweg
      */
-    function setzeFormelAlsSvg(item) {
+    function setzeFormelAlsSvg(item, farbe) {
         var el = item.element;
         var latex = el.getAttribute('data-latex');
         if (!latex) { return null; }
@@ -606,12 +725,23 @@
             //
             // Ohne diese Wiederholung fiele je Seitenaufruf die erste Formel
             // mit Umlaut ohne Not auf den Rasterweg zurueck.
+            //
+            // DREI Anlaeufe statt zwei seit AP-2.2: Der Wurf kommt je
+            // ZEICHEN und Schriftlage, nicht je Schriftdatei - eine Formel,
+            // die mehrere neue Zeichen zugleich einfuehrt, braucht mehr als
+            // einen zweiten Anlauf. Gemessen an einer echten Formel der
+            // Seite 1676, die ss aufrecht und kursiv zugleich einfuehrt: drei
+            // Anlaeufe. Das Aufwaermen in waermeSchriftenAuf() nimmt dem Fall
+            // heute die Grundlage; die Wiederholung bleibt als Netz fuer
+            // Zeichen ausserhalb der dortigen Liste. Bewusst NICHT hoeher:
+            // eine Formel, die MathJax gar nicht setzen kann, soll schnell
+            // auf den Rasterweg fallen statt lange zu probieren.
             var knoten = null;
-            for (var versuch = 0; versuch < 2 && !knoten; versuch++) {
+            for (var versuch = 0; versuch < 3 && !knoten; versuch++) {
                 try {
                     knoten = window.MathJax.tex2svg(latex, { display: !!item.isDisplay });
                 } catch (wieder) {
-                    if (versuch === 1 || !/retry/i.test(String(wieder))) { throw wieder; }
+                    if (versuch === 2 || !/retry/i.test(String(wieder))) { throw wieder; }
                 }
             }
             if (!knoten) { return null; }
@@ -652,9 +782,7 @@
                 return null;
             }
 
-            bereiteSvgFuerMpdfAuf(svg, exInPx(el),
-                el.ownerDocument.defaultView.getComputedStyle(el).color || '#333333',
-                !!item.isDisplay);
+            bereiteSvgFuerMpdfAuf(svg, exInPx(el), farbe || '#333333');
 
             return svg.outerHTML;
         } catch (e) {
@@ -709,12 +837,38 @@
         var $overlay = createProgressOverlay(containerBlocks.length);
         $('body').append($overlay);
 
+        // Die Formelfarben JETZT messen - vor jeder Veraenderung am DOM.
+        // Warum nicht spaeter, je Block: siehe sammleFormelfarben().
+        sammleFormelfarben(containerBlocks);
+
         // Step 1: Expand all collapsed blocks
         var collapsedStates = expandAllBlocks(containerBlocks);
 
+        // AP-2.2: MathJax SOFORT anfordern, damit das Nachladen parallel zur
+        // Aufklapp-Animation laeuft statt danach. Der Textmodus braucht es
+        // nicht - dort gilt ohnehin der lesbare Ersatztext.
+        //
+        // Ein Fehlschlag bricht den Export NICHT ab: Ohne MathJax faellt
+        // captureFormulaImages() fuer jede Formel auf den Rasterweg zurueck,
+        // also auf genau das Verhalten vor diesem Vorhaben. Deshalb wird die
+        // Ablehnung hier verschluckt und nur gemeldet.
+        var mathJaxBereit;
+        if (mode === 'text') {
+            mathJaxBereit = Promise.resolve(null);
+        } else {
+            mathJaxBereit = ladeMathJax().catch(function (fehler) {
+                console.warn('[CBD PDF] MathJax nicht ladbar - Formeln werden gerastert ' +
+                    '(Rueckfall auf den Weg vor AP-2.2).', fehler);
+                return null;
+            });
+        }
+
         // Step 2: Wait for expansion animation, then process
         setTimeout(function () {
-            processBlocksSequentially(containerBlocks, mode, quality, includeDrawings, $overlay, collapsedStates);
+            updateProgress($overlay, 0, containerBlocks.length, 'Formelsatz wird vorbereitet...');
+            mathJaxBereit.then(function () {
+                processBlocksSequentially(containerBlocks, mode, quality, includeDrawings, $overlay, collapsedStates);
+            });
         }, 400);
 
         return true;
@@ -1401,52 +1555,96 @@
     }
 
     /**
-     * Rendert KaTeX-Formeln als PNG-Bilder (html2canvas, scale 2 für Schärfe).
-     * Liefert [{id, image, width, height, isDisplay}] – width/height in CSS-px,
-     * damit der Server das Bild in Originalgröße einsetzen kann.
-     * Fehlgeschlagene Captures werden ausgelassen (Server lässt dann den
-     * Fallback-Text im Platzhalter stehen).
+     * Bereitet alle Formeln eines Blocks fuer den Server auf.
+     *
+     * REGELWEG SEIT AP-2.2 IST DER VEKTORWEG: Jede Formel wird aus ihrem
+     * LaTeX-Quelltext von MathJax **gesetzt** und als SVG geschickt
+     * ({id, svg, isDisplay}). Der Rasterweg (html2canvas -> PNG,
+     * {id, image, width, height, isDisplay}) bleibt vollstaendig erhalten
+     * und greift **je Formel**, wenn der Vektorweg fuer genau diese Formel
+     * nichts liefert - etwa weil MathJax das Makro nicht kennt (mhchem) oder
+     * der Waechter in setzeFormelAlsSvg() anschlaegt.
+     *
+     * Warum ueberhaupt: Ein Bild der Bildschirmdarstellung ist etwas anderes
+     * als eine gesetzte Formel. Aus dieser einen Entscheidung stammt jeder
+     * Formelfehler der letzten vier Vorhaben - fehlende, abgeschnittene,
+     * blasse, durchgestrichene Formeln (CLAUDE.md, Abschnitte N2, N4,
+     * "blasse Formeln" und "Der Bruchstrich und der Bibliothekstausch").
+     *
+     * Der Server setzt beides ein: `svg` inline (vektoriell), `image` als
+     * <img>. Welcher Weg gegriffen hat, sagt die Konsolenzeile am Ende.
      */
     function captureFormulaImages(formulaElements, callback) {
-        if (!formulaElements.length || typeof html2canvas === 'undefined') {
+        if (!formulaElements.length) {
             callback([]);
             return;
         }
 
         var formulas = [];
         var index = 0;
+        var zahlVektor = 0;
+        var zahlRaster = 0;
 
         function nextFormula() {
+            // ---------------------------------------------------------------
+            // Der Vektorweg ist der REGELWEG (AP-2.2) - kein Schalter mehr
+            // davor. Fehlt MathJax (Nachladen fehlgeschlagen, siehe
+            // ladeMathJax()), faellt der ganze Export auf den Rasterweg
+            // zurueck; liefert MathJax fuer EINE Formel nichts, faellt nur
+            // sie zurueck. Das ist der Rueckfall je Formel (A4).
+            //
+            // Er laeuft in EINER Schleife durch, statt sich je Formel ueber
+            // setTimeout neu aufzurufen. Das ist kein Feinschliff: Chrome
+            // drosselt Zeitgeber in einem Tab im Hintergrund - nach einigen
+            // Minuten auf einen Aufruf je MINUTE. Beim Bauen dieses APs
+            // gemessen: neun Formeln eines Blocks brauchten so ueber vier
+            // Minuten, obwohl das Setzen selbst rund 10 ms je Formel kostet.
+            // Der Rasterweg weiter unten behaelt sein setTimeout - er ist
+            // asynchron und teuer genug, dass der Zwischenschritt sich lohnt.
+            // ---------------------------------------------------------------
+            while (index < formulaElements.length) {
+                var kandidat = formulaElements[index];
+
+                if (window.MathJax && window.MathJax.tex2svg) {
+                    var svgMarkup = setzeFormelAlsSvg(kandidat, formelfarbe(kandidat.element));
+                    if (svgMarkup) {
+                        formulas.push({
+                            id: kandidat.id,
+                            svg: svgMarkup,
+                            isDisplay: kandidat.isDisplay ? 1 : 0
+                        });
+                        zahlVektor++;
+                        index++;
+                        continue;
+                    }
+                }
+
+                // Ohne html2canvas gibt es keinen Rasterweg - dann bleibt der
+                // lesbare Ersatztext im Platzhalter stehen. Vor AP-2.2 stand
+                // diese Pruefung am Anfang der Funktion und haette den
+                // Vektorweg gleich mit abgeschaltet.
+                if (typeof html2canvas === 'undefined') {
+                    index++;
+                    continue;
+                }
+
+                break;   // diese Formel braucht den Rasterweg
+            }
+
             if (index >= formulaElements.length) {
-                window.cbdDebug && console.log('[CBD PDF] Captured ' + formulas.length + '/' + formulaElements.length +
-                    ' formula images (' + (foRenderingLiefertLeerbild ? 'Standard-Painter' : 'foreignObject') + ')');
+                // Bewusst NICHT hinter window.cbdDebug: Diese Zeile ist der
+                // Beleg dafuer, welcher Weg tatsaechlich gelaufen ist - die
+                // ?ver=-Cache-Falle macht transferSize dafuer untauglich
+                // (CLAUDE.md, N2, "Die HTTP-Cache-Falle").
+                console.log('[CBD PDF] Formeln: ' + zahlVektor + ' als Vektor (MathJax), ' +
+                    zahlRaster + ' als Rasterbild, ' +
+                    (formulaElements.length - zahlVektor - zahlRaster) + ' ohne Ergebnis ' +
+                    '(von ' + formulaElements.length + ').');
                 callback(formulas);
                 return;
             }
 
             var item = formulaElements[index];
-
-            // AP-1.2 (PLAN-Formeln-als-Vektor-im-PDF.md), Durchstich hinter
-            // einem Schalter: Statt die Bildschirmdarstellung zu rastern,
-            // wird der LaTeX-Quelltext von MathJax gesetzt und als SVG
-            // geschickt. Der Schalter ist provisorisch - Phase 2 macht
-            // daraus den Regelweg mit Rueckfall je Formel.
-            if (window.cbdFormelVektorProbe && window.MathJax && window.MathJax.tex2svg) {
-                var svgMarkup = setzeFormelAlsSvg(item);
-                if (svgMarkup) {
-                    formulas.push({
-                        id: item.id,
-                        svg: svgMarkup,
-                        isDisplay: item.isDisplay ? 1 : 0
-                    });
-                    index++;
-                    setTimeout(nextFormula, 0);
-                    return;
-                }
-                // Kein SVG zu bekommen: unveraendert weiter auf dem
-                // Rasterweg. Das ist der Rueckfall je Formel (A4).
-            }
-
             var mass = messeFormel(item.element);
 
             // Unsichtbare/leere Formeln überspringen (Fallback-Text greift)
@@ -1534,6 +1732,7 @@
                         height: hoehe,
                         isDisplay: item.isDisplay ? 1 : 0
                     });
+                    zahlRaster++;
                 } catch (e) {
                     console.warn('[CBD PDF] Formula toDataURL failed for', item.id, e);
                 }

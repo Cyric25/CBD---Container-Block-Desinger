@@ -4308,7 +4308,7 @@ beiden Metriken:
 6 px. Eine kleinere Grundlinie malt Glyphen **höher** — und höher heißt beim
 Bruch: **der Nenner wandert in den Strich**.
 
-Dieselbe Formel (`rac{K_L}{[	ext{Cl}^-]}`), einmal normal, einmal mit
+Dieselbe Formel (`\frac{K_L}{[\text{Cl}^-]}`), einmal normal, einmal mit
 erzwungener Stufe 2, Bänder in den Strichspalten:
 
 | | Bänder | Urteil |
