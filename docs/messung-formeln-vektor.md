@@ -80,9 +80,17 @@ in rund 10 ms.
 
 | | |
 |---|---|
-| Neue Dateien | `assets/vendor/mathjax/` (11 Dateien), `tools/test-svg-aufbereitung.js`, `tools/fixtures/mathjax/` (6 Dateien) |
-| Roh | 2,93 MB |
-| **Im ZIP (deflate)** | **+0,90 MB** |
+| Neue Dateien **im ZIP** | `assets/vendor/mathjax/` (**6 Dateien**: `tex-svg.js`, drei Schriftdateien, `LICENSE`, `HERKUNFT.md`) |
+| Neue Dateien **nicht im ZIP** | `tools/test-svg-aufbereitung.js`, `tools/fixtures/mathjax/` (6 Dateien) — `tools/` steht nicht in `includePaths` von `create-plugin-zip.js` und wird nie ausgeliefert (zusammen 0,06 MB roh) |
+| Roh, alle neuen Dateien zusammen | 2,93 MB |
+| **Im ZIP (deflate)** | **+0,90 MB** — davon stammt praktisch alles aus `assets/vendor/mathjax/` (deflatiert allein 0,87 MB), der Rest ist ZIP-Verwaltungsaufwand |
+
+> **Richtigstellung (`AP-3.rev`, Befund G1):** Hier standen ursprünglich
+> „11 Dateien" für `assets/vendor/mathjax/` — es sind **6** —, und die
+> `tools/`-Dateien waren als Verursacher des ZIP-Zuwachses aufgeführt,
+> obwohl sie gar nicht ins ZIP gelangen. Die Zahlen 2,93 MB und +0,90 MB
+> sind vom Review unabhängig bestätigt worden, nur die Dateiliste war
+> falsch.
 
 Davon ist `tex-svg.js` mit 1,76 MB roh der größte Anteil. Zum Vergleich:
 `assets/lib/` (html2canvas-pro, jsPDF, modern-screenshot) belegt 0,61 MB,

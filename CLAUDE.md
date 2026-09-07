@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Container Block Designer is a WordPress plugin that creates customizable container blocks for the Gutenberg Block Editor. It allows users to create, manage, and apply styled container blocks with features like collapsible sections, copy-to-clipboard, screenshots, and automatic numbering.
 
-**Current Version:** 3.1.75
+**Current Version:** 3.1.122
 **WordPress Requirements:** 6.0+
 **PHP Requirements:** 7.4+ (rückwärtskompatibel; getestet auf 7.4.33)
 **Tested up to:** WordPress 6.4, PHP 8.4
@@ -3451,14 +3451,35 @@ gefunden.
 
 ## PDF-Export: Formeln als Bild — die Blankheitsprüfung (N2, Branch `nachtrag-flackern-und-pdf-formeln`, 2026-09-04)
 
-> **Stand 2026-09-06:** Die Bibliothek dieses Abschnitts ist inzwischen
-> ausgetauscht — `html2canvas` 1.4.1 durch den Fork `html2canvas-pro` 2.4.1
-> (Abschnitt „PDF-Export: Der Bruchstrich und der Bibliothekstausch"
-> weiter unten). **Alles hier Beschriebene gilt unverändert weiter**,
-> insbesondere `canvasIstBemalt()` und der Rückfall vom leeren
-> `foreignObject`-Pfad: Der Fork behebt diesen Defekt **nicht** (gemessen:
-> 0 bemalte Pixel gegen 4045 beim Standard-Painter). Geändert hat sich nur,
-> **wie** der Standard-Painter die Textgrundlinie bestimmt.
+> **ÜBERHOLT seit 2026-09-07 — dieser Abschnitt beschreibt nicht mehr den
+> Regelweg.** Formeln werden im PDF nicht mehr gerastert, sondern von
+> MathJax **gesetzt** und als SVG vektoriell gezeichnet. Der aktuelle Weg
+> steht in „PDF-Export: Der Vektorweg ist der Regelweg" (Phase 2) und
+> „PDF-Export: Abnahme des Vektorwegs" (Phase 3) weiter unten.
+>
+> **Warum dieser Abschnitt trotzdem stehen bleibt — drei Gründe:**
+>
+> 1. **Der Rasterweg ist nicht entfernt**, er ist der Rückfall **je Formel**
+>    (Architekturentscheidung A4) und der einzige Weg für die
+>    Bildschirmfotos interaktiver Elemente. Alles hier Beschriebene gilt
+>    unverändert **für diesen Rückfall** — insbesondere `canvasIstBemalt()`
+>    und der Rückfall vom leeren `foreignObject`-Pfad (der Fork behebt den
+>    Defekt **nicht**: 0 bemalte Pixel gegen 4045 beim Standard-Painter).
+> 2. **Er erklärt, warum toter Code tot bleibt.** `extractFormulas()` und
+>    `CBD_PDF_Generator::insert_formula()` sind seit N2 tot und werden auch
+>    vom Vektorweg **nicht** wiederbelebt (A6): Der neue Weg schickt SVG,
+>    kein KaTeX-HTML — die alte Idee, mPDF KaTeX-Markup setzen zu lassen,
+>    bleibt falsch.
+> 3. **Er ist die Fehlergeschichte, aus der das Vorhaben entstand.** N2,
+>    N4a, N4b, die blassen Formeln und der Bruchstrich sind fünf Ausprägungen
+>    **einer** Ursache: Ein Bild der Bildschirmdarstellung ist etwas anderes
+>    als eine gesetzte Formel.
+>
+> Die Bibliothek dieses Abschnitts ist außerdem ausgetauscht —
+> `html2canvas` 1.4.1 durch den Fork `html2canvas-pro` 2.4.1 (Abschnitt
+> „PDF-Export: Der Bruchstrich und der Bibliothekstausch" weiter unten).
+> Geändert hat sich dadurch nur, **wie** der Standard-Painter die
+> Textgrundlinie bestimmt.
 
 **Der gemeldete Fehler:** Im erzeugten PDF fehlten die LaTeX-Formeln.
 **Die naheliegende Erklärung war falsch** und ist ausdrücklich widerlegt:
@@ -4823,7 +4844,180 @@ zu prüfen. Der Ersatz kann jetzt beide Formen.
    fehlerhafte Formeln auf Seite 872, drei `\ce{}`-Formeln,
    `data-semantic-*`-Ballast — den wirft der Client seit AP-2.1 ab —,
    `preserveAspectRatio` seit AP-2.1 berücksichtigt).
-5. **`CBD_VERSION` ist unverändert.** Der Bump steht in `AP-3.doc`.
+5. ~~**`CBD_VERSION` ist unverändert.** Der Bump steht in `AP-3.doc`.~~
+   **Erledigt mit Phase 3:** `CBD_VERSION` = `3.1.122`.
+
+## PDF-Export: Abnahme des Vektorwegs (`PLAN-Formeln-als-Vektor-im-PDF.md`, Phase 3, 2026-09-07)
+
+Phase 1 hat die Machbarkeit belegt, Phase 2 den Vektorweg zum Regelweg
+gemacht. **Phase 3 ist die Abnahme über echte Seiten** — und sie hat einen
+Fehler gefunden, den die Prüfseite der beiden Vorphasen strukturell nicht
+zeigen konnte.
+
+### Der Fund: der Wächter verwarf jede Formel mit gestrecktem Pfeil
+
+`setzeFormelAlsSvg()` verlangt **genau eine `<svg>`-Wurzel** (Phase 1, „Der
+Wächter"). Die Zählung lautete:
+
+```js
+var wurzeln = knoten.querySelectorAll('svg');   // FALSCH
+```
+
+`querySelectorAll('svg')` findet **auch die inneren `<svg>`**, mit denen
+MathJax gestreckte Operatoren baut — allen voran `\xrightarrow`. Jede solche
+Formel galt damit als „zwei Wurzeln" und fiel auf den Rasterweg zurück.
+
+**Das Bittere daran:** Genau für diese Konstruktion ist in `AP-1.2`
+`loeseVerschachtelteSvgAuf()` gebaut worden — der Wächter aus `AP-1.fix1`
+hat sie danach unerreichbar gemacht. Zwei Arbeitspakete haben sich
+gegenseitig aufgehoben, ohne dass eine Prüfung anschlug.
+
+**Warum es niemandem auffiel:** Die Prüfseite 1676 enthält **keinen
+einzigen** solchen Pfeil. Im Bestand kommt `\xrightarrow` dagegen **89-mal**
+vor.
+
+Der Fix zählt nur noch Elemente **ohne `<svg>`-Vorfahr**:
+
+```js
+var alleSvg = knoten.querySelectorAll('svg');
+var wurzeln = [];
+for (var w = 0; w < alleSvg.length; w++) {
+    var eltern = alleSvg[w].parentElement;
+    if (!eltern || !eltern.closest || !eltern.closest('svg')) {
+        wurzeln.push(alleSvg[w]);
+    }
+}
+```
+
+Seite 860 vorher **128/130** mit zwei Warnungen, nachher **130/130** ohne.
+Im unabhängigen Review am laufenden Browser nachgestellt: Die Seite enthält
+genau zwei `\xrightarrow`-Formeln, MathJax erzeugt für jede **2 `<svg>`**,
+nach der neuen Regel bleibt **1** — die alte Zählung verwarf exakt diese
+beiden.
+
+> **Die Lehre, und sie ist allgemeiner als dieser Fall:** **Eine Abnahme
+> braucht Seiten, auf denen die gebauten Sonderfälle wirklich vorkommen.**
+> Eine Prüfseite, die alle Vorphasen bestanden hat, ist dafür kein Ersatz —
+> sie hat genau die Konstrukte, für die sie ausgesucht wurde.
+
+### Die Messung über fünf echte Seiten
+
+Vollständiger Bericht mit Messbedingungen: **`docs/messung-formeln-vektor.md`**,
+Gegenüberstellung als Bild: `docs/bilder/formeln-raster-gegen-vektor.png`.
+
+| | Vektorweg | Rasterweg |
+|---|---|---|
+| Formeln gesetzt | **432 / 432** | 432 / 432 |
+| Rasterbilder **für Formeln** | **0 auf allen fünf Seiten** | eines je Formel (als Farbbild + Maske zwei PDF-Objekte) |
+| PDF-Größe | **30–49 % kleiner** | |
+| Textebene | **wortgleich** | |
+| Dauer | Seite 5824 Median **15,98 s**, Seite 860 **29,7 s** | **24,41 s** bzw. **80,8/91,4 s** |
+
+**R5 und R6 sind damit beantwortet, beide zugunsten des Vektorwegs:** Die
+PDFs werden **kleiner**, nicht größer, und die Läufe **kürzer**, nicht
+länger. Die in `A2` vorgesehene Reißleine `fontCache: 'local'` war nicht
+nötig — sie schiede ohnehin aus, weil `CBD_SVG_Sanitizer` `<use>` nicht
+durchlässt.
+
+**Der ungesuchte Gewinn beim Ansehen:** Abgesetzte Formeln waren im
+**Rasterweg** deutlich zu klein — im neuen PDF stehen sie im Schriftgrad des
+Fließtextes. Das ist der auffälligste sichtbare Unterschied der ganzen
+Abnahme, und niemand hat danach gesucht.
+
+**Das ZIP wächst um 0,90 MB** (roh 2,93 MB, im Wesentlichen `tex-svg.js`).
+Zum Vergleich: KaTeX belegt 1,5 MB, `assets/lib/` 0,61 MB.
+
+### Was das unabhängige Review zusätzlich belegt hat
+
+`AP-3.rev` wurde mit einer **eigenen Werkzeugkette** durchgeführt (selbst
+geschriebener CDP-Treiber, PyMuPDF statt der Vorgängerwerkzeuge). Ergebnis:
+**0 kritisch, 0 mittel, 3 gering** (alle Dokumentation). Seite 5824
+reproduzierte den Bericht **Zahl für Zahl** — 886 gegen 408 Zeichenobjekte,
+74 Bilder, −38,9 % gegen berichtete −39 %, Rasterdauer auf 0,9 % am Median.
+Zusätzlich gemessen:
+
+- **Dunkelmodus-Export ist byteidentisch zum Hellmodus bis auf 72 Byte**,
+  und die sind ausschließlich `/CreationDate`, `/ModDate` und die daraus
+  abgeleitete `/ID`.
+- **MathJax wird auf einem normalen Seitenaufruf nicht geladen**
+  (`window.MathJax` undefiniert); beim Export kommen genau vier Anfragen
+  dazu, **alle lokal**, **null** an ein CDN.
+- Nach sieben Exportläufen **keine neue Zeile im PHP-Fehlerprotokoll** — die
+  114 mPDF-`lineBox`-Warnungen eines Zwischenstandes sind mit
+  `vertical-align:middle` dauerhaft verschwunden.
+
+### Die beiden stillen Fallen — weiterhin die wichtigste Warnung
+
+Sie sind behoben, aber sie kehren zurück, sobald jemand die Aufbereitung
+anfasst. **Beide scheitern ohne Fehlermeldung, ohne Log, ohne Platzhalter:**
+
+| Falle | Wirkung, wenn sie zurückkehrt |
+|---|---|
+| `fill="currentColor"` (MathJax' Vorgabe) | mPDF kennt das Schlüsselwort nicht und erzeugt den PDF-Operator `n` statt `f` — der Pfad wird **beendet, ohne gemalt zu werden**. Die Formel ist **unsichtbar**, das PDF sieht sonst fehlerfrei aus |
+| `ex`-Maße | mPDF versteht die Einheit nicht — **eine** Formel füllte im Versuch drei Viertel einer A4-Seite und schob den Folgetext auf die nächste |
+
+Beide Umformungen stehen deshalb in **einer** Funktion
+(`bereiteSvgFuerMpdfAuf()`) mit eigenem Prüfharnisch, und serverseitig lehnt
+`formel_svg_pruefen()` ein SVG mit `currentColor` oder `ex` als Notbremse ab
+und fällt auf den Rasterweg zurück, statt es durchzulassen.
+
+**Die N4b-Regel in ihrer heutigen Form:** Die Farbe wird **je Formel aus
+ihrem Block aufgelöst** (`getComputedStyle(el).color`, vor Exportbeginn
+gesammelt), **nie fest eingetragen**. Eine pauschale Formelfarbe war in
+diesem Projekt schon zweimal ein Fehler. Am echten Inhalt gegengeprüft: Auf
+der Prüfseite stehen zwei verschiedene Füllfarben nebeneinander.
+
+### Rückfall und Abschalter — die zwei Reißleinen
+
+- **Je Formel:** Liefert MathJax für eine Formel nichts Brauchbares
+  (`merror`, dreimal `retry`, fehlendes `data-latex`, mehrere Wurzeln, null
+  Zeichenobjekte), wird **nur diese eine** gerastert. Jeder Fall erzeugt
+  **genau eine Warnzeile mit dem LaTeX-Quelltext** — ohne sie wäre der
+  Rückfall der nächste stille Fehler.
+- **Insgesamt:** Die Option **`cbd_formeln_als_vektor`** (Container Designer
+  → Einstellungen, Vorgabe **an**, fail-open) schaltet den ganzen Weg ab.
+  MathJax wird dann gar nicht geladen, und das PDF ist **byteidentisch** mit
+  einem Export auf dem Stand vor Phase 2.
+
+### Bekannte Einschränkungen
+
+1. **R1 — KaTeX und MathJax setzen minimal unterschiedlich.** Bewusst
+   hingenommen (Entscheidung des Betreibers). Über fünf Seiten geprüft und
+   im Review unabhängig bestätigt: **keine strukturelle Abweichung** —
+   beide verwenden Computer-Modern-Schriften, Zeichenformen,
+   Bruchstrichlagen, Klammergrößen und Operatorabstände sind praktisch
+   deckungsgleich. Die sichtbaren Unterschiede sind **Größe und Schärfe**,
+   beide zugunsten des Vektorwegs.
+2. **R7 — Apple-Geräte bleiben unbelegt, aber das Risiko ist strukturell
+   kleiner geworden.** `istAppleGeraet()` leitet iOS/macOS-Safari auf genau
+   diesen Exportweg um; ein Test auf echtem Gerät fehlt weiterhin.
+   **Entscheidend ist aber, warum der Safari-Bruchstrichfehler hier nicht
+   wiederkehren kann:** Er entstand aus einer **zweiten Grundlinienquelle** —
+   html2canvas schätzt die Textgrundlinie neu, und Safari vor 17.4 liefert
+   dafür die kleinere Metrik. Auf dem Vektorweg gibt es diese zweite Quelle
+   nicht: Glyphenformen und Bruchstrichlagen stecken als Pfaddaten im
+   MathJax-Bündel und werden von mPDF gezeichnet, nicht vom Browser
+   vermessen. Die **einzige** verbleibende browserabhängige Messung ist
+   `exInPx()` (`pdf-server-side.js:418`), und die skaliert die Formel als
+   Ganzes — sie kann Strich und Nenner nicht gegeneinander verschieben.
+   **Die im Abschnitt „Der Bruchstrich und der Bibliothekstausch" als
+   Einschränkung 2 geführte Safari-Regression betrifft damit nur noch den
+   Rasterrückfall, nicht den Regelweg.** Der Betriebshinweis „PDFs mit
+   Bruchformeln möglichst am Desktop erzeugen" ist für den Regelweg
+   gegenstandslos.
+3. **Die senkrechte Lage ist `middle`**, nicht die Formelgrundlinie —
+   dieselbe Regel, die der Rasterweg seit je benutzt. Buchstabengenau ginge
+   es nur mit einer eigenen Grundlinienschätzung, und genau die schafft
+   dieses Vorhaben ab.
+4. **Ein unbekanntes Makro löst keinen Rückfall aus.** MathJax 4 setzt
+   `\dieszgibtsnicht{x}` als **Text**, ohne `merror`. KaTeX zeigt am
+   Bildschirm eine rote Fehlermeldung, im PDF stünde der Makroname.
+5. **CJK-Zeichen ergeben Ersatzkästchen statt eines Rückfalls** (`中文漢字`
+   liefert drei Pfade, nicht null). Für den deutschsprachigen Bestand ohne
+   Belang.
+6. **Drei `\ce{}`-Formeln (mhchem) und zwei Formeln auf Seite 872 sind
+   heute schon am Bildschirm kaputt** — sie fallen sauber auf den Rasterweg
+   zurück, das Vorhaben verschlechtert nichts.
 
 ## Klassenmodus: Live-Aktualisierung (`PLAN-Klassenmodus-Live.md`, 2026-08-30 bis 2026-09-04, alle vier Phasen abgeschlossen und in `main` gemergt)
 
