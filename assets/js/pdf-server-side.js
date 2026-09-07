@@ -828,7 +828,29 @@
             //
             // In beiden Faellen ist der Rasterweg die bessere Antwort: Er
             // liefert die Formel, wenn auch als Bild.
-            var wurzeln = knoten.querySelectorAll('svg');
+            // NUR die WURZELN zaehlen, nicht jedes <svg> im Baum.
+            //
+            // Das war ein Fehler mit Ansage (AP-3.1): Der Waechter benutzte
+            // `querySelectorAll('svg')`, und das findet auch die INNEREN
+            // <svg>, mit denen MathJax gestreckte Operatoren baut - allen
+            // voran `\xrightarrow`. Jede Formel mit einem beschrifteten
+            // Pfeil galt damit als "zwei Wurzeln" und fiel auf den
+            // Rasterweg zurueck. Im Bestand kommt `\xrightarrow` 89-mal vor.
+            //
+            // Bitter daran: Genau fuer diese Konstruktion ist in AP-1.2
+            // loeseVerschachtelteSvgAuf() gebaut worden - der Waechter aus
+            // AP-1.fix1 hat sie danach unerreichbar gemacht. Die Pruefseite
+            // 1676 enthaelt keinen einzigen solchen Pfeil, deshalb ist es
+            // dort nie aufgefallen. **Eine Abnahme braucht Seiten, auf denen
+            // die gebauten Sonderfaelle wirklich vorkommen.**
+            var alleSvg = knoten.querySelectorAll('svg');
+            var wurzeln = [];
+            for (var w = 0; w < alleSvg.length; w++) {
+                var eltern = alleSvg[w].parentElement;
+                if (!eltern || !eltern.closest || !eltern.closest('svg')) {
+                    wurzeln.push(alleSvg[w]);
+                }
+            }
             if (wurzeln.length !== 1) {
                 console.warn('[CBD PDF] MathJax lieferte ' + wurzeln.length +
                     ' SVG-Wurzeln statt einer (Zeilenumbruch?), Rueckfall auf ' +

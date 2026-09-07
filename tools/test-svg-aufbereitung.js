@@ -445,5 +445,40 @@ console.log('\n--- Gruppe 8: Waechter gegen Wiederholung ---');
 
 console.log('\n=========================================================');
 console.log('  ' + bestanden + ' bestanden, ' + fehlgeschlagen + ' fehlgeschlagen');
+console.log('\n--- Gruppe 9: Waechter zaehlt nur WURZELN, nicht jedes <svg> ---');
+{
+    // AP-3.fix1: setzeFormelAlsSvg() verwarf jede Formel, deren SVG ein
+    // INNERES <svg> enthaelt - und genau so baut MathJax gestreckte
+    // Operatoren, allen voran \xrightarrow (im Bestand 89-mal). Der
+    // Waechter zaehlte sie als "zwei Wurzeln".
+    //
+    // Die Zaehlung selbst steckt in setzeFormelAlsSvg() und braucht MathJax;
+    // hier wird deshalb die REGEL an der echten Fixture nachvollzogen und
+    // zusaetzlich festgehalten, dass die ausgelieferte Datei sie benutzt.
+    const roh = fs.readFileSync(path.join(FIXTURES, 'pfeil.svg'), 'utf8');
+    const alle = (roh.match(/<svg\b/g) || []).length;
+    pruefe('Fixture "pfeil" enthaelt wirklich mehr als ein <svg>', alle > 1,
+        'sonst prueft diese Gruppe nichts');
+
+    const svg = fixture('pfeil');
+    const gefunden = svg.querySelectorAll('svg');
+    // Dieselbe Regel wie im Produktivcode: nur Elemente ohne <svg>-Vorfahr
+    const wurzeln = gefunden.filter(n => {
+        let p = n.parentNode;
+        while (p) { if (p.tagName === 'svg') { return false; } p = p.parentNode; }
+        return true;
+    });
+    pruefe('nach der Wurzelregel bleibt genau EINE Wurzel uebrig',
+        wurzeln.length === 0,
+        'die Fixture ist bereits die Wurzel selbst; ihre inneren <svg> duerfen nicht als Wurzel zaehlen. '
+        + 'gefunden: ' + gefunden.length + ', davon Wurzeln: ' + wurzeln.length);
+
+    pruefe('die ausgelieferte Datei filtert Wurzeln, statt blind zu zaehlen',
+        quelltext.indexOf("eltern.closest('svg')") !== -1,
+        'Ohne diese Filterung faellt jede Formel mit gestrecktem Pfeil auf den Rasterweg.');
+    pruefe('die alte, blinde Zaehlung steht nicht mehr da',
+        quelltext.indexOf("var wurzeln = knoten.querySelectorAll('svg');") === -1);
+}
+
 console.log('=========================================================\n');
 process.exit(fehlgeschlagen > 0 ? 1 : 0);
