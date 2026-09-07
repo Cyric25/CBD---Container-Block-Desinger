@@ -1046,9 +1046,13 @@
     font-size: 14px;
 }
 
+/* Farbe aus der Projektvariablen statt des frueheren, hartkodierten
+   WordPress-Adminblaus #007cba (AP-2.2, 2026-09). Hausregel: Farben werden
+   abgeleitet, nicht gesetzt - nur var(--x, #fallback). Der Rueckfallwert ist
+   das Projekt-Braun, nicht mehr das Adminblau. */
 .wp-block[data-type*="container-block-designer"] .cbd-container-error a,
 [class*="wp-block-container-block-designer"] .cbd-container-error a {
-    color: #007cba;
+    color: var(--color-special-text, #71230a);
     text-decoration: none;
 }
 
