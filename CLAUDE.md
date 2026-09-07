@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Container Block Designer is a WordPress plugin that creates customizable container blocks for the Gutenberg Block Editor. It allows users to create, manage, and apply styled container blocks with features like collapsible sections, copy-to-clipboard, screenshots, and automatic numbering.
 
-**Current Version:** 3.1.122
+**Current Version:** 3.1.123
 **WordPress Requirements:** 6.0+
 **PHP Requirements:** 7.4+ (rückwärtskompatibel; getestet auf 7.4.33)
 **Tested up to:** WordPress 6.4, PHP 8.4
@@ -4845,7 +4845,7 @@ zu prüfen. Der Ersatz kann jetzt beide Formen.
    `data-semantic-*`-Ballast — den wirft der Client seit AP-2.1 ab —,
    `preserveAspectRatio` seit AP-2.1 berücksichtigt).
 5. ~~**`CBD_VERSION` ist unverändert.** Der Bump steht in `AP-3.doc`.~~
-   **Erledigt mit Phase 3:** `CBD_VERSION` = `3.1.122`.
+   **Erledigt mit Phase 3:** `CBD_VERSION` = `3.1.123` (`create-plugin-zip.js` erhöht die Version beim Bau selbst — ein zusätzlicher Bump von Hand davor ergibt einen Doppelsprung).
 
 ## PDF-Export: Abnahme des Vektorwegs (`PLAN-Formeln-als-Vektor-im-PDF.md`, Phase 3, 2026-09-07)
 
