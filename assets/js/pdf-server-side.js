@@ -548,6 +548,25 @@
         if (svg.getAttribute('fill') === 'currentColor') { svg.setAttribute('fill', farbe); }
         if (svg.getAttribute('stroke') === 'currentColor') { svg.setAttribute('stroke', farbe); }
 
+        // Auch in `style`-Attributen - so verlangt es AP-2.1, und so stand es
+        // bis AP-2.fix1 nicht im Code (AP-2.rev, Befund B4). MathJax 4
+        // schreibt `currentColor` in dieser Konfiguration ausschliesslich als
+        // Attribut; ueber alle sechs Fixtures nachgezaehlt. Der Fall tritt
+        // heute also nicht ein - aber die serverseitige Notbremse wuerde eine
+        // solche Formel abweisen, und weil der Vektorweg kein Rasterbild
+        // mitschickt, bliebe nur der Ersatztext. Zwei Zeilen sind billiger.
+        var alleKnoten = svg.querySelectorAll('*');
+        for (var s = 0; s < alleKnoten.length; s++) {
+            var wert = alleKnoten[s].getAttribute('style');
+            if (wert && wert.indexOf('currentColor') !== -1) {
+                alleKnoten[s].setAttribute('style', wert.replace(/currentColor/g, farbe));
+            }
+        }
+        var eigenerStil = svg.getAttribute('style');
+        if (eigenerStil && eigenerStil.indexOf('currentColor') !== -1) {
+            svg.setAttribute('style', eigenerStil.replace(/currentColor/g, farbe));
+        }
+
         // ---------------------------------------------------------------
         // (2) ex -> px
         //
@@ -794,10 +813,18 @@
             //    Durchstich verlassen, und genau da ist er hereingefallen.
             //    Der Waechter macht die Annahme pruefbar, statt sie zu
             //    glauben.
-            // 2. NULL Zeichenobjekte. Ein Zeichen, das MathJax nicht kennt
-            //    (z. B. CJK), ergibt ein SVG mit korrekter Breite, aber ohne
-            //    einen einzigen Pfad - im PDF eine unsichtbare Luecke, ohne
-            //    merror und ohne Ausnahme.
+            // 2. NULL Zeichenobjekte - ein SVG mit korrekter Breite, aber
+            //    ohne einen einzigen Pfad. Im PDF waere das eine unsichtbare
+            //    Luecke, ohne merror und ohne Ausnahme.
+            //
+            //    ACHTUNG, die urspruengliche Begruendung war falsch (AP-2.rev,
+            //    Befund B3): CJK-Zeichen sind KEIN Beispiel dafuer. Gemessen:
+            //    `中文漢字` liefert 3 Pfade, `مرحبا` 4 - MathJax setzt dort
+            //    Ersatzkaestchen, der Waechter greift also nicht und die
+            //    Formel landet als Kaestchenreihe im PDF. Nur ein Emoji
+            //    (`😀`) liefert wirklich 0 Pfade. Fuer den deutschsprachigen
+            //    Bestand ohne Folge; wer CJK in Formeln braucht, muss den
+            //    Waechter erweitern.
             //
             // In beiden Faellen ist der Rasterweg die bessere Antwort: Er
             // liefert die Formel, wenn auch als Bild.

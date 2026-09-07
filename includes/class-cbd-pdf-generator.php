@@ -623,18 +623,32 @@ class CBD_PDF_Generator {
         //   - Ein <img> mit SVG-Inhalt bleibt in mPDF VEKTORIELL: im
         //     Versuch 0 Rasterbilder, 62 Zeichenobjekte.
         //
-        // Masse braucht das <img> nicht - mPDF nimmt sie aus dem SVG selbst
-        // (gemessen: mit und ohne width/height zeichengleich).
+        // DIE MASSE MUESSEN AN DAS <img>, in CSS-Pixeln (AP-2.fix1).
+        //
+        // Die erste Fassung ueberliess mPDF die Groesse - es liest sie dann
+        // aus dem SVG selbst. Das ergibt eine ANDERE Umrechnung als ein
+        // CSS-`width` am <img>: Am selben Massstab gemessen (identisches
+        // Textstueck 153,00 pt breit in beiden PDFs) war dieselbe
+        // Inline-Formel im Vektorweg **49,89 pt** statt **70,50 pt** wie im
+        // Rasterweg - rund ein Viertel zu klein, und im Fliesstext sichtbar.
+        // Gefunden im unabhaengigen Review AP-2.rev, Befund B1.
+        //
+        // Der Rasterweg hat es von Anfang an richtig gemacht: Er setzt
+        // `width:Npx; height:Npx` als CSS. Genau das tut dieser Zweig jetzt
+        // auch - mit denselben Zahlen, die der Browser gemessen hat und die
+        // im SVG stehen.
         $svg = $this->formel_svg_pruefen($formula);
         if (null !== $svg) {
             $quelle = 'data:image/svg+xml;base64,' . base64_encode($svg);
+            $masse = $this->formel_svg_masse($svg);
             if (!empty($formula['isDisplay'])) {
                 return $this->formel_ersetzen($html, $formula_id,
                     '<div style="text-align:center; margin:10px 0; page-break-inside:avoid;">'
-                    . '<img src="' . $quelle . '" /></div>');
+                    . '<img src="' . $quelle . '" style="' . $masse . 'max-width:100%;" />'
+                    . '</div>');
             }
             return $this->formel_ersetzen($html, $formula_id,
-                '<img src="' . $quelle . '" style="vertical-align:middle;" />');
+                '<img src="' . $quelle . '" style="' . $masse . 'vertical-align:middle;" />');
         }
 
         // Kein Rasterbild in der Nutzlast? Dann bleibt der lesbare
@@ -724,6 +738,36 @@ class CBD_PDF_Generator {
     }
 
     /**
+     * Liest `width`/`height` aus dem aufbereiteten SVG und gibt sie als
+     * CSS-Angabe zurueck (mit abschliessendem Semikolon, oder leer).
+     *
+     * Der Browser hat die beiden Werte am Formelelement gemessen und von
+     * `ex` in `px` umgerechnet (bereiteSvgFuerMpdfAuf(), Umformung 2). Hier
+     * werden sie nur uebernommen - gerechnet wird nichts.
+     *
+     * Warum ueberhaupt: siehe die Begruendung in insert_formula_image().
+     *
+     * @param string $svg
+     * @return string z. B. 'width:93.40px; height:17.20px; ' oder ''
+     */
+    private function formel_svg_masse($svg) {
+        if (!preg_match('/<svg\b[^>]*\bwidth="([\d.]+)px"/i', $svg, $mw)) {
+            return '';
+        }
+        if (!preg_match('/<svg\b[^>]*\bheight="([\d.]+)px"/i', $svg, $mh)) {
+            return '';
+        }
+        $breite = (float) $mw[1];
+        $hoehe  = (float) $mh[1];
+        // Unplausibles lieber weglassen als eine Formel ueber die Seite
+        // schieben - ohne Angabe skaliert mPDF wie zuvor.
+        if ($breite <= 0 || $hoehe <= 0 || $breite > 5000 || $hoehe > 5000) {
+            return '';
+        }
+        return 'width:' . $breite . 'px; height:' . $hoehe . 'px; ';
+    }
+
+    /**
      * Prueft, ob eine Formel-Nutzlast ein brauchbares, gesetztes SVG traegt.
      *
      * DIE NOTBREMSE DIESES WEGES (Risiko R4 im Plan). Beide Muster, gegen
@@ -756,7 +800,13 @@ class CBD_PDF_Generator {
             $this->log_svg_abweisung($formula, 'currentColor nicht aufgeloest');
             return null;
         }
-        if (preg_match('/(?:width|height)="[\d.]+ex"/i', $svg)) {
+        // Beide Schreibweisen des Attributs UND die style-Form. Die erste
+        // Fassung pruefte nur auf doppelte Anfuehrungszeichen; einfache
+        // gingen durch, und DOMDocument im Sanitizer normalisiert sie
+        // danach auf doppelte - das `ex` kam also doch bei mPDF an
+        // (AP-2.rev, Befund B2).
+        if (preg_match('/(?:width|height)\s*=\s*["\'][\d.]+ex["\']/i', $svg)
+            || preg_match('/(?:width|height)\s*:\s*[\d.]+ex/i', $svg)) {
             $this->log_svg_abweisung($formula, 'Masse noch in ex');
             return null;
         }

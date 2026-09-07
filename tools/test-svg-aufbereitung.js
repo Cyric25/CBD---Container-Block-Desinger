@@ -98,9 +98,14 @@ class Element {
     querySelectorAll(sel) {
         const treffer = [];
         const attrSel = /^\[([\w-]+)="([^"]*)"\]$/.exec(sel.trim());
+        // Auch die Form ohne Wert - sonst faellt [style] auf den
+        // Tagnamen-Zweig zurueck und trifft STILL nichts (Falle beim
+        // Bauen von AP-2.fix1 aufgetreten).
+        const daSel = /^\[([\w-]+)\]$/.exec(sel.trim());
         const passt = (n) => {
             if (sel === '*') { return true; }
             if (attrSel) { return n.getAttribute(attrSel[1]) === attrSel[2]; }
+            if (daSel) { return n.getAttribute(daSel[1]) !== null; }
             return sel.split(',').map(s => s.trim()).indexOf(n.tagName) !== -1;
         };
         const geh = (n) => {
@@ -216,6 +221,21 @@ console.log('\n--- Gruppe 2: (1) currentColor wird je Formel aufgeloest ---');
     pruefe('KEINE feste Vorgabefarbe eingeschmuggelt (N4b)',
         html.indexOf('#333333') === -1,
         'Eine pauschale Farbe war in diesem Projekt schon zweimal ein Fehler.');
+}
+{
+    // AP-2.fix1 (AP-2.rev, Befund B4): currentColor kommt auch in
+    // style-Attributen vor - AP-2.1 verlangt das ausdruecklich, der Code
+    // konnte es bis dahin aber nicht.
+    const svg = fixture('inline-bruch');
+    svg.setAttribute('style', 'color: currentColor; vertical-align: -0.8ex;');
+    const erstesKind = svg.querySelector('g');
+    erstesKind.setAttribute('style', 'fill: currentColor');
+    F.bereiteSvgFuerMpdfAuf(svg, PRO_EX, FARBE);
+    pruefe('currentColor auch in style-Attributen aufgeloest',
+        svg.outerHTML.indexOf('currentColor') === -1,
+        svg.outerHTML.slice(0, 160));
+    pruefe('und dort steht die uebergebene Farbe',
+        (erstesKind.getAttribute('style') || '').indexOf(FARBE) !== -1);
 }
 {
     // dieselbe Formel, andere Farbe -> muss sich unterscheiden
