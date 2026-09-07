@@ -443,8 +443,6 @@ console.log('\n--- Gruppe 8: Waechter gegen Wiederholung ---');
         + ' einmal, aber ein Harnisch darf sich darauf nicht verlassen.');
 }
 
-console.log('\n=========================================================');
-console.log('  ' + bestanden + ' bestanden, ' + fehlgeschlagen + ' fehlgeschlagen');
 console.log('\n--- Gruppe 9: Waechter zaehlt nur WURZELN, nicht jedes <svg> ---');
 {
     // AP-3.fix1: setzeFormelAlsSvg() verwarf jede Formel, deren SVG ein
@@ -480,5 +478,7 @@ console.log('\n--- Gruppe 9: Waechter zaehlt nur WURZELN, nicht jedes <svg> ---'
         quelltext.indexOf("var wurzeln = knoten.querySelectorAll('svg');") === -1);
 }
 
+console.log('\n=========================================================');
+console.log('  ' + bestanden + ' bestanden, ' + fehlgeschlagen + ' fehlgeschlagen');
 console.log('=========================================================\n');
 process.exit(fehlgeschlagen > 0 ? 1 : 0);
