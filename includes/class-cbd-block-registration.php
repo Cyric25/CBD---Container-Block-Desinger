@@ -676,6 +676,17 @@ class CBD_Block_Registration {
                     // Doppelung hat bei 'pageId' schon einmal dazu gefuehrt,
                     // dass der Wert auf gewoehnlichen Seiten fehlte.
                     'pluginUrl' => CBD_PLUGIN_URL,
+                    // AP-2.3: der Abschalter. VERSCHACHTELT, nicht als
+                    // skalarer Wert der obersten Ebene - wp_localize_script()
+                    // giesst nur skalare Werte in Zeichenketten, und aus
+                    // false wuerde "" (falsy, richtig), aus 0 aber "0"
+                    // (in JavaScript WAHR). Verschachtelt bleibt der Typ
+                    // erhalten. Auch hier gilt: Gegenstueck in
+                    // class-cbd-classroom.php mitziehen.
+                    'optionen' => array(
+                        'formelnAlsVektor' => function_exists('cbd_formeln_als_vektor')
+                            ? cbd_formeln_als_vektor() : true,
+                    ),
                 )
             );
         }

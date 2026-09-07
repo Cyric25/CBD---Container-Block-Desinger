@@ -4308,7 +4308,7 @@ beiden Metriken:
 6 px. Eine kleinere Grundlinie malt Glyphen **höher** — und höher heißt beim
 Bruch: **der Nenner wandert in den Strich**.
 
-Dieselbe Formel (`rac{K_L}{[	ext{Cl}^-]}`), einmal normal, einmal mit
+Dieselbe Formel (`\frac{K_L}{[\text{Cl}^-]}`), einmal normal, einmal mit
 erzwungener Stufe 2, Bänder in den Strichspalten:
 
 | | Bänder | Urteil |
@@ -4544,6 +4544,12 @@ Das reicht nicht. Eine verstümmelte Formel **sieht aus wie eine Formel** —
 
 ### Bekannte Einschränkungen (Stand Phase 1)
 
+> **Punkt 1 und Punkt 6 sind mit Phase 2 überholt** — siehe den Abschnitt
+> „Der Vektorweg ist der Regelweg" weiter unten. Die senkrechte Ausrichtung
+> ist gelöst (aber anders als hier vermutet: mPDF wertet `vertical-align` an
+> einem inline `<svg>` gar nicht aus, und es **beschneidet** an der
+> viewBox), und der Vektorweg ist seither der Regelweg.
+
 1. **Die senkrechte Ausrichtung sitzt noch nicht.** Die Umformung `ex →
    px` findet auch für `vertical-align` statt, aber mPDF setzt sie
    offenbar nicht um — die Formeln schweben sichtbar über der Zeile. Erst
@@ -4565,6 +4571,259 @@ Das reicht nicht. Eine verstümmelte Formel **sieht aus wie eine Formel** —
    `sx = sy = 1`), aber ungeprüft.
 6. **Der Rasterweg bleibt der Regelweg.** Ohne den Schalter verhält sich
    der Export unverändert.
+
+## PDF-Export: Der Vektorweg ist der Regelweg (`PLAN-Formeln-als-Vektor-im-PDF.md`, Phase 2, 2026-09-06/07)
+
+Phase 1 (Abschnitt darüber) hat die Machbarkeit belegt, hinter einem
+Schalter. **Phase 2 macht daraus den Regelweg**: Jede Formel wird beim
+Export aus ihrem LaTeX-Quelltext von MathJax **gesetzt** und als SVG
+geschickt; der Rasterweg bleibt vollständig erhalten und greift **je
+Formel**, wenn der Vektorweg für genau diese nichts liefert.
+
+**Der Einschränkungspunkt 6 der Phase 1 ist damit überholt**, und
+Punkt 1 (senkrechte Ausrichtung) ist gelöst — aber anders als dort
+vermutet, siehe unten.
+
+### Gemessen am Vollexport der Prüfseite (20 Container, 47 Formeln, 16 Seiten)
+
+| | Vektorweg | Rasterweg |
+|---|---|---|
+| Formeln gesetzt | **47 / 47** | 47 / 47 |
+| Rasterbilder im PDF | **0** | 94 (= 47 × 2 PDF-Objekte: Farbbild + Maske) |
+| Zeichenobjekte | 932 | 242 |
+| Dateigröße | **255 558 B** | 438 582 B (**42 % kleiner**) |
+| Dauer | **43 s** | 94 s |
+| Textebene | **wortgleich** | |
+
+Die zwei Bilder im Vektorlauf sind das Bildschirmfoto eines interaktiven
+Elements — für Formeln **null**. Der Rasterlauf entstand, indem
+`MathJax.tex2svg` nach dem Laden entfernt wurde; damit prüft er zugleich
+den Rückfall je Formel.
+
+### Der Weg ins PDF: `<img>` mit `data:`-URI, nicht inline `<svg>`
+
+**Das ist die zentrale Festlegung der Phase, und sie beruht auf drei
+Messungen an mPDF — zwei davon haben frühere Annahmen widerlegt.**
+
+| Frage an mPDF | Antwort |
+|---|---|
+| Wertet es `vertical-align` an einem **inline `<svg>`** aus? | **Nein** — weder px noch ex, `middle`, `baseline` oder Prozent. Alle sechs Varianten setzen die **Unterkante** auf die Textgrundlinie. `margin-bottom` ebenso wenig |
+| Beschneidet es an der `viewBox`? | **Ja.** Die Gegenmessung aus AP-2.1 („beschneidet nicht") zählte Zeichenobjekte im PDF-Inhaltsstrom — **die stehen auch dann darin, wenn sie beschnitten sind** |
+| Wertet es `vertical-align` an einem **`<img>`** aus? | **Ja, aber nur die Schlüsselwörter.** Ein Längenwert wirkt wie `bottom`: Der Versatz hängt allein an der Zeilenhöhe (7,21 / 5,01 / 2,81 / 0,61 pt bei `line-height` 1,4 / 1,8 / 2,2 / 2,6) und ist vom Wert **völlig unabhängig**. `middle` wirkt konstant (+5,55 pt) |
+
+Daraus folgt der ausgelieferte Stand:
+
+```php
+// insert_formula_image(), SVG-Zweig
+$quelle = 'data:image/svg+xml;base64,' . base64_encode($svg);
+$masse  = $this->formel_svg_masse($svg);      // 'width:93.4px; height:17.2px; '
+// inline:
+'<img src="' . $quelle . '" style="' . $masse . 'vertical-align:middle;" />'
+// abgesetzt: dasselbe in einem zentrierten <div>, mit max-width:100%
+```
+
+**Ein `<img>` mit SVG-Inhalt bleibt in mPDF vektoriell** — im Versuch
+0 Rasterbilder, 62 Zeichenobjekte.
+
+**Die Maßangabe ist Pflicht, nicht Kosmetik.** Ohne sie liest mPDF die Maße
+aus dem SVG und rechnet sie **anders** um als ein CSS-`width` am `<img>`:
+Am selben Maßstab gemessen war dieselbe Inline-Formel **49,89 pt statt
+70,50 pt** — rund ein Viertel zu klein, im Fließtext sichtbar, während
+abgesetzte Formeln richtig blieben. Im selben Dokument standen damit zwei
+Schriftgrößen. Gefunden hat das erst das unabhängige Review (AP-2.rev,
+Befund B1), obwohl alle Zahlen der Abnahme stimmten.
+
+> **Ergänzung zur Regel „nicht zählen, ansehen":** Ein Formelbild wird
+> **zusammen mit dem umgebenden Text** angesehen, nicht für sich allein.
+> Sonst prüft man Bruchstriche und Vollständigkeit und übersieht die Größe.
+
+**Die senkrechte Lage ist damit `middle`, nicht die Formelgrundlinie** —
+dieselbe Regel, die der Rasterweg seit je benutzt. Buchstabengenau ginge es
+nur mit einer eigenen Schätzung der Textgrundlinie, und **genau diese
+Schätzerei schafft dieses Vorhaben ab** (sie ist die Ursache des
+Bruchstrich-Falls). Ob die Lage genügt, entscheidet die Abnahme in Phase 3.
+
+**Nebenwirkung, die niemand suchen würde:** Ohne `vertical-align` schreibt
+mPDF für jedes Inline-Bild eine PHP-Warnung ins Log (`Undefined array key
+… Mpdf.php:6935`, fehlender `lineBox`-Eintrag) — **114 Stück in einem
+Export**. Mit `middle` sind es null.
+
+### Der Schutzmarker aus Phase 1 ist entfallen — und das ist der stärkere Zustand
+
+Weil im Block-HTML **gar kein `<svg>` mehr** steht, darf `clean_block_html()`
+wieder **jedes** entfernen. Der je Anfrage gewürfelte Marker samt seiner
+Ausnahme ist ersatzlos gestrichen. Der base64-Zeichenvorrat enthält kein
+`<`, ein eingebettetes SVG kann von der Regel nicht getroffen werden.
+Zusätzlich belegt (AP-2.rev): `wp_kses_post()` entfernt in
+`sanitize_pdf_block_html()` ohnehin **jedes** `<svg>` samt Kindern, bevor
+`clean_block_html()` überhaupt läuft.
+
+**Wer hier je wieder inline `<svg>` einsetzen will, braucht den Marker
+erneut** — die Begründung steht im Kommentar an der Stelle.
+
+### Zwei ausgelieferte Fehler, die einander verdeckt haben
+
+In `class-cbd-pdf-generator.php` standen an zwei Stellen **echte
+Backspace-Bytes (0x08)**, wo `\b` gemeint war — hineingeraten durch ein
+Patch-Skript, das `"\b"` in **doppelten** Anführungszeichen schrieb. Folgen:
+
+- Die `<svg>`-Reinigung in `clean_block_html()` matchte **nichts**.
+- Der Schutzmarker wurde **nie gesetzt**.
+
+Beide Fehler heben einander auf: Hätte nur einer bestanden, wären entweder
+alle Formeln verschwunden oder alle Bediensymbole geblieben. So sah alles
+richtig aus. Dieselbe Ursache hatte eine Formel in dieser Datei zerstört
+(`\f` → Seitenvorschub). Das ganze Plugin ist auf Steuerzeichen durchsucht:
+genau diese drei Stellen, alle behoben.
+
+> **Regel daraus:** In Patch-Skripten gehören Suchmuster mit Backslash in
+> **einfache** Anführungszeichen. Und wenn eine Ersetzung nicht greift, sieht
+> man sich die Bytes an, statt das Muster zu lockern.
+
+### Die Formelfarbe im Dunkelmodus — `sammleFormelfarben()`
+
+Der Vektorweg liest die Farbe je Formel aus dem DOM (N4b-Regel: **nie** fest
+eintragen). Steht die Seite auf dunkel, ist das `rgb(232,232,232)` — im PDF
+fast weiße Glyphen auf weißem Papier; am PDF nachgezählt **470 von 727
+Zeichenobjekten unlesbar**. Der Rasterweg hat das Problem nicht, er malt in
+einem Klon, dem `neutralisiereDarkmodeImKlon()` das `data-theme` abnimmt;
+einen solchen Klon gibt es hier nicht.
+
+`sammleFormelfarben(containerBlocks)` misst deshalb **einmal zu Beginn des
+Exports**, vor jeder Veränderung am DOM: `data-theme` kurz abnehmen, alle
+Farben in eine `Map` lesen, Attribut zurücksetzen. Alles in **einem**
+synchronen Block — der Browser malt erst dazwischen, es flackert nichts.
+
+**Der naheliegende Ort — je Block mitten im Lauf — funktioniert nicht.**
+Gemessen: `data-theme` war nachweislich entfernt (Attribut `null`), und
+`getComputedStyle` lieferte trotzdem den Dunkelmodus-Wert, für **30 von 47**
+Formeln; auch ein erzwungener Reflow half nicht. Im ruhigen Zustand vor dem
+Export stimmt derselbe Ablauf für alle. **Der Aufruf läuft nur bei
+eingeschaltetem Vektorweg** — er erzwingt eine Stilneuberechnung, und die
+verschob im Vergleichslauf den Zuschnitt genau einer Formel (242×34 statt
+2038×128).
+
+### Schriften aufwärmen — `waermeSchriftenAuf()`
+
+MathJax wirft `retry` beim ersten Kontakt mit **jedem Zeichen je
+Schriftlage**, nicht je Schriftdatei (das korrigiert die Annahme aus
+Phase 1, AP-1.3). Eine echte Formel der Prüfseite führt das scharfe s
+aufrecht **und** kursiv zugleich ein, brauchte drei Anläufe und fiel als
+einzige auf den Rasterweg zurück; ein `\textbf{}` mit Umlaut kam auch nach
+**zwanzig** Anläufen nicht durch, solange die aufrechte Lage kalt war.
+
+Deshalb wird einmal je Seitenaufruf `äöüÄÖÜß` in allen drei Lagen gesetzt
+und weggeworfen — **135 ms**, danach gelingt jeder geprüfte Fall im ersten
+Anlauf, auch der bis dahin unerreichbare Fettsatz. Die Wiederholung im
+Wächter steht auf drei Anläufen, als Netz für Zeichen außerhalb dieser
+Liste.
+
+### Warum der Vektorweg in einer Schleife läuft
+
+`captureFormulaImages()` ruft sich für Vektorformeln **nicht** je Formel
+über `setTimeout` neu auf. Chrome drosselt Zeitgeber in einem Tab im
+Hintergrund bis auf einen Aufruf je **Minute**; neun Formeln eines Blocks
+brauchten so über vier Minuten. Der Rasterweg behält sein `setTimeout` — er
+ist asynchron und teuer genug.
+
+### Der Abschalter `cbd_formeln_als_vektor`
+
+Die Reißleine, Vorgabe **an**, nach dem Vorbild von
+`cbd_klassenpuls_takt = 0`:
+
+| Stelle | Aufgabe |
+|---|---|
+| `includes/functions.php` | `cbd_formeln_als_vektor()` — die einzige Auslegung |
+| `admin/settings.php` | Kontrollkästchen „Formeln im PDF" samt Speichern |
+| `includes/class-cbd-block-registration.php` | Wert ans Frontend |
+| `includes/class-cbd-classroom.php` | **dasselbe noch einmal** — `cbdPDFData` wird an zwei unabhängigen Stellen lokalisiert |
+
+**Der Wert reist verschachtelt** unter `optionen`:
+`wp_localize_script()` gießt nur **skalare Werte der obersten Ebene** in
+Zeichenketten, und aus einer `0` würde `"0"` — in JavaScript **wahr**, der
+Schalter ließe sich nie ausschalten.
+
+**Die Auswertung ist fail-open:** Nur ein ausdrückliches `false` schaltet ab.
+Die Doppelung der Localize-Stellen hat bei `pageId` schon einmal dazu
+geführt, dass ein Wert auf gewöhnlichen Seiten fehlte; würde ein fehlender
+Wert als „aus" gelten, schaltete ein vergessener Eintrag den **Regelweg**
+still ab.
+
+Bei abgeschaltetem Weg wird MathJax **gar nicht erst geladen**, und das
+erzeugte PDF ist **byteidentisch** mit einem Export auf dem Stand vor
+Phase 2 (nach Neutralisieren von `/CreationDate`, `/ModDate`, `/ID`). Der
+Rauschboden ist dabei null: Zwei Läufe desselben Standes sind ebenfalls
+byteidentisch.
+
+> Der erste Anlauf war **nicht** byteidentisch — 4115 Byte, ein Formelbild
+> anders zugeschnitten. Ursache war `sammleFormelfarben()` (siehe oben).
+> Ohne dieses strenge Kriterium wäre die Nebenwirkung unbemerkt geblieben.
+
+### Der Rückfall je Formel — und was ihn auslöst
+
+`setzeFormelAlsSvg()` gibt `null` zurück, und die Formel geht auf den
+Rasterweg. Jeder dieser Fälle erzeugt **genau eine** Warnzeile mit dem
+Quelltext:
+
+| Auslöser | Beispiel |
+|---|---|
+| MathJax meldet `merror` | `\frac{1}`, `x^`, `\left( x`, `\begin{matrix} a` |
+| MathJax wirft dreimal `retry` | `\ce{H2O}` (mhchem nicht geladen) |
+| kein `data-latex` am Element | clientseitig nachgerenderte Formeln |
+| mehrere `<svg>`-Wurzeln oder null Zeichenobjekte | der Wächter aus Phase 1 |
+
+**Zwei Fälle, die man erwarten würde und die NICHT greifen:**
+
+- **Ein unbekanntes Makro ist für MathJax 4 kein Fehler.**
+  `\dieszgibtsnicht{x}` wird als **Text** gesetzt (17 Pfade, kein `merror`).
+  KaTeX zeigt am Bildschirm eine rote Fehlermeldung; im PDF stünde der
+  Makroname als Text.
+- **CJK ergibt kein SVG ohne Pfade.** `中文漢字` liefert **3** Pfade
+  (Ersatzkästchen), `مرحبا` vier; nur ein Emoji liefert wirklich 0. Eine
+  CJK-Formel landet also als Kästchenreihe im PDF, ohne Warnung. Für den
+  deutschsprachigen Bestand ohne Belang — aber die frühere Begründung im
+  Code („z. B. CJK") war falsch.
+
+### Zwei Messbedingungen, die man kennen muss
+
+1. **Die `?ver=`-Cache-Falle** (bekannt seit N2) hat in dieser Phase wieder
+   zugeschlagen: Nach dem Ausliefern und einem Neuladen lief weiterhin der
+   alte Stand, und ein bereits funktionierender Dunkelmodus-Fix sah aus, als
+   griffe er nicht. Wer hier misst, holt die Datei mit `cache: 'no-store'`
+   und führt sie aus, bevor er misst. **Der Versions-Bump ist deshalb ein
+   Auslieferungsschritt, keine Kosmetik.**
+2. **Der Rasterweg ist in einem verborgenen Prüf-Tab unzuverlässig.** Gegen
+   Ende dieser Phase lieferte er für rund die Hälfte der Formeln leere
+   Leinwände (das aus N2 bekannte Verhalten). Der Vektorweg lief in
+   derselben Umgebung 47 von 47 — nebenbei ein Argument für dieses Vorhaben.
+
+### Prüfharnisch
+
+`node tools/test-svg-aufbereitung.js` — **50 Prüfungen**, ohne Browser, mit
+echten MathJax-Ausgaben als Eingabe (`tools/fixtures/mathjax/`). Er liest die
+**ausgelieferte** Datei und schneidet die geprüften Funktionen daraus heraus.
+Per Mutation belegt, dass er anschlägt: feste Farbe **3**, `vertical-align`
+stehen lassen **9**, `ex` nicht umrechnen **15** Fehlschläge.
+
+**Eine Falle im Harnisch selbst**, in AP-2.fix1 gefunden: Sein DOM-Ersatz
+kannte nur Attribut-Selektoren **mit** Wert; `[style]` fiel still auf den
+Tagnamen-Zweig und traf nichts — eine neue Prüfung wäre grün geworden, ohne
+zu prüfen. Der Ersatz kann jetzt beide Formen.
+
+### Bekannte, bewusst offene Punkte (Stand Phase 2)
+
+1. **Die senkrechte Lage ist `middle`**, nicht die Formelgrundlinie (siehe
+   oben). Entscheidung liegt bei der Abnahme in Phase 3.
+2. **`\textbf{}` mit einem Zeichen außerhalb der Aufwärmliste** fällt auf den
+   Rasterweg zurück. Verlustfrei, aber der einzige bekannte Fall, in dem
+   MathJax' eigener Nachlader gar nicht konvergiert.
+3. **Ein unbekanntes Makro und CJK-Zeichen** lösen keinen Rückfall aus (siehe
+   oben).
+4. Die Punkte 2 bis 5 der Phase-1-Liste gelten unverändert (zwei inhaltlich
+   fehlerhafte Formeln auf Seite 872, drei `\ce{}`-Formeln,
+   `data-semantic-*`-Ballast — den wirft der Client seit AP-2.1 ab —,
+   `preserveAspectRatio` seit AP-2.1 berücksichtigt).
+5. **`CBD_VERSION` ist unverändert.** Der Bump steht in `AP-3.doc`.
 
 ## Klassenmodus: Live-Aktualisierung (`PLAN-Klassenmodus-Live.md`, 2026-08-30 bis 2026-09-04, alle vier Phasen abgeschlossen und in `main` gemergt)
 

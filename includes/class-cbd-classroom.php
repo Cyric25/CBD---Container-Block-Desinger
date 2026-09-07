@@ -2141,7 +2141,14 @@ class CBD_Classroom {
                 // an zwei unabhaengigen Stellen lokalisiert, je nachdem ob die
                 // Seite den [cbd_classroom]-Shortcode traegt. Wer hier etwas
                 // ergaenzt, muss die andere Stelle mitziehen.
-                'pluginUrl' => CBD_PLUGIN_URL
+                'pluginUrl' => CBD_PLUGIN_URL,
+                // AP-2.3: der Abschalter, verschachtelt aus Typgruenden -
+                // Begruendung an der Gegenstelle in
+                // class-cbd-block-registration.php.
+                'optionen' => array(
+                    'formelnAlsVektor' => function_exists('cbd_formeln_als_vektor')
+                        ? cbd_formeln_als_vektor() : true,
+                )
             )
         );
 
