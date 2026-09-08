@@ -1,6 +1,8 @@
 # Datei-Map: Plugin „Container Block Designer"
 
-_Stand: 2026-09-06 · Plugin-Version 3.1.120 (Phasen 1 und 2 aus `PLAN-PDF-Formelfarbe-und-App-Download.md`; der Versions-Bump auf 3.1.121 folgt in `AP-2.doc`)_
+_Stand: 2026-09-08 · Plugin-Version 3.1.124 (AP-2.2 aus
+`PLAN-Summary-PDF-und-Content-Links.md`, Vorhaben „Linkfarben allgemein" —
+Links in Container-Block-Inhalten folgen den Customizer-Themefarben)_
 
 Navigationshilfe auf Dateiebene. Die fachlichen Details stehen in `CLAUDE.md`
 — dort insbesondere die Abschnitte zum Content-Importer, Block-Serializer,
