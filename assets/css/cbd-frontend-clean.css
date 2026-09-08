@@ -390,6 +390,74 @@
     display: none;
 }
 
+/* ============================================
+   LINKS IM CONTAINER-INHALT (AP-2.2, Vorhaben
+   "Summary-PDF und Content-Links", 2026-09)
+   ============================================
+
+   Ein Link, den ein Redakteur in den Inhalt eines Container-Blocks setzt,
+   hatte bis hierher KEINE Farbregel - weder in dieser Datei noch in
+   block-base.css. Er lief damit auf das Browser-Standardblau, mitten in
+   einem Text, dessen uebrige Farben aus dem Customizer kommen.
+
+   Die Farben kommen ueber die Projekt-Variablen mit Rueckfallwert (Hausregel
+   "nur var(--x, #fallback), nie ein nackter Hexwert"). Verwendet wird
+   bewusst --color-special-text, nicht eine neue Customizer-Farbe: dieselbe
+   Konvention wie bei den Glossarbegriffen des Themes und beim bereits
+   vorhandenen Inline-Blockverweis (blocks/block-reference/style.css:385-400).
+
+   WARUM :not([class]) UND NICHT EINFACH ".cbd-container-content a"
+   ---------------------------------------------------------------
+   Ein Selektor .cbd-container-content a hat die Spezifitaet 0-1-1 und
+   schlaegt damit JEDE Regel, die einen Link ueber seine eigene Klasse
+   gestaltet (0-1-0). Im Container-Inhalt betrifft das nachweislich:
+
+     .cbd-block-reference-link   - die Karte des Blocks "Block-Referenz"
+                                   (blocks/block-reference/style.css:9-14,
+                                   "text-decoration: none; color: inherit").
+                                   Sie bekaeme quer ueber die ganze Karte
+                                   eine Unterstreichung und eine Textfarbe,
+                                   die ihren plastischen Look zerlegt.
+     .cbd-block-reference-inline - der Inline-Blockverweis. Farbe und
+                                   Hoverfarbe sind zwar dieselben, aber die
+                                   KURZSCHREIBWEISE "text-decoration:
+                                   underline" setzt text-decoration-thickness
+                                   und -style zurueck - der Verweis verloere
+                                   seine feinere Linienfuehrung.
+     .wp-block-button__link      - Kernblock "Button". Ebenfalls 0-1-0.
+
+   Deshalb greift die Regel nur an Links OHNE jede Klasse. Genau das sind
+   die vom Redakteur im Editor eingefuegten Fliesstext-Links (core/link
+   erzeugt <a href> ohne class); alles mit Klasse traegt eine eigene
+   Gestaltungsabsicht und wird nicht ueberfahren. Eine Liste einzelner
+   :not(.klasse)-Ausnahmen waere die Alternative gewesen - sie muesste bei
+   jedem neuen Linktyp nachgezogen werden und liefe still daneben, wenn das
+   jemand vergisst.
+
+   Die Glossarbegriffe des Themes sind hier KEIN Thema: sie sind <span>,
+   nicht <a> (Theme/functions.php:1940 serverseitig,
+   Theme/src/js/glossar.js:260 im Browser) - geprueft, nicht angenommen.
+
+   .cbd-fragenwand-verweis ist ausdruecklich MIT aufgenommen: Das
+   Inline-Textformat der Fragenwand hat im Frontend gar keine eigene
+   Farbregel (nur assets/css/fragenwand-editor.css fuer das Editor-iFrame)
+   und ist damit derselbe Fall wie ein blanker Fliesstext-Link.
+   ============================================ */
+
+.cbd-container-content a:not([class]),
+.cbd-container-content a.cbd-fragenwand-verweis {
+    color: var(--color-special-text, #71230a);
+    text-decoration: underline;
+    text-decoration-color: var(--color-ui-surface, #e24614);
+}
+
+.cbd-container-content a:not([class]):hover,
+.cbd-container-content a:not([class]):focus-visible,
+.cbd-container-content a.cbd-fragenwand-verweis:hover,
+.cbd-container-content a.cbd-fragenwand-verweis:focus-visible {
+    color: var(--color-ui-surface-dark, #c93d12);
+}
+
 /* Icon state for collapsed containers */
 .cbd-container.cbd-collapsed .cbd-collapse-toggle .dashicons {
     /* JavaScript will set the correct icon class */

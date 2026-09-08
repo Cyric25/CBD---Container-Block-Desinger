@@ -6611,6 +6611,86 @@ zwei Kennungen im `post_content` stehen, aber nichts rendern — ein
 vorbestehendes Inhaltsproblem, verwandt mit dem oben dokumentierten
 Duplikat-Nebenbefund aus AP-2.fix2.
 
+## Links in Container-Block-Inhalten (seit 3.1.124, `PLAN-Summary-PDF-und-Content-Links.md`, Vorhaben „Linkfarben allgemein")
+
+Wie `.entry-content` im Theme (siehe `Theme/CLAUDE.md`, Abschnitt
+„Color Scheme") hatte auch der Inhaltsbereich eines Container-Blocks
+(`.cbd-container-content`) bis zu diesem Vorhaben keine generische Regel
+für `<a>`-Elemente — ein vom Redakteur im Editor eingefügter Link im
+Container-Inhalt lief auf Browser-Standardblau. `assets/css/cbd-frontend-clean.css`
+trägt seither, direkt nach der Collapsed-Regel:
+
+```css
+.cbd-container-content a:not([class]),
+.cbd-container-content a.cbd-fragenwand-verweis {
+    color: var(--color-special-text, #71230a);
+    text-decoration: underline;
+    text-decoration-color: var(--color-ui-surface, #e24614);
+}
+.cbd-container-content a:not([class]):hover,
+.cbd-container-content a:not([class]):focus-visible,
+.cbd-container-content a.cbd-fragenwand-verweis:hover,
+.cbd-container-content a.cbd-fragenwand-verweis:focus-visible {
+    color: var(--color-ui-surface-dark, #c93d12);
+}
+```
+
+**Abweichung vom ursprünglichen Plan-Text — `a:not([class])` statt `a`,
+und der Grund ist tragend, keine Stilfrage.** `.cbd-container-content a`
+hätte Spezifität 0-1-1 und damit jede Regel geschlagen, die einen Link über
+seine **eigene Klasse** gestaltet (0-1-0). Nachgemessen betroffen wären
+gewesen:
+
+| Klasse | Was ohne den Wächter passiert wäre |
+|---|---|
+| `.cbd-block-reference-link` | Die Karte des Blocks „Block-Referenz" (`text-decoration:none; color:inherit`) bekäme quer über die ganze Karte eine Unterstreichung und eine fremde Textfarbe |
+| `.cbd-block-reference-inline` | Farbe/Hoverfarbe wären zwar zeichengleich, aber die Kurzschreibweise `text-decoration: underline` setzt `text-decoration-thickness`/`-style` auf `initial` zurück — der Inline-Verweis verlöre seine feinere Linienführung |
+| `.wp-block-button__link` | Kernblock „Button" — Knöpfe im Container würden unterstrichen und umgefärbt |
+
+`a:not([class])` trifft genau den vom Redakteur im Editor eingefügten
+Fließtext-Link (`core/link` erzeugt `<a href>` ohne `class`); alles mit
+Klasse trägt eine eigene Gestaltungsabsicht und wird nicht überfahren.
+`a.cbd-fragenwand-verweis` ist zusätzlich ausdrücklich aufgenommen: Das
+Inline-Textformat der Fragenwand (Abschnitt „Fragenwand" oben) hatte im
+Frontend **keine** eigene Farbregel — `fragenwand-editor.css` gestaltet nur
+das Editor-iFrame — und war damit derselbe Fall wie ein blanker
+Fließtext-Link. Der **Button** „Fragenwand öffnen" im Inhaltsverzeichnis
+(`.page-index__fragenwand-link` in `fragenwand.css`) ist davon nicht
+betroffen — er ist ein `<button>`, kein `<a>`, und liegt außerdem nicht in
+`.cbd-container-content`; seine Farbregel folgt bereits seit vorher den
+Themefarben (verifiziert, keine Änderung nötig).
+
+**`editor-base.css:1051`** (`.cbd-container-error a`) verwendete zusätzlich
+den hartkodierten Wert `#007cba` (WordPress-Admin-Blau) statt einer
+Projektvariable — nur im Editor-iFrame sichtbar, aber inkonsistent mit der
+Projektkonvention „Farben werden abgeleitet, nicht gesetzt" (siehe
+`Theme/CLAUDE.md`, Abschnitt „Plastischer Look"). Umgestellt auf
+`color: var(--color-special-text, #71230a)`. **Rund zehn weitere
+`#007cba`-Literale bleiben in derselben Datei stehen** (Zeilen 669, 731,
+743, 809, 810, 854, 865, 866, 877, 992 — Knopf-/Fokusflächen der
+Editor-Oberfläche, alle mit `!important`) — bewusst außerhalb des Scopes
+dieses AP, offener Punkt für ein künftiges Aufräum-AP.
+
+**Verhältnis zur Theme-Regel `:where(.entry-content) a`:** Beide Regeln
+greifen unabhängig voneinander und regieren **disjunkte** Elementmengen —
+gemessen per Kausalprobe (Übersteuern der Plugin-Regel färbt nur Links im
+Container, Übersteuern der Theme-Regel nur Links außerhalb). Für den
+klassenlosen Link im Container gewinnt die Plugin-Regel (0-2-1 bzw. 0-3-1
+mit Hover) gegen die Theme-Regel (0-0-1) — dasselbe Ergebnis, da beide
+dieselben Variablen verwenden. Die drei Klassenfälle oben blieben auch im
+kombinierten Zustand (beide Regeln aktiv) unverändert. **Eine bekannte,
+kosmetische Abweichung:** `text-decoration-thickness` fällt innerhalb eines
+Container-Blocks `auto` statt `1px` aus (außen, nur Theme-Regel aktiv),
+weil die Kurzschreibweise `text-decoration: underline` hier `-thickness`
+zurücksetzt und keine Langform dagegenhält — bei Fließtextgröße praktisch
+nicht wahrnehmbar, bewusst nicht behoben (Befund B-2 aus AP-2.rev; ließe
+sich mit einer zusätzlichen Zeile `text-decoration-thickness: 1px;`
+beheben, falls gewünscht).
+
+`CBD_VERSION` wurde im Zuge dieses Vorhabens 3.1.123 → 3.1.124 erhöht
+(Plugin-Header `Version:` mitgezogen) — notwendiger Auslieferungsschritt
+für das Cache-Busting der geänderten CSS-Dateien, keine Kosmetik.
+
 ## Debugging-Konventionen
 
 - **PHP:** Informations-Logs laufen über klasseneigene `debug_log()`-Helper
