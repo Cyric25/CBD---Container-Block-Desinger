@@ -983,6 +983,27 @@
 }
 
 /* =============================================
+   TEXT-EINGABE - Overlay des Werkzeugs "Text" (data-tool="text")
+   ============================================= */
+
+.cbd-board-text-input {
+    position: fixed;
+    resize: both;
+    overflow: auto;
+    min-width: 120px;
+    min-height: 40px;
+    padding: 6px;
+    border: 2px solid var(--color-ui-surface, #e24614);
+    border-radius: 6px;
+    font-family: sans-serif;
+    font-size: 14px;
+    background: var(--color-background, #ffffff);
+    color: var(--color-text-primary, #333);
+    z-index: 1000001;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+/* =============================================
    DARKMODE - Werkzeugleiste, Zeichenflaechen-Rahmen, Farbauswahl-Dialog
    (AP-1.4, PLAN-PDF-Export-und-Tafelmodus-Fixes.md)
    ============================================= */
@@ -1125,6 +1146,12 @@
    im Darkmode ueberhaupt gesetzt. */
 .cbd-board-canvas-container.cbd-board-inverted {
     filter: invert(1);
+}
+
+[data-theme="dark"] .cbd-board-text-input {
+    background: var(--color-background-light, #1e1e1e);
+    color: var(--color-text-primary, #e8e8e8);
+    border-color: var(--color-ui-surface, #e24614);
 }
 
 /* =============================================

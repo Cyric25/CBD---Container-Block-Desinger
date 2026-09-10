@@ -365,6 +365,9 @@
                         '<button class="cbd-board-tool" data-tool="eraser-point" title="Punkt-Radierer">' +
                             '<span class="dashicons dashicons-dismiss"></span>' +
                         '</button>' +
+                        '<button class="cbd-board-tool" data-tool="text" title="Text einfügen">' +
+                            '<span class="dashicons dashicons-text-page"></span>' +
+                        '</button>' +
                         '<span class="cbd-board-separator"></span>' +
                         // Farben
                         '<input type="color" class="cbd-board-color" value="#000000" title="Stiftfarbe">' +
@@ -1258,6 +1261,82 @@
             this.removeFromCache();
         },
 
+        /**
+         * Text-Werkzeug: Eingabefeld an der Klickposition öffnen.
+         * Stempelt den bestätigten Text direkt auf die Zeichenfläche
+         * (Speicher-/Undo-Integration als strokes-Eintrag folgt in AP-1.2).
+         */
+        openTextInput: function(clientX, clientY) {
+            var self = this;
+            var canvasX = this.lastX;
+            var canvasY = this.lastY;
+            var committed = false;
+
+            // Falls bereits ein Eingabefeld offen ist: zuerst entfernen (ohne Text zu übernehmen)
+            var existing = document.querySelector('.cbd-board-text-input');
+            if (existing && existing.parentNode) {
+                existing.parentNode.removeChild(existing);
+            }
+
+            var textarea = document.createElement('textarea');
+            textarea.className = 'cbd-board-text-input';
+            textarea.style.left = clientX + 'px';
+            textarea.style.top = clientY + 'px';
+
+            function cleanup() {
+                if (textarea.parentNode) {
+                    textarea.parentNode.removeChild(textarea);
+                }
+            }
+
+            function commit() {
+                if (committed) return;
+                committed = true;
+
+                var text = textarea.value.replace(/^\s+|\s+$/g, '');
+                cleanup();
+                if (!text) return;
+
+                var fontSizePx = Math.round(16 + self.lineWidth * 4);
+                self.drawingCtx.font = fontSizePx + 'px sans-serif';
+                self.drawingCtx.fillStyle = self.currentColor;
+                self.drawingCtx.textBaseline = 'top';
+
+                var lines = text.split('\n');
+                for (var i = 0; i < lines.length; i++) {
+                    self.drawingCtx.fillText(lines[i], canvasX, canvasY + i * fontSizePx * 1.2);
+                }
+            }
+
+            function cancel() {
+                if (committed) return;
+                committed = true;
+                cleanup();
+            }
+
+            textarea.addEventListener('keydown', function(e) {
+                // Nie an den dokumentweiten Tastatur-Handler des Tafelmodus
+                // durchreichen (u. a. schliesst dessen Escape-Zweig sonst die
+                // GESAMTE Tafel statt nur dieses Eingabefeld, siehe onKeyDown()).
+                e.stopPropagation();
+
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancel();
+                } else if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    commit();
+                }
+            });
+
+            textarea.addEventListener('blur', function() {
+                commit();
+            });
+
+            document.body.appendChild(textarea);
+            textarea.focus();
+        },
+
         showClearConfirm: function() {
             var self = this;
 
@@ -1328,6 +1407,12 @@
             var rect = this.drawingCanvas.getBoundingClientRect();
             this.lastX = (e.clientX - rect.left) / this.zoom;
             this.lastY = (e.clientY - rect.top) / this.zoom;
+
+            // Text-Werkzeug: Eingabefeld an der Klickposition öffnen statt zu zeichnen
+            if (this.currentTool === 'text') {
+                this.openTextInput(e.clientX, e.clientY);
+                return; // kein Zeichen-Strich beginnen
+            }
 
             // Punkt-Radierer: Kontinuierlich radieren (wie normaler Radierer)
             if (this.currentTool === 'eraser-point') {
