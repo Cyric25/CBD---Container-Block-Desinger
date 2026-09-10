@@ -873,6 +873,33 @@ Werkzeuge unverändert, Regression damit ausgeschlossen.
 **`reference_file_map.md` aktualisiert** (Zeile zu `board-mode.js`, deckt
 AP-1.fix1 und AP-1.fix2 gemeinsam ab).
 
+**Unabhängige Kurz-Bestätigung (separater, frischer Agent, ausschließlich
+echte Eingaben, kein Zugriff auf diese Übergabenotizen):** Alle drei
+Befunde erneut und unabhängig als behoben bestätigt — inklusive eines
+Selbsttests des eigenen Fehler-Sammlers für B2 (ein absichtlich
+provoziertes `removeChild` wurde erkannt, die gemeldete Null-Fehlerquote
+ist also aussagekräftig) und der bei AP-1.fix2 offen gelassenen
+Gegenprobe „Klick außerhalb des Textes trifft nicht" (bestanden: 3→3
+Striche bei einem Klick 168 px neben dem Textkörper). Regressionscheck
+(Stift, Punkt-Abstands-Radierer, Persistenz über echtes Schließen/
+Neuöffnen) ebenfalls bestanden, 0 Konsolenfehler über den gesamten
+Testlauf. **Ausdrückliche Aussage: „Phase 1 ist erreicht."**
+
+Drei neue, geringe Beobachtungen ohne Handlungsbedarf vor Phasenabschluss
+(für `AP-1.doc` als bekannte, bewusst nicht behobene Kleinigkeiten
+vorgesehen):
+1. `eraseStrokeAtPoint()` (`:1581`) setzt `this.drawingCtx.font` für die
+   Trefferflächen-Messung und stellt den vorherigen Wert nicht wieder her
+   — heute folgenlos, da Pass 3 in `redrawAllStrokes()` `font` vor jedem
+   Text ohnehin selbst setzt.
+2. Die Trefferbox (`:1591`) ist an der Unterkante um ca. `0,2 * fontSizePx`
+   großzügiger bemessen als die tatsächliche letzte Textzeile — Fehlerrichtung
+   „lieber treffen als verfehlen", passt zum Zweck des Radierers.
+3. Methodischer Hinweis für künftige Tests: Der `computer`-Werkzeug-Tastenname
+   `"Return"` erzeugt keinen auswertbaren `key: 'Enter'`-Keydown (leere
+   `key`/`code`), `"Enter"` dagegen schon — wer das verwechselt, hält einen
+   funktionierenden Commit-Pfad für kaputt.
+
 #### AP-1.doc: Dokumentation Phase 1 aktualisieren
 
 **Status:** ☐ offen
@@ -1439,6 +1466,7 @@ pro Phasenabschluss.
 | 2026-09-10 | AP-1.rev | Unabhängiges Review (frischer Opus-Agent): Codelektüre, git diff/log, Live-Test mit echten UND synthetischen Eingaben | 3 Befunde: B1 kritisch (Text-Werkzeug mit echter Eingabe funktionslos), B2 mittel (Doppel-Öffnen wirft Fehler), B3 mittel (Radierer trifft nur Textanker). Lauffähiger Endzustand NICHT erreicht | frischer Review-Agent (Opus) |
 | 2026-09-10 | AP-1.fix1 | Alle Akzeptanzkriterien ausschließlich mit echten `computer`-Tool-Eingaben (Klick, Tippen, echte Enter-Taste): Feld bleibt offen, Text übernommen, zweites Feld ohne Fehler, Persistenz weiterhin intakt | Bestanden — B1 und B2 behoben | Claude (Sonnet 5) |
 | 2026-09-10 | AP-1.fix2 | Strich-Radierer-Klick in Textmitte und am Textende live getestet | Bestanden — B3 behoben, Text vollständig entfernt bei Klick auf den Textkörper | Claude (Sonnet 5) |
+| 2026-09-10 | Kurz-Review (Bestätigung AP-1.fix1+fix2) | Zweiter, unabhängiger frischer Agent: B1/B2/B3 erneut mit echten Eingaben geprüft, inkl. Selbsttest des Fehler-Sammlers (B2) und Negativ-Gegenprobe (B3), Regressionscheck Stift/Radierer/Persistenz | Alle drei Befunde unabhängig bestätigt behoben, 0 Konsolenfehler, „Phase 1 ist erreicht" | frischer Review-Agent (Opus) |
 
 ## 10. Dokumentation
 
