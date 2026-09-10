@@ -365,6 +365,9 @@
                         '<button class="cbd-board-tool" data-tool="eraser-point" title="Punkt-Radierer">' +
                             '<span class="dashicons dashicons-dismiss"></span>' +
                         '</button>' +
+                        '<button class="cbd-board-tool" data-tool="text" title="Text einfügen">' +
+                            '<span class="dashicons dashicons-text-page"></span>' +
+                        '</button>' +
                         '<span class="cbd-board-separator"></span>' +
                         // Farben
                         '<input type="color" class="cbd-board-color" value="#000000" title="Stiftfarbe">' +
@@ -1258,6 +1261,98 @@
             this.removeFromCache();
         },
 
+        /**
+         * Text-Werkzeug: Eingabefeld an der Klickposition öffnen.
+         * Übernommener Text wird als strokes-Eintrag abgelegt (siehe commit()
+         * unten) und dadurch automatisch gespeichert/rückgängig machbar.
+         */
+        openTextInput: function(clientX, clientY) {
+            var self = this;
+            var canvasX = this.lastX;
+            var canvasY = this.lastY;
+            var committed = false;
+
+            // Falls bereits ein Eingabefeld offen ist: zuerst entfernen. Das
+            // loest synchron ein 'blur' auf dem alten Feld aus, dessen
+            // eigener Handler seinen Text uebernimmt (commit()) und sich
+            // dabei SELBST aus dem DOM entfernt (cleanup()) - der
+            // nachfolgende removeChild-Aufruf hier traefe dann auf einen
+            // bereits entfernten Knoten. AP-1.fix1 (Befund B2 aus
+            // AP-1.rev): try/catch faengt genau diesen Fall ab, das
+            // Ergebnis (kein offenes altes Feld mehr) ist in beiden Faellen
+            // dasselbe.
+            var existing = document.querySelector('.cbd-board-text-input');
+            if (existing && existing.parentNode) {
+                try {
+                    existing.parentNode.removeChild(existing);
+                } catch (removeErr) {
+                    // bereits per eigenem blur-Handler entfernt, siehe oben
+                }
+            }
+
+            var textarea = document.createElement('textarea');
+            textarea.className = 'cbd-board-text-input';
+            textarea.style.left = clientX + 'px';
+            textarea.style.top = clientY + 'px';
+
+            function cleanup() {
+                if (textarea.parentNode) {
+                    textarea.parentNode.removeChild(textarea);
+                }
+            }
+
+            function commit() {
+                if (committed) return;
+                committed = true;
+
+                var text = textarea.value.replace(/^\s+|\s+$/g, '');
+                cleanup();
+                if (!text) return;
+
+                // Als regulaeren strokes-Eintrag ablegen (analog zum
+                // bestehenden 'highlighter'-Sonderfall) - macht Undo,
+                // Speichern und Seitenwechsel automatisch korrekt, weil
+                // redrawAllStrokes() ausschliesslich aus baseImageObj +
+                // strokes neu aufbaut (siehe dortiger Pass 3).
+                self.strokes.push({
+                    tool: 'text',
+                    text: text,
+                    color: self.currentColor,
+                    width: self.lineWidth,
+                    points: [{x: canvasX, y: canvasY}]
+                });
+                self.redrawAllStrokes();
+            }
+
+            function cancel() {
+                if (committed) return;
+                committed = true;
+                cleanup();
+            }
+
+            textarea.addEventListener('keydown', function(e) {
+                // Nie an den dokumentweiten Tastatur-Handler des Tafelmodus
+                // durchreichen (u. a. schliesst dessen Escape-Zweig sonst die
+                // GESAMTE Tafel statt nur dieses Eingabefeld, siehe onKeyDown()).
+                e.stopPropagation();
+
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancel();
+                } else if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    commit();
+                }
+            });
+
+            textarea.addEventListener('blur', function() {
+                commit();
+            });
+
+            document.body.appendChild(textarea);
+            textarea.focus();
+        },
+
         showClearConfirm: function() {
             var self = this;
 
@@ -1328,6 +1423,23 @@
             var rect = this.drawingCanvas.getBoundingClientRect();
             this.lastX = (e.clientX - rect.left) / this.zoom;
             this.lastY = (e.clientY - rect.top) / this.zoom;
+
+            // Text-Werkzeug: Eingabefeld an der Klickposition öffnen statt zu zeichnen
+            if (this.currentTool === 'text') {
+                // AP-1.fix1 (Befund B1 aus AP-1.rev): Ohne preventDefault()
+                // verarbeitet der Browser nach diesem pointerdown weiterhin
+                // seine eigene Standardaktion (u. a. Fokuswechsel Richtung
+                // Canvas) - das zog den Fokus dem gerade erst geöffneten
+                // Eingabefeld sofort wieder weg, dessen blur-Handler committete
+                // daraufhin einen leeren Text und entfernte das Feld, bevor der
+                // Nutzer auch nur ein Zeichen tippen konnte. Nur bei ECHTER
+                // Eingabe reproduzierbar, nicht bei synthetisch dispatchten
+                // PointerEvents (die haben keine Standardaktion) - deshalb in
+                // AP-1.1/AP-1.2 unentdeckt geblieben.
+                e.preventDefault();
+                this.openTextInput(e.clientX, e.clientY);
+                return; // kein Zeichen-Strich beginnen
+            }
 
             // Punkt-Radierer: Kontinuierlich radieren (wie normaler Radierer)
             if (this.currentTool === 'eraser-point') {
@@ -1458,6 +1570,35 @@
             for (var i = this.strokes.length - 1; i >= 0; i--) {
                 var stroke = this.strokes[i];
 
+                // Text-Einträge haben nur einen Anker-Punkt (Einfügeposition),
+                // nicht den tatsächlich gerenderten Textbereich - ein reiner
+                // Punkt-Abstands-Test würde den Radierer nur nahe der linken
+                // oberen Ecke treffen lassen (AP-1.rev, Befund B3). Deshalb
+                // hier stattdessen ein Rechtecktest über die tatsächliche
+                // Ausdehnung des gerenderten Texts.
+                if (stroke.tool === 'text') {
+                    var fontSizePxErase = Math.round(16 + stroke.width * 4);
+                    this.drawingCtx.font = fontSizePxErase + 'px sans-serif';
+                    var textLinesErase = stroke.text.split('\n');
+                    var maxLineWidth = 0;
+                    for (var tl = 0; tl < textLinesErase.length; tl++) {
+                        var lineWidthPx = this.drawingCtx.measureText(textLinesErase[tl]).width;
+                        if (lineWidthPx > maxLineWidth) maxLineWidth = lineWidthPx;
+                    }
+                    var boxLeft = stroke.points[0].x - eraserRadius;
+                    var boxTop = stroke.points[0].y - eraserRadius;
+                    var boxRight = stroke.points[0].x + maxLineWidth + eraserRadius;
+                    var boxBottom = stroke.points[0].y + textLinesErase.length * fontSizePxErase * 1.2 + eraserRadius;
+
+                    if (x >= boxLeft && x <= boxRight && y >= boxTop && y <= boxBottom) {
+                        this.strokes.splice(i, 1);
+                        deletedAny = true;
+                    }
+
+                    if (deletedAny) break;
+                    continue;
+                }
+
                 // Prüfe ob Radierer einen Punkt des Strichs berührt
                 for (var j = 0; j < stroke.points.length; j++) {
                     var point = stroke.points[j];
@@ -1534,7 +1675,7 @@
 
             for (var i = 0; i < allStrokes.length; i++) {
                 var stroke = allStrokes[i];
-                if (stroke.tool === 'highlighter') continue; // Überspringen, schon gezeichnet
+                if (stroke.tool === 'highlighter' || stroke.tool === 'text') continue; // Überspringen (Textmarker schon gezeichnet, Text folgt in Pass 3)
                 if (stroke.points.length < 1) continue;
 
                 this.drawingCtx.lineWidth = stroke.width;
@@ -1555,6 +1696,24 @@
 
             // Composite Operation zurücksetzen
             this.drawingCtx.globalCompositeOperation = 'source-over';
+
+            // Pass 3: Text-Einträge zeichnen (oberste Ebene)
+            for (var k = 0; k < allStrokes.length; k++) {
+                var textStroke = allStrokes[k];
+                if (textStroke.tool !== 'text') continue;
+                var fontSizePx = Math.round(16 + textStroke.width * 4);
+                this.drawingCtx.font = fontSizePx + 'px sans-serif';
+                this.drawingCtx.fillStyle = textStroke.color;
+                this.drawingCtx.textBaseline = 'top';
+                var textLines = textStroke.text.split('\n');
+                for (var li = 0; li < textLines.length; li++) {
+                    this.drawingCtx.fillText(
+                        textLines[li],
+                        textStroke.points[0].x,
+                        textStroke.points[0].y + li * fontSizePx * 1.2
+                    );
+                }
+            }
         },
 
         onKeyDown: function(e) {
