@@ -1,6 +1,6 @@
 # Projektplan: Text-Werkzeug im Tafelmodus + Wiederherstellung Notizen-Download/-Upload
 
-_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (Phase 1 vollständig abgeschlossen)_
+_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (Phase 1 abgeschlossen, AP-2.1 abgeschlossen)_
 
 ## 0. Anweisungen für den ausführenden Agenten
 
@@ -980,7 +980,7 @@ zweifach unabhängig mit echten Eingaben bestätigt.
 
 #### AP-2.1: Notizen-Manager-Enqueue aus dem Feature-Scan herauslösen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** opus (strukturelle Änderung an einer zentralen, produktiv genutzten Methode – Regressionsrisiko erfordert Urteilsvermögen)
 **Abhängigkeiten:** keine
@@ -1142,7 +1142,43 @@ Verhalten zu ändern.
   Inhaltsverzeichnis-Block (dieses AP ändert noch keine Sichtbarkeitsregel).
 
 **Übergabenotiz:**
+Umgesetzt exakt wie im Vorgehen beschrieben: Codeblock aus
+`enqueue_feature_styles()` entfernt, neue Methode
+`enqueue_notes_manager_styles()` direkt danach eingefügt (mit `global
+$post;` und einem `if ($notes_manager_enabled === 'disabled') { return;
+}`-Frühausstieg statt der ursprünglichen `!== 'disabled'`-Verschachtelung
+— funktional identisch, aber ohne eine zusätzliche Einrückungsebene für
+den Rest der Methode), neuer Aufruf `$this->enqueue_notes_manager_styles();`
+direkt nach `$this->enqueue_feature_styles();` in `enqueue_frontend_styles()`
+ergänzt, dort mit Kommentar, der auf AP-2.1 und den Grund verweist.
+`enqueue_feature_styles()` selbst ist sonst **byteidentisch** zum Stand vor
+diesem AP (nur der Notizen-Manager-Block fehlt jetzt am Ende).
 
+`php -l` und `php tools/check-php74.php` (572 Dateien PHP-7.4-kompatibel)
+fehlerfrei.
+
+Live auf dem Testserver getestet (weiterhin unter
+`http://fos.localhost:8080/`, drei per SQL-Abfrage gezielt ausgewählte
+Seiten):
+- Seite 146 „Skripten Altes Curriculum" (kein Container-Block, kein
+  Inhaltsverzeichnis) → **kein** `board-mode.css/.js` und **kein**
+  `personal-notes-manager.css/.js` im `outerHTML` — Prüfschritt 1
+  bestanden.
+- Seite 117 „Die wichtigsten Organischen Grundlagen" (Container-Design mit
+  aktivem `boardMode`-Feature) → `board-mode.css`/`board-mode.js`
+  weiterhin vorhanden, `personal-notes-manager.*` weiterhin abwesend —
+  Prüfschritt 2 bestanden.
+- Seite 17 „Chemie" (enthält `fos/inhaltsverzeichnis`, `.page-index` im DOM
+  bestätigt) → `personal-notes-manager.css/.js` weiterhin **abwesend**,
+  kein `.cbd-notes-manager-button` im DOM — Prüfschritt 3 bestanden (Option
+  ist noch `disabled`, `has_block()`-Regel kommt erst in AP-2.2).
+
+`debug.log` des Testservers (WP_DEBUG/WP_DEBUG_LOG aktiv) nach allen drei
+Seitenaufrufen ohne neue Notices/Warnings/Fatal-Errors — nur die üblichen
+Boot-Protokollzeilen der Block-Registrierung.
+
+`reference_file_map.md` (Zeile zu `includes/class-cbd-style-loader.php`)
+aktualisiert.
 
 #### AP-2.2: Options-Wert „toc" + Sichtbarkeitsregel + neuer Vorgabewert
 
@@ -1474,7 +1510,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.fix1 | Text-Werkzeug mit echter Eingabe nutzbar (B1+B2) | opus | ☑ | AP-1.rev | Kritischer Bug: Fokus ging bei echtem Klick sofort verloren |
 | AP-1.fix2 | Strich-Radierer trifft ganzen Textkörper (B3) | sonnet | ☑ | AP-1.rev | |
 | AP-1.doc | Doku Phase 1 | sonnet | ☑ | AP-1.rev, AP-1.fix1, AP-1.fix2 | Phase 1 vollständig abgeschlossen, CBD_VERSION 3.1.126 |
-| AP-2.1 | Notizen-Manager-Enqueue herauslösen | opus | ☐ | – | |
+| AP-2.1 | Notizen-Manager-Enqueue herauslösen | opus | ☑ | – | Reine Verschiebung, `enqueue_feature_styles()` sonst byteidentisch; 3 Regressionstests live bestanden |
 | AP-2.2 | Options-Wert „toc" + Sichtbarkeitsregel | sonnet | ☐ | AP-2.1 | |
 | AP-2.3 | Darkmode-Sichtprüfung personal-notes-manager.css | sonnet | ☐ | AP-2.2 | |
 | AP-2.rev | Review Phase 2 | opus | ☐ | AP-2.1, AP-2.2, AP-2.3 | |
@@ -1495,6 +1531,7 @@ pro Phasenabschluss.
 | 2026-09-10 | AP-1.fix2 | Strich-Radierer-Klick in Textmitte und am Textende live getestet | Bestanden — B3 behoben, Text vollständig entfernt bei Klick auf den Textkörper | Claude (Sonnet 5) |
 | 2026-09-10 | Kurz-Review (Bestätigung AP-1.fix1+fix2) | Zweiter, unabhängiger frischer Agent: B1/B2/B3 erneut mit echten Eingaben geprüft, inkl. Selbsttest des Fehler-Sammlers (B2) und Negativ-Gegenprobe (B3), Regressionscheck Stift/Radierer/Persistenz | Alle drei Befunde unabhängig bestätigt behoben, 0 Konsolenfehler, „Phase 1 ist erreicht" | frischer Review-Agent (Opus) |
 | 2026-09-10 | AP-1.doc / Phase 1 Abschluss | CLAUDE.md-Abschnitt, reference_file_map.md und CBD_VERSION gegen den tatsächlichen Code gegengeprüft (Stichprobe: Funktionsnamen/Zeilennummern) | Bestanden — Phase 1 vollständig abgeschlossen (alle APs ☑) | Claude (Sonnet 5) |
+| 2026-09-10 | AP-2.1 | 3 Regressions-Prüfschritte live auf `fos.localhost:8080` (Seite 146 ohne Feature, Seite 117 mit boardMode, Seite 17 mit Inhaltsverzeichnis), `php -l` + `check-php74.php`, `debug.log` geprüft | Bestanden, `enqueue_feature_styles()` sonst byteidentisch, kein neuer PHP-Notice | Claude (Sonnet 5) |
 
 ## 10. Dokumentation
 
