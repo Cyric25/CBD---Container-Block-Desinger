@@ -1,6 +1,6 @@
 # Projektplan: Text-Werkzeug im Tafelmodus + Wiederherstellung Notizen-Download/-Upload
 
-_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (Phase 1 vollständig abgeschlossen)_
+_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (Phase 1 abgeschlossen, AP-2.1–AP-2.3 abgeschlossen)_
 
 ## 0. Anweisungen für den ausführenden Agenten
 
@@ -980,7 +980,7 @@ zweifach unabhängig mit echten Eingaben bestätigt.
 
 #### AP-2.1: Notizen-Manager-Enqueue aus dem Feature-Scan herauslösen
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** opus (strukturelle Änderung an einer zentralen, produktiv genutzten Methode – Regressionsrisiko erfordert Urteilsvermögen)
 **Abhängigkeiten:** keine
@@ -1142,11 +1142,56 @@ Verhalten zu ändern.
   Inhaltsverzeichnis-Block (dieses AP ändert noch keine Sichtbarkeitsregel).
 
 **Übergabenotiz:**
+Umgesetzt exakt wie im Vorgehen beschrieben: Codeblock aus
+`enqueue_feature_styles()` entfernt, neue Methode
+`enqueue_notes_manager_styles()` direkt danach eingefügt (mit `global
+$post;` und einem `if ($notes_manager_enabled === 'disabled') { return;
+}`-Frühausstieg statt der ursprünglichen `!== 'disabled'`-Verschachtelung
+— funktional identisch, aber ohne eine zusätzliche Einrückungsebene für
+den Rest der Methode), neuer Aufruf `$this->enqueue_notes_manager_styles();`
+direkt nach `$this->enqueue_feature_styles();` in `enqueue_frontend_styles()`
+ergänzt, dort mit Kommentar, der auf AP-2.1 und den Grund verweist.
+`enqueue_feature_styles()` selbst ist sonst **byteidentisch** zum Stand vor
+diesem AP (nur der Notizen-Manager-Block fehlt jetzt am Ende).
 
+`php -l` und `php tools/check-php74.php` (572 Dateien PHP-7.4-kompatibel)
+fehlerfrei.
+
+Live auf dem Testserver getestet (weiterhin unter
+`http://fos.localhost:8080/`, drei per SQL-Abfrage gezielt ausgewählte
+Seiten):
+- Seite 146 „Skripten Altes Curriculum" (kein Container-Block, kein
+  Inhaltsverzeichnis) → **kein** `board-mode.css/.js` und **kein**
+  `personal-notes-manager.css/.js` im `outerHTML` — Prüfschritt 1
+  bestanden.
+- Seite 117 „Die wichtigsten Organischen Grundlagen" (Container-Design mit
+  aktivem `boardMode`-Feature) → `board-mode.css`/`board-mode.js`
+  weiterhin vorhanden, `personal-notes-manager.*` weiterhin abwesend —
+  Prüfschritt 2 bestanden.
+- Seite 17 „Chemie" (enthält `fos/inhaltsverzeichnis`, `.page-index` im DOM
+  bestätigt) → `personal-notes-manager.css/.js` weiterhin **abwesend**,
+  kein `.cbd-notes-manager-button` im DOM — Prüfschritt 3 bestanden (Option
+  ist noch `disabled`, `has_block()`-Regel kommt erst in AP-2.2).
+
+`debug.log` des Testservers (WP_DEBUG/WP_DEBUG_LOG aktiv) nach allen drei
+Seitenaufrufen ohne neue Notices/Warnings/Fatal-Errors — nur die üblichen
+Boot-Protokollzeilen der Block-Registrierung.
+
+`reference_file_map.md` (Zeile zu `includes/class-cbd-style-loader.php`)
+aktualisiert.
+
+**Nachtrag (gefunden während AP-2.2, dort behoben — siehe dortige
+Übergabenotiz):** AP-2.1 wurde ausschließlich mit der Option auf
+`disabled` getestet (dem einzigen zu diesem Zeitpunkt im Spiel befindlichen
+Wert), nicht mit `all`/`specific`. Die Prüfschritte hier waren damit
+formal bestanden, aber lückenhaft — ein echter Regressionsfall (`all`
+zeigte den Button auf jeder Seite, nicht nur auf Seiten mit
+Container-Block) blieb dadurch unentdeckt und kam erst beim AP-2.2-
+Regressionstest zutage.
 
 #### AP-2.2: Options-Wert „toc" + Sichtbarkeitsregel + neuer Vorgabewert
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** sonnet (Vorgehen durch AP-2.1 und die Analyse eindeutig vorgezeichnet)
 **Abhängigkeiten:** AP-2.1 (Methode `enqueue_notes_manager_styles()` muss existieren)
@@ -1218,25 +1263,25 @@ existiert; der `$default`-Parameter greift nur, wenn die Option in
    `'specific'` reagiert und jeden anderen Wert gleich behandelt).
 
 **Akzeptanzkriterien:**
-- [ ] Eine veröffentlichte Seite mit dem Block `fos/inhaltsverzeichnis` im
+- [x] Eine veröffentlichte Seite mit dem Block `fos/inhaltsverzeichnis` im
       `post_content` zeigt den Notizen-Manager-Button, **ohne** dass die
       Option `cbd_personal_notes_manager` je manuell gesetzt wurde
       (Vorgabewert `'toc'` greift).
-- [ ] Eine Seite ohne diesen Block und ohne andere aktive Notizen-Manager-
+- [x] Eine Seite ohne diesen Block und ohne andere aktive Notizen-Manager-
       Einstellung zeigt **keinen** Notizen-Manager-Button.
-- [ ] Container Designer → Einstellungen zeigt einen neuen, dritten
+- [x] Container Designer → Einstellungen zeigt einen neuen, dritten
       Radio-Eintrag „Nur auf Seiten mit Inhaltsverzeichnis-Block anzeigen",
       standardmäßig ausgewählt (sofern die Option in der Datenbank noch
       nicht existiert).
-- [ ] Wird in den Einstellungen explizit „Deaktiviert" gewählt und
+- [x] Wird in den Einstellungen explizit „Deaktiviert" gewählt und
       gespeichert, verschwindet der Button auch auf
       Inhaltsverzeichnis-Seiten (Options-Wert wird respektiert, `toc` ist
       nur der Vorgabewert, keine erzwungene Einstellung).
-- [ ] Die bestehenden Modi „Auf allen Seiten…" und „Nur auf ausgewählten
+- [x] Die bestehenden Modi „Auf allen Seiten…" und „Nur auf ausgewählten
       Seiten…" funktionieren unverändert.
-- [ ] `php tools/check-php74.php` läuft ohne Fehler über beide geänderten
+- [x] `php tools/check-php74.php` läuft ohne Fehler über beide geänderten
       Dateien.
-- [ ] `reference_file_map.md` (Zeilen zu `includes/class-cbd-style-loader.php`
+- [x] `reference_file_map.md` (Zeilen zu `includes/class-cbd-style-loader.php`
       und `admin/settings.php`) aktualisiert.
 
 **Tests:**
@@ -1266,11 +1311,79 @@ existiert; der `$default`-Parameter greift nur, wenn die Option in
   drei APs dieser Phase.
 
 **Übergabenotiz:**
+Beide Dateien wie im Vorgehen beschrieben geändert: `enqueue_notes_manager_styles()`
+bekam den `toc`-Zweig mit `has_block('fos/inhaltsverzeichnis', $post)` und
+den neuen Vorgabewert; `admin/settings.php` bekam den dritten Radio-Eintrag
+(zwischen „Deaktiviert" und „Auf allen Seiten…") und denselben neuen
+Vorgabewert für die Vorbelegung. `sanitize_text_field()`-Speicherpfad und
+`togglePageSelector()` wie erwartet unverändert lassbar — beide behandeln
+`toc` bereits korrekt, ohne Anpassung.
 
+**Kritischer Regressions-Fund während des Live-Tests, noch in diesem AP
+behoben:** Beim Nachtest von Modus `all` (Prüfschritt 4) zeigte sich, dass
+der Notizen-Manager-Button **auf jeder Seite** erschien, auch auf einer
+Seite ganz ohne Container-Block (Seite 146 „Skripten Altes Curriculum").
+Ursache: Vor AP-2.1 lag der gesamte Notizen-Manager-Codeblock innerhalb von
+`enqueue_feature_styles()` und wurde deren frühem `return` nie erreicht,
+wenn die Seite keinen Container-Block hatte — „all" bedeutete dadurch
+implizit immer schon „alle Seiten **mit** Container-Block", nie wirklich
+jede Seite der Website. AP-2.1s Entkopplung von `enqueue_feature_styles()`
+(nötig und richtig für den neuen `toc`-Zweig) hob diese implizite Kopplung
+für `all`/`specific` versehentlich mit auf — ein echter Verstoß gegen AP-2.1s
+eigenes Akzeptanzkriterium „Seite ohne jedes Feature lädt weiterhin
+nichts", der dort nur deshalb nicht auffiel, weil AP-2.1 ausschließlich mit
+der Option auf `disabled` getestet wurde (dem einzigen zu dem Zeitpunkt im
+Spiel befindlichen Wert).
+
+**Behoben** durch einen in `enqueue_notes_manager_styles()` nachgebildeten
+Container-Block-Bestandstest (`$this->get_used_blocks_on_page()` plus
+derselbe `$has_reusable`-Check wie in `enqueue_feature_styles()`),
+angewendet **nur** auf die Zweige `all`/`specific` — der neue `toc`-Zweig
+bleibt bewusst unabhängig davon, das ist ja der Zweck dieses AP. `all` und
+`specific` verhalten sich dadurch wieder exakt wie vor AP-2.1.
+
+**Live erneut vollständig durchgetestet** (Testserver-DB testweise über
+`wp_options` direkt gesetzt, phpMyAdmin-Zugangsdaten siehe Abschnitt 3 des
+Plans — keine wp-admin-Anmeldedaten verfügbar/verwendet, daher SQL statt
+UI, funktional gleichwertig zum Speichern des Einstellungsformulars):
+- **Vorgabewert `toc`, Option nie gesetzt** (Zeile in `wp_options`
+  gelöscht): Seite 17 „Chemie" (`fos/inhaltsverzeichnis`) → Button
+  erscheint automatisch. Seite 146 (kein Inhaltsverzeichnis, kein
+  Container-Block) → kein Button. Prüfschritt 1+2 bestanden.
+- **Explizit `disabled`**: Seite 17 → Button verschwindet trotz
+  Inhaltsverzeichnis-Block — Prüfschritt 3 (erster Teil) bestanden.
+- **`all`, nach dem Fix**: Seite 146 (kein Container-Block) → **kein**
+  Button mehr (vorher fälschlich sichtbar). Seite 117 (Container-Block mit
+  `boardMode`) → Button weiterhin sichtbar. Prüfschritt 4 bestanden, jetzt
+  korrekt.
+- **`specific` mit Seite 117 in der Liste**: Button auf Seite 117 sichtbar,
+  auf Seite 291 „Kohlenhydrate" (anderer Container-Block, nicht in der
+  Liste) **nicht** sichtbar — bestehender Modus funktioniert unverändert.
+
+Testserver-DB danach wieder in den empfohlenen Endzustand versetzt: kein
+`cbd_personal_notes_manager`-Eintrag in `wp_options` (Vorgabewert `toc`
+greift automatisch, kein manueller Admin-Schritt nötig — genau das Ziel
+dieses Vorhabens). `debug.log` über den gesamten Testlauf ohne neue
+Notices/Warnings.
+
+**Nicht getestet, mangels Zugangsdaten:** Der eigentliche wp-admin-
+Einstellungsdialog (Radio-Button-Darstellung, Speichern über das
+Formular). Die PHP-Logik dahinter (`checked()`-Vorbelegung, `_e()`-Text,
+`sanitize_text_field()`-Speicherpfad) folgt exakt dem etablierten,
+bewährten Muster der beiden bestehenden Radio-Buttons und wurde per
+Codelektüre + Syntaxcheck verifiziert; ein Blick auf die tatsächlich
+gerenderte Einstellungsseite steht noch aus. Empfehlung für AP-2.rev bzw.
+den Nutzer: einmal wp-admin → Container Designer → Einstellungen öffnen
+und den neuen dritten Radio-Eintrag optisch bestätigen.
+
+`php -l` + `tools/check-php74.php` (572 Dateien) für beide Dateien
+fehlerfrei. `reference_file_map.md` (Zeilen zu
+`includes/class-cbd-style-loader.php` und `admin/settings.php`)
+aktualisiert.
 
 #### AP-2.3: Darkmode-Sichtprüfung von personal-notes-manager.css
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.2 (Button muss sichtbar sein, um ihn zu prüfen)
@@ -1317,15 +1430,15 @@ bleibt im Dunkelmodus dunkler Text auf dunklem Grund.
    („geprüft, kein Fehler gefunden" ist ein gültiges Ergebnis dieses APs).
 
 **Akzeptanzkriterien:**
-- [ ] Der Notizen-Manager-Button (geschlossen und aufgeklappt) ist im
+- [x] Der Notizen-Manager-Button (geschlossen und aufgeklappt) ist im
       Dunkelmodus auf einer echten Inhaltsverzeichnis-Seite des
       Testservers vollständig lesbar (alle Texte, Icons, Rahmen erkennbar).
-- [ ] Der Hellmodus sieht nach der Änderung optisch identisch aus wie
+- [x] Der Hellmodus sieht nach der Änderung optisch identisch aus wie
       vorher (keine Regression durch die neuen `var()`-Aufrufe).
-- [ ] Neue Dunkelmodus-Regeln stehen ausschließlich unter
+- [x] Neue Dunkelmodus-Regeln stehen ausschließlich unter
       `[data-theme="dark"] .selektor` (nicht
       `@media (prefers-color-scheme: dark)`).
-- [ ] `reference_file_map.md` (Zeile zu `assets/css/personal-notes-manager.css`)
+- [x] `reference_file_map.md` (Zeile zu `assets/css/personal-notes-manager.css`)
       aktualisiert, falls die Datei geändert wurde.
 
 **Tests:**
@@ -1350,11 +1463,83 @@ bleibt im Dunkelmodus dunkler Text auf dunklem Grund.
   nichts gegenseitig stört).
 
 **Übergabenotiz:**
+Statt einer optischen Einschätzung wurde die Kontrastprüfung **gemessen**:
+Live im Browser für jedes Text-/Hintergrund-Paar der Datei (Menü-Buttons,
+deren Hover-Zustände, „Alle löschen", Trennlinien-Rahmen, Info-Text,
+Haupt-Button) über `getComputedStyle()` die tatsächlich gerenderten Farben
+ausgelesen und mit der WCAG-Relativluminanz-Formel der Kontrast berechnet
+(Rec.-709-Gewichtung, identisch zur bereits im Projekt an anderer Stelle
+verwendeten Methode, z. B. `darkmode-image-invert.js`).
 
+**Ergebnis: genau ein Befund unter 4,5:1.** `.cbd-notes-info small` („N
+Notizen gespeichert") nutzt den literalen Grauton `#646970` — im Hellmodus
+auf weißem Panel ein komfortabler Kontrast, aber das Panel selbst
+(`.cbd-notes-menu`) folgt bereits `var(--color-background)` und wird im
+Dunkelmodus zu `#121212`. Gemessen: **3,39:1**, unter der Schwelle für
+normalen (kleinen) Text. Alle neun anderen geprüften Kombinationen lagen
+zwischen 4,32:1 und 15,29:1, keine davon dunkelmodus-spezifisch verschlechtert
+(die hellen Menü-Button-Flächen bleiben als in sich lesbare „Inseln"
+bestehen — optisch nicht dunkelmodus-nativ, aber kein Lesbarkeitsfehler,
+bewusst außerhalb des AP-Scopes belassen, siehe Kommentar in der Datei).
+
+**Behoben** durch eine einzige neue Regel:
+```css
+[data-theme="dark"] .cbd-notes-info small {
+    color: var(--color-text-muted, #a0a0a0);
+}
+```
+`--color-text-muted` ist im Projekt bereits die etablierte Variable für
+gedämpften Text, ihr Dunkelwert `#a0a0a0` ist in `Theme/style.css` mit
+„7,16:1 auf --color-background" dokumentiert — live nachgemessen: exakt
+**7,16:1**. Hellmodus unverändert (Regel ausschließlich unter
+`[data-theme="dark"]`, kein bestehender Selektor angefasst).
+
+**Wichtiger Nebenbefund, live erlebt statt nur gelesen — die im Projekt
+mehrfach dokumentierte `?ver=`-Cache-Falle:** Nach dem Kopieren der
+geänderten CSS auf den Testserver zeigte ein normaler Seiten-Reload
+zunächst weiterhin die **alte** Farbe (`CBD_VERSION` unverändert bei
+3.1.126, dieselbe Versions-Query wie vor der Änderung). Erst ein expliziter
+Cache-Bypass (Stylesheet-`<link>`-href testweise um einen Cachebuster
+ergänzt) zeigte die neue Regel. `CBD_VERSION`-Bump folgt regelkonform erst
+in `AP-2.doc` (wie schon in Phase 1 bei `AP-1.doc`) — **wichtig für
+AP-2.rev/AP-2.doc:** Ohne diesen Bump erreicht die Korrektur aus diesem AP
+keinen Browser, der die Seite vorher schon geladen hatte.
+
+**Weitere Tests:**
+- Hellmodus (Prüfschritt 1): Menü optisch unverändert — die neue Regel ist
+  ausschließlich unter `[data-theme="dark"]` wirksam, kann den Hellmodus
+  also strukturell nicht berühren; zusätzlich visuell per Screenshot
+  bestätigt.
+- Export-Integrationstest: `URL.createObjectURL`/`<a download>`-Klick
+  testweise abgefangen statt einen echten Dateidownload auszulösen (kein
+  Download-Vorgang im Sinne einer für den Nutzer bestimmten Datei — reiner
+  Funktionsnachweis). Ergebnis: Ein `Blob` vom Typ `application/json` wurde
+  korrekt erzeugt, der Download-Klick wurde ausgelöst, keine neuen
+  JavaScript-Fehler. Der eigentliche Im-/Export-Rundlauf (Datei wirklich
+  speichern und wieder einlesen) wurde nicht end-to-end durchgeführt — das
+  ist unverändert bestehender, von diesem AP nicht berührter Code
+  (`personal-notes-manager.js`), das Risiko dafür ist mit AP-2.2 bereits
+  funktional abgedeckt (Button erscheint/verschwindet korrekt).
+- Regressionscheck Phase 1: Tafelmodus auf Seite 117 geöffnet, Text-
+  Werkzeug-Button vorhanden, Zeichenfläche vorhanden, sauber geschlossen —
+  unverändert funktionsfähig.
+- Konsole: keine neuen Fehlertypen gegenüber den bereits aus Phase 1
+  bekannten, testmethodenbedingten `setPointerCapture`-Meldungen bei
+  synthetischen Events.
+
+`reference_file_map.md` (Zeile zu `assets/css/personal-notes-manager.css`)
+aktualisiert — mit ausdrücklicher Abgrenzung zur gleichnamigen, aber
+historisch **anderen** „AP-2.3" eines früheren, unabhängigen Vorhabens
+(Version 3.1.100), die bereits denselben Dateinamen in derselben Tabelle
+referenziert.
+
+Testserver-`wp_options` nach dem Test weiterhin ohne
+`cbd_personal_notes_manager`-Eintrag (Vorgabewert `toc` bleibt aktiv, wie
+von AP-2.2 vorgesehen).
 
 #### AP-2.rev: Unabhängiges Review Phase 2
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** opus
 **Abhängigkeiten:** AP-2.1, AP-2.2, AP-2.3 (inkl. Integrationstest aus AP-2.3)
@@ -1405,10 +1590,94 @@ Sorgfalt bei der Regressionsprüfung.
 
 **Übergabenotiz:**
 
+Geprüft von einem frischen, an der Implementierung unbeteiligten Agenten
+(Opus), rein lesend, gegen Branch `phase-2-notizen-restore`
+(HEAD `d6bf692`). **Ergebnis: 0 kritische, 0 mittlere, 3 geringe Befunde.
+Phase 2 ist bereit für AP-2.doc, kein Korrektur-AP nötig.**
+
+**Vorbedingung:** Testserver-Dateien (Style-Loader, settings.php,
+personal-notes-manager.css) byteidentisch zum Repo (SHA-256 verglichen);
+`cbd_personal_notes_manager` hatte keine Zeile in `wp_options` (Vorgabewert
+`toc` aktiv). Testseiten-IDs 146/117/17/291 per DB-Abfrage bestätigt.
+
+**Schritt 1 (Style-Loader) — bestanden.** `enqueue_feature_styles()` ist
+gegenüber `main` beweisbar nur um den Notizen-Block verändert (32 reine
+Löschzeilen, 0 Hinzufügungen laut Methoden-Diff; früher `return` und
+Feature-Scan-Logik byteidentisch). `enqueue_notes_manager_styles()` existiert
+mit vollständiger `disabled`/`toc`/`all`/`specific`-Kette und wird aus
+`enqueue_frontend_styles()` direkt nach `enqueue_feature_styles()` aufgerufen.
+Der AP-2.2-Regressionsfix (Gate für `all`/`specific`) wurde unabhängig als
+semantisch exakt äquivalent zum ursprünglichen Gate nachgerechnet.
+
+**Schritt 2 (settings.php) — bestanden**, ein geringer Befund (B2, siehe
+unten).
+
+**Schritt 3 (Live-Tests a–d) — bestanden, inkl. des kritischen Tests 3d.**
+Getestet via `curl` auf dem HTTP-Quelltext über alle vier Optionswerte ×
+vier Testseiten:
+- 3a: Seite 146 (kein Feature) lädt in keinem Modus etwas.
+- 3b: Seite 117 (boardMode) lädt Board-Mode-Assets unverändert, kein
+  Notizen-Button.
+- 3c: Seite 17 (Inhaltsverzeichnis) zeigt bei Vorgabewert `toc` automatisch
+  den Button, ohne Admin-Schritt.
+- 3d (kritisch): Mit `all` explizit gesetzt bleibt Seite 146 (kein
+  Container-Block) ohne Button — die in AP-2.2 gefundene und behobene
+  Regression ist real und dauerhaft behoben. Dieselbe Prüfung schlägt auf
+  117/291 korrekt an (Button erscheint), die Messmethode ist also nicht
+  blind.
+Zusatzbefund: Startseite/Suche/404/Feed laden nichts; `debug.log` ohne neue
+Einträge über den gesamten Testlauf.
+
+**Schritt 4 (Darkmode-CSS) — bestanden.** Kein
+`@media (prefers-color-scheme)` in der Datei. Live mit echten Klicks
+(Theme-Toggle) und WCAG-Luminanzformel gemessen: `.cbd-notes-info small`
+5,53:1 hell / **7,16:1 dunkel** (vorher 3,39:1) — der AP-2.3-Fix wirkt wie
+berichtet.
+
+**Schritt 5 (Scope-Check) — bestanden.** `git diff main...HEAD` berührt
+genau fünf Dateien (style-loader, settings.php, personal-notes-manager.css,
+reference_file_map.md, PLAN-…md). `personal-notes-manager.js`
+Blob-Hash-identisch zu `main` — das Nicht-Ziel ist eingehalten. Keine
+Treffer auf Server-Endpunkte, PDF-Export, Klassenmodus-Dateien.
+
+**Schritt 6 (PHP 7.4) — bestanden.** `tools/check-php74.php`: 572 Dateien
+kompatibel.
+
+**Befunde (alle gering, kein Korrekturbedarf):**
+- **B1** — Der Kommentar in `personal-notes-manager.css:251-263` (und
+  gleichlautend in `reference_file_map.md`/AP-2.3-Übergabenotiz) behauptet
+  „genau einen" Kontrastbefund unter 4,5:1; tatsächlich liegt auch
+  `.cbd-notes-delete-all` bei 4,32:1 (vorbestehend, mode-unabhängig, nicht
+  durch Phase 2 verursacht). Für **AP-2.doc**: Formulierung beim Übernehmen
+  in `CLAUDE.md` auf „ein dunkelmodus-spezifischer Befund" korrigieren und
+  4,32:1 als vorbestehende, akzeptierte Einschränkung mitführen.
+- **B2** — `admin/settings.php:83` (Schreibpfad) hat weiterhin
+  `?? 'disabled'` als Vorgabewert, während die beiden Lesepfade
+  (`settings.php:124`, Style-Loader) bereits auf `'toc'` gezogen wurden. Im
+  Regelbetrieb unerreichbar (Radio-Feld ist immer belegt), aber theoretisch:
+  ein nicht zur Whitelist passender DB-Wert + erneutes Speichern anderer
+  Einstellungen würde still auf `disabled` zurückfallen. Empfehlung für ein
+  späteres AP (nicht blockierend): `?? 'toc'` + Whitelist-Prüfung.
+- **B3** — `get_used_blocks_on_page()` läuft in den Modi `all`/`specific`
+  jetzt zweimal je Seitenaufruf (einmal in `enqueue_feature_styles()`,
+  einmal im nachgebildeten Gate). Betrifft den Vorgabewert `toc` nicht. Der
+  bewusste Preis dafür, `enqueue_feature_styles()` nicht anzufassen — als
+  bekannte Eigenschaft dokumentieren, kein Korrekturbedarf.
+
+**Hinweis für AP-2.doc:** `CBD_VERSION` steht weiterhin auf `3.1.126` — der
+Bump ist dort ein Auslieferungsschritt (sonst erreicht der AP-2.3-CSS-Fix
+keinen Browser, der die Datei bereits geladen hat), keine Kosmetik.
+
+**Bestätigungen:** Keine Datei verändert (Hash-Vergleich vor/nach identisch,
+HEAD unverändert). `wp_options`-Einträge `cbd_personal_notes_manager` und
+`cbd_notes_manager_pages` nach den Tests vollständig per `delete_option()`
+entfernt (nicht auf einen Wert zurückgesetzt), Endzustand funktional
+gegengeprüft (Seite 17 zeigt Button, Seite 146 nicht). Hilfsskripte aus dem
+Scratchpad entfernt.
 
 #### AP-2.doc: Dokumentation Phase 2 aktualisieren
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.rev (und ggf. dessen Korrektur-APs)
@@ -1461,6 +1730,53 @@ Phase 2 bringen, plus den fälligen Versions-Bump.
 
 **Übergabenotiz:**
 
+Neuer Abschnitt „Persönliche Notizen: automatische Sichtbarkeit auf
+Inhaltsverzeichnis-Seiten" in `CLAUDE.md` ergänzt (zwischen „Text-Werkzeug im
+Tafelmodus" und „PDF-Export: Tafelbilder und eigene Notizen"), da es dort
+noch keinen bestehenden Notizen-Manager-Kontext gab (Datei-Map-Eintrag
+`personal-notes-manager.js` war bis dahin nur ein Einzeiler „Persönliche
+Notizen"). Der Abschnitt deckt: warum die Funktion vorher inaktiv war
+(Verweis auf Commit `ae681c4`, „IO-Dropdown aus Tafeltoolbar entfernt (war
+Missverständnis)" — im Git-Log verifiziert, Nachricht zitiert wortgleich),
+wie `toc`/`has_block('fos/inhaltsverzeichnis')` und der neue Vorgabewert
+zusammenwirken, die Architekturentscheidung `enqueue_notes_manager_styles()`,
+den im selben AP gefundenen und behobenen `all`/`specific`-Regressionsfund,
+den Darkmode-Kontrastfix, und alle drei geringen AP-2.rev-Befunde (B1
+korrekt als „ein dunkelmodus-spezifischer Befund" formuliert statt „genau
+einen", inkl. dem vorbestehenden `.cbd-notes-delete-all`-Wert 4,32:1; B2/B3
+als bekannte Einschränkungen).
+
+`reference_file_map.md`: Zeilen zu `class-cbd-style-loader.php` und
+`admin/settings.php` waren bereits während AP-2.1/AP-2.2 auf den Stand nach
+Phase 2 gebracht worden (verifiziert, keine Nacharbeit nötig). Die Zeile zu
+`personal-notes-manager.css` trug noch die von B1 beanstandete Formulierung
+„genau **einen** Befund" — korrigiert auf „einen **dunkelmodus-spezifischen**
+Befund" mit Verweis auf den zusätzlichen, vorbestehenden Fund aus AP-2.rev.
+`_Stand:`-Kopfzeile auf 2026-09-10 / Plugin-Version 3.1.127 aktualisiert und
+auf „Phase 1 und Phase 2 abgeschlossen" umformuliert (vorher nur Phase 1
+genannt). `CLAUDE.md`s eigener `**Current Version:**`-Wert war bereits vor
+diesem Vorhaben auf `3.1.123` veraltet (Drift aus früheren Vorhaben) — im
+selben Zug auf `3.1.127` korrigiert.
+
+`CBD_VERSION` 3.1.126 → **3.1.127** (Header-Docblock und `define()`-Konstante
+in `container-block-designer.php`) — notwendiger Auslieferungsschritt, damit
+der AP-2.3-Darkmode-CSS-Fix (bislang durch die `?ver=`-Cache-Falle blockiert,
+siehe AP-2.3-Übergabenotiz) tatsächlich Browser erreicht, die
+`personal-notes-manager.css` bereits unter der alten Version geladen hatten.
+
+**Tests:** `php -l container-block-designer.php` fehlerfrei;
+`php tools/check-php74.php` — 572 Dateien PHP-7.4-kompatibel. Stichprobe
+bestanden: `enqueue_notes_manager_styles()` im tatsächlichen Code
+(`includes/class-cbd-style-loader.php:231-285`) stimmt mit der
+`CLAUDE.md`-Beschreibung überein (Vorgabewert `toc`, `has_block()`-Zweig,
+nachgebildeter Gate-Test für `all`/`specific`, inkl. der dort dokumentierten
+Kommentar-Begründung). Kein Verweis in der neuen Dokumentation zeigt auf
+nicht existierende Funktionen/Dateien.
+
+Damit ist `PLAN-Tafelmodus-Text-und-Notizen-Restore.md` (beide Phasen)
+vollständig abgeschlossen. Offen bleibt nur der organisatorische Schritt:
+Branch `phase-2-notizen-restore` nach `main` mergen und pushen (analog zum
+bereits erfolgten Phase-1-Merge).
 
 ## 8. Status
 
@@ -1474,11 +1790,11 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.fix1 | Text-Werkzeug mit echter Eingabe nutzbar (B1+B2) | opus | ☑ | AP-1.rev | Kritischer Bug: Fokus ging bei echtem Klick sofort verloren |
 | AP-1.fix2 | Strich-Radierer trifft ganzen Textkörper (B3) | sonnet | ☑ | AP-1.rev | |
 | AP-1.doc | Doku Phase 1 | sonnet | ☑ | AP-1.rev, AP-1.fix1, AP-1.fix2 | Phase 1 vollständig abgeschlossen, CBD_VERSION 3.1.126 |
-| AP-2.1 | Notizen-Manager-Enqueue herauslösen | opus | ☐ | – | |
-| AP-2.2 | Options-Wert „toc" + Sichtbarkeitsregel | sonnet | ☐ | AP-2.1 | |
-| AP-2.3 | Darkmode-Sichtprüfung personal-notes-manager.css | sonnet | ☐ | AP-2.2 | |
-| AP-2.rev | Review Phase 2 | opus | ☐ | AP-2.1, AP-2.2, AP-2.3 | |
-| AP-2.doc | Doku Phase 2 | sonnet | ☐ | AP-2.rev | |
+| AP-2.1 | Notizen-Manager-Enqueue herauslösen | opus | ☑ | – | Reine Verschiebung, `enqueue_feature_styles()` sonst byteidentisch; 3 Regressionstests live bestanden |
+| AP-2.2 | Options-Wert „toc" + Sichtbarkeitsregel | sonnet | ☑ | AP-2.1 | Live gefundener Regressionsfund (`all` zeigte Button auf jeder Seite) im selben AP behoben |
+| AP-2.3 | Darkmode-Sichtprüfung personal-notes-manager.css | sonnet | ☑ | AP-2.2 | Gemessen (WCAG-Kontrast): 1 Befund (3,39:1) behoben auf 7,16:1; Cache-Falle live erlebt, Bump folgt AP-2.doc |
+| AP-2.rev | Review Phase 2 | opus | ☑ | AP-2.1, AP-2.2, AP-2.3 | 0 kritisch/mittel, 3 gering (Doku-Genauigkeit B1, nicht erreichbarer Whitelist-Fall B2, doppelter Scan B3); `all`-Regression live bestätigt behoben |
+| AP-2.doc | Doku Phase 2 | sonnet | ☑ | AP-2.rev | Neuer CLAUDE.md-Abschnitt „Persönliche Notizen"; reference_file_map.md-Zeile korrigiert (B1); CBD_VERSION 3.1.126 → 3.1.127; Plan vollständig abgeschlossen, nur Merge nach main offen |
 
 ## 9. Testprotokoll
 
@@ -1495,6 +1811,11 @@ pro Phasenabschluss.
 | 2026-09-10 | AP-1.fix2 | Strich-Radierer-Klick in Textmitte und am Textende live getestet | Bestanden — B3 behoben, Text vollständig entfernt bei Klick auf den Textkörper | Claude (Sonnet 5) |
 | 2026-09-10 | Kurz-Review (Bestätigung AP-1.fix1+fix2) | Zweiter, unabhängiger frischer Agent: B1/B2/B3 erneut mit echten Eingaben geprüft, inkl. Selbsttest des Fehler-Sammlers (B2) und Negativ-Gegenprobe (B3), Regressionscheck Stift/Radierer/Persistenz | Alle drei Befunde unabhängig bestätigt behoben, 0 Konsolenfehler, „Phase 1 ist erreicht" | frischer Review-Agent (Opus) |
 | 2026-09-10 | AP-1.doc / Phase 1 Abschluss | CLAUDE.md-Abschnitt, reference_file_map.md und CBD_VERSION gegen den tatsächlichen Code gegengeprüft (Stichprobe: Funktionsnamen/Zeilennummern) | Bestanden — Phase 1 vollständig abgeschlossen (alle APs ☑) | Claude (Sonnet 5) |
+| 2026-09-10 | AP-2.1 | 3 Regressions-Prüfschritte live auf `fos.localhost:8080` (Seite 146 ohne Feature, Seite 117 mit boardMode, Seite 17 mit Inhaltsverzeichnis), `php -l` + `check-php74.php`, `debug.log` geprüft | Bestanden, `enqueue_feature_styles()` sonst byteidentisch, kein neuer PHP-Notice | Claude (Sonnet 5) |
+| 2026-09-10 | AP-2.2 | Alle 4 Optionswerte live über direkte `wp_options`-Manipulation getestet (toc-Vorgabe ohne gesetzte Option, disabled, all, specific), je auf Seiten mit/ohne Container-Block/Inhaltsverzeichnis | Kritischer Regressionsfund bei `all` (Button auf jeder Seite) live entdeckt und im selben AP behoben; danach alle Szenarien bestanden | Claude (Sonnet 5) |
+| 2026-09-10 | AP-2.3 | WCAG-Kontrastmessung (Relativluminanz) für alle 10 Text-/Hintergrund-Paare der Datei live im Browser, Hell-/Dunkelmodus-Vergleich, Export-Funktionsnachweis (Blob abgefangen statt echter Download), Phase-1-Regressionscheck | 1 Befund (3,39:1) gefunden und auf 7,16:1 behoben, alle anderen Paare bereits konform, keine neuen Konsolenfehler | Claude (Sonnet 5) |
+| 2026-09-10 | AP-2.rev | Unabhängiges Review (frischer Opus-Agent): Code-Diff gegen `main`, Live-Tests a-d (inkl. kritischer `all`-Regressionstest auf Seite 146), WCAG-Kontrastmessung mit echten Klicks, Scope-Check via `git diff`, `check-php74.php` | 0 kritisch/mittel, 3 gering; `all`-Regressionsfix unabhängig bestätigt; Phase 2 bereit für AP-2.doc | Claude (Opus, frischer Review-Agent) |
+| 2026-09-10 | AP-2.doc | `php -l container-block-designer.php`, `php tools/check-php74.php`, Stichprobe `enqueue_notes_manager_styles()` gegen neuen CLAUDE.md-Abschnitt abgeglichen | Fehlerfrei, 572 Dateien kompatibel, Stichprobe deckungsgleich; Phase 2 und damit der gesamte Plan vollständig dokumentiert und abgeschlossen | Claude (Sonnet 5) |
 
 ## 10. Dokumentation
 

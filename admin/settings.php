@@ -121,7 +121,7 @@ $classroom_enabled = get_option('cbd_classroom_enabled', 0);
 $klassenpuls_takt = (int) get_option('cbd_klassenpuls_takt', 10);
 $formeln_als_vektor = function_exists('cbd_formeln_als_vektor') ? cbd_formeln_als_vektor() : true;
 $html_annotation = get_option('cbd_html_annotation', 1);
-$notes_manager_mode = get_option('cbd_personal_notes_manager', 'disabled');
+$notes_manager_mode = get_option('cbd_personal_notes_manager', 'toc');
 $notes_manager_pages = get_option('cbd_notes_manager_pages', array());
 $icon_scale = cbd_get_icon_scale_percent();
 $icon_scale_bounds = cbd_icon_scale_bounds();
@@ -358,6 +358,10 @@ $needs_migration = !$is_default_exists || !$classroom_tables_exist || version_co
                         <label>
                             <input type="radio" name="notes_manager_mode" value="disabled" <?php checked($notes_manager_mode, 'disabled'); ?>>
                             <?php _e('Deaktiviert', 'container-block-designer'); ?>
+                        </label><br>
+                        <label>
+                            <input type="radio" name="notes_manager_mode" value="toc" <?php checked($notes_manager_mode, 'toc'); ?>>
+                            <?php _e('Nur auf Seiten mit Inhaltsverzeichnis-Block anzeigen (empfohlen)', 'container-block-designer'); ?>
                         </label><br>
                         <label>
                             <input type="radio" name="notes_manager_mode" value="all" <?php checked($notes_manager_mode, 'all'); ?>>
