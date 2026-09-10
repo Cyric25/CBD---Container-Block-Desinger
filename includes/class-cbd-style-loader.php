@@ -231,7 +231,12 @@ class CBD_Style_Loader {
     private function enqueue_notes_manager_styles() {
         global $post;
 
-        $notes_manager_enabled = get_option('cbd_personal_notes_manager', 'disabled');
+        // Vorgabewert 'toc' (statt 'disabled'): Die Wiederherstellung wirkt
+        // dadurch ohne manuellen Admin-Schritt. Betrifft nur Installationen,
+        // auf denen die Option noch nie gespeichert wurde - get_option()
+        // liefert sonst immer den in der Datenbank stehenden Wert, auch ein
+        // dort bereits explizit gesetztes 'disabled' bleibt unangetastet.
+        $notes_manager_enabled = get_option('cbd_personal_notes_manager', 'toc');
         if ($notes_manager_enabled === 'disabled') {
             return;
         }
@@ -241,12 +246,41 @@ class CBD_Style_Loader {
         $current_page_id = get_the_ID();
         $should_show = false;
 
-        if ($notes_manager_enabled === 'all') {
-            // Auf allen Seiten mit Container Blocks
-            $should_show = true;
-        } elseif ($notes_manager_enabled === 'specific' && !empty($show_on_pages)) {
-            // Nur auf spezifischen Seiten
-            $should_show = in_array($current_page_id, $show_on_pages);
+        if ($notes_manager_enabled === 'toc') {
+            // Automatisch auf jeder Seite mit dem Theme-Block
+            // "Inhaltsverzeichnis" (fos/inhaltsverzeichnis). has_block() ist
+            // eine WordPress-Kernfunktion (prueft nur post_content auf den
+            // Blocknamen) - kein Aufruf einer Theme-Funktion, deshalb auch
+            // kein function_exists()-Schutz noetig: fehlt der Block oder ist
+            // ein anderes Theme aktiv, liefert has_block() schlicht false.
+            $should_show = $post && has_block('fos/inhaltsverzeichnis', $post);
+        } elseif ($notes_manager_enabled === 'all' || $notes_manager_enabled === 'specific') {
+            // Vor AP-2.1 lag dieser gesamte Codeblock INNERHALB von
+            // enqueue_feature_styles() und wurde deren fruehem return nie
+            // erreicht, wenn die Seite keinen Container-Block (und keinen
+            // moeglicherweise einen enthaltenden wiederverwendbaren Block)
+            // hatte - "all" bedeutete dadurch faktisch immer schon "alle
+            // Seiten MIT Container-Block", nie wirklich jede Seite. Die
+            // AP-2.1-Entkopplung von enqueue_feature_styles() hat diese
+            // implizite Kopplung fuer 'all'/'specific' versehentlich mit
+            // aufgehoben (live beim AP-2.2-Regressionstest gefunden: der
+            // Button erschien mit 'all' auch auf Seiten ganz ohne CDB-
+            // Container). Hier bewusst nachgebildet, damit sich 'all' und
+            // 'specific' weiterhin exakt wie vor AP-2.1 verhalten - nur
+            // 'toc' oben ist absichtlich unabhaengig vom Container-Block-
+            // Bestand der Seite.
+            $page_has_container_content = !empty($this->get_used_blocks_on_page())
+                || ($post && $post->post_content && strpos($post->post_content, '<!-- wp:block ') !== false);
+
+            if ($page_has_container_content) {
+                if ($notes_manager_enabled === 'all') {
+                    // Auf allen Seiten mit Container Blocks
+                    $should_show = true;
+                } elseif (!empty($show_on_pages)) {
+                    // Nur auf spezifischen Seiten
+                    $should_show = in_array($current_page_id, $show_on_pages);
+                }
+            }
         }
 
         if ($should_show) {

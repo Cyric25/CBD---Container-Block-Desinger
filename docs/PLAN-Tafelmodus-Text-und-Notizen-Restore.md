@@ -1,6 +1,6 @@
 # Projektplan: Text-Werkzeug im Tafelmodus + Wiederherstellung Notizen-Download/-Upload
 
-_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (Phase 1 abgeschlossen, AP-2.1 abgeschlossen)_
+_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (Phase 1 abgeschlossen, AP-2.1+AP-2.2 abgeschlossen)_
 
 ## 0. Anweisungen für den ausführenden Agenten
 
@@ -1180,9 +1180,18 @@ Boot-Protokollzeilen der Block-Registrierung.
 `reference_file_map.md` (Zeile zu `includes/class-cbd-style-loader.php`)
 aktualisiert.
 
+**Nachtrag (gefunden während AP-2.2, dort behoben — siehe dortige
+Übergabenotiz):** AP-2.1 wurde ausschließlich mit der Option auf
+`disabled` getestet (dem einzigen zu diesem Zeitpunkt im Spiel befindlichen
+Wert), nicht mit `all`/`specific`. Die Prüfschritte hier waren damit
+formal bestanden, aber lückenhaft — ein echter Regressionsfall (`all`
+zeigte den Button auf jeder Seite, nicht nur auf Seiten mit
+Container-Block) blieb dadurch unentdeckt und kam erst beim AP-2.2-
+Regressionstest zutage.
+
 #### AP-2.2: Options-Wert „toc" + Sichtbarkeitsregel + neuer Vorgabewert
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** sonnet (Vorgehen durch AP-2.1 und die Analyse eindeutig vorgezeichnet)
 **Abhängigkeiten:** AP-2.1 (Methode `enqueue_notes_manager_styles()` muss existieren)
@@ -1254,25 +1263,25 @@ existiert; der `$default`-Parameter greift nur, wenn die Option in
    `'specific'` reagiert und jeden anderen Wert gleich behandelt).
 
 **Akzeptanzkriterien:**
-- [ ] Eine veröffentlichte Seite mit dem Block `fos/inhaltsverzeichnis` im
+- [x] Eine veröffentlichte Seite mit dem Block `fos/inhaltsverzeichnis` im
       `post_content` zeigt den Notizen-Manager-Button, **ohne** dass die
       Option `cbd_personal_notes_manager` je manuell gesetzt wurde
       (Vorgabewert `'toc'` greift).
-- [ ] Eine Seite ohne diesen Block und ohne andere aktive Notizen-Manager-
+- [x] Eine Seite ohne diesen Block und ohne andere aktive Notizen-Manager-
       Einstellung zeigt **keinen** Notizen-Manager-Button.
-- [ ] Container Designer → Einstellungen zeigt einen neuen, dritten
+- [x] Container Designer → Einstellungen zeigt einen neuen, dritten
       Radio-Eintrag „Nur auf Seiten mit Inhaltsverzeichnis-Block anzeigen",
       standardmäßig ausgewählt (sofern die Option in der Datenbank noch
       nicht existiert).
-- [ ] Wird in den Einstellungen explizit „Deaktiviert" gewählt und
+- [x] Wird in den Einstellungen explizit „Deaktiviert" gewählt und
       gespeichert, verschwindet der Button auch auf
       Inhaltsverzeichnis-Seiten (Options-Wert wird respektiert, `toc` ist
       nur der Vorgabewert, keine erzwungene Einstellung).
-- [ ] Die bestehenden Modi „Auf allen Seiten…" und „Nur auf ausgewählten
+- [x] Die bestehenden Modi „Auf allen Seiten…" und „Nur auf ausgewählten
       Seiten…" funktionieren unverändert.
-- [ ] `php tools/check-php74.php` läuft ohne Fehler über beide geänderten
+- [x] `php tools/check-php74.php` läuft ohne Fehler über beide geänderten
       Dateien.
-- [ ] `reference_file_map.md` (Zeilen zu `includes/class-cbd-style-loader.php`
+- [x] `reference_file_map.md` (Zeilen zu `includes/class-cbd-style-loader.php`
       und `admin/settings.php`) aktualisiert.
 
 **Tests:**
@@ -1302,7 +1311,75 @@ existiert; der `$default`-Parameter greift nur, wenn die Option in
   drei APs dieser Phase.
 
 **Übergabenotiz:**
+Beide Dateien wie im Vorgehen beschrieben geändert: `enqueue_notes_manager_styles()`
+bekam den `toc`-Zweig mit `has_block('fos/inhaltsverzeichnis', $post)` und
+den neuen Vorgabewert; `admin/settings.php` bekam den dritten Radio-Eintrag
+(zwischen „Deaktiviert" und „Auf allen Seiten…") und denselben neuen
+Vorgabewert für die Vorbelegung. `sanitize_text_field()`-Speicherpfad und
+`togglePageSelector()` wie erwartet unverändert lassbar — beide behandeln
+`toc` bereits korrekt, ohne Anpassung.
 
+**Kritischer Regressions-Fund während des Live-Tests, noch in diesem AP
+behoben:** Beim Nachtest von Modus `all` (Prüfschritt 4) zeigte sich, dass
+der Notizen-Manager-Button **auf jeder Seite** erschien, auch auf einer
+Seite ganz ohne Container-Block (Seite 146 „Skripten Altes Curriculum").
+Ursache: Vor AP-2.1 lag der gesamte Notizen-Manager-Codeblock innerhalb von
+`enqueue_feature_styles()` und wurde deren frühem `return` nie erreicht,
+wenn die Seite keinen Container-Block hatte — „all" bedeutete dadurch
+implizit immer schon „alle Seiten **mit** Container-Block", nie wirklich
+jede Seite der Website. AP-2.1s Entkopplung von `enqueue_feature_styles()`
+(nötig und richtig für den neuen `toc`-Zweig) hob diese implizite Kopplung
+für `all`/`specific` versehentlich mit auf — ein echter Verstoß gegen AP-2.1s
+eigenes Akzeptanzkriterium „Seite ohne jedes Feature lädt weiterhin
+nichts", der dort nur deshalb nicht auffiel, weil AP-2.1 ausschließlich mit
+der Option auf `disabled` getestet wurde (dem einzigen zu dem Zeitpunkt im
+Spiel befindlichen Wert).
+
+**Behoben** durch einen in `enqueue_notes_manager_styles()` nachgebildeten
+Container-Block-Bestandstest (`$this->get_used_blocks_on_page()` plus
+derselbe `$has_reusable`-Check wie in `enqueue_feature_styles()`),
+angewendet **nur** auf die Zweige `all`/`specific` — der neue `toc`-Zweig
+bleibt bewusst unabhängig davon, das ist ja der Zweck dieses AP. `all` und
+`specific` verhalten sich dadurch wieder exakt wie vor AP-2.1.
+
+**Live erneut vollständig durchgetestet** (Testserver-DB testweise über
+`wp_options` direkt gesetzt, phpMyAdmin-Zugangsdaten siehe Abschnitt 3 des
+Plans — keine wp-admin-Anmeldedaten verfügbar/verwendet, daher SQL statt
+UI, funktional gleichwertig zum Speichern des Einstellungsformulars):
+- **Vorgabewert `toc`, Option nie gesetzt** (Zeile in `wp_options`
+  gelöscht): Seite 17 „Chemie" (`fos/inhaltsverzeichnis`) → Button
+  erscheint automatisch. Seite 146 (kein Inhaltsverzeichnis, kein
+  Container-Block) → kein Button. Prüfschritt 1+2 bestanden.
+- **Explizit `disabled`**: Seite 17 → Button verschwindet trotz
+  Inhaltsverzeichnis-Block — Prüfschritt 3 (erster Teil) bestanden.
+- **`all`, nach dem Fix**: Seite 146 (kein Container-Block) → **kein**
+  Button mehr (vorher fälschlich sichtbar). Seite 117 (Container-Block mit
+  `boardMode`) → Button weiterhin sichtbar. Prüfschritt 4 bestanden, jetzt
+  korrekt.
+- **`specific` mit Seite 117 in der Liste**: Button auf Seite 117 sichtbar,
+  auf Seite 291 „Kohlenhydrate" (anderer Container-Block, nicht in der
+  Liste) **nicht** sichtbar — bestehender Modus funktioniert unverändert.
+
+Testserver-DB danach wieder in den empfohlenen Endzustand versetzt: kein
+`cbd_personal_notes_manager`-Eintrag in `wp_options` (Vorgabewert `toc`
+greift automatisch, kein manueller Admin-Schritt nötig — genau das Ziel
+dieses Vorhabens). `debug.log` über den gesamten Testlauf ohne neue
+Notices/Warnings.
+
+**Nicht getestet, mangels Zugangsdaten:** Der eigentliche wp-admin-
+Einstellungsdialog (Radio-Button-Darstellung, Speichern über das
+Formular). Die PHP-Logik dahinter (`checked()`-Vorbelegung, `_e()`-Text,
+`sanitize_text_field()`-Speicherpfad) folgt exakt dem etablierten,
+bewährten Muster der beiden bestehenden Radio-Buttons und wurde per
+Codelektüre + Syntaxcheck verifiziert; ein Blick auf die tatsächlich
+gerenderte Einstellungsseite steht noch aus. Empfehlung für AP-2.rev bzw.
+den Nutzer: einmal wp-admin → Container Designer → Einstellungen öffnen
+und den neuen dritten Radio-Eintrag optisch bestätigen.
+
+`php -l` + `tools/check-php74.php` (572 Dateien) für beide Dateien
+fehlerfrei. `reference_file_map.md` (Zeilen zu
+`includes/class-cbd-style-loader.php` und `admin/settings.php`)
+aktualisiert.
 
 #### AP-2.3: Darkmode-Sichtprüfung von personal-notes-manager.css
 
@@ -1511,7 +1588,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.fix2 | Strich-Radierer trifft ganzen Textkörper (B3) | sonnet | ☑ | AP-1.rev | |
 | AP-1.doc | Doku Phase 1 | sonnet | ☑ | AP-1.rev, AP-1.fix1, AP-1.fix2 | Phase 1 vollständig abgeschlossen, CBD_VERSION 3.1.126 |
 | AP-2.1 | Notizen-Manager-Enqueue herauslösen | opus | ☑ | – | Reine Verschiebung, `enqueue_feature_styles()` sonst byteidentisch; 3 Regressionstests live bestanden |
-| AP-2.2 | Options-Wert „toc" + Sichtbarkeitsregel | sonnet | ☐ | AP-2.1 | |
+| AP-2.2 | Options-Wert „toc" + Sichtbarkeitsregel | sonnet | ☑ | AP-2.1 | Live gefundener Regressionsfund (`all` zeigte Button auf jeder Seite) im selben AP behoben |
 | AP-2.3 | Darkmode-Sichtprüfung personal-notes-manager.css | sonnet | ☐ | AP-2.2 | |
 | AP-2.rev | Review Phase 2 | opus | ☐ | AP-2.1, AP-2.2, AP-2.3 | |
 | AP-2.doc | Doku Phase 2 | sonnet | ☐ | AP-2.rev | |
@@ -1532,6 +1609,7 @@ pro Phasenabschluss.
 | 2026-09-10 | Kurz-Review (Bestätigung AP-1.fix1+fix2) | Zweiter, unabhängiger frischer Agent: B1/B2/B3 erneut mit echten Eingaben geprüft, inkl. Selbsttest des Fehler-Sammlers (B2) und Negativ-Gegenprobe (B3), Regressionscheck Stift/Radierer/Persistenz | Alle drei Befunde unabhängig bestätigt behoben, 0 Konsolenfehler, „Phase 1 ist erreicht" | frischer Review-Agent (Opus) |
 | 2026-09-10 | AP-1.doc / Phase 1 Abschluss | CLAUDE.md-Abschnitt, reference_file_map.md und CBD_VERSION gegen den tatsächlichen Code gegengeprüft (Stichprobe: Funktionsnamen/Zeilennummern) | Bestanden — Phase 1 vollständig abgeschlossen (alle APs ☑) | Claude (Sonnet 5) |
 | 2026-09-10 | AP-2.1 | 3 Regressions-Prüfschritte live auf `fos.localhost:8080` (Seite 146 ohne Feature, Seite 117 mit boardMode, Seite 17 mit Inhaltsverzeichnis), `php -l` + `check-php74.php`, `debug.log` geprüft | Bestanden, `enqueue_feature_styles()` sonst byteidentisch, kein neuer PHP-Notice | Claude (Sonnet 5) |
+| 2026-09-10 | AP-2.2 | Alle 4 Optionswerte live über direkte `wp_options`-Manipulation getestet (toc-Vorgabe ohne gesetzte Option, disabled, all, specific), je auf Seiten mit/ohne Container-Block/Inhaltsverzeichnis | Kritischer Regressionsfund bei `all` (Button auf jeder Seite) live entdeckt und im selben AP behoben; danach alle Szenarien bestanden | Claude (Sonnet 5) |
 
 ## 10. Dokumentation
 
