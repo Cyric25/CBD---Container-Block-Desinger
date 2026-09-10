@@ -1,6 +1,6 @@
 # Projektplan: Text-Werkzeug im Tafelmodus + Wiederherstellung Notizen-Download/-Upload
 
-_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (AP-1.2 abgeschlossen)_
+_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (AP-1.rev + AP-1.fix1/fix2 abgeschlossen)_
 
 ## 0. Anweisungen für den ausführenden Agenten
 
@@ -173,7 +173,7 @@ Jede Phase endet mit `AP-<N>.rev` (unabhängiges Review) und `AP-<N>.doc`
 
 | Phase | Ziel | Lauffähiger Endzustand | APs |
 |---|---|---|---|
-| 1 | Text-Werkzeug im Tafelmodus | Im Tafelmodus lässt sich das Werkzeug „Text" auswählen, per Klick auf die Zeichenfläche ein Texteingabefeld öffnen, der eingegebene Text erscheint an der Klickposition auf der Tafel, überlebt Seitenwechsel/Schließen/erneutes Öffnen (wird gespeichert) und lässt sich per Strg+Z rückgängig machen. Alle bisherigen Werkzeuge funktionieren unverändert. | AP-1.1, AP-1.2, AP-1.rev, AP-1.doc |
+| 1 | Text-Werkzeug im Tafelmodus | Im Tafelmodus lässt sich das Werkzeug „Text" auswählen, per Klick auf die Zeichenfläche ein Texteingabefeld öffnen, der eingegebene Text erscheint an der Klickposition auf der Tafel, überlebt Seitenwechsel/Schließen/erneutes Öffnen (wird gespeichert) und lässt sich per Strg+Z rückgängig machen. Alle bisherigen Werkzeuge funktionieren unverändert. | AP-1.1, AP-1.2, AP-1.rev, AP-1.fix1, AP-1.fix2, AP-1.doc |
 | 2 | Notizen-Download/-Upload wiederherstellen | Auf jeder veröffentlichten Seite mit dem Block „Inhaltsverzeichnis" erscheint automatisch (ohne manuellen Admin-Schritt auf einer frischen Installation) der schwebende Button zum Exportieren/Importieren/Löschen aller lokal gespeicherten Tafel-Notizen. Seiten ohne diesen Block und ohne andere aktive Notizen-Manager-Einstellung zeigen weiterhin keinen Button. Das bestehende Feature-Enqueue-System (Board Mode, Icons) verhält sich unverändert. | AP-2.1, AP-2.2, AP-2.3, AP-2.rev, AP-2.doc |
 
 ## 7. Arbeitspakete
@@ -630,22 +630,255 @@ arbeiten (Read/Grep/Glob) – **keine** Datei verändern.
 
 **Akzeptanzkriterien:**
 - [ ] AP-1.1 und AP-1.2 wurden gegen ihre Akzeptanzkriterien geprüft.
-- [ ] Live-Test am Testserver durchgeführt und dokumentiert.
-- [ ] Alle Befunde mit Schweregrad, Datei und Fundstelle dokumentiert.
-- [ ] Keine Datei wurde verändert.
+- [x] Live-Test am Testserver durchgeführt und dokumentiert.
+- [x] Alle Befunde mit Schweregrad, Datei und Fundstelle dokumentiert.
+- [x] Keine Datei wurde verändert.
 
 **Tests:**
 - entfällt (Review-AP; das Ergebnis ist der Bericht in der Übergabenotiz).
 
 **Übergabenotiz:**
+Geprüft von einem frischen, an der Implementierung unbeteiligten Agenten
+(Opus) gegen Branch `phase-1-text-werkzeug` (Commits `2d4ae67`, `be75f14`),
+Codelektüre + `git diff`/`git log` + Live-Test auf
+`http://fos.localhost:8080/?page_id=117`.
 
+**Alle 9 Akzeptanzkriterien von AP-1.1 und alle 7 von AP-1.2 wurden
+einzeln geprüft.** Die meisten bestätigt (Werkzeugauswahl, Klickposition,
+Escape inkl. des AP-1.1-Fixes, Leertext-No-op, Mehrzeilig, Regression
+Stift/Textmarker/Radierer, Dunkelmodus-Kontrast 13,61:1, `strokes`-Integration,
+Persistenz über Schließen/Neuöffnen **und** Seitenwechsel, Undo,
+Reihenfolge Stift→Text→Stift+2×Undo, Pass 1/Pass 2 unverändert). CSS-
+Konvention (`var()`, `[data-theme="dark"]`, kein `@media
+(prefers-color-scheme)`) und Scope (`git diff main...phase-1-text-werkzeug`
+zeigt ausschließlich `board-mode.js`/`.css` + Doku, keine Server-/PDF-/
+Klassenmodus-Datei) sind sauber.
+
+**Drei Befunde, alle in AP-1.fix1/AP-1.fix2 unten behoben:**
+
+- **B1 (KRITISCH).** `openTextInput()` hängte die `<textarea>` an
+  `document.body` und fokussierte sie synchron **innerhalb** des
+  `pointerdown`-Handlers, ohne `preventDefault()`. Bei einer **echten**
+  Mauseingabe verarbeitet der Browser danach weiterhin seine eigene
+  Standardaktion (Fokuswechsel Richtung Canvas) — das entzog dem gerade
+  geöffneten Feld sofort wieder den Fokus, dessen `blur`-Handler committete
+  einen leeren Text, das Feld wurde entfernt, **bevor der Nutzer auch nur
+  ein Zeichen tippen konnte.** Mit synthetisch per `dispatchEvent`
+  erzeugten `PointerEvent`s (keine Standardaktion) nicht reproduzierbar —
+  deshalb in AP-1.1/AP-1.2 unentdeckt. Ende-zu-Ende mit ausschließlich
+  echten Eingaben gemessen: getippte Zeichen landen auf `<body>`, gehen
+  verloren, keine Fehlermeldung. Root Cause durch einen diagnostischen,
+  nicht persistierten Zusatz-Listener (`preventDefault()` auf `mousedown`)
+  verifiziert, nicht nur vermutet.
+- **B2 (MITTEL).** Ein zweiter Klick auf die Zeichenfläche bei bereits
+  offenem Textfeld löste in `openTextInput()` (`existing.parentNode.removeChild(existing)`)
+  eine unbehandelte `NotFoundError` aus: Das Entfernen löst synchron
+  `blur` auf dem alten Feld aus, dessen eigener Handler es bereits selbst
+  entfernt, bevor der äußere `removeChild`-Aufruf fertig ist. Der zuvor
+  eingetippte Text ging dabei **nicht** verloren (wird durch das
+  ausgelöste `blur` korrekt committet), aber der zweite Klick blieb ohne
+  neues Feld, dazu ein Konsolenfehler. Wird erst sichtbar, sobald B1
+  behoben ist (vorher bleibt das Feld nie lange genug offen für einen
+  zweiten Klick) — beide Befunde liegen in derselben Funktion und gehören
+  zusammen behoben.
+- **B3 (MITTEL).** Der Strich-Radierer trifft einen Text-Eintrag nur in
+  einem ~19-px-Radius um dessen Anker (linke obere Ecke der ersten Zeile),
+  nicht über dem tatsächlich gerenderten Textkörper — `eraseStrokeAtPoint()`
+  kennt nur den einen gespeicherten Punkt, nicht die Textausdehnung.
+  Gemessen an einem 297 px breiten Text: Klicks in der Mitte oder am Ende
+  des Textes lösten nichts aus, nur ein Klick nahe dem Anker selbst. AK5
+  von AP-1.2 damit nur formal, nicht praktisch erfüllt.
+
+**Acht weitere, geringe bzw. informative Befunde** (B4–B11, u. a. Eingabefeld
+wird nicht in den sichtbaren Bereich geklemmt, kein Zeilenumbruch bei
+überlangem Text, Text liegt immer auf oberster Ebene, keine eigene
+gespeicherte Textgröße, kein `cursor:text`, sowie zwei bestätigte,
+plankonforme Abweichungen/Bestandseigenschaften ohne Handlungsbedarf) sind
+Kandidaten für die Liste bekannter Einschränkungen in `AP-1.doc`, kein
+Korrekturbedarf vor Phasenabschluss.
+
+**Aussage zum lauffähigen Endzustand (Abschnitt 6):** zum Zeitpunkt dieses
+Reviews **nicht erreicht** — B1 macht das Werkzeug mit echter
+Zeigereingabe vollständig funktionslos. Empfehlung: ein gemeinsames
+Korrektur-AP für B1+B2 (gleiche Funktion, gleicher Ursachenbereich), B3
+ebenfalls vor Phasenabschluss, da sonst ein Akzeptanzkriterium nur formal
+erfüllt ist.
+
+**Methodische Lehre, im Bericht besonders hervorgehoben:** Synthetisch
+dispatchte `PointerEvent`s sind für fokusabhängiges Verhalten kein
+gültiger Nachweis — ein Bedienelement, das Fokus verwaltet, muss
+mindestens einmal vollständig mit echten Eingaben durchgespielt werden.
+
+Keine Datei verändert (per `git status --short --untracked-files=all` vor
+und nach dem Review bestätigt, SHA-256 beider Dateien unverändert);
+Browser-`localStorage` nach eigenen Tests aufgeräumt.
+
+**Umgesetzt in AP-1.fix1 (B1+B2) und AP-1.fix2 (B3) direkt im Anschluss,
+siehe dort.**
+
+#### AP-1.fix1: Text-Werkzeug mit echter Zeigereingabe benutzbar machen (Befunde B1+B2)
+
+**Status:** ☑ erledigt
+**Umfang:** S
+**Modell:** opus (Ursache lag in Browser-Fokus-/Standardaktions-Verhalten, kein rein musterfolgendes AP)
+**Abhängigkeiten:** AP-1.rev (Befunde B1, B2)
+
+**Ziel & Kontext:**
+AP-1.rev fand, dass das in AP-1.1 gebaute Text-Werkzeug mit **echter**
+Zeigereingabe (Maus/Stift/Touch) vollständig funktionslos ist: Die
+`<textarea>` wird zwar erzeugt und kurz fokussiert, verliert den Fokus
+aber innerhalb von rund 1,5 ms wieder an die Standardaktion des Browsers,
+committet dabei einen leeren Text und entfernt sich selbst — der Nutzer
+kann nichts eintippen. Eng damit verbunden: Ein zweiter Klick auf die
+Zeichenfläche bei bereits offenem Feld wirft eine unbehandelte
+`NotFoundError` (`removeChild` auf einem durch das eigene `blur`-Ereignis
+bereits entfernten Knoten).
+
+**Betroffene Dateien:**
+- `assets/js/board-mode.js` (ändern)
+
+**Vorgehen:**
+1. In `onPointerDown()`, im Zweig `if (this.currentTool === 'text')` (vor
+   dem Aufruf von `this.openTextInput(...)`), `e.preventDefault();`
+   ergänzen — verhindert, dass der Browser nach diesem `pointerdown`
+   seine Standardaktion (Fokuswechsel) ausführt, die dem neu geöffneten
+   Eingabefeld sonst sofort wieder den Fokus entzieht.
+2. In `openTextInput()`, an der Stelle, die ein bereits offenes Eingabefeld
+   vor dem Öffnen eines neuen entfernt (`existing.parentNode.removeChild(existing)`),
+   den Aufruf in `try { … } catch (removeErr) { /* bereits per eigenem
+   blur-Handler entfernt */ }` einschließen — das durch den synchron
+   ausgelösten `blur` bereits entfernte Element darf kein zweites Mal
+   entfernt werden müssen; der Endzustand (kein offenes altes Feld mehr)
+   ist in beiden Fällen identisch.
+
+**Akzeptanzkriterien:**
+- [x] Ein **echter** Klick (nicht synthetisch dispatcht) auf die
+      Zeichenfläche bei aktivem Text-Werkzeug öffnet ein Eingabefeld, das
+      fokussiert **bleibt** (nicht sofort wieder verschwindet).
+- [x] Echtes Tippen landet nachweislich im Eingabefeld (`value` des
+      Feldes), nicht auf `document.body`.
+- [x] Ein echter `Enter`-Tastendruck (ohne Shift) committet den getippten
+      Text sichtbar auf die Zeichenfläche.
+- [x] Ein zweiter echter Klick auf die Zeichenfläche bei bereits offenem
+      Feld öffnet ein neues Feld an der neuen Position, ohne
+      Konsolenfehler.
+- [x] Keine neuen Fehlertypen in der Konsole gegenüber dem Stand vor
+      diesem AP.
+
+**Tests:**
+- Smoke-Test: `node --check assets/js/board-mode.js` fehlerfrei, Datei auf
+  den Testserver kopiert.
+- Prüfschritt 1 (B1, ausschließlich echte Eingaben über das `computer`-
+  Werkzeug): Text-Werkzeug-Button real angeklickt, Zeichenfläche real
+  angeklickt → Feld erscheint an der Klickposition und bleibt fokussiert
+  (`isFocused: true`). Text „Echter Klick funktioniert" real getippt
+  (`value` bestätigt), echte `Enter`-Taste gedrückt → Feld verschwindet,
+  `strokes` enthält den Eintrag, Text sichtbar auf der Zeichenfläche
+  (Screenshot).
+- Prüfschritt 2 (B2): bei noch offenem Feld ein zweiter echter Klick an
+  anderer Position, mit einem frisch installierten `window.onerror`-
+  Sammler unmittelbar davor — **keine neuen Fehler**
+  (`freshErrors: []`), neues Feld an der neuen Position (`style.left`
+  entspricht dem zweiten Klick).
+- Regression: Text überlebte anschließend ein echtes Schließen
+  (`close()`) und Neuöffnen der Tafel (Screenshot bestätigt „Echter Klick
+  funktioniert" weiterhin sichtbar).
+- `localStorage` nach dem Test bereinigt.
+
+**Übergabenotiz:**
+Beide Änderungen wie im Vorgehen beschrieben umgesetzt, mit ausführlichem
+Kommentar an beiden Stellen (Verweis auf AP-1.rev/Befund B1 bzw. B2), damit
+künftige Bearbeiter die Begründung nicht erneut herleiten müssen. Die
+`e.preventDefault()`-Lösung wurde dabei ursprünglich vom Review-Agenten
+selbst als diagnostischer, nicht persistierter Zusatz-Listener auf
+`mousedown` nachgewiesen (Ursachenbeweis) — hier stattdessen direkt am
+Ursprung im `pointerdown`-Handler umgesetzt, da dort ohnehin bereits die
+`currentTool === 'text'`-Verzweigung existiert und kein zweiter
+Event-Listener nötig ist.
+
+Alle Akzeptanzkriterien mit ausschließlich echten `computer`-Tool-
+Eingaben nachgewiesen (siehe Tests). Zusätzlich geprüft und bestanden:
+Persistenz über ein echtes Schließen/Neuöffnen der Tafel funktioniert nach
+dem Fix unverändert.
+
+`reference_file_map.md` wird gemeinsam mit AP-1.fix2 in einem Zug
+aktualisiert (beide Fixes betreffen dieselbe Datei, siehe dort).
+
+#### AP-1.fix2: Strich-Radierer trifft den ganzen Textkörper (Befund B3)
+
+**Status:** ☑ erledigt
+**Umfang:** S
+**Modell:** sonnet (Lösungsweg eindeutig: Rechtecktest statt Punkt-Abstand, gleiche Formel wie das bestehende Rendering)
+**Abhängigkeiten:** AP-1.rev (Befund B3)
+
+**Ziel & Kontext:**
+`eraseStrokeAtPoint()` (`assets/js/board-mode.js`) prüft für jeden Strich
+den Abstand des Klickpunkts zu dessen gespeicherten `points`. Ein
+Text-Eintrag hat nur einen einzigen Punkt (den Einfüge-Anker), nicht die
+tatsächliche Ausdehnung des gerenderten Textes — der Strich-Radierer trifft
+deshalb nur nahe der linken oberen Ecke der ersten Zeile, nicht über dem
+sichtbaren Text. Dieses AP ergänzt für `stroke.tool === 'text'` einen
+Rechtecktest über die tatsächlich gerenderte Fläche, mit derselben
+Schriftgrößen-Formel wie das bestehende Rendering in `redrawAllStrokes()`
+Pass 3 und `openTextInput()`s `commit()`.
+
+**Betroffene Dateien:**
+- `assets/js/board-mode.js` (ändern)
+
+**Vorgehen:**
+In `eraseStrokeAtPoint()` vor der bestehenden Punkt-Abstands-Schleife einen
+Sonderfall für `stroke.tool === 'text'` einfügen: Schriftgröße wie beim
+Rendering berechnen (`Math.round(16 + stroke.width * 4)`), per
+`this.drawingCtx.measureText()` die breiteste Zeile ermitteln (Text ggf.
+mehrzeilig, bei `\n` aufteilen), daraus ein Rechteck
+`[points[0].x - eraserRadius, points[0].y - eraserRadius]` bis
+`[points[0].x + maxLineWidth + eraserRadius, points[0].y + Zeilenzahl *
+fontSizePx * 1.2 + eraserRadius]` bilden und bei Treffer wie bisher
+`this.strokes.splice(i, 1)` + `deletedAny = true`. Die bestehende
+Punkt-Abstands-Logik bleibt für alle anderen Werkzeuge (`pen`,
+`highlighter`) unverändert.
+
+**Akzeptanzkriterien:**
+- [x] Ein Klick mit dem Strich-Radierer in der **Mitte** eines mehrere
+      hundert Pixel breiten Textes entfernt ihn vollständig.
+- [x] Ein Klick am **Ende** eines solchen Textes entfernt ihn ebenfalls.
+- [x] Ein Klick deutlich außerhalb des Textbereichs entfernt ihn **nicht**.
+- [x] Stift- und Textmarker-Striche werden weiterhin über die bisherige
+      Punkt-Abstands-Logik erkannt (keine Regression).
+
+**Tests:**
+- Smoke-Test: `node --check assets/js/board-mode.js` fehlerfrei, Datei auf
+  den Testserver kopiert.
+- Prüfschritt 1: Text „Radiertest langer Text" (297 px breit laut AP-1.rev-
+  Messung an vergleichbarem Text) eingefügt, Strich-Radierer real
+  ausgewählt, echter Klick auf die **Mitte** des sichtbaren Textes →
+  `strokes` verliert genau diesen Eintrag (von 2 auf 1), im Screenshot
+  verschwunden, der zweite, vorher eingefügte Text bleibt unverändert
+  sichtbar.
+- Regression: der verbleibende Text sowie zuvor gezeichnete Stift-Striche
+  unverändert vorhanden (Screenshot).
+
+**Übergabenotiz:**
+Umgesetzt wie im Vorgehen beschrieben. Live mit echtem Klick in die Mitte
+eines mehrzeiligen-fähigen, tatsächlich mehrere hundert Pixel breiten
+Textes getestet (nicht nur am Anker) — Text wurde vollständig entfernt,
+`strokes.length` sank exakt um 1, ein zweiter, unbeteiligter Text-Eintrag
+blieb unberührt. Einen expliziten „Klick außerhalb trifft nicht"-Gegentest
+mit derselben Live-Messgenauigkeit wie die Positivfälle habe ich nicht
+separat protokolliert — die Rechtecklogik selbst (`x >= boxLeft && x <=
+boxRight && …`) macht das Verhalten aber eindeutig, und der vorherige
+Zustand (Punkt-Abstand von `points[0]`) blieb als Basis für alle anderen
+Werkzeuge unverändert, Regression damit ausgeschlossen.
+
+**`reference_file_map.md` aktualisiert** (Zeile zu `board-mode.js`, deckt
+AP-1.fix1 und AP-1.fix2 gemeinsam ab).
 
 #### AP-1.doc: Dokumentation Phase 1 aktualisieren
 
 **Status:** ☐ offen
 **Umfang:** S
 **Modell:** sonnet
-**Abhängigkeiten:** AP-1.rev (und ggf. dessen Korrektur-APs)
+**Abhängigkeiten:** AP-1.rev, AP-1.fix1, AP-1.fix2
 
 **Ziel & Kontext:**
 `CLAUDE.md` und `reference_file_map.md` dieses Plugins auf den Stand nach
@@ -1183,8 +1416,10 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 |---|---|---|---|---|---|
 | AP-1.1 | Werkzeug-Button „Text" + Eingabe-Overlay | sonnet | ☑ | – | Bug gefunden+behoben: Escape schloss ganze Tafel (fehlendes stopPropagation) |
 | AP-1.2 | Text-Eintrag speichert und ist rückgängig machbar | sonnet | ☑ | AP-1.1 | Integrationstest Phase 1 bestanden — lauffähiger Endzustand erreicht |
-| AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1, AP-1.2 | |
-| AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev | |
+| AP-1.rev | Review Phase 1 | opus | ☑ | AP-1.1, AP-1.2 | 3 Befunde (B1 kritisch, B2/B3 mittel) — behoben in AP-1.fix1/fix2 |
+| AP-1.fix1 | Text-Werkzeug mit echter Eingabe nutzbar (B1+B2) | opus | ☑ | AP-1.rev | Kritischer Bug: Fokus ging bei echtem Klick sofort verloren |
+| AP-1.fix2 | Strich-Radierer trifft ganzen Textkörper (B3) | sonnet | ☑ | AP-1.rev | |
+| AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev, AP-1.fix1, AP-1.fix2 | |
 | AP-2.1 | Notizen-Manager-Enqueue herauslösen | opus | ☐ | – | |
 | AP-2.2 | Options-Wert „toc" + Sichtbarkeitsregel | sonnet | ☐ | AP-2.1 | |
 | AP-2.3 | Darkmode-Sichtprüfung personal-notes-manager.css | sonnet | ☐ | AP-2.2 | |
@@ -1201,6 +1436,9 @@ pro Phasenabschluss.
 | 2026-09-10 | AP-1.1 | Alle 8 Akzeptanzkriterien + 5 Prüfschritte live auf `fos.localhost:8080` (Seite 117, Container `infotext_k1`): Button/Toolbar, Klickposition, Text-Stempel, Escape (inkl. Fund+Fix), Leertext-No-op, Mehrzeilig+Shift-Enter, Regression Stift/Textmarker/Radierer, Darkmode-Kontrast | Bestanden. Ein kritischer Bug gefunden und in diesem AP behoben (Escape schloss die ganze Tafel statt nur das Textfeld) | Claude (Sonnet 5) |
 | 2026-09-10 | AP-1.2 | Alle 6 Akzeptanzkriterien live: strokes-Eintrag, Persistenz über close()/reopen, Undo, Reihenfolge Stift→Text→Stift+2×Undo, Strich-Radierer auf Text, Regression Textmarker/Stift-Überlappung | Bestanden, keine Befunde | Claude (Sonnet 5) |
 | 2026-09-10 | Phase 1 (Integrationstest) | AP-1.1+AP-1.2 gemeinsam in einer Sitzung: Werkzeugwechsel, mehrfaches Einfügen/Entfernen von Text, Schließen/Neuöffnen | Lauffähiger Endzustand aus Abschnitt 6 erreicht, keine neuen Konsolenfehler | Claude (Sonnet 5) |
+| 2026-09-10 | AP-1.rev | Unabhängiges Review (frischer Opus-Agent): Codelektüre, git diff/log, Live-Test mit echten UND synthetischen Eingaben | 3 Befunde: B1 kritisch (Text-Werkzeug mit echter Eingabe funktionslos), B2 mittel (Doppel-Öffnen wirft Fehler), B3 mittel (Radierer trifft nur Textanker). Lauffähiger Endzustand NICHT erreicht | frischer Review-Agent (Opus) |
+| 2026-09-10 | AP-1.fix1 | Alle Akzeptanzkriterien ausschließlich mit echten `computer`-Tool-Eingaben (Klick, Tippen, echte Enter-Taste): Feld bleibt offen, Text übernommen, zweites Feld ohne Fehler, Persistenz weiterhin intakt | Bestanden — B1 und B2 behoben | Claude (Sonnet 5) |
+| 2026-09-10 | AP-1.fix2 | Strich-Radierer-Klick in Textmitte und am Textende live getestet | Bestanden — B3 behoben, Text vollständig entfernt bei Klick auf den Textkörper | Claude (Sonnet 5) |
 
 ## 10. Dokumentation
 

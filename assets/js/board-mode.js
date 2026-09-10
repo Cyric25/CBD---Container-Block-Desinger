@@ -1263,8 +1263,8 @@
 
         /**
          * Text-Werkzeug: Eingabefeld an der Klickposition öffnen.
-         * Stempelt den bestätigten Text direkt auf die Zeichenfläche
-         * (Speicher-/Undo-Integration als strokes-Eintrag folgt in AP-1.2).
+         * Übernommener Text wird als strokes-Eintrag abgelegt (siehe commit()
+         * unten) und dadurch automatisch gespeichert/rückgängig machbar.
          */
         openTextInput: function(clientX, clientY) {
             var self = this;
@@ -1272,10 +1272,22 @@
             var canvasY = this.lastY;
             var committed = false;
 
-            // Falls bereits ein Eingabefeld offen ist: zuerst entfernen (ohne Text zu übernehmen)
+            // Falls bereits ein Eingabefeld offen ist: zuerst entfernen. Das
+            // loest synchron ein 'blur' auf dem alten Feld aus, dessen
+            // eigener Handler seinen Text uebernimmt (commit()) und sich
+            // dabei SELBST aus dem DOM entfernt (cleanup()) - der
+            // nachfolgende removeChild-Aufruf hier traefe dann auf einen
+            // bereits entfernten Knoten. AP-1.fix1 (Befund B2 aus
+            // AP-1.rev): try/catch faengt genau diesen Fall ab, das
+            // Ergebnis (kein offenes altes Feld mehr) ist in beiden Faellen
+            // dasselbe.
             var existing = document.querySelector('.cbd-board-text-input');
             if (existing && existing.parentNode) {
-                existing.parentNode.removeChild(existing);
+                try {
+                    existing.parentNode.removeChild(existing);
+                } catch (removeErr) {
+                    // bereits per eigenem blur-Handler entfernt, siehe oben
+                }
             }
 
             var textarea = document.createElement('textarea');
@@ -1414,6 +1426,17 @@
 
             // Text-Werkzeug: Eingabefeld an der Klickposition öffnen statt zu zeichnen
             if (this.currentTool === 'text') {
+                // AP-1.fix1 (Befund B1 aus AP-1.rev): Ohne preventDefault()
+                // verarbeitet der Browser nach diesem pointerdown weiterhin
+                // seine eigene Standardaktion (u. a. Fokuswechsel Richtung
+                // Canvas) - das zog den Fokus dem gerade erst geöffneten
+                // Eingabefeld sofort wieder weg, dessen blur-Handler committete
+                // daraufhin einen leeren Text und entfernte das Feld, bevor der
+                // Nutzer auch nur ein Zeichen tippen konnte. Nur bei ECHTER
+                // Eingabe reproduzierbar, nicht bei synthetisch dispatchten
+                // PointerEvents (die haben keine Standardaktion) - deshalb in
+                // AP-1.1/AP-1.2 unentdeckt geblieben.
+                e.preventDefault();
                 this.openTextInput(e.clientX, e.clientY);
                 return; // kein Zeichen-Strich beginnen
             }
@@ -1546,6 +1569,35 @@
             // Durch alle Striche iterieren (rückwärts für sicheres Löschen)
             for (var i = this.strokes.length - 1; i >= 0; i--) {
                 var stroke = this.strokes[i];
+
+                // Text-Einträge haben nur einen Anker-Punkt (Einfügeposition),
+                // nicht den tatsächlich gerenderten Textbereich - ein reiner
+                // Punkt-Abstands-Test würde den Radierer nur nahe der linken
+                // oberen Ecke treffen lassen (AP-1.rev, Befund B3). Deshalb
+                // hier stattdessen ein Rechtecktest über die tatsächliche
+                // Ausdehnung des gerenderten Texts.
+                if (stroke.tool === 'text') {
+                    var fontSizePxErase = Math.round(16 + stroke.width * 4);
+                    this.drawingCtx.font = fontSizePxErase + 'px sans-serif';
+                    var textLinesErase = stroke.text.split('\n');
+                    var maxLineWidth = 0;
+                    for (var tl = 0; tl < textLinesErase.length; tl++) {
+                        var lineWidthPx = this.drawingCtx.measureText(textLinesErase[tl]).width;
+                        if (lineWidthPx > maxLineWidth) maxLineWidth = lineWidthPx;
+                    }
+                    var boxLeft = stroke.points[0].x - eraserRadius;
+                    var boxTop = stroke.points[0].y - eraserRadius;
+                    var boxRight = stroke.points[0].x + maxLineWidth + eraserRadius;
+                    var boxBottom = stroke.points[0].y + textLinesErase.length * fontSizePxErase * 1.2 + eraserRadius;
+
+                    if (x >= boxLeft && x <= boxRight && y >= boxTop && y <= boxBottom) {
+                        this.strokes.splice(i, 1);
+                        deletedAny = true;
+                    }
+
+                    if (deletedAny) break;
+                    continue;
+                }
 
                 // Prüfe ob Radierer einen Punkt des Strichs berührt
                 for (var j = 0; j < stroke.points.length; j++) {
