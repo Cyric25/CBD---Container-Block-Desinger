@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Container Block Designer is a WordPress plugin that creates customizable container blocks for the Gutenberg Block Editor. It allows users to create, manage, and apply styled container blocks with features like collapsible sections, copy-to-clipboard, screenshots, and automatic numbering.
 
-**Current Version:** 3.1.123
+**Current Version:** 3.1.127
 **WordPress Requirements:** 6.0+
 **PHP Requirements:** 7.4+ (rückwärtskompatibel; getestet auf 7.4.33)
 **Tested up to:** WordPress 6.4, PHP 8.4
@@ -3424,6 +3424,119 @@ geringfügig, kein Korrekturbedarf:
    keinen `strokes`-Eintrag an), und nach Speichern/Neuöffnen liegt jeder
    Inhalt im `baseImageObj` — Undo und Strich-Radierer greifen dann nicht
    mehr, nur „Zeichnung löschen" (alles) entfernt ihn noch.
+
+## Persönliche Notizen: automatische Sichtbarkeit auf Inhaltsverzeichnis-Seiten
+(Phase 2 von `PLAN-Tafelmodus-Text-und-Notizen-Restore.md`, abgeschlossen
+2026-09-10)
+
+Der globale, schwebende Button zum Exportieren/Importieren/Löschen aller
+lokal (`localStorage`) gespeicherten Tafel-Notizen (`assets/js/personal-notes-manager.js`,
+fertiger, seit v3.0.17 unveränderter Code — Gerätewechsel für Schüler) war
+über die Option `cbd_personal_notes_manager` steuerbar, stand aber
+standardmäßig auf `disabled` und musste von Hand auf `all`/`specific`
+umgestellt werden. **Der Button war nie kaputt, nur nirgends aktiv
+eingeschaltet.** Eine frühere, im selben Zuge entfernte Variante hängte
+Import/Export stattdessen als Dropdown-Menü direkt in die Tafel-Werkzeugleiste
+(Commit `ae681c4`, „IO-Dropdown aus Tafeltoolbar entfernt (war
+Missverständnis)", v3.0.17) — genau dieser Weg (ein Menü in der
+Tafel-Werkzeugleiste selbst) ist für die hier beschriebene Wiederherstellung
+ein explizites Nicht-Ziel, um nicht auf jeder Seite mit Tafelmodus einen
+weiteren Werkzeugleisten-Knopf zu erzeugen.
+
+**Der neue Options-Wert `toc` (zusätzlich zu `disabled`/`all`/`specific`,
+kein Ersatz) zeigt den Button automatisch, ohne jeden Admin-Schritt, auf
+jeder veröffentlichten Seite mit dem Theme-Block `fos/inhaltsverzeichnis`** —
+erkannt über die WordPress-Kernfunktion `has_block('fos/inhaltsverzeichnis', $post)`,
+keine Theme-Naht, kein `function_exists()`-Schutz nötig (`has_block()` prüft
+nur `post_content`). `toc` ist seither außerdem der **neue Vorgabewert** der
+Option (`get_option('cbd_personal_notes_manager', 'toc')`, sowohl in
+`admin/settings.php` als auch im Style-Loader) — Bestandsinstallationen mit
+bereits explizit gespeichertem Wert sind davon unberührt (`get_option()`
+liefert immer den gespeicherten Wert, wenn einer existiert; die
+Vorgabewert-Änderung wirkt nur, wo die Options-Zeile fehlt).
+
+**Architekturentscheidung — eigene Methode statt Erweiterung der
+bestehenden:** `includes/class-cbd-style-loader.php::enqueue_notes_manager_styles()`
+ist eine neue, private Methode, separat aus `enqueue_frontend_styles()`
+aufgerufen (`$this->enqueue_feature_styles(); $this->enqueue_notes_manager_styles();`).
+Der bis dahin in `enqueue_feature_styles()` liegende Notizen-Enqueue-Block
+wurde dorthin verschoben. Grund: `enqueue_feature_styles()` bricht früh mit
+`return` ab, sobald eine Seite keine aktiven Container-Block-Features hat —
+eine reine Inhaltsverzeichnis-Seite hätte typischerweise keine, der neue
+`toc`-Zweig hätte diesen Codepfad also nie erreicht. Die Extraktion lässt die
+Feature-Scan-Logik selbst unangetastet (reines Verschieben, kein
+Verhaltensunterschied — per Methoden-Diff bestätigt: 32 reine Löschzeilen,
+0 Hinzufügungen).
+
+**Live gefundene und im selben AP behobene Regression:** Die Entkopplung
+hob für `all`/`specific` zunächst versehentlich die vorher implizite
+Kopplung „nur auf Seiten mit mindestens einem Container-Block" mit auf, die
+diesen beiden Modi über den früheren `return` in `enqueue_feature_styles()`
+automatisch zugutekam — `all` zeigte den Button kurzzeitig auf jeder Seite
+der Website, auch ganz ohne CDB-Container. Behoben durch einen in
+`enqueue_notes_manager_styles()` selbst nachgebildeten, semantisch
+äquivalenten Gate-Test (`get_used_blocks_on_page()` + derselbe
+`$has_reusable`-Check wie in `enqueue_feature_styles()`), angewendet
+**ausschließlich** auf `all`/`specific` — der `toc`-Zweig bleibt davon
+unabhängig, seine einzige Bedingung ist `has_block()`. Kehrseite dieser
+bewussten Duplikation: `get_used_blocks_on_page()` läuft in `all`/`specific`
+jetzt zweimal je Seitenaufruf (einmal in `enqueue_feature_styles()`, einmal
+im nachgebildeten Gate) — der bewusst akzeptierte Preis dafür,
+`enqueue_feature_styles()` selbst nicht anzufassen; betrifft den Vorgabewert
+`toc` nicht.
+
+**Admin-Oberfläche:** `admin/settings.php` hat einen dritten Radio-Eintrag
+„Nur auf Seiten mit Inhaltsverzeichnis-Block anzeigen (empfohlen)"
+(`value="toc"`) zwischen „Deaktiviert" und „Auf allen Seiten…". Der
+Schreibpfad beim Speichern hat weiterhin `?? 'disabled'` als Rückfallwert
+(nicht auf `toc` gezogen) — im Regelbetrieb unerreichbar, da das Radio-Feld
+beim Speichern immer belegt ist; siehe „Bekannte, bewusst akzeptierte
+Einschränkungen" unten.
+
+**Darkmode-Kontrastfehler gefunden und behoben:** `assets/css/personal-notes-manager.css`
+stammt aus v3.0.x, vor der projektweiten Darkmode-Umstellung. Eine
+Live-Kontrastmessung (WCAG-Relativluminanz) über alle Text-/Hintergrund-Paare
+der Datei im Dunkelmodus fand einen dunkelmodus-spezifischen Befund unter der
+AA-Schwelle von 4,5:1: `.cbd-notes-info small` (literaler Grauton `#646970`)
+fiel auf dem inzwischen dunklen Menü-Panel von ~5,5:1 im Hellmodus auf
+gemessene 3,39:1. Neue Regel:
+```css
+[data-theme="dark"] .cbd-notes-info small {
+    color: var(--color-text-muted, #a0a0a0);
+}
+```
+Live nachgemessen: 7,16:1. Alle anderen Kombinationen der Datei (Menü-Buttons,
+deren Hover-Zustände, „Alle löschen", Trennlinien, Haupt-Button) bestanden
+live mit 4,3–15,3:1 und blieben unverändert — mit einer Ausnahme, siehe
+Einschränkung unten (`.cbd-notes-delete-all`, 4,32:1, vorbestehend und
+mode-unabhängig).
+
+### Bekannte, bewusst akzeptierte Einschränkungen
+
+Aus dem unabhängigen Review (AP-2.rev) — kein kritischer oder mittlerer
+Befund, drei geringe, kein Korrektur-AP nötig:
+
+1. `.cbd-notes-delete-all` („Alle Notizen löschen", `#d63638` auf `#fef2f2`)
+   misst 4,32:1 — ebenfalls unter der WCAG-AA-Schwelle von 4,5:1, aber
+   **vorbestehend und mode-unabhängig** (beide Farben sind literal und im
+   Hell- wie im Dunkelmodus identisch, also nicht durch dieses Vorhaben
+   verursacht). Kein Lesbarkeitsproblem in der Praxis (rot auf sehr hellem
+   Rosa).
+2. `admin/settings.php`: Der Schreibpfad (`?? 'disabled'`) ist inkonsistent
+   mit den beiden Lesepfaden (`'toc'`). Theoretisches, im Regelbetrieb nicht
+   erreichbares Szenario: ein zur Whitelist nicht passender DB-Wert plus
+   erneutes Speichern anderer Einstellungen würde still auf `disabled`
+   zurückfallen. Empfehlung für ein künftiges AP (nicht blockierend):
+   `?? 'toc'` plus Whitelist-Prüfung gegen die vier gültigen Werte.
+3. `get_used_blocks_on_page()` läuft in den Modi `all`/`specific` doppelt je
+   Seitenaufruf (siehe Architekturentscheidung oben) — bewusst akzeptierte
+   Eigenschaft, betrifft den Vorgabewert `toc` nicht.
+
+Details und die vollständigen Übergabenotizen der Phase-2-APs:
+`PLAN-Tafelmodus-Text-und-Notizen-Restore.md`, Abschnitt 7 (AP-2.1 bis
+AP-2.rev). Datei-Referenz: `reference_file_map.md`, Zeilen zu
+`class-cbd-style-loader.php`, `admin/settings.php` und
+`personal-notes-manager.css`.
 
 ## PDF-Export: Tafelbilder und eigene Notizen (Phase 2 von
 `docs/archiv/PLAN-PDF-Notizen-und-Listenformeln.md`, abgeschlossen 2026-08-24)
