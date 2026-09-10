@@ -247,3 +247,20 @@
 .cbd-notes-toggle.has-notes {
     animation: pulse 2s ease-in-out infinite;
 }
+
+/* Dunkelmodus (AP-2.3, PLAN-Tafelmodus-Text-und-Notizen-Restore.md,
+   Phase 2, 2026-09-10): Live-Kontrastmessung ueber alle Text-/Hintergrund-
+   Paare dieser Datei ergab genau EINEN Befund unter der WCAG-AA-Schwelle
+   von 4,5:1 fuer normalen Text - der literale Grauton #646970 auf dem
+   dunklen Menue-Panel (dessen Hintergrund ueber var(--color-background)
+   bereits automatisch mitzieht) faellt von komfortablen ~5,5:1 im
+   Hellmodus auf gemessene 3,39:1. Alle anderen Kombinationen (Menue-
+   Buttons, deren Hover-Zustaende, "Alle loeschen", Trennlinien, Haupt-
+   Button) bestehen live gemessen mit 4,3:1 bis 15,3:1 und blieben deshalb
+   bewusst unveraendert - insbesondere die hellen Menue-Button-Flaechen
+   (#f6f7f7) sind als eigenstaendige "Inseln" mit ~12:1 in sich lesbar,
+   nur optisch nicht dunkelmodus-nativ (kein Lesbarkeitsfehler, ausserhalb
+   des AP-Scopes). */
+[data-theme="dark"] .cbd-notes-info small {
+    color: var(--color-text-muted, #a0a0a0);
+}

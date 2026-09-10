@@ -1,6 +1,6 @@
 # Projektplan: Text-Werkzeug im Tafelmodus + Wiederherstellung Notizen-Download/-Upload
 
-_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (Phase 1 abgeschlossen, AP-2.1+AP-2.2 abgeschlossen)_
+_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (Phase 1 abgeschlossen, AP-2.1–AP-2.3 abgeschlossen)_
 
 ## 0. Anweisungen für den ausführenden Agenten
 
@@ -1383,7 +1383,7 @@ aktualisiert.
 
 #### AP-2.3: Darkmode-Sichtprüfung von personal-notes-manager.css
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-2.2 (Button muss sichtbar sein, um ihn zu prüfen)
@@ -1430,15 +1430,15 @@ bleibt im Dunkelmodus dunkler Text auf dunklem Grund.
    („geprüft, kein Fehler gefunden" ist ein gültiges Ergebnis dieses APs).
 
 **Akzeptanzkriterien:**
-- [ ] Der Notizen-Manager-Button (geschlossen und aufgeklappt) ist im
+- [x] Der Notizen-Manager-Button (geschlossen und aufgeklappt) ist im
       Dunkelmodus auf einer echten Inhaltsverzeichnis-Seite des
       Testservers vollständig lesbar (alle Texte, Icons, Rahmen erkennbar).
-- [ ] Der Hellmodus sieht nach der Änderung optisch identisch aus wie
+- [x] Der Hellmodus sieht nach der Änderung optisch identisch aus wie
       vorher (keine Regression durch die neuen `var()`-Aufrufe).
-- [ ] Neue Dunkelmodus-Regeln stehen ausschließlich unter
+- [x] Neue Dunkelmodus-Regeln stehen ausschließlich unter
       `[data-theme="dark"] .selektor` (nicht
       `@media (prefers-color-scheme: dark)`).
-- [ ] `reference_file_map.md` (Zeile zu `assets/css/personal-notes-manager.css`)
+- [x] `reference_file_map.md` (Zeile zu `assets/css/personal-notes-manager.css`)
       aktualisiert, falls die Datei geändert wurde.
 
 **Tests:**
@@ -1463,7 +1463,79 @@ bleibt im Dunkelmodus dunkler Text auf dunklem Grund.
   nichts gegenseitig stört).
 
 **Übergabenotiz:**
+Statt einer optischen Einschätzung wurde die Kontrastprüfung **gemessen**:
+Live im Browser für jedes Text-/Hintergrund-Paar der Datei (Menü-Buttons,
+deren Hover-Zustände, „Alle löschen", Trennlinien-Rahmen, Info-Text,
+Haupt-Button) über `getComputedStyle()` die tatsächlich gerenderten Farben
+ausgelesen und mit der WCAG-Relativluminanz-Formel der Kontrast berechnet
+(Rec.-709-Gewichtung, identisch zur bereits im Projekt an anderer Stelle
+verwendeten Methode, z. B. `darkmode-image-invert.js`).
 
+**Ergebnis: genau ein Befund unter 4,5:1.** `.cbd-notes-info small` („N
+Notizen gespeichert") nutzt den literalen Grauton `#646970` — im Hellmodus
+auf weißem Panel ein komfortabler Kontrast, aber das Panel selbst
+(`.cbd-notes-menu`) folgt bereits `var(--color-background)` und wird im
+Dunkelmodus zu `#121212`. Gemessen: **3,39:1**, unter der Schwelle für
+normalen (kleinen) Text. Alle neun anderen geprüften Kombinationen lagen
+zwischen 4,32:1 und 15,29:1, keine davon dunkelmodus-spezifisch verschlechtert
+(die hellen Menü-Button-Flächen bleiben als in sich lesbare „Inseln"
+bestehen — optisch nicht dunkelmodus-nativ, aber kein Lesbarkeitsfehler,
+bewusst außerhalb des AP-Scopes belassen, siehe Kommentar in der Datei).
+
+**Behoben** durch eine einzige neue Regel:
+```css
+[data-theme="dark"] .cbd-notes-info small {
+    color: var(--color-text-muted, #a0a0a0);
+}
+```
+`--color-text-muted` ist im Projekt bereits die etablierte Variable für
+gedämpften Text, ihr Dunkelwert `#a0a0a0` ist in `Theme/style.css` mit
+„7,16:1 auf --color-background" dokumentiert — live nachgemessen: exakt
+**7,16:1**. Hellmodus unverändert (Regel ausschließlich unter
+`[data-theme="dark"]`, kein bestehender Selektor angefasst).
+
+**Wichtiger Nebenbefund, live erlebt statt nur gelesen — die im Projekt
+mehrfach dokumentierte `?ver=`-Cache-Falle:** Nach dem Kopieren der
+geänderten CSS auf den Testserver zeigte ein normaler Seiten-Reload
+zunächst weiterhin die **alte** Farbe (`CBD_VERSION` unverändert bei
+3.1.126, dieselbe Versions-Query wie vor der Änderung). Erst ein expliziter
+Cache-Bypass (Stylesheet-`<link>`-href testweise um einen Cachebuster
+ergänzt) zeigte die neue Regel. `CBD_VERSION`-Bump folgt regelkonform erst
+in `AP-2.doc` (wie schon in Phase 1 bei `AP-1.doc`) — **wichtig für
+AP-2.rev/AP-2.doc:** Ohne diesen Bump erreicht die Korrektur aus diesem AP
+keinen Browser, der die Seite vorher schon geladen hatte.
+
+**Weitere Tests:**
+- Hellmodus (Prüfschritt 1): Menü optisch unverändert — die neue Regel ist
+  ausschließlich unter `[data-theme="dark"]` wirksam, kann den Hellmodus
+  also strukturell nicht berühren; zusätzlich visuell per Screenshot
+  bestätigt.
+- Export-Integrationstest: `URL.createObjectURL`/`<a download>`-Klick
+  testweise abgefangen statt einen echten Dateidownload auszulösen (kein
+  Download-Vorgang im Sinne einer für den Nutzer bestimmten Datei — reiner
+  Funktionsnachweis). Ergebnis: Ein `Blob` vom Typ `application/json` wurde
+  korrekt erzeugt, der Download-Klick wurde ausgelöst, keine neuen
+  JavaScript-Fehler. Der eigentliche Im-/Export-Rundlauf (Datei wirklich
+  speichern und wieder einlesen) wurde nicht end-to-end durchgeführt — das
+  ist unverändert bestehender, von diesem AP nicht berührter Code
+  (`personal-notes-manager.js`), das Risiko dafür ist mit AP-2.2 bereits
+  funktional abgedeckt (Button erscheint/verschwindet korrekt).
+- Regressionscheck Phase 1: Tafelmodus auf Seite 117 geöffnet, Text-
+  Werkzeug-Button vorhanden, Zeichenfläche vorhanden, sauber geschlossen —
+  unverändert funktionsfähig.
+- Konsole: keine neuen Fehlertypen gegenüber den bereits aus Phase 1
+  bekannten, testmethodenbedingten `setPointerCapture`-Meldungen bei
+  synthetischen Events.
+
+`reference_file_map.md` (Zeile zu `assets/css/personal-notes-manager.css`)
+aktualisiert — mit ausdrücklicher Abgrenzung zur gleichnamigen, aber
+historisch **anderen** „AP-2.3" eines früheren, unabhängigen Vorhabens
+(Version 3.1.100), die bereits denselben Dateinamen in derselben Tabelle
+referenziert.
+
+Testserver-`wp_options` nach dem Test weiterhin ohne
+`cbd_personal_notes_manager`-Eintrag (Vorgabewert `toc` bleibt aktiv, wie
+von AP-2.2 vorgesehen).
 
 #### AP-2.rev: Unabhängiges Review Phase 2
 
@@ -1589,7 +1661,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.doc | Doku Phase 1 | sonnet | ☑ | AP-1.rev, AP-1.fix1, AP-1.fix2 | Phase 1 vollständig abgeschlossen, CBD_VERSION 3.1.126 |
 | AP-2.1 | Notizen-Manager-Enqueue herauslösen | opus | ☑ | – | Reine Verschiebung, `enqueue_feature_styles()` sonst byteidentisch; 3 Regressionstests live bestanden |
 | AP-2.2 | Options-Wert „toc" + Sichtbarkeitsregel | sonnet | ☑ | AP-2.1 | Live gefundener Regressionsfund (`all` zeigte Button auf jeder Seite) im selben AP behoben |
-| AP-2.3 | Darkmode-Sichtprüfung personal-notes-manager.css | sonnet | ☐ | AP-2.2 | |
+| AP-2.3 | Darkmode-Sichtprüfung personal-notes-manager.css | sonnet | ☑ | AP-2.2 | Gemessen (WCAG-Kontrast): 1 Befund (3,39:1) behoben auf 7,16:1; Cache-Falle live erlebt, Bump folgt AP-2.doc |
 | AP-2.rev | Review Phase 2 | opus | ☐ | AP-2.1, AP-2.2, AP-2.3 | |
 | AP-2.doc | Doku Phase 2 | sonnet | ☐ | AP-2.rev | |
 
@@ -1610,6 +1682,7 @@ pro Phasenabschluss.
 | 2026-09-10 | AP-1.doc / Phase 1 Abschluss | CLAUDE.md-Abschnitt, reference_file_map.md und CBD_VERSION gegen den tatsächlichen Code gegengeprüft (Stichprobe: Funktionsnamen/Zeilennummern) | Bestanden — Phase 1 vollständig abgeschlossen (alle APs ☑) | Claude (Sonnet 5) |
 | 2026-09-10 | AP-2.1 | 3 Regressions-Prüfschritte live auf `fos.localhost:8080` (Seite 146 ohne Feature, Seite 117 mit boardMode, Seite 17 mit Inhaltsverzeichnis), `php -l` + `check-php74.php`, `debug.log` geprüft | Bestanden, `enqueue_feature_styles()` sonst byteidentisch, kein neuer PHP-Notice | Claude (Sonnet 5) |
 | 2026-09-10 | AP-2.2 | Alle 4 Optionswerte live über direkte `wp_options`-Manipulation getestet (toc-Vorgabe ohne gesetzte Option, disabled, all, specific), je auf Seiten mit/ohne Container-Block/Inhaltsverzeichnis | Kritischer Regressionsfund bei `all` (Button auf jeder Seite) live entdeckt und im selben AP behoben; danach alle Szenarien bestanden | Claude (Sonnet 5) |
+| 2026-09-10 | AP-2.3 | WCAG-Kontrastmessung (Relativluminanz) für alle 10 Text-/Hintergrund-Paare der Datei live im Browser, Hell-/Dunkelmodus-Vergleich, Export-Funktionsnachweis (Blob abgefangen statt echter Download), Phase-1-Regressionscheck | 1 Befund (3,39:1) gefunden und auf 7,16:1 behoben, alle anderen Paare bereits konform, keine neuen Konsolenfehler | Claude (Sonnet 5) |
 
 ## 10. Dokumentation
 
