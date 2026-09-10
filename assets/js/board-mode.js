@@ -1297,15 +1297,19 @@
                 cleanup();
                 if (!text) return;
 
-                var fontSizePx = Math.round(16 + self.lineWidth * 4);
-                self.drawingCtx.font = fontSizePx + 'px sans-serif';
-                self.drawingCtx.fillStyle = self.currentColor;
-                self.drawingCtx.textBaseline = 'top';
-
-                var lines = text.split('\n');
-                for (var i = 0; i < lines.length; i++) {
-                    self.drawingCtx.fillText(lines[i], canvasX, canvasY + i * fontSizePx * 1.2);
-                }
+                // Als regulaeren strokes-Eintrag ablegen (analog zum
+                // bestehenden 'highlighter'-Sonderfall) - macht Undo,
+                // Speichern und Seitenwechsel automatisch korrekt, weil
+                // redrawAllStrokes() ausschliesslich aus baseImageObj +
+                // strokes neu aufbaut (siehe dortiger Pass 3).
+                self.strokes.push({
+                    tool: 'text',
+                    text: text,
+                    color: self.currentColor,
+                    width: self.lineWidth,
+                    points: [{x: canvasX, y: canvasY}]
+                });
+                self.redrawAllStrokes();
             }
 
             function cancel() {
@@ -1619,7 +1623,7 @@
 
             for (var i = 0; i < allStrokes.length; i++) {
                 var stroke = allStrokes[i];
-                if (stroke.tool === 'highlighter') continue; // Überspringen, schon gezeichnet
+                if (stroke.tool === 'highlighter' || stroke.tool === 'text') continue; // Überspringen (Textmarker schon gezeichnet, Text folgt in Pass 3)
                 if (stroke.points.length < 1) continue;
 
                 this.drawingCtx.lineWidth = stroke.width;
@@ -1640,6 +1644,24 @@
 
             // Composite Operation zurücksetzen
             this.drawingCtx.globalCompositeOperation = 'source-over';
+
+            // Pass 3: Text-Einträge zeichnen (oberste Ebene)
+            for (var k = 0; k < allStrokes.length; k++) {
+                var textStroke = allStrokes[k];
+                if (textStroke.tool !== 'text') continue;
+                var fontSizePx = Math.round(16 + textStroke.width * 4);
+                this.drawingCtx.font = fontSizePx + 'px sans-serif';
+                this.drawingCtx.fillStyle = textStroke.color;
+                this.drawingCtx.textBaseline = 'top';
+                var textLines = textStroke.text.split('\n');
+                for (var li = 0; li < textLines.length; li++) {
+                    this.drawingCtx.fillText(
+                        textLines[li],
+                        textStroke.points[0].x,
+                        textStroke.points[0].y + li * fontSizePx * 1.2
+                    );
+                }
+            }
         },
 
         onKeyDown: function(e) {

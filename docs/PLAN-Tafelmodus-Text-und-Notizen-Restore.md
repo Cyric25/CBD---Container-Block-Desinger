@@ -1,6 +1,6 @@
 # Projektplan: Text-Werkzeug im Tafelmodus + Wiederherstellung Notizen-Download/-Upload
 
-_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (AP-1.1 abgeschlossen)_
+_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (AP-1.2 abgeschlossen)_
 
 ## 0. Anweisungen für den ausführenden Agenten
 
@@ -423,7 +423,7 @@ existiert nachweislich in `wp-includes/css/dashicons.css` des Testservers.
 
 #### AP-1.2: Text-Eintrag speichert und ist rückgängig machbar
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** M
 **Modell:** sonnet (Vorgehen konkret vorgezeichnet, folgt bestehendem Muster des `highlighter`-Sonderfalls)
 **Abhängigkeiten:** AP-1.1
@@ -543,7 +543,55 @@ und Undo teil.
   Fehler, keine verschwundenen oder doppelten Elemente.
 
 **Übergabenotiz:**
+Umgesetzt exakt wie im Vorgehen beschrieben: `commit()` in `openTextInput()`
+legt jetzt `{tool:'text', text, color, width, points:[{x:canvasX,
+y:canvasY}]}` in `this.strokes` ab statt direkt zu malen, und ruft
+`redrawAllStrokes()`. Dort schließt Pass 2 `tool === 'text'` zusätzlich zu
+`'highlighter'` aus; neuer Pass 3 (nach Pass 2, vor Funktionsende) zeichnet
+alle Text-Einträge. `eraseStrokeAtPoint()` musste wie im Plan vermutet
+**nicht** angepasst werden — funktioniert unverändert korrekt mit einem
+Text-Eintrag, der genau einen Punkt in `points` trägt.
 
+Live getestet auf `http://fos.localhost:8080/?page_id=117`, derselbe
+Testserver-Kontext wie AP-1.1 (weiterhin aktiv). Alle sechs
+Akzeptanzkriterien einzeln bestätigt (Werte aus den Live-Läufen):
+- Text-Eintrag in `strokes`: nach Einfügen `strokesAfterInsert === 1` mit
+  `tool: 'text'`.
+- **Persistenz:** Text „Persistenz-Test" eingefügt, `close()` aufgerufen
+  (speichert automatisch über den bestehenden, unveränderten
+  `saveDrawing()`-Dispatcher — in diesem persönlichen, nicht
+  klassengebundenen Testkontext nach `localStorage['cbd-board-<id>']`),
+  Tafel über den Toggle-Button erneut geöffnet → Text **und** die vorher
+  gezeichneten Stift-Striche erscheinen unverändert (Screenshot bestätigt).
+- **Undo:** vor Einfügen 0 Tinte-Pixel, nach Einfügen 2187, nach `undo()`
+  wieder 0 — `strokes.length` 0→1→0, exakte Rückkehr zur Ausgangsbasis.
+- **Reihenfolge Stift→Text→Stift + 2×Undo:** Werkzeugfolge nach jedem
+  Schritt protokolliert: `[pen]` → `[pen,text]` → `[pen,text,pen]` → nach
+  1. Undo `[pen,text]` → nach 2. Undo `[pen]`. Exakt wie im Plan gefordert.
+- **Strich-Radierer auf Text:** `strokes.length` vor 2, nach Klick auf die
+  Textposition mit aktivem `eraser-stroke` 1 — Text vollständig entfernt.
+- **Regression Textmarker/Stift-Überlappung:** sich überlappender
+  Textmarker- und Stift-Strich hinzugefügt, `strokes`-Reihenfolge
+  `[highlighter, pen]` unverändert erhalten, Rendering (Textmarker unten,
+  Stift oben) im Screenshot wie vor dieser Änderung.
+
+**Integrationstest Phase 1 (AP-1.1 + AP-1.2 zusammen, in einer laufenden
+Sitzung):** Werkzeugwechsel Stift↔Text↔Textmarker↔Radierer mehrfach
+durchlaufen, Text mehrfach eingefügt/per Undo und per Strich-Radierer
+wieder entfernt, Tafel geschlossen und neu geöffnet — keine verschwundenen
+oder doppelten Elemente, keine neuen Konsolenfehler. Damit ist der in
+Abschnitt 6 definierte „lauffähige Endzustand" von Phase 1 erreicht.
+
+**Konsole:** einzige beobachtete Fehler sind die bereits in AP-1.1
+dokumentierten `NotFoundError`s von `setPointerCapture()` — ausschließlich
+bei synthetisch per `dispatchEvent(new PointerEvent(...))` erzeugten
+Klicks (vorbestehender Code, nicht Teil dieses APs), nicht bei echten
+Eingaben. Keine neuen Fehlertypen.
+
+`localStorage` nach jedem Testabschnitt bereinigt. Testserver läuft
+weiter für AP-1.rev.
+
+**`reference_file_map.md` aktualisiert** (Zeile zu `board-mode.js`).
 
 #### AP-1.rev: Unabhängiges Review Phase 1
 
@@ -1134,7 +1182,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP | Titel | Modell | Status | Abhängig von | Notiz |
 |---|---|---|---|---|---|
 | AP-1.1 | Werkzeug-Button „Text" + Eingabe-Overlay | sonnet | ☑ | – | Bug gefunden+behoben: Escape schloss ganze Tafel (fehlendes stopPropagation) |
-| AP-1.2 | Text-Eintrag speichert und ist rückgängig machbar | sonnet | ☐ | AP-1.1 | |
+| AP-1.2 | Text-Eintrag speichert und ist rückgängig machbar | sonnet | ☑ | AP-1.1 | Integrationstest Phase 1 bestanden — lauffähiger Endzustand erreicht |
 | AP-1.rev | Review Phase 1 | opus | ☐ | AP-1.1, AP-1.2 | |
 | AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev | |
 | AP-2.1 | Notizen-Manager-Enqueue herauslösen | opus | ☐ | – | |
@@ -1151,6 +1199,8 @@ pro Phasenabschluss.
 | Datum | AP / Phase | Getestet | Ergebnis | Getestet von |
 |---|---|---|---|---|
 | 2026-09-10 | AP-1.1 | Alle 8 Akzeptanzkriterien + 5 Prüfschritte live auf `fos.localhost:8080` (Seite 117, Container `infotext_k1`): Button/Toolbar, Klickposition, Text-Stempel, Escape (inkl. Fund+Fix), Leertext-No-op, Mehrzeilig+Shift-Enter, Regression Stift/Textmarker/Radierer, Darkmode-Kontrast | Bestanden. Ein kritischer Bug gefunden und in diesem AP behoben (Escape schloss die ganze Tafel statt nur das Textfeld) | Claude (Sonnet 5) |
+| 2026-09-10 | AP-1.2 | Alle 6 Akzeptanzkriterien live: strokes-Eintrag, Persistenz über close()/reopen, Undo, Reihenfolge Stift→Text→Stift+2×Undo, Strich-Radierer auf Text, Regression Textmarker/Stift-Überlappung | Bestanden, keine Befunde | Claude (Sonnet 5) |
+| 2026-09-10 | Phase 1 (Integrationstest) | AP-1.1+AP-1.2 gemeinsam in einer Sitzung: Werkzeugwechsel, mehrfaches Einfügen/Entfernen von Text, Schließen/Neuöffnen | Lauffähiger Endzustand aus Abschnitt 6 erreicht, keine neuen Konsolenfehler | Claude (Sonnet 5) |
 
 ## 10. Dokumentation
 
