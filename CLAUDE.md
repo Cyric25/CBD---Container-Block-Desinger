@@ -3296,6 +3296,135 @@ Tafelmodus geklickt, greift die Notiz-Invertierung erst beim nächsten
 Scope nicht zu sprengen (ein zusätzlicher Event-Listener auf den Toggle
 wäre nötig).
 
+## Text-Werkzeug im Tafelmodus (`PLAN-Tafelmodus-Text-und-Notizen-Restore.md`,
+Phase 1, abgeschlossen 2026-09-10)
+
+Ein fünftes Zeichenwerkzeug neben Stift/Textmarker/beiden Radierern:
+`data-tool="text"` in der Tafel-Werkzeugleiste. Klick auf die
+Zeichenfläche bei aktivem Werkzeug öffnet ein `<textarea
+class="cbd-board-text-input">` an der Klickposition; bestätigter Text
+wird als regulärer Eintrag in `this.strokes` abgelegt (`{tool:'text',
+text, color, width, points:[{x,y}]}`) und über `redrawAllStrokes()`
+gezeichnet.
+
+**Warum kein neuer Datentyp in der Speicherkette nötig war:** Die Tafel
+wird beim Speichern ohnehin vollständig zu einem PNG gerastert
+(`toDataURL()`, sowohl für `localStorage` als auch für den Server). Ein
+Text-Eintrag ist deshalb nur ein weiterer Eintrag im bereits vorhandenen
+Undo-/Redraw-Mechanismus — `saveToServer()`, `loadFromServer()`,
+`saveToCache()`, `loadFromCache()`, `close()` und `undo()` mussten
+**nicht** angefasst werden.
+
+**Rendering:** `redrawAllStrokes()` (`assets/js/board-mode.js`) zeichnet
+in drei Durchläufen: Pass 1 Textmarkierer (unten), Pass 2 normale
+Striche (Mitte, schließt seit diesem Vorhaben `tool === 'text'`
+zusätzlich zu `'highlighter'` aus), neuer **Pass 3** zeichnet alle
+Text-Einträge zuoberst per `ctx.fillText()`. Schriftgröße durchgängig
+`Math.round(16 + lineWidth * 4)`px sans-serif, `textBaseline: 'top'`,
+Zeilenabstand `fontSizePx * 1.2` bei mehrzeiligem Text (`\n`-getrennt).
+Text liegt dadurch konstruktionsbedingt immer auf der obersten Ebene —
+er lässt sich nicht durch einen späteren Stift-/Textmarker-Strich
+übermalen (bekannte, akzeptierte Einschränkung, siehe unten).
+
+**CSS:** `.cbd-board-text-input` in `assets/css/board-mode.css`
+(Abschnitt „TEXT-EINGABE"), ausschließlich `var(--x, #fallback)`,
+Dunkelmodus-Pendant unter `[data-theme="dark"]` direkt nach der
+bestehenden `.cbd-board-canvas-container.cbd-board-inverted`-Regel.
+Bewusste Abweichung vom ursprünglichen Plan-Text: Hintergrund im
+Dunkelmodus nutzt `var(--color-background-light, #1e1e1e)` statt
+`var(--color-background, #121212)` — hebt das Eingabefeld sichtbar vom
+Seitengrund ab, Kontrast gemessen 13,61:1.
+
+### Kritischer Befund aus dem unabhängigen Review, behoben (AP-1.fix1/fix2)
+
+Die ursprüngliche Umsetzung (AP-1.1/AP-1.2) wurde ausschließlich mit
+synthetisch per `element.dispatchEvent(new PointerEvent(...))` erzeugten
+Klicks getestet. **Diese haben keine Standardaktion** — und genau darin
+lag die Lücke: Bei einer **echten** Zeigereingabe verarbeitete der
+Browser nach dem `pointerdown` weiterhin seine eigene Standardaktion
+(Fokuswechsel Richtung Canvas), entzog dem gerade geöffneten Eingabefeld
+dadurch **innerhalb von rund 1,5 ms** wieder den Fokus, dessen
+`blur`-Handler committete einen leeren Text und entfernte das Feld —
+**der Nutzer konnte nichts eintippen.** Das unabhängige Review (AP-1.rev)
+fand das über eine Ende-zu-Ende-Messung mit ausschließlich echten
+`computer`-Tool-Eingaben und verifizierte die Ursache zusätzlich über
+einen diagnostischen, nicht persistierten `preventDefault()`-Test.
+
+**Behoben durch `e.preventDefault()`** im `text`-Zweig von
+`onPointerDown()`, unmittelbar vor dem Aufruf von `openTextInput()` —
+verhindert die fokusraubende Standardaktion des Browsers, ohne andere
+Werkzeuge zu berühren (der Aufruf steht ausschließlich in diesem einen
+Zweig).
+
+**Eng verwandter, zweiter Befund derselben Funktion:** Ein zweiter Klick
+auf die Zeichenfläche bei bereits offenem Eingabefeld ließ
+`existing.parentNode.removeChild(existing)` in `openTextInput()` auf
+einen bereits durch das eigene, synchron ausgelöste `blur`-Ereignis
+entfernten Knoten laufen (`NotFoundError: … Perhaps it was moved in a
+'blur' event handler?`) — wurde erst durch den ersten Fix sichtbar (vorher
+blieb ein Feld nie lange genug offen für einen zweiten Klick). Behoben
+durch `try/catch` um diesen `removeChild`-Aufruf; der Endzustand (kein
+offenes altes Feld mehr) ist in beiden Fällen identisch.
+
+**Dritter Befund, andere Funktion:** `eraseStrokeAtPoint()` prüfte für
+Text-Einträge nur den Abstand zum gespeicherten Anker-Punkt (linke obere
+Ecke der ersten Zeile) — der Strich-Radierer traf ein `text`-Element
+deshalb nur in einem ~19-px-Radius um diese Ecke, nicht über dem
+tatsächlich sichtbaren Textkörper. Behoben durch einen Rechtecktest
+speziell für `stroke.tool === 'text'`: Breite über
+`this.drawingCtx.measureText()` je Zeile (Maximum bei mehrzeiligem Text),
+Höhe über Zeilenzahl × `fontSizePx * 1.2`, mit `eraserRadius` als
+Toleranzrand auf allen vier Seiten. Die bestehende Punkt-Abstands-Prüfung
+für `pen`/`highlighter` blieb unverändert.
+
+**Beide Korrektur-APs wurden anschließend von einem zweiten, unabhängigen
+Agenten mit ausschließlich echten Eingaben erneut bestätigt** — inklusive
+eines Selbsttests des verwendeten Fehler-Sammlers (ein absichtlich
+provoziertes `removeChild` wurde erkannt, die gemeldete Null-Fehlerquote
+für den echten Testfall ist damit aussagekräftig) und einer expliziten
+Negativ-Gegenprobe für den Radierer-Fix (ein Klick 168 px neben dem
+Textkörper löscht nichts).
+
+**Methodische Lehre, projektübergreifend relevant:** Synthetisch
+dispatchte `PointerEvent`s sind für fokusabhängiges Verhalten **kein**
+gültiger Nachweis — sie haben keine Standardaktion und können deshalb
+genau die Fehlerklasse verdecken, die B1 hier zwei Arbeitspakete lang
+unentdeckt ließ. Ein Bedienelement, das Fokus verwaltet (Eingabefelder,
+Dialoge), sollte mindestens einmal vollständig mit echten Eingaben
+(Browser-`computer`-Werkzeug: echter Klick, echtes Tippen, echte
+Tastendrücke) durchgespielt werden, bevor ein AP als getestet gilt.
+
+### Bekannte, bewusst akzeptierte Einschränkungen
+
+Aus dem unabhängigen Review (AP-1.rev) bzw. dessen Kurz-Bestätigung, alle
+geringfügig, kein Korrekturbedarf:
+
+1. Das Eingabefeld wird nicht in den sichtbaren Bereich geklemmt — ein
+   Klick nahe dem rechten/unteren Rand lässt es teilweise aus dem Fenster
+   ragen (`position: fixed`, kein Scrollbalken, aber die letzten Zeichen
+   sind beim Tippen nicht sichtbar).
+2. Kein Zeilenumbruch: überlanger Text wird am Zeichenflächenrand
+   abgeschnitten und ist nach dem Speichern (Rasterung) unwiederbringlich
+   verloren. Kein Absturz.
+3. Text liegt konstruktionsbedingt immer auf der obersten Ebene (Pass 3)
+   und lässt sich nicht durch Stift/Textmarker übermalen oder
+   durchstreichen.
+4. Die Textgröße hat keinen eigenen gespeicherten Wert — `lineWidth` wird
+   beim Werkzeugwechsel wieder zur Stiftbreite; innerhalb einer
+   ununterbrochenen Nutzung des Text-Werkzeugs wirkt der Breitenregler
+   aber sofort auf die Schriftgröße.
+5. Kein eigener Mauszeiger (`cursor: text`) für das Werkzeug.
+6. `eraseStrokeAtPoint()` setzt `this.drawingCtx.font` für die
+   Trefferflächen-Messung eines Textes, ohne den vorherigen Wert danach
+   wiederherzustellen — heute folgenlos, da Pass 3 in
+   `redrawAllStrokes()` `font` vor jedem Text ohnehin selbst setzt.
+7. Zwei vorbestehende, nicht durch dieses Vorhaben verursachte
+   Eigenschaften der Tafel treffen Text genauso wie Stift-Striche: Der
+   Punkt-Radierer wirkt nur bis zum nächsten `redrawAllStrokes()` (legt
+   keinen `strokes`-Eintrag an), und nach Speichern/Neuöffnen liegt jeder
+   Inhalt im `baseImageObj` — Undo und Strich-Radierer greifen dann nicht
+   mehr, nur „Zeichnung löschen" (alles) entfernt ihn noch.
+
 ## PDF-Export: Tafelbilder und eigene Notizen (Phase 2 von
 `docs/archiv/PLAN-PDF-Notizen-und-Listenformeln.md`, abgeschlossen 2026-08-24)
 

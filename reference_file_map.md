@@ -1,8 +1,8 @@
 # Datei-Map: Plugin „Container Block Designer"
 
-_Stand: 2026-09-08 · Plugin-Version 3.1.124 (AP-2.2 aus
-`PLAN-Summary-PDF-und-Content-Links.md`, Vorhaben „Linkfarben allgemein" —
-Links in Container-Block-Inhalten folgen den Customizer-Themefarben)_
+_Stand: 2026-09-10 · Plugin-Version 3.1.126 (Phase 1 aus
+`PLAN-Tafelmodus-Text-und-Notizen-Restore.md` abgeschlossen — Text-Werkzeug
+im Tafelmodus, inkl. Korrektur-APs nach unabhängigem Review)_
 
 Navigationshilfe auf Dateiebene. Die fachlichen Details stehen in `CLAUDE.md`
 — dort insbesondere die Abschnitte zum Content-Importer, Block-Serializer,

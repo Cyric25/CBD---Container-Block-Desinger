@@ -1,6 +1,6 @@
 # Projektplan: Text-Werkzeug im Tafelmodus + Wiederherstellung Notizen-Download/-Upload
 
-_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (AP-1.rev + AP-1.fix1/fix2 abgeschlossen)_
+_Erstellt am: 2026-09-10 · Letzte Aktualisierung: 2026-09-10 (Phase 1 vollständig abgeschlossen)_
 
 ## 0. Anweisungen für den ausführenden Agenten
 
@@ -902,7 +902,7 @@ vorgesehen):
 
 #### AP-1.doc: Dokumentation Phase 1 aktualisieren
 
-**Status:** ☐ offen
+**Status:** ☑ erledigt
 **Umfang:** S
 **Modell:** sonnet
 **Abhängigkeiten:** AP-1.rev, AP-1.fix1, AP-1.fix2
@@ -934,11 +934,11 @@ Phase 1 bringen, plus den fälligen Versions-Bump für das Cache-Busting.
 5. „Stand"-Datum in `CLAUDE.md` und `reference_file_map.md` aktualisieren.
 
 **Akzeptanzkriterien:**
-- [ ] Neuer Abschnitt „Text-Werkzeug im Tafelmodus" in `CLAUDE.md` vorhanden.
-- [ ] `reference_file_map.md`-Zeilen zu `board-mode.js`/`board-mode.css`
+- [x] Neuer Abschnitt „Text-Werkzeug im Tafelmodus" in `CLAUDE.md` vorhanden.
+- [x] `reference_file_map.md`-Zeilen zu `board-mode.js`/`board-mode.css`
       spiegeln den tatsächlichen Stand nach Phase 1.
-- [ ] `CBD_VERSION` wurde erhöht.
-- [ ] Kein Verweis in der Dokumentation zeigt auf nicht existierende
+- [x] `CBD_VERSION` wurde erhöht.
+- [x] Kein Verweis in der Dokumentation zeigt auf nicht existierende
       Funktionen/Dateien.
 
 **Tests:**
@@ -947,7 +947,34 @@ Phase 1 bringen, plus den fälligen Versions-Bump für das Cache-Busting.
   `redrawAllStrokes`) gegen den tatsächlichen Code abgleichen.
 
 **Übergabenotiz:**
+Übergabenotizen von AP-1.1, AP-1.2, AP-1.rev, AP-1.fix1, AP-1.fix2 und der
+unabhängigen Kurz-Bestätigung durchgegangen. Neuer Abschnitt „Text-Werkzeug
+im Tafelmodus" in `Plugins/CDB-Designer/CLAUDE.md` ergänzt (zwischen
+„Tafelmodus im Darkmode" und „PDF-Export: Tafelbilder und eigene
+Notizen") — deckt Zweck, Architekturentscheidung (kein neuer Datentyp,
+Rasterung über `this.strokes`), Rendering (Drei-Pass-Schema), CSS/Darkmode,
+den kritischen Review-Befund samt Behebung und methodischer Lehre, sowie
+alle sieben bekannten, akzeptierten Einschränkungen aus AP-1.rev und der
+Kurz-Bestätigung.
 
+`reference_file_map.md`-Zeilen zu `board-mode.js`/`board-mode.css` waren
+bereits in AP-1.1/AP-1.2/AP-1.fix1/AP-1.fix2 laufend gepflegt worden —
+Stichprobe gegen den tatsächlichen Code bestätigt Übereinstimmung
+(`openTextInput` Zeile 1269, „Pass 3: Text-Einträge" Zeile 1700).
+
+`CBD_VERSION` 3.1.125 → **3.1.126** (Plugin-Header-Kommentar `Version:`
+mitgezogen), Datei zum Testserver kopiert. `php -l
+container-block-designer.php` fehlerfrei.
+
+`_Stand:`-Zeile in `reference_file_map.md` auf 2026-09-10 / 3.1.126 /
+Phase 1 dieses Plans aktualisiert. `CLAUDE.md` trägt kein eigenes
+„Stand"-Datumsfeld (laufender Text ohne Kopfzeile) — keine Änderung dort
+nötig.
+
+**Phase 1 ist damit vollständig abgeschlossen** (AP-1.1, AP-1.2, AP-1.rev,
+AP-1.fix1, AP-1.fix2, unabhängige Kurz-Bestätigung, AP-1.doc — alle ☑).
+Der in Abschnitt 6 definierte lauffähige Endzustand ist erreicht und
+zweifach unabhängig mit echten Eingaben bestätigt.
 
 ### Phase 2: Notizen-Download/-Upload wiederherstellen
 
@@ -1446,7 +1473,7 @@ Legende: ☐ offen · ◐ in Arbeit · ☑ erledigt · ✗ blockiert
 | AP-1.rev | Review Phase 1 | opus | ☑ | AP-1.1, AP-1.2 | 3 Befunde (B1 kritisch, B2/B3 mittel) — behoben in AP-1.fix1/fix2 |
 | AP-1.fix1 | Text-Werkzeug mit echter Eingabe nutzbar (B1+B2) | opus | ☑ | AP-1.rev | Kritischer Bug: Fokus ging bei echtem Klick sofort verloren |
 | AP-1.fix2 | Strich-Radierer trifft ganzen Textkörper (B3) | sonnet | ☑ | AP-1.rev | |
-| AP-1.doc | Doku Phase 1 | sonnet | ☐ | AP-1.rev, AP-1.fix1, AP-1.fix2 | |
+| AP-1.doc | Doku Phase 1 | sonnet | ☑ | AP-1.rev, AP-1.fix1, AP-1.fix2 | Phase 1 vollständig abgeschlossen, CBD_VERSION 3.1.126 |
 | AP-2.1 | Notizen-Manager-Enqueue herauslösen | opus | ☐ | – | |
 | AP-2.2 | Options-Wert „toc" + Sichtbarkeitsregel | sonnet | ☐ | AP-2.1 | |
 | AP-2.3 | Darkmode-Sichtprüfung personal-notes-manager.css | sonnet | ☐ | AP-2.2 | |
@@ -1467,6 +1494,7 @@ pro Phasenabschluss.
 | 2026-09-10 | AP-1.fix1 | Alle Akzeptanzkriterien ausschließlich mit echten `computer`-Tool-Eingaben (Klick, Tippen, echte Enter-Taste): Feld bleibt offen, Text übernommen, zweites Feld ohne Fehler, Persistenz weiterhin intakt | Bestanden — B1 und B2 behoben | Claude (Sonnet 5) |
 | 2026-09-10 | AP-1.fix2 | Strich-Radierer-Klick in Textmitte und am Textende live getestet | Bestanden — B3 behoben, Text vollständig entfernt bei Klick auf den Textkörper | Claude (Sonnet 5) |
 | 2026-09-10 | Kurz-Review (Bestätigung AP-1.fix1+fix2) | Zweiter, unabhängiger frischer Agent: B1/B2/B3 erneut mit echten Eingaben geprüft, inkl. Selbsttest des Fehler-Sammlers (B2) und Negativ-Gegenprobe (B3), Regressionscheck Stift/Radierer/Persistenz | Alle drei Befunde unabhängig bestätigt behoben, 0 Konsolenfehler, „Phase 1 ist erreicht" | frischer Review-Agent (Opus) |
+| 2026-09-10 | AP-1.doc / Phase 1 Abschluss | CLAUDE.md-Abschnitt, reference_file_map.md und CBD_VERSION gegen den tatsächlichen Code gegengeprüft (Stichprobe: Funktionsnamen/Zeilennummern) | Bestanden — Phase 1 vollständig abgeschlossen (alle APs ☑) | Claude (Sonnet 5) |
 
 ## 10. Dokumentation
 
