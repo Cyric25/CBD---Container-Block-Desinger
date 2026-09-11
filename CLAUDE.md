@@ -3516,12 +3516,11 @@ mode-unabhängig).
 Aus dem unabhängigen Review (AP-2.rev) — kein kritischer oder mittlerer
 Befund, drei geringe, kein Korrektur-AP nötig:
 
-1. `.cbd-notes-delete-all` („Alle Notizen löschen", `#d63638` auf `#fef2f2`)
+1. ~~`.cbd-notes-delete-all` („Alle Notizen löschen", `#d63638` auf `#fef2f2`)
    misst 4,32:1 — ebenfalls unter der WCAG-AA-Schwelle von 4,5:1, aber
-   **vorbestehend und mode-unabhängig** (beide Farben sind literal und im
-   Hell- wie im Dunkelmodus identisch, also nicht durch dieses Vorhaben
-   verursacht). Kein Lesbarkeitsproblem in der Praxis (rot auf sehr hellem
-   Rosa).
+   vorbestehend und mode-unabhängig.~~ **Behoben durch die Style-Korrektur
+   vom 2026-09-11** (Abschnitt „Style-Korrektur: Markenfarbe statt
+   WP-Admin-Farbschema" unten) — misst seither 4,71:1 hell / 6,30:1 dunkel.
 2. `admin/settings.php`: Der Schreibpfad (`?? 'disabled'`) ist inkonsistent
    mit den beiden Lesepfaden (`'toc'`). Theoretisches, im Regelbetrieb nicht
    erreichbares Szenario: ein zur Whitelist nicht passender DB-Wert plus
@@ -3531,6 +3530,71 @@ Befund, drei geringe, kein Korrektur-AP nötig:
 3. `get_used_blocks_on_page()` läuft in den Modi `all`/`specific` doppelt je
    Seitenaufruf (siehe Architekturentscheidung oben) — bewusst akzeptierte
    Eigenschaft, betrifft den Vorgabewert `toc` nicht.
+
+### Style-Korrektur: Markenfarbe statt WP-Admin-Farbschema (2026-09-11)
+
+Der Nutzer meldete, Download-Button und Menü des Notizen-Managers folgten
+nicht den Style-Vorgaben des Projekts. Befund: `personal-notes-manager.css`
+verwendete durchgehend **WordPress-Admin-Farben** (Blau `#2271b1`, Grün
+`#00a32a`, Rot `#d63638`) statt der tatsächlichen Markenfarbe der Website
+(`--color-ui-surface`, Orange `#e24614`) — die bisherigen Kommentare
+rechtfertigten das mit „keine exakte Entsprechung im Vokabular", was die
+falsche Messlatte war: Die Projektregel verlangt die semantisch passende
+Variable mit dem bisherigen Wert als eigenem Fallback, nicht Hex-Gleichheit,
+und die passenden Variablen (`--color-ui-surface-light`,
+`--color-text-primary`, `--color-success`, `--color-danger`,
+`--color-border`, `--color-text-muted`) existierten längst.
+
+**`.cbd-notes-toggle` folgt seither zusätzlich dem „Plastischen Look" des
+PDF-Export-Knopfs** (`assets/js/floating-pdf-button.js`), auf ausdrücklichen
+Wunsch des Nutzers: 135°-Verlauf Basisfarbe → 20 % dunkler
+(`color-mix(in srgb, var(--color-ui-surface) 80%, #000)`), radialer Glanz
+oben links, dreifacher Insetschatten plus Schlagschatten — dieselbe
+Rezeptur, aber mit **eigenen, lokalen** Variablen
+(`--cbd-notes-plastic-dark`/`--cbd-notes-plastic-shadow`, definiert auf
+`.cbd-notes-manager-button`) statt der gleichnamigen Theme-Variablen
+(`--plastic-dark`/`--plastic-shadow` in `Theme/style.css`) — genau wie
+`floating-pdf-button.js` bleibt das Plugin dadurch von einem bestimmten
+Theme unabhängig. Menü und Menü-Buttons bekamen den plastischen Look
+bewusst **nicht** — Theme/CLAUDE.md hält für den Navigations-Streifen
+ausdrücklich fest „Kopfleiste, Menü und Mobilmenü bleiben schlicht weiß",
+nur eigenständige schwebende Aktions-Knöpfe (FAB) tragen ihn.
+
+**Dabei gefundener echter Darkmode-Kontrastfehler, kein reiner
+Branding-Mismatch:** Drei Stellen setzten Text auf farbigem/dunklem Grund
+fälschlich auf `var(--color-background, #fff)` statt
+`var(--color-text-on-accent, #fff)` — `.cbd-notes-menu button:hover`,
+`.cbd-notes-delete-all:hover` und die Tooltip-Regel
+`.cbd-notes-toggle::after`. `--color-background` wird im Darkmode zu
+`#121212`; auf orangem/rotem Hover-Grund bzw. dem ohnehin fast schwarzen
+Tooltip-Hintergrund wäre der Text dadurch nahezu unsichtbar gewesen —
+`--color-text-on-accent` bleibt in beiden Modi `#ffffff` und behebt das.
+Die vormals separate `[data-theme="dark"] .cbd-notes-info small`-Regel
+(AP-2.3) ist entfallen: Die Basisregel verwendet jetzt direkt
+`var(--color-text-muted, #666666)`, das im Darkmode automatisch auf
+denselben Wert (`#a0a0a0`) wechselt — live nachgemessen weiterhin 7,16:1,
+unverändert.
+
+**Falle bei der Kontrastmessung selbst, für künftige Messungen wichtig:**
+Ein erster Regex-basierter Luminanz-Rechner scheiterte unbemerkt an
+Chromiums Serialisierung von `color-mix()`-Ergebnissen
+(`getComputedStyle()` liefert dafür `color(srgb 0.988 0.952 0.952)` statt
+`rgb(252, 243, 243)`) — der Regex extrahierte die 0–1-Werte, behandelte sie
+aber als 0–255-Werte und lieferte für **beide** verglichenen Varianten
+(12 % und 6 % `--color-danger`-Beimischung) denselben falschen Wert
+(4,07). Ersetzt durch einen Canvas-2D-Kontext als kanonischen Farbparser
+(`ctx.fillStyle = farbe; ctx.getImageData(...)`), der jede
+CSS-Farbsyntax zuverlässig auf ein Byte-Array normalisiert. Ergebnis:
+`.cbd-notes-delete-all` mit 6 % `--color-danger` in `--color-background`
+(statt zunächst probierter 12 %, die mit korrekt gemessenen 4,07:1 unter
+der neuen 6,77:1-Dokumentationsschwelle der Variable geblieben wären) misst
+**4,71:1 hell / 6,30:1 dunkel** — beide über der vorherigen Baseline von
+4,32:1.
+
+Live am Testserver in Hell- und Dunkelmodus gegengeprüft: Toggle-Button
+(Ruhe- und Hover-Zustand), Menü-Öffnen, alle drei Menü-Button-Hover-Zustände,
+Tooltip, keine neuen Konsolenfehler. `reference_file_map.md`,
+Zeile zu `personal-notes-manager.css`, trägt die Einzelheiten.
 
 Details und die vollständigen Übergabenotizen der Phase-2-APs:
 `PLAN-Tafelmodus-Text-und-Notizen-Restore.md`, Abschnitt 7 (AP-2.1 bis

@@ -15,9 +15,22 @@
        "Helvetica Neue" vor sans-serif, siehe Theme/style.css Zeile 61) -
        bei var()-Verwendung wuerde IMMER der Live-Wert der Variable
        gerendert, nie dieser Fallback (gleicher Mechanismus wie bei den
-       Hex-Mismatches, siehe AP-2.1-Uebergabenotiz) - daher bewusst literal
-       belassen statt auf var(--font-family-base, ...) umgestellt. */
+       frueheren Hex-Mismatches, siehe AP-2.1-Uebergabenotiz) - daher
+       bewusst literal belassen statt auf var(--font-family-base, ...)
+       umgestellt. */
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+
+    /* Plastischer Look wie der PDF-Export-Knopf (assets/js/floating-pdf-button.js,
+       Rezeptur aus Website/Icons/generate_iconset_local.py): Verlauf 135°
+       Basisfarbe -> 20% dunkler, radialer Glanz oben links, Innenkante oben
+       dunkel/unten hell, Schlagschatten in stark abgedunkelter Basisfarbe.
+       Zwei Zwischenwerte einmal hier berechnet, von .cbd-notes-toggle und
+       dessen :hover-/.has-notes-Zustand gemeinsam genutzt. EIGENE, lokale
+       Variablen statt der gleichnamigen Theme-Variablen (--plastic-dark/
+       --plastic-shadow in Theme/style.css) - genau wie floating-pdf-button.js
+       bleibt das Plugin dadurch von einem bestimmten Theme unabhaengig. */
+    --cbd-notes-plastic-dark: color-mix(in srgb, var(--color-ui-surface, #e24614) 80%, #000);
+    --cbd-notes-plastic-shadow: color-mix(in srgb, var(--color-ui-surface, #e24614) 45%, #000);
 }
 
 /* Toggle-Button (Hauptbutton) */
@@ -26,14 +39,35 @@
     height: 56px;
     border-radius: 50%;
     border: none;
-    /* #2271b1/#135e96 (WP-Admin-Blau-Verlauf) haben keine Entsprechung im
-       AP-1.1-Vokabular (kein Blauton definiert) - bewusst literal belassen,
-       gleiches Muster wie #007cba in cbd-frontend-clean.css (AP-2.1). */
-    background: linear-gradient(135deg, #2271b1 0%, #135e96 100%);
-    color: var(--color-background, #fff);
+    /* Style-Korrektur (2026-09-11): Der Button trug bis hierher einen
+       WP-Admin-Blau-Verlauf (#2271b1/#135e96) statt der tatsaechlichen
+       Markenfarbe der Website UND ohne den "Plastischen Look", den der
+       PDF-Export-Knopf desselben Plugins bereits traegt. Die fruehere
+       Begruendung "keine exakte Entsprechung im Vokabular" war die falsche
+       Messlatte - die Projektregel verlangt die semantisch passende
+       Variable mit dem bisherigen Wert als eigenem Fallback, nicht
+       Hex-Gleichheit. --color-ui-surface ist genau dafuer da (Root-CLAUDE.md,
+       "Color Scheme": "UI-Oberflaechen-Farbe - Orange fuer Buttons und
+       aktive Elemente") und zieht Customizer-Einstellung sowie Darkmode
+       automatisch mit (in beiden Modi derselbe Orangeton). */
+    background-color: var(--color-ui-surface, #e24614); /* Ruecktritt: einfarbig, falls background-image (color-mix) ungueltig ist */
+    background-image:
+        radial-gradient(75% 75% at 30% 22%, rgba(255, 255, 255, .35) 0%, rgba(255, 255, 255, .08) 45%, rgba(255, 255, 255, 0) 100%),
+        linear-gradient(135deg, var(--color-ui-surface, #e24614) 0%, var(--cbd-notes-plastic-dark) 100%);
+    /* Text-/Icon-Farbe AUF der Akzentflaeche: --color-text-on-accent bleibt
+       in beiden Farbmodi #ffffff, weil die Akzentflaeche selbst in beiden
+       Modi denselben Orangeton behaelt (siehe Theme/style.css). NICHT
+       --color-background verwenden - das waere im Darkmode #121212 (nahezu
+       schwarzes Icon auf orangem Grund). */
+    color: var(--color-text-on-accent, #fff);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, .35);
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    transition: all 0.3s ease;
+    box-shadow:
+        inset 0 2px 2px -1px color-mix(in srgb, var(--cbd-notes-plastic-shadow) 75%, transparent),
+        inset 0 -2px 2px -1px rgba(255, 255, 255, .5),
+        inset -1px 0 1px color-mix(in srgb, var(--cbd-notes-plastic-shadow) 25%, transparent),
+        0 4px 10px color-mix(in srgb, var(--cbd-notes-plastic-shadow) 55%, transparent);
+    transition: transform 0.2s ease, background-color 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -41,10 +75,16 @@
 }
 
 .cbd-notes-toggle:hover {
-    /* #135e96/#0a4270 (dunklerer WP-Admin-Blau-Verlauf) - siehe Begruendung
-       oben bei .cbd-notes-toggle. */
-    background: linear-gradient(135deg, #135e96 0%, #0a4270 100%);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    /* Beim Hover den ganzen Verlauf austauschen (Basisfarbe -> dunklere
+       Stufe), nicht nur eine einzelne Flaeche - sonst wuerde eine einzelne
+       Farbe die Verlaufsschichten ueberschreiben und den plastischen Look
+       beim Ueberfahren flach machen (dieselbe Warnung wie in
+       floating-pdf-button.js). box-shadow bleibt bewusst unveraendert -
+       das macht auch der PDF-Knopf nicht. */
+    background-color: var(--color-ui-surface-dark, #c93d12);
+    background-image:
+        radial-gradient(75% 75% at 30% 22%, rgba(255, 255, 255, .35) 0%, rgba(255, 255, 255, .08) 45%, rgba(255, 255, 255, 0) 100%),
+        linear-gradient(135deg, var(--color-ui-surface-dark, #c93d12) 0%, var(--cbd-notes-plastic-dark) 100%);
     transform: translateY(-2px);
 }
 
@@ -82,18 +122,23 @@
     }
 }
 
-/* Menü-Buttons */
+/* Menü-Buttons - bewusst OHNE plastischen Look: Menüs/Flaechenelemente
+   bleiben im Projekt durchgehend schlicht (Theme/CLAUDE.md, "Plastischer
+   Look": "Kopfleiste, Menü und Mobilmenü bleiben schlicht weiß"); nur
+   eigenstaendige schwebende Aktions-Knoepfe (FAB) wie .cbd-notes-toggle
+   oder der PDF-Knopf bekommen ihn. */
 .cbd-notes-menu button {
     width: 100%;
     padding: 12px 16px;
     border: none;
     border-radius: 8px;
-    /* #f6f7f7 (WP-Admin-Hellgrau) entspricht keinem AP-1.1-Wert exakt
-       (--color-code-bg ist #f1f1f1) - bewusst literal belassen. */
-    background: #f6f7f7;
-    /* #2c3338 (WP-Admin-Dunkelgrau) entspricht keinem AP-1.1-Wert exakt
-       (--color-text-primary ist #333333) - bewusst literal belassen. */
-    color: #2c3338;
+    /* Style-Korrektur (2026-09-11): #f6f7f7/#2c3338 (WP-Admin-Grautoene)
+       ersetzt durch die tatsaechlich passenden Projekt-Variablen -
+       --color-ui-surface-light hat einen eigenen, warm getoenten
+       Darkmode-Wert (Theme/style.css, :root[data-theme="dark"]) und macht
+       diese Flaeche damit automatisch darkmode-nativ statt nur lesbar. */
+    background: var(--color-ui-surface-light, #f5ede9);
+    color: var(--color-text-primary, #333333);
     cursor: pointer;
     transition: all 0.2s ease;
     display: flex;
@@ -109,9 +154,13 @@
 }
 
 .cbd-notes-menu button:hover {
-    /* #2271b1 (WP-Admin-Blau) - siehe Begruendung bei .cbd-notes-toggle. */
-    background: #2271b1;
-    color: var(--color-background, #fff);
+    /* Style-Korrektur (2026-09-11): #2271b1 (WP-Admin-Blau) -> Markenfarbe. */
+    background: var(--color-ui-surface, #e24614);
+    /* Textfarbe AUF der Akzentflaeche: --color-text-on-accent (immer
+       #ffffff), NICHT --color-background - das waere im Darkmode #121212
+       und praktisch unlesbar auf orangem Hover-Grund (vorbestehender
+       Darkmode-Kontrastfehler, hier mitkorrigiert). */
+    color: var(--color-text-on-accent, #fff);
     transform: translateX(-2px);
 }
 
@@ -127,9 +176,10 @@
 }
 
 .cbd-notes-export:hover {
-    /* #00a32a (WP-Admin-Gruen) entspricht keinem AP-1.1-Wert exakt
-       (--color-success ist #2ecc40) - bewusst literal belassen. */
-    background: #00a32a !important;
+    /* Style-Korrektur (2026-09-11): #00a32a (WP-Admin-Gruen) -> --color-success,
+       existiert bereits im Projekt-Vokabular (Theme/style.css :root, mit
+       eigenem Darkmode-Wert #4ade80). */
+    background: var(--color-success, #2ecc40) !important;
 }
 
 /* Import-Button (Upload) */
@@ -138,48 +188,59 @@
 }
 
 .cbd-notes-import:hover {
-    /* #00a32a (WP-Admin-Gruen) - siehe Begruendung bei .cbd-notes-export:hover. */
-    background: #00a32a !important;
+    /* Siehe Begruendung bei .cbd-notes-export:hover. */
+    background: var(--color-success, #2ecc40) !important;
 }
 
 /* Trennlinie */
 .cbd-notes-divider {
     border: none;
-    /* #dcdcde (WP-Admin-Rahmengrau) entspricht keinem AP-1.1-Wert exakt
-       (--color-border ist #dddddd) - bewusst literal belassen. */
-    border-top: 1px solid #dcdcde;
+    /* Style-Korrektur (2026-09-11): #dcdcde (WP-Admin-Rahmengrau) ->
+       --color-border, existiert bereits im Projekt-Vokabular. */
+    border-top: 1px solid var(--color-border, #dddddd);
     margin: 4px 0 12px;
 }
 
 /* Alle löschen - roter Button */
 .cbd-notes-delete-all {
-    /* #d63638 (WP-Admin-Rot) entspricht keinem AP-1.1-Wert exakt
-       (--color-danger ist #cc3333) - bewusst literal belassen. */
-    color: #d63638 !important;
-    /* #fef2f2 (helles Rot-Tint) hat keine Entsprechung im AP-1.1-Vokabular -
-       bewusst literal belassen. */
+    /* Style-Korrektur (2026-09-11): #d63638 (WP-Admin-Rot) -> --color-danger,
+       existiert bereits im Projekt-Vokabular (Theme/style.css :root, mit
+       eigenem Darkmode-Wert #f87171, dort dokumentiert mit 6,77:1 Kontrast). */
+    color: var(--color-danger, #cc3333) !important;
+    /* #fef2f2 hatte keine direkte Entsprechung - statt eines weiteren
+       literalen Hex-Werts wird der helle Rot-Ton aus --color-danger
+       ABGELEITET (color-mix, wie --plastic-* in Theme/style.css), damit er
+       im Darkmode automatisch mitzieht statt weiterhin fest hellrosa auf
+       dunklem Menue-Panel zu stehen. Erste Zeile ist der Ruecktritt ohne
+       color-mix()-Unterstuetzung. */
     background: #fef2f2 !important;
+    background: color-mix(in srgb, var(--color-danger, #cc3333) 6%, var(--color-background, #fff)) !important;
 }
 
 .cbd-notes-delete-all:hover {
-    /* #d63638 (WP-Admin-Rot) - siehe Begruendung bei .cbd-notes-delete-all. */
-    background: #d63638 !important;
-    color: var(--color-background, #fff) !important;
+    /* Siehe Begruendung bei .cbd-notes-delete-all. */
+    background: var(--color-danger, #cc3333) !important;
+    /* Textfarbe AUF der Akzentflaeche: --color-text-on-accent (immer
+       #ffffff), NICHT --color-background - siehe Begruendung bei
+       .cbd-notes-menu button:hover. */
+    color: var(--color-text-on-accent, #fff) !important;
 }
 
 /* Info-Text */
 .cbd-notes-info {
     margin-top: 12px;
     padding-top: 12px;
-    /* #dcdcde (WP-Admin-Rahmengrau) - siehe Begruendung bei .cbd-notes-divider. */
-    border-top: 1px solid #dcdcde;
+    border-top: 1px solid var(--color-border, #dddddd);
     text-align: center;
 }
 
 .cbd-notes-info small {
-    /* #646970 (WP-Admin-Grauton) entspricht keinem AP-1.1-Wert exakt
-       (--color-text-muted ist #666666) - bewusst literal belassen. */
-    color: #646970;
+    /* Style-Korrektur (2026-09-11): #646970 (WP-Admin-Grauton) ->
+       --color-text-muted, existiert bereits im Projekt-Vokabular mit
+       eigenem Darkmode-Wert (#a0a0a0) - die vormals separate
+       [data-theme="dark"]-Regel weiter unten in dieser Datei wird dadurch
+       ueberfluessig, siehe dort. */
+    color: var(--color-text-muted, #666666);
     font-size: 12px;
 }
 
@@ -216,7 +277,12 @@
     transform: translateY(-50%);
     margin-right: 12px;
     background: rgba(0, 0, 0, 0.85);
-    color: var(--color-background, #fff);
+    /* Textfarbe AUF dem (immer nahezu schwarzen) Tooltip-Grund:
+       --color-text-on-accent (immer #ffffff). NICHT --color-background -
+       das waere im Darkmode #121212, also nahezu unsichtbarer dunkler Text
+       auf dunklem Tooltip-Hintergrund (Darkmode-Kontrastfehler, hier
+       mitkorrigiert). */
+    color: var(--color-text-on-accent, #fff);
     padding: 8px 12px;
     border-radius: 6px;
     font-size: 13px;
@@ -233,14 +299,26 @@
 /* Pulsierender Effekt für Aufmerksamkeit (optional) */
 @keyframes pulse {
     0%, 100% {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        box-shadow:
+            inset 0 2px 2px -1px color-mix(in srgb, var(--cbd-notes-plastic-shadow) 75%, transparent),
+            inset 0 -2px 2px -1px rgba(255, 255, 255, .5),
+            inset -1px 0 1px color-mix(in srgb, var(--cbd-notes-plastic-shadow) 25%, transparent),
+            0 4px 10px color-mix(in srgb, var(--cbd-notes-plastic-shadow) 55%, transparent);
     }
     50% {
-        /* rgba(34, 113, 177, ...) ist die RGB-Entsprechung von #2271b1
-           (WP-Admin-Blau, siehe Begruendung bei .cbd-notes-toggle) - kein
-           Hex-Literal, daher ohnehin außerhalb des AP-Scopes, unveraendert
-           belassen. */
-        box-shadow: 0 4px 20px rgba(34, 113, 177, 0.5);
+        /* Style-Korrektur (2026-09-11): rgba(34, 113, 177, ...) war die
+           RGB-Entsprechung des alten WP-Admin-Blau - ersetzt durch einen
+           von --color-ui-surface abgeleiteten Leuchtring (color-mix), damit
+           der Puls zur jetzt orangen Basisfarbe passt und die
+           Customizer-Farbe mitzieht. Die drei Insets bleiben gegenüber dem
+           Ruhezustand unveraendert, nur die vierte (aeussere) Ebene wird
+           zum groesseren, farbigen Leuchten - gleiche Ebenenzahl in allen
+           Keyframes ist Voraussetzung fuer eine fluessige Interpolation. */
+        box-shadow:
+            inset 0 2px 2px -1px color-mix(in srgb, var(--cbd-notes-plastic-shadow) 75%, transparent),
+            inset 0 -2px 2px -1px rgba(255, 255, 255, .5),
+            inset -1px 0 1px color-mix(in srgb, var(--cbd-notes-plastic-shadow) 25%, transparent),
+            0 4px 20px color-mix(in srgb, var(--color-ui-surface, #e24614) 50%, transparent);
     }
 }
 
@@ -248,19 +326,16 @@
     animation: pulse 2s ease-in-out infinite;
 }
 
-/* Dunkelmodus (AP-2.3, PLAN-Tafelmodus-Text-und-Notizen-Restore.md,
-   Phase 2, 2026-09-10): Live-Kontrastmessung ueber alle Text-/Hintergrund-
-   Paare dieser Datei ergab genau EINEN Befund unter der WCAG-AA-Schwelle
-   von 4,5:1 fuer normalen Text - der literale Grauton #646970 auf dem
-   dunklen Menue-Panel (dessen Hintergrund ueber var(--color-background)
-   bereits automatisch mitzieht) faellt von komfortablen ~5,5:1 im
-   Hellmodus auf gemessene 3,39:1. Alle anderen Kombinationen (Menue-
-   Buttons, deren Hover-Zustaende, "Alle loeschen", Trennlinien, Haupt-
-   Button) bestehen live gemessen mit 4,3:1 bis 15,3:1 und blieben deshalb
-   bewusst unveraendert - insbesondere die hellen Menue-Button-Flaechen
-   (#f6f7f7) sind als eigenstaendige "Inseln" mit ~12:1 in sich lesbar,
-   nur optisch nicht dunkelmodus-nativ (kein Lesbarkeitsfehler, ausserhalb
-   des AP-Scopes). */
-[data-theme="dark"] .cbd-notes-info small {
-    color: var(--color-text-muted, #a0a0a0);
-}
+/* Dunkelmodus: Nach der Style-Korrektur vom 2026-09-11 (siehe Kommentare
+   oben) laufen alle Farben dieser Datei ueber var(--x, #fallback) mit
+   Projekt-Variablen, die entweder in beiden Modi denselben Wert tragen
+   (--color-ui-surface, --color-text-on-accent) oder einen eigenen
+   Darkmode-Wert in Theme/style.css mitbringen (--color-ui-surface-light,
+   --color-text-primary, --color-text-muted, --color-border, --color-success,
+   --color-danger, --color-background). Eine gesonderte
+   [data-theme="dark"]-Regel ist dadurch nicht mehr noetig - insbesondere
+   die vormals hier stehende Regel fuer .cbd-notes-info small (AP-2.3,
+   PLAN-Tafelmodus-Text-und-Notizen-Restore.md, Phase 2, 2026-09-10) ist
+   ueberfluessig geworden, weil die Basisregel jetzt direkt
+   var(--color-text-muted) verwendet, die im Darkmode automatisch auf
+   #a0a0a0 wechselt (identischer Wert wie die entfernte Regel). */
