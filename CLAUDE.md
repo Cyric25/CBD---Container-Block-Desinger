@@ -3611,27 +3611,59 @@ gesetzt). Nur die Mindestbreite des Menü-Panels (`min-width`) bleibt unter
 passt jetzt auch unter 782px, weil der Knopf selbst dort nicht mehr
 schrumpft.
 
-**Kollisionsrisiko geprüft, nicht behoben (bewusst, siehe unten):** Der
-PDF-Export-Knopf erscheint nur auf Seiten mit mindestens einem
-Container-Block (`frontend_has_container_block()` in
-`class-cbd-block-registration.php`, Gate um `enqueue_block_assets()`), der
-Notizen-Knopf im `toc`-Modus unabhängig davon auf jeder Seite mit
-`fos/inhaltsverzeichnis`-Block — beide Bedingungen sind unabhängig
-voneinander und schließen sich nicht aus. Mit identischer Geometrie UND
-identischer Position (`bottom:20px;right:20px`) würden beide Knöpfe bei
-gleichzeitigem Auftreten exakt übereinanderliegen. Live-Stichprobe am
-Testserver (2026-09-11, SQL-Abfrage über `post_content LIKE
-'%fos/inhaltsverzeichnis%' AND post_content LIKE
-'%container-block-designer%'`) fand **keine** Seite mit beiden Blöcken im
-aktuellen Bestand — das Risiko ist damit real, aber gegenwärtig nicht
-eingetreten, deshalb bewusst nicht durch eine Positions-Sonderregel
-vorab gelöst (kein Erkennungsmechanismus, welcher der beiden Knöpfe bei
-gleichzeitigem Laden Vorrang hätte). **Für ein künftiges AP, falls eine
-Seite beide Blöcke kombiniert:** Kollisionsvermeidung nach dem im Projekt
-bereits etablierten Muster Theme-Navigationsknopf/PDF-Knopf (entgegengesetzte
-Ecken oder vertikal gestapelt mit Abstand `Knopfhöhe + Lücke`), siehe
-Theme/CLAUDE.md, Abschnitt „Plastischer Look", Unterabschnitt „Gemeinsame
-Geometrie mit dem PDF-Knopf des Plugins".
+**Kollisionsvermeidung mit dem PDF-Export-Knopf, nachtraeglich implementiert
+(2026-09-11, gleicher Tag — auf Rueckfrage des Nutzers "was passiert, wenn
+beide gleichzeitig vorkommen").** Der PDF-Export-Knopf erscheint nur auf
+Seiten mit mindestens einem Container-Block
+(`frontend_has_container_block()` in `class-cbd-block-registration.php`,
+Gate um `enqueue_block_assets()`), der Notizen-Knopf im `toc`-Modus
+unabhängig davon auf jeder Seite mit `fos/inhaltsverzeichnis`-Block — beide
+Bedingungen sind unabhängig voneinander und schließen sich nicht aus. Mit
+identischer Geometrie UND identischer Position (`bottom:20px;right:20px`,
+siehe oben) würden beide Knöpfe bei gleichzeitigem Auftreten sonst exakt
+übereinanderliegen — besonders kritisch auf dem Handy, wo kein Platz für
+eine Nebeneinander-Lösung bleibt.
+
+Neue Regel, ans Ende der Datei gesetzt:
+```css
+body:has(#cbd-pdf-export-fab) .cbd-notes-manager-button {
+    bottom: 84px; /* 20px (PDF-Knopf-Abstand) + 52px (seine Kachelgröße) + 12px (Lücke) */
+}
+```
+
+**Warum `:has()` statt einer JavaScript-Lösung:** Die beiden Skripte
+(`personal-notes-manager.js`, `floating-pdf-button.js`) werden unabhängig
+voneinander eingereiht, ohne enqueue-Abhängigkeitspfeil zueinander — welches
+seinen Knopf zuerst ins DOM einfügt, ist nicht garantiert. `:has()` ist eine
+**live** CSS-Regel: Der Browser wertet sie kontinuierlich neu aus, sobald
+sich das DOM ändert, unabhängig davon, wann `#cbd-pdf-export-fab` erscheint —
+eine einmalige JS-Prüfung beim eigenen Laden könnte den PDF-Knopf verpassen,
+falls der noch nicht im DOM steht. Zusätzlich setzt der PDF-Knopf seine
+Position per `jQuery.css()` **inline** — ein Stylesheet-Override dafür
+bräuchte `!important` und müsste den PDF-Knopf selbst anfassen; stattdessen
+weicht der (per externer CSS-Datei gestylte) Notizen-Knopf aus, der
+PDF-Knopf bleibt unverändert auf seiner mit dem Theme-Navigations-Streifen
+abgestimmten Position. Nur `.cbd-notes-manager-button` (der fixed-
+positionierte Container) muss verschoben werden — Toggle-Button, Menü und
+Tooltip sind alle relativ dazu positioniert und ziehen automatisch mit.
+
+Live am Testserver mit einem simulierten `#cbd-pdf-export-fab`-Element
+gegengeprüft (echtes Markup/Inline-Styling wie im echten Skript
+nachgebildet): Notizen-Knopf rückt zuverlässig auf `bottom:84px`, beide
+Knöpfe bleiben getrennt sichtbar, Menü öffnet weiterhin korrekt oberhalb des
+verschobenen Knopfs — geprüft sowohl in der Desktop- als auch in der
+375×812-Handy-Ansicht, keine neuen Konsolenfehler. Aktueller Seitenbestand
+enthält weiterhin keine Seite mit beiden Blöcken gleichzeitig (SQL-Stichprobe
+2026-09-11), die Regel greift also vorsorglich, nicht rückwirkend für ein
+beobachtetes Problem.
+
+**Bekannte, bewusst akzeptierte Einschränkung:** Browser ohne
+`:has()`-Unterstützung (praktisch nur sehr alte Versionen — Firefox < 121,
+Safari < 15.4, Chrome/Edge < 105, eine vergleichbare Grenze wie beim im
+Projekt bereits verwendeten `color-mix()`) wenden die Regel nicht an; beide
+Knöpfe stünden dort im seltenen Kollisionsfall wieder übereinander —
+derselbe Zustand wie vor diesem Nachtrag, kein Absturz, keine unlesbare
+Seite.
 
 Details und die vollständigen Übergabenotizen der Phase-2-APs:
 `PLAN-Tafelmodus-Text-und-Notizen-Restore.md`, Abschnitt 7 (AP-2.1 bis

@@ -11,13 +11,9 @@
        dieselbe Position wie der PDF-Export-Knopf (floating-pdf-button.js:
        bottom:'20px', right:'20px'), keine responsive Verkleinerung mehr
        (siehe @media-Block unten) - beide Knoepfe verhalten sich jetzt als
-       echte visuelle Geschwister. Ein Zusammentreffen beider Knoepfe auf
-       derselben Seite ist auf dem heutigen Seitenbestand nicht moeglich
-       (has_block()-prueft unabhaengige Bedingungen, Live-Stichprobe
-       2026-09-11 fand keine Seite mit beiden Bloecken) - falls sich das
-       aendert, bräuchten beide Knoepfe eine Kollisionsvermeidung (analog
-       zur Aufteilung Navigation links/PDF rechts zwischen Theme und Plugin,
-       siehe Theme/CLAUDE.md, "Plastischer Look"). */
+       echte visuelle Geschwister. Kollisionsvermeidung fuer den Fall, dass
+       beide gleichzeitig auf derselben Seite erscheinen: siehe die
+       `body:has(#cbd-pdf-export-fab)`-Regel weiter unten. */
     bottom: 20px;
     right: 20px;
     z-index: 9999;
@@ -274,6 +270,48 @@
     .cbd-notes-menu {
         min-width: 240px;
     }
+}
+
+/* Kollisionsvermeidung mit dem PDF-Export-Knopf (seit 2026-09-11).
+   Beide Knoepfe koennen unabhaengig voneinander auf derselben Seite
+   erscheinen: der PDF-Knopf (floating-pdf-button.js, Element
+   #cbd-pdf-export-fab, IMMER auf bottom:20px;right:20px per Inline-Style)
+   erscheint, sobald die Seite einen Container-Block hat
+   (frontend_has_container_block()), der Notizen-Knopf im toc-Modus
+   unabhaengig davon auf jeder Seite mit fos/inhaltsverzeichnis-Block. Ohne
+   Ausweichregel laegen beide bei identischer Groesse/Position exakt
+   uebereinander - besonders kritisch auf dem Handy, wo kein Platz fuer eine
+   nebeneinander stehende Loesung ist.
+
+   `:has()` statt einer JavaScript-Loesung, aus zwei Gruenden:
+   1. LADEREIHENFOLGE-UNABHAENGIG. Beide Skripte werden unabhaengig
+      voneinander eingereiht (kein enqueue-Abhaengigkeitspfeil zwischen
+      ihnen) - welches zuerst seinen Knopf einfuegt, ist nicht garantiert.
+      Eine einmalige JS-Pruefung beim eigenen Laden koennte den PDF-Knopf
+      verpassen, wenn der noch nicht im DOM steht. `:has()` ist eine LIVE
+      CSS-Regel: Der Browser wertet sie kontinuierlich neu aus, sobald sich
+      das DOM aendert - unabhaengig davon, WANN `#cbd-pdf-export-fab`
+      erscheint, rueckt der Notizen-Knopf in demselben Moment nach oben.
+   2. Der PDF-Knopf setzt seine Position per `jQuery.css()` INLINE
+      (floating-pdf-button.js) - ein Stylesheet-Override dafuer bräuchte
+      `!important` und muesste den PDF-Knopf selbst anfassen. Stattdessen
+      weicht der (per externer CSS-Datei gestylte) Notizen-Knopf aus - der
+      PDF-Knopf bleibt unveraendert auf seiner mit dem Theme-Navigations-
+      Streifen abgestimmten Position.
+
+   Der Offset 84px = 20px (PDF-Knopf-Abstand) + 52px (seine Kachelgroesse)
+   + 12px (Luecke, gleicher Wert wie der Tooltip-Abstand oben). Nur
+   `.cbd-notes-manager-button` (der fixed-positionierte Container) muss
+   verschoben werden - Toggle-Button, Menue und Tooltip sind alle relativ
+   dazu positioniert und ziehen automatisch mit.
+
+   Rueckfall ohne `:has()`-Unterstuetzung (praktisch nur sehr alte
+   Browser: Firefox < 121, Safari < 15.4, Chrome/Edge < 105 - vergleichbare
+   Grenze wie beim im Projekt bereits verwendeten `color-mix()`): Die Regel
+   greift dort nicht, beide Knoepfe stehen wieder uebereinander - derselbe
+   Zustand wie vor diesem Nachtrag, kein Absturz, keine unlesbare Seite. */
+body:has(#cbd-pdf-export-fab) .cbd-notes-manager-button {
+    bottom: 84px;
 }
 
 /* Tooltip für Hauptbutton */
