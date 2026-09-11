@@ -3596,6 +3596,43 @@ Live am Testserver in Hell- und Dunkelmodus gegengeprüft: Toggle-Button
 Tooltip, keine neuen Konsolenfehler. `reference_file_map.md`,
 Zeile zu `personal-notes-manager.css`, trägt die Einzelheiten.
 
+**Nachtrag: Formfaktor an den PDF-Knopf angeglichen (2026-09-11, gleicher
+Tag).** Die Farbkorrektur oben ließ die Geometrie zunächst unangetastet —
+`.cbd-notes-toggle` blieb ein 56×56px-Kreis auf `bottom:24px;right:24px`,
+mit einer eigenen, kleineren Mobildarstellung (48×48px, `bottom:16px;
+right:16px`) unter 782px. Auf Rückmeldung des Nutzers („farblich passt es,
+der Formfaktor stimmt noch nicht") jetzt **zeichengleich mit dem
+PDF-Export-Knopf**: `width`/`height: 52px`, `border-radius: 12px` (statt
+`50%`), Position `bottom: 20px; right: 20px` — und **keine** responsive
+Verkleinerung mehr unter 782px, weil `floating-pdf-button.js` selbst keine
+eigene Mobilgröße kennt (feste 52×52px über alle Breiten, per `jQuery.css()`
+gesetzt). Nur die Mindestbreite des Menü-Panels (`min-width`) bleibt unter
+782px auf 240px reduziert; dessen `bottom`-Position (`70px`, unverändert)
+passt jetzt auch unter 782px, weil der Knopf selbst dort nicht mehr
+schrumpft.
+
+**Kollisionsrisiko geprüft, nicht behoben (bewusst, siehe unten):** Der
+PDF-Export-Knopf erscheint nur auf Seiten mit mindestens einem
+Container-Block (`frontend_has_container_block()` in
+`class-cbd-block-registration.php`, Gate um `enqueue_block_assets()`), der
+Notizen-Knopf im `toc`-Modus unabhängig davon auf jeder Seite mit
+`fos/inhaltsverzeichnis`-Block — beide Bedingungen sind unabhängig
+voneinander und schließen sich nicht aus. Mit identischer Geometrie UND
+identischer Position (`bottom:20px;right:20px`) würden beide Knöpfe bei
+gleichzeitigem Auftreten exakt übereinanderliegen. Live-Stichprobe am
+Testserver (2026-09-11, SQL-Abfrage über `post_content LIKE
+'%fos/inhaltsverzeichnis%' AND post_content LIKE
+'%container-block-designer%'`) fand **keine** Seite mit beiden Blöcken im
+aktuellen Bestand — das Risiko ist damit real, aber gegenwärtig nicht
+eingetreten, deshalb bewusst nicht durch eine Positions-Sonderregel
+vorab gelöst (kein Erkennungsmechanismus, welcher der beiden Knöpfe bei
+gleichzeitigem Laden Vorrang hätte). **Für ein künftiges AP, falls eine
+Seite beide Blöcke kombiniert:** Kollisionsvermeidung nach dem im Projekt
+bereits etablierten Muster Theme-Navigationsknopf/PDF-Knopf (entgegengesetzte
+Ecken oder vertikal gestapelt mit Abstand `Knopfhöhe + Lücke`), siehe
+Theme/CLAUDE.md, Abschnitt „Plastischer Look", Unterabschnitt „Gemeinsame
+Geometrie mit dem PDF-Knopf des Plugins".
+
 Details und die vollständigen Übergabenotizen der Phase-2-APs:
 `PLAN-Tafelmodus-Text-und-Notizen-Restore.md`, Abschnitt 7 (AP-2.1 bis
 AP-2.rev). Datei-Referenz: `reference_file_map.md`, Zeilen zu

@@ -7,8 +7,19 @@
 /* Container */
 .cbd-notes-manager-button {
     position: fixed;
-    bottom: 24px;
-    right: 24px;
+    /* Formfaktor-Korrektur (2026-09-11): 20px statt vormals 24px - exakt
+       dieselbe Position wie der PDF-Export-Knopf (floating-pdf-button.js:
+       bottom:'20px', right:'20px'), keine responsive Verkleinerung mehr
+       (siehe @media-Block unten) - beide Knoepfe verhalten sich jetzt als
+       echte visuelle Geschwister. Ein Zusammentreffen beider Knoepfe auf
+       derselben Seite ist auf dem heutigen Seitenbestand nicht moeglich
+       (has_block()-prueft unabhaengige Bedingungen, Live-Stichprobe
+       2026-09-11 fand keine Seite mit beiden Bloecken) - falls sich das
+       aendert, bräuchten beide Knoepfe eine Kollisionsvermeidung (analog
+       zur Aufteilung Navigation links/PDF rechts zwischen Theme und Plugin,
+       siehe Theme/CLAUDE.md, "Plastischer Look"). */
+    bottom: 20px;
+    right: 20px;
     z-index: 9999;
     /* Font-Stack weicht geringfuegig vom tatsaechlichen Live-Wert von
        --font-family-base ab ("Oxygen-Sans" statt "Oxygen", zusaetzlich
@@ -35,9 +46,16 @@
 
 /* Toggle-Button (Hauptbutton) */
 .cbd-notes-toggle {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
+    /* Formfaktor-Korrektur (2026-09-11): 52x52px mit 12px Eckenradius statt
+       vormals 56x56px Kreis - exakt dieselbe Kachel-Geometrie wie der
+       PDF-Export-Knopf (floating-pdf-button.js: width/height '52px',
+       borderRadius '12px'), die ihrerseits mit dem Navigations-Streifen
+       des Themes abgestimmt ist (Theme/style.css, @media max-width: 992px
+       .sidebar-toggle-btn). Farblich war das bereits angeglichen (siehe
+       Style-Korrektur oben); jetzt auch in Form und Groesse. */
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
     border: none;
     /* Style-Korrektur (2026-09-11): Der Button trug bis hierher einen
        WP-Admin-Blau-Verlauf (#2271b1/#135e96) statt der tatsaechlichen
@@ -245,26 +263,16 @@
 }
 
 /* Responsive Anpassungen */
+/* Formfaktor-Korrektur (2026-09-11): Der Knopf selbst (Groesse 52x52px,
+   Position 20px/20px) wird NICHT mehr unter 782px verkleinert/verschoben -
+   der PDF-Export-Knopf, dem der Formfaktor jetzt entspricht, kennt keine
+   eigene Mobil-Groesse (feste 52x52px ueber alle Breiten, siehe
+   floating-pdf-button.js). Die Standard-Position des Menues (`bottom: 70px`
+   oben) passt dadurch jetzt auch unter 782px unveraendert - nur die
+   Mindestbreite wird auf schmalen Bildschirmen reduziert. */
 @media screen and (max-width: 782px) {
-    .cbd-notes-manager-button {
-        bottom: 16px;
-        right: 16px;
-    }
-
-    .cbd-notes-toggle {
-        width: 48px;
-        height: 48px;
-    }
-
-    .cbd-notes-toggle .dashicons {
-        font-size: 24px;
-        width: 24px;
-        height: 24px;
-    }
-
     .cbd-notes-menu {
         min-width: 240px;
-        bottom: 60px;
     }
 }
 
