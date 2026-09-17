@@ -112,6 +112,18 @@ class CBD_Klassenpuls {
     const SEITEN_OBERGRENZE = 400;
 
     /**
+     * Name des taeglichen Aufraeum-Termins (AP-1.7).
+     *
+     * Steht als Konstante, weil er an drei Stellen gebraucht wird: beim
+     * Anmelden der Aktion, beim Einplanen und beim Abmelden in der
+     * Deaktivierungsroutine des Plugins.
+     */
+    const CRON_HAKEN = 'cbd_klassenpuls_aufraeumen';
+
+    /** Hoechstalter einer liegengebliebenen Zwischendatei in Sekunden. */
+    const TMP_HOECHSTALTER = 3600;
+
+    /**
      * Takt der REST-Route, sobald die Pulsdatei gelesen wird — in Sekunden.
      *
      * Die Route hört damit auf, der Taktgeber zu sein, und wird zum
@@ -166,6 +178,21 @@ class CBD_Klassenpuls {
         // diese Klasse nicht kennen, und eine Aktion ohne Zuhörer ist
         // wirkungslos statt fehlerhaft.
         add_action('cbd_klassenmodus_geaendert', array(__CLASS__, 'merke_aenderung'), 10, 1);
+
+        // Taeglicher Aufraeumdurchlauf (AP-1.7). Der Termin wird hier
+        // eingeplant statt beim Aktivieren des Plugins: Der
+        // Aktivierungshaken dieses Plugins feuert nachweislich nie (die
+        // Hauptklasse entsteht erst auf `plugins_loaded`, und
+        // `activate_plugin()` bindet die Datei erst danach ein -- siehe
+        // `CLAUDE.md`, Abschnitt zur Datenbankreparatur). `wp_next_scheduled()`
+        // verhindert, dass bei jedem Seitenaufruf ein weiterer Termin entsteht.
+        add_action(self::CRON_HAKEN, array(__CLASS__, 'raeume_auf'));
+
+        if (function_exists('wp_next_scheduled') && function_exists('wp_schedule_event')) {
+            if (!wp_next_scheduled(self::CRON_HAKEN)) {
+                wp_schedule_event(time() + HOUR_IN_SECONDS, 'daily', self::CRON_HAKEN);
+            }
+        }
     }
 
     /**
@@ -842,6 +869,128 @@ class CBD_Klassenpuls {
         }
 
         return $daten;
+    }
+
+    // ---------------------------------------------------------------------
+    // Die Pulsdatei: Aufräumen (AP-1.7)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Verwaiste Pulsdateien entfernen.
+     *
+     * Eine Pulsdatei kann verwaisen, wenn eine Klasse außerhalb von
+     * `CBD_Classroom::ajax_delete_class()` verschwindet — durch einen direkten
+     * Eingriff in die Datenbank, eine Migration, oder weil eine ältere
+     * Plugin-Fassung sie ohne Aufräumen gelöscht hat. Verwaiste Dateien sind
+     * harmlos (sie enthalten nur Prüfsummen), aber ihre Adresse bleibt gültig
+     * und sie sammeln sich an.
+     *
+     * ZWEI LÖSCHGRÜNDE, beide nötig:
+     *
+     * 1. Die Klassen-ID im Dateinamen existiert nicht mehr.
+     * 2. Der Dateiname passt nicht zu dem, was `pulsdatei_name()` für diese
+     *    Klasse heute bilden würde. Das trifft Dateien aus einer früheren
+     *    Salt-Generation: Wurde `wp_salt('auth')` gewechselt, sind ihre
+     *    Adressen ohnehin tot — niemand kann sie mehr erfahren, denn die
+     *    Route nennt nur den aktuellen Namen.
+     *
+     * DIE KLASSENLISTE WIRD EINMAL GEHOLT, nicht einmal je Datei. Bei einer
+     * Installation mit vielen Klassen wäre eine Abfrage je Datei genau die
+     * N+1-Falle, die der Klassenpuls an anderer Stelle bewusst vermeidet.
+     *
+     * Zusätzlich verschwinden Zwischendateien, die älter als
+     * `TMP_HOECHSTALTER` sind — Reste abgebrochener Schreibvorgänge. Frische
+     * bleiben unangetastet: Sie könnten zu einer gerade laufenden Anfrage
+     * gehören.
+     *
+     * Läuft täglich über den Termin `CRON_HAKEN` (siehe `init()`) und
+     * zusätzlich bei jedem Aufruf von Hand. Fehlschläge beim Löschen werden
+     * stillschweigend übergangen — ein nicht gelöschter Rest ist kein Grund,
+     * eine Aufräumrunde abzubrechen.
+     *
+     * @return int Zahl der entfernten Dateien.
+     */
+    public static function raeume_auf() {
+        $basis = self::basisverzeichnis();
+
+        if (null === $basis) {
+            return 0;
+        }
+
+        $verzeichnis = $basis['pfad'] . '/' . self::UNTERORDNER;
+
+        if (!is_dir($verzeichnis)) {
+            return 0;
+        }
+
+        $entfernt = 0;
+
+        // --- Zwischendateien ------------------------------------------------
+        $reste = glob($verzeichnis . '/*.tmp');
+        $grenze = time() - self::TMP_HOECHSTALTER;
+
+        if (is_array($reste)) {
+            foreach ($reste as $rest) {
+                clearstatcache(true, $rest);
+                $alter = @filemtime($rest);
+
+                if (false !== $alter && $alter < $grenze && @unlink($rest)) {
+                    $entfernt++;
+                }
+            }
+        }
+
+        // --- Pulsdateien ----------------------------------------------------
+        $dateien = glob($verzeichnis . '/puls-*.json');
+
+        if (!is_array($dateien) || array() === $dateien) {
+            return $entfernt;
+        }
+
+        // Die eine Abfrage: alle vorhandenen Klassen-IDs auf einmal.
+        $vorhanden = null;
+
+        if (defined('CBD_TABLE_CLASSES')) {
+            global $wpdb;
+            $ids = $wpdb->get_col('SELECT id FROM ' . CBD_TABLE_CLASSES);
+
+            if (is_array($ids)) {
+                $vorhanden = array();
+                foreach ($ids as $id) {
+                    $vorhanden[(int) $id] = true;
+                }
+            }
+        }
+
+        foreach ($dateien as $datei) {
+            $name = basename($datei);
+
+            if (!preg_match('/^puls-(\d+)-[0-9a-f]{16}\.json$/', $name, $treffer)) {
+                // Nicht unser Namensschema — nicht anfassen.
+                continue;
+            }
+
+            $class_id = (int) $treffer[1];
+
+            $verwaist = false;
+
+            // Grund 1: Klasse existiert nicht mehr. Nur prüfbar, wenn die
+            // Liste geladen werden konnte — sonst lieber behalten.
+            if (is_array($vorhanden) && !isset($vorhanden[$class_id])) {
+                $verwaist = true;
+            }
+
+            // Grund 2: Name passt nicht zum heutigen Salt.
+            if (!$verwaist && $name !== self::pulsdatei_name($class_id)) {
+                $verwaist = true;
+            }
+
+            if ($verwaist && @unlink($datei)) {
+                $entfernt++;
+            }
+        }
+
+        return $entfernt;
     }
 
     // ---------------------------------------------------------------------

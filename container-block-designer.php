@@ -246,6 +246,7 @@ class ContainerBlockDesigner {
         
         // Geplante Events entfernen
         wp_clear_scheduled_hook('cbd_daily_cleanup');
+        wp_clear_scheduled_hook('cbd_klassenpuls_aufraeumen');
         
         // Cache leeren - über Service Container
         try {
