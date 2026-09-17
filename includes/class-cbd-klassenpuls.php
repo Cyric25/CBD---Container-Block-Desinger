@@ -112,6 +112,27 @@ class CBD_Klassenpuls {
     const SEITEN_OBERGRENZE = 400;
 
     /**
+     * Takt der REST-Route, sobald die Pulsdatei gelesen wird — in Sekunden.
+     *
+     * Die Route hört damit auf, der Taktgeber zu sein, und wird zum
+     * HERZSCHLAG: Sie prüft die Sitzung, nennt Takt und Dateiadresse und
+     * repariert eine veraltete Datei. Den schnellen Takt macht die Datei.
+     */
+    const HERZSCHLAG = 60;
+
+    /** Takt des Dateiabrufs in Sekunden, wenn die Option fehlt. */
+    const TAKT_DATEI_VORGABE = 2;
+
+    /** Kleinster zulässiger Dateitakt. `0` heißt „aus" und liegt darunter. */
+    const TAKT_DATEI_MIN = 1;
+
+    /** Größter zulässiger Dateitakt. */
+    const TAKT_DATEI_MAX = 60;
+
+    /** Name der Option, die den Dateitakt einstellt. */
+    const OPTION_TAKT_DATEI = 'cbd_klassenpuls_takt_datei';
+
+    /**
      * Klassen, deren Pulsdatei in dieser Anfrage neu geschrieben werden muss.
      *
      * Schlüssel sind die Klassen-IDs — so verschwinden Dubletten von selbst,
@@ -293,6 +314,35 @@ class CBD_Klassenpuls {
         // sich nach diesem Feld statt nach einer eigenen Konstante — ändert der
         // Betrieb die Option, folgt er beim nächsten Durchlauf.
         $antwort['takt'] = self::takt();
+
+        // ---- Herzschlag: Reparatur, nicht Routine (AP-1.6) -----------------
+        // Geschrieben wird NUR, wenn die Datei fehlt oder veraltet ist.
+        // Bedingungsloses Schreiben wäre ein Wettlauf gegen die
+        // Schreibstellen — Begründung in `datei_veraltet()`.
+        if (self::takt() > 0 && self::datei_veraltet($class_id)) {
+            self::schreibe_pulsdatei($class_id);
+        }
+
+        // Die Adresse geht NUR an einen Browser, der bis hierher gekommen
+        // ist, also die Sitzungsprüfung bestanden hat. Der Ablehnungspfad
+        // (`ablehnen()`) nennt sie nie — dort steht ausschließlich der eine
+        // Fehlercode, zeichengleich für jeden Ablehnungsgrund.
+        $adresse = '';
+        $pfad    = '';
+
+        if (self::takt() > 0) {
+            $adresse = self::pulsdatei_url($class_id);
+            $pfad    = self::pulsdatei_pfad($class_id);
+        }
+
+        $antwort['datei'] = ('' !== $adresse && '' !== $pfad && file_exists($pfad))
+            ? $adresse
+            : null;
+
+        // Bei abgeschaltetem Puls ist auch der schnelle Takt gegenstandslos:
+        // Der Browser soll dann gar nichts abfragen, weder Route noch Datei.
+        $antwort['takt_datei'] = self::takt() > 0 ? self::takt_datei() : 0;
+        $antwort['herzschlag'] = self::HERZSCHLAG;
 
         return rest_ensure_response($antwort);
     }
@@ -556,6 +606,104 @@ class CBD_Klassenpuls {
      *
      * @return WP_REST_Response
      */
+    // ---------------------------------------------------------------------
+    // Herzschlag: Dateitakt und Reparatur (AP-1.6)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Takt des Dateiabrufs in Sekunden, `0` heißt abgeschaltet.
+     *
+     * Aufgebaut wie `takt()` und aus demselben Grund die EINZIGE Stelle, die
+     * die Option `cbd_klassenpuls_takt_datei` auslegt.
+     *
+     * VERHÄLTNIS ZUR NOTBREMSE: Diese Option kann `cbd_klassenpuls_takt`
+     * nicht aushebeln. Steht der Takt auf 0, wird `klassenpuls.js` gar nicht
+     * erst eingereiht und es entsteht keine Pulsdatei — der Dateitakt ist
+     * dann gegenstandslos, egal was hier steht. Umgekehrt schaltet `0` hier
+     * nur den schnellen Weg ab; die Route tickt weiter wie vor diesem
+     * Vorhaben.
+     *
+     * | Optionswert           | Ergebnis                     |
+     * |-----------------------|------------------------------|
+     * | nicht gesetzt         | 2 (`TAKT_DATEI_VORGABE`)     |
+     * | `'quatsch'`, `array()`| 2 (`TAKT_DATEI_VORGABE`)     |
+     * | `'0'`, `'-5'`         | 0 (aus)                      |
+     * | `'99'`                | 60 (`TAKT_DATEI_MAX`)        |
+     *
+     * @return int 0 oder ein Wert zwischen `TAKT_DATEI_MIN` und `TAKT_DATEI_MAX`.
+     */
+    public static function takt_datei() {
+        $roh = get_option(self::OPTION_TAKT_DATEI, null);
+
+        if (is_array($roh) || is_object($roh) || !is_numeric($roh)) {
+            return self::TAKT_DATEI_VORGABE;
+        }
+
+        $wert = (int) round((float) $roh);
+
+        if ($wert <= 0) {
+            return 0;
+        }
+
+        if ($wert < self::TAKT_DATEI_MIN) {
+            return self::TAKT_DATEI_MIN;
+        }
+
+        if ($wert > self::TAKT_DATEI_MAX) {
+            return self::TAKT_DATEI_MAX;
+        }
+
+        return $wert;
+    }
+
+    /**
+     * Ist die Pulsdatei einer Klasse fehlend oder veraltet?
+     *
+     * DAS IST DIE BEDINGUNG, DIE DEN HERZSCHLAG ZUR REPARATUR MACHT — und
+     * sie ist der Grund, warum er die Datei nicht bei jedem Aufruf neu
+     * schreibt.
+     *
+     * Ohne sie könnte ein Herzschlag, der die Datenbank kurz VOR einem
+     * gleichzeitigen Umschalten gelesen hat, die bereits frischere Datei mit
+     * veralteten Werten überschreiben. Der Browser sähe dann eine Signatur,
+     * die zurückspringt, und meldete eine Änderung, die es nicht gab. Mit der
+     * Bedingung ist die Herzschlag-Schreibung eine reine Reparatur: Wird eine
+     * Schreibstelle übersehen oder umgangen (direkter Eingriff in die
+     * Datenbank, Migration), altert die Datei — und genau dann wird sie
+     * erneuert.
+     *
+     * Die Schwelle ist `2 × HERZSCHLAG`: Ein einzelner ausgefallener
+     * Herzschlag löst noch keine Reparatur aus.
+     *
+     * `clearstatcache()` ist Pflicht — ohne sie liefert PHP innerhalb
+     * derselben Anfrage einen zwischengespeicherten Zeitstempel, und eine
+     * gerade geschriebene Datei sähe weiterhin alt aus.
+     *
+     * @param int $class_id Klassen-ID.
+     * @return bool
+     */
+    private static function datei_veraltet($class_id) {
+        $pfad = self::pulsdatei_pfad($class_id);
+
+        if ('' === $pfad) {
+            return false;
+        }
+
+        clearstatcache(true, $pfad);
+
+        if (!file_exists($pfad)) {
+            return true;
+        }
+
+        $stand = @filemtime($pfad);
+
+        if (false === $stand) {
+            return true;
+        }
+
+        return (time() - $stand) > (2 * self::HERZSCHLAG);
+    }
+
     // ---------------------------------------------------------------------
     // Die Pulsdatei: Inhalt (AP-1.3)
     // ---------------------------------------------------------------------
