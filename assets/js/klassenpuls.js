@@ -137,6 +137,61 @@
  *    ohne den Gleichschritt-Fall zu betreffen.
  *
  * ---------------------------------------------------------------------------
+ * DIE ZWEITE DATENQUELLE: DIE PULSDATEI (AP-2.1)
+ * ---------------------------------------------------------------------------
+ *
+ * Seit dem Vorhaben „Schneller Klassenpuls" gibt es dieselben Signaturen an
+ * zwei Stellen. Der Grund ist Kosten, nicht Bequemlichkeit: Eine Anfrage an
+ * die Route kostet einen vollstaendigen WordPress-Bootstrap - auf der
+ * Produktivmaschine rund 47 ms Rechenzeit gemessen, und zwar AUCH dann, wenn
+ * sie abgelehnt wird. Eine statische Datei kostet den Webserver fast nichts
+ * und belegt keinen PHP-Arbeitsprozess.
+ *
+ *   Stufe 1  Pulsdatei     schnell (~2 s)    kein PHP
+ *   Stufe 0  Route         selten (~60 s)    prueft die Sitzung, nennt Takt
+ *                                            und Dateiadresse, repariert
+ *   Stufe 2  Inhalte       bei Bedarf        unveraendert
+ *
+ * FORM DER DATEI (nur Zahlen und Pruefsummen, niemals Inhalte):
+ *
+ *   {
+ *       "klasse":     "a1b2c3d4e5f6",
+ *       "fragenwand": "0f1e2d3c4b5a",
+ *       "seiten":     { "1618": ["9988776655ff", "1122334455aa"] },
+ *       "takt":       10,
+ *       "stand":      1789456123
+ *   }
+ *
+ * Sie gilt fuer eine ganze KLASSE, nicht fuer eine Seite - deshalb die
+ * Abbildung `seiten`. `verarbeiteDatei()` uebersetzt sie in die flache Form,
+ * die `uebernehmeSignaturen()` erwartet.
+ *
+ * DER TAKT KOMMT WEITERHIN NUR AUS DER ROUTE. Regel 5 unten gilt unveraendert;
+ * das Feld `takt` der Datei wird gelesen, aber nicht verwendet. Eine
+ * Autoritaet, nicht zwei.
+ *
+ * ZWEI FAELLE, IN DENEN `seite`/`tafel` NICHT AUS DER DATEI KOMMEN:
+ * `seiten_unvollstaendig === true` (die Klasse ueberschreitet die
+ * serverseitige Obergrenze; dann fehlt `seiten` ganz - weglassen statt
+ * kuerzen) und eine `seiteId` ohne Eintrag in `seiten`. In beiden Faellen
+ * zieht der naechste Herzschlag ueber die Route sie nach. Ein Ersatzwert
+ * waere falsch - die Begruendung steht ausfuehrlich am Docblock von
+ * `verarbeiteDatei()`.
+ *
+ * REGEL 1 GILT UNVERAENDERT UND DECKT ZWEI QUELLEN BEREITS AB. Sie lautet:
+ * „Ein Rueckruf feuert nie fuer eine Signatur, deren vorheriger Wert
+ * `undefined` war." Welche der beiden Quellen einen Namen zuerst sieht, ist
+ * damit gleichgueltig - sie legt den Ausgangswert fest und meldet nichts.
+ * Es braucht KEINE zweite Erstanfrage-Markierung je Quelle; `uebernehmeSignaturen()`
+ * setzt die eine vorhandene. Eine zweite waere eine zweite Auslegung
+ * derselben Regel.
+ *
+ * DER VERTRAG NACH AUSSEN AENDERT SICH NICHT. Dieselben sieben Namen,
+ * dieselben fuenf Abonnentennamen, dieselbe Rueckrufsignatur. Die vier
+ * Abonnenten wissen nicht, aus welcher Quelle eine Signatur stammt - und
+ * sollen es nicht wissen.
+ *
+ * ---------------------------------------------------------------------------
  * ADRESSBILDUNG
  * ---------------------------------------------------------------------------
  *
@@ -612,21 +667,102 @@
 	}
 
 	/**
-	 * Eine erfolgreiche Antwort auswerten.
+	 * Eine Menge frischer Signaturen uebernehmen und die Rueckrufe ausloesen.
 	 *
-	 * Reihenfolge mit Absicht: erst Takt uebernehmen und den naechsten
-	 * Durchlauf einplanen, DANN die Rueckrufe aufrufen. So gewinnt ein
-	 * Abonnent, der in seinem Rueckruf `halte()` ruft.
+	 * HERAUSGELOEST IN AP-2.1, damit beide Datenquellen - die Route und die
+	 * Pulsdatei - durch DIESELBE Vergleichslogik laufen. Zwei Kopien waeren
+	 * zwei Gelegenheiten, Regel 1 unterschiedlich auszulegen.
 	 *
-	 * @param {Object} daten Die geparste Antwort.
+	 * Der Rumpf ist zeichengleich aus `verarbeiteAntwort()` uebernommen,
+	 * einschliesslich der Feuerbedingung. DREI Eigenschaften duerfen dabei
+	 * nicht verloren gehen:
+	 *
+	 * 1. EIN FEHLENDER NAME WIRD UEBERSPRUNGEN, nicht auf `undefined`
+	 *    zurueckgesetzt. `signaturen[name]` behaelt seinen Wert. Sonst
+	 *    verlaere eine Quelle, die einen Namen gar nicht kennt (die
+	 *    Pulsdatei ohne Seitenbezug kennt `seite`/`tafel` nicht), die von
+	 *    der anderen Quelle bereits gesetzte Signatur - und die naechste
+	 *    echte Aenderung fiele unter Regel 1 und wuerde verschluckt.
+	 * 2. ERST ALLE VERGLEICHEN, DANN ALLE MELDEN. Ein Rueckruf darf nicht
+	 *    mitten in der Vergleichsschleife laufen; er koennte `halte()`
+	 *    rufen oder selbst Signaturen beruehren.
+	 * 3. `erstanfrageErledigt` WIRD HIER GESETZT, nicht beim Aufrufer - und
+	 *    es ist EINE Markierung fuer BEIDE Quellen, keine je Quelle. Regel 1
+	 *    („ein Rueckruf feuert nie fuer eine Signatur, deren vorheriger Wert
+	 *    `undefined` war") deckt zwei Quellen damit bereits ab: Welche
+	 *    Quelle einen Namen zuerst sieht, ist gleichgueltig - sie legt den
+	 *    Ausgangswert fest und meldet nichts.
+	 *
+	 *    EHRLICH DAZU (Mutationsprobe zu AP-2.1): Der Term
+	 *    `erstanfrageErledigt &&` in der Feuerbedingung ist HEUTE redundant.
+	 *    Der zweite Term (`alt` ist `undefined`) blockt jede Erstsichtung
+	 *    bereits allein, weil `signaturen` und `erstanfrageErledigt` nur
+	 *    GEMEINSAM zurueckgesetzt werden - beim Sitzungswechsel in
+	 *    `setzeSitzung()` und sonst nirgends. Der Term bleibt trotzdem
+	 *    stehen: Er kostet nichts und wird wieder tragend, sobald jemand
+	 *    eine der beiden Marken einzeln zuruecksetzt. Wer das tut, sollte
+	 *    wissen, dass er es tut.
+	 *
+	 * @param {Object} werte Name -> Signatur. Nur eigene Schluessel zaehlen.
 	 * @returns {void}
 	 */
-	function verarbeiteAntwort(daten) {
+	function uebernehmeSignaturen(werte) {
 		var aenderungen = [];
 		var i;
 		var name;
 		var neu;
 		var alt;
+
+		if (!werte || 'object' !== typeof werte) {
+			return;
+		}
+
+		for (i = 0; i < SIGNATURNAMEN.length; i++) {
+			name = SIGNATURNAMEN[i];
+
+			if (!Object.prototype.hasOwnProperty.call(werte, name)) {
+				continue;
+			}
+
+			neu = werte[name];
+			alt = Object.prototype.hasOwnProperty.call(signaturen, name)
+				? signaturen[name]
+				: undefined;
+
+			signaturen[name] = neu;
+
+			// Gemeldet wird nur, was sich gegenueber einem BEKANNTEN Wert
+			// unterscheidet - und erst ab der zweiten Antwort.
+			if (erstanfrageErledigt && 'undefined' !== typeof alt && alt !== neu) {
+				aenderungen.push({ name: name, neu: neu, alt: alt });
+			}
+		}
+
+		erstanfrageErledigt = true;
+
+		for (i = 0; i < aenderungen.length; i++) {
+			melde('Signatur "' + aenderungen[i].name + '" geaendert.', aenderungen[i]);
+			rufeAbonnenten(aenderungen[i].name, aenderungen[i].neu, aenderungen[i].alt);
+		}
+	}
+
+	/**
+	 * Eine erfolgreiche Antwort der ROUTE auswerten.
+	 *
+	 * Reihenfolge mit Absicht: erst Takt uebernehmen und den naechsten
+	 * Durchlauf einplanen, DANN die Rueckrufe aufrufen. So gewinnt ein
+	 * Abonnent, der in seinem Rueckruf `halte()` ruft.
+	 *
+	 * DESHALB steht der Aufruf von `uebernehmeSignaturen()` hier NACH der
+	 * Planung, obwohl die Vergleichsschleife frueher davor stand: Die
+	 * Funktion vergleicht UND meldet. Zwischen Vergleich und Planung liegt
+	 * nichts, was `signaturen` oder `erstanfrageErledigt` liest - das
+	 * Verhalten bleibt dasselbe, die Regel „planen vor melden" auch.
+	 *
+	 * @param {Object} daten Die geparste Antwort.
+	 * @returns {void}
+	 */
+	function verarbeiteAntwort(daten) {
 		var taktWert;
 
 		if (!daten || 'object' !== typeof daten) {
@@ -645,30 +781,6 @@
 			}
 		}
 
-		// --- Signaturen vergleichen ---------------------------------------
-		for (i = 0; i < SIGNATURNAMEN.length; i++) {
-			name = SIGNATURNAMEN[i];
-
-			if (!Object.prototype.hasOwnProperty.call(daten, name)) {
-				continue;
-			}
-
-			neu = daten[name];
-			alt = Object.prototype.hasOwnProperty.call(signaturen, name)
-				? signaturen[name]
-				: undefined;
-
-			signaturen[name] = neu;
-
-			// Gemeldet wird nur, was sich gegenueber einem BEKANNTEN Wert
-			// unterscheidet - und erst ab der zweiten Antwort.
-			if (erstanfrageErledigt && 'undefined' !== typeof alt && alt !== neu) {
-				aenderungen.push({ name: name, neu: neu, alt: alt });
-			}
-		}
-
-		erstanfrageErledigt = true;
-
 		// --- Naechster Durchlauf ------------------------------------------
 		if (takt <= 0) {
 			melde('Server meldet Takt 0 - Taktgeber angehalten.');
@@ -677,11 +789,82 @@
 			planeNaechsteAbfrage();
 		}
 
-		// --- Rueckrufe -----------------------------------------------------
-		for (i = 0; i < aenderungen.length; i++) {
-			melde('Signatur "' + aenderungen[i].name + '" geaendert.', aenderungen[i]);
-			rufeAbonnenten(aenderungen[i].name, aenderungen[i].neu, aenderungen[i].alt);
+		// --- Signaturen vergleichen und melden -----------------------------
+		uebernehmeSignaturen(daten);
+	}
+
+	/**
+	 * Eine erfolgreiche Antwort der PULSDATEI auswerten.
+	 *
+	 * Die Datei hat eine andere Form als die Route: Sie gilt fuer die ganze
+	 * Klasse und traegt die Seitensignaturen als Abbildung
+	 * `seiten: { "<page_id>": ["<seite>", "<tafel>"] }`. Diese Funktion
+	 * uebersetzt sie in die flache Form, die `uebernehmeSignaturen()`
+	 * erwartet.
+	 *
+	 * DER TAKT WIRD AUS DER DATEI NICHT UEBERNOMMEN. `takt`, `takt_datei`
+	 * und `herzschlag` kommen ausschliesslich aus der Antwort der Route -
+	 * eine Autoritaet, nicht zwei. Das Feld `takt` in der Datei wird hier
+	 * bewusst ignoriert; es steht dort nur, damit die Datei fuer sich
+	 * gelesen verstaendlich bleibt. Zwei Quellen fuer denselben Wert waeren
+	 * zwei Gelegenheiten, unterschiedlich schnell zu takten.
+	 *
+	 * ZWEI FAELLE, IN DENEN `seite`/`tafel` BEWUSST NICHT AUS DER DATEI
+	 * KOMMEN - in beiden zieht erst der naechste Herzschlag ueber die Route
+	 * sie nach:
+	 *
+	 * 1. `seiten_unvollstaendig === true`. Die Klasse hat mehr Seiten mit
+	 *    Zeichnungsdatensaetzen als die serverseitige Obergrenze zulaesst;
+	 *    der Schluessel `seiten` fehlt dann GANZ (weglassen statt kuerzen).
+	 * 2. Die aktuelle `seiteId` hat keinen Eintrag in `seiten`. Fuer diese
+	 *    Seite existiert noch kein Datensatz.
+	 *
+	 * EIN ERSATZWERT WAERE HIER FALSCH. Er muesste zeichengleich zu dem
+	 * sein, was die Route fuer eine leere Menge berechnet; jede Abweichung
+	 * erzeugte einen Rueckruf, sobald die Route das naechste Mal antwortet -
+	 * und danach gleich wieder einen, sobald die Datei antwortet. Die
+	 * Signatur spraenge dauerhaft zwischen beiden Quellen hin und her, und
+	 * jeder Sprung kostet einen Stufe-2-Abruf.
+	 *
+	 * Ein fehlendes Feld wird gar nicht erst in `werte` aufgenommen - so
+	 * bleibt die `hasOwnProperty`-Pruefung in `uebernehmeSignaturen()`
+	 * zeichengleich zum Bestand, und eine beschaedigte Datei kann eine
+	 * bereits bekannte Signatur nicht mit `undefined` ueberschreiben.
+	 *
+	 * @param {Object} daten Der geparste Inhalt der Pulsdatei.
+	 * @returns {void}
+	 */
+	function verarbeiteDatei(daten) {
+		var werte = {};
+		var schluessel;
+		var paar;
+
+		if (!daten || 'object' !== typeof daten) {
+			return;
 		}
+
+		if ('undefined' !== typeof daten.klasse && null !== daten.klasse) {
+			werte.klasse = daten.klasse;
+		}
+
+		if ('undefined' !== typeof daten.fragenwand && null !== daten.fragenwand) {
+			werte.fragenwand = daten.fragenwand;
+		}
+
+		if (seiteId > 0 && true !== daten.seiten_unvollstaendig
+				&& daten.seiten && 'object' === typeof daten.seiten) {
+			schluessel = String(seiteId);
+			paar = Object.prototype.hasOwnProperty.call(daten.seiten, schluessel)
+				? daten.seiten[schluessel]
+				: null;
+
+			if (paar && paar.length >= 2) {
+				werte.seite = paar[0];
+				werte.tafel = paar[1];
+			}
+		}
+
+		uebernehmeSignaturen(werte);
 	}
 
 	/**
