@@ -2,6 +2,22 @@
 
 _Angelegt: 2026-09-17 · Gehört zu `PLAN-Schneller-Klassenpuls.md`, AP-0.3_
 
+> # ⊘ DIESE EINRICHTUNG ENTFÄLLT
+>
+> **Entscheidung des Betreibers vom 2026-09-17:** Es wird keine eigene
+> Testdomain eingerichtet. Die Messung aus `AP-3.3` findet stattdessen auf
+> der **Produktivseite** statt, außerhalb der Unterrichtszeit und mit einer
+> Parallelität von höchstens 25.
+>
+> **Dieses Dokument bleibt als Anleitung stehen**, falls später doch eine
+> getrennte Testumgebung gebraucht wird — etwa für eine schulweite
+> Ausweitung, bei der man den Knick der Sättigungskurve wirklich suchen
+> müsste. Genau das bleibt bei der Messung auf der Produktivseite
+> ausdrücklich unbelegt: Sie zeigt, dass der Betriebsfall weit unterhalb
+> jeder Grenze liegt, nicht wo die Grenze ist.
+>
+> Begründung und Auflagen: `PLAN-Schneller-Klassenpuls.md`, `AP-3.3`.
+
 Eine Subdomain auf der echten all-inkl-Maschine mit eigener
 WordPress-Installation. Sie dient der Lastmessung in AP-3.3.
 
