@@ -4,8 +4,10 @@ _Durchgeführt: 2026-09-17 · Gehört zu `PLAN-Schneller-Klassenpuls.md`, AP-2.3
 
 > **Kurzfassung: bestanden.** Alle 16 Einzelprüfungen der sechs Gruppen sind
 > durchgeführt. Kein Abonnent verhält sich unter dem fünfmal schnelleren Takt
-> anders als zuvor. **Zwei Befunde**, beide gering und keiner durch dieses
-> Vorhaben verursacht; dazu drei Umgebungsnotizen.
+> anders als zuvor. **Ein Befund**, gering und nicht durch dieses Vorhaben
+> verursacht; dazu drei Umgebungsnotizen. Der zweite Befund B2 — eine
+> zunächst nicht durchführbare Prüfung — ist am selben Tag nachgeholt
+> worden (Gruppe 4c).
 >
 > **Der Messwert für `AP-3.2`: eine Neuladung je Minute** bei durchgehendem
 > Zeichnen der Lehrperson (20 Speicherungen in 60 Sekunden). Der
@@ -24,8 +26,8 @@ eines zweiten Fensters laufen **alle Lehrerhandlungen über PHP-CLI**
 aufgerufen, nie über den Browser). Das hat drei Vorteile: Die Handlung ist auf
 die Millisekunde datiert, sie ist wiederholbar, und sie belegt nebenbei, dass
 die Aktion `cbd_klassenmodus_geaendert` auch außerhalb des AJAX-Wegs trägt.
-Nachteil: Die **Lehrer-Oberfläche** der Fragenwand wird dadurch nicht bedient —
-siehe Befund B2.
+Der Preis: Die **Lehrer-Oberfläche** der Fragenwand wird so nicht bedient. Prüfung 4c
+ist deshalb nachträglich mit angemeldeter Lehrersitzung nachgeholt worden (Befund B2).
 
 **Die Schülerseite lief nicht angemeldet.** Das ist Voraussetzung für
 Gruppe 2: Die serverseitige Reduktion greift ausschließlich für nicht
@@ -148,7 +150,7 @@ unter einem fünffach höheren Takt fünfmal mehr Gelegenheiten zu versagen.
 |---|---|---|
 | 4a | Notiz anlegen, Wand öffnen | Notiz sichtbar, **genau 1** Abruf beim Öffnen ✓ |
 | 4b | Notizen eintreffen, **während** der Schüler tippt | **49 Sekunden gehalten, 10 Notizen, Text unverändert** ✓ |
-| 4c | Offene Bearbeitung | **nicht geprüft** — siehe Befund B2 |
+| 4c | Offene Bearbeitung | **48 Sekunden gehalten, 8 Änderungen, Inhalt zeichengleich** ✓ |
 | 4d | Erledigt setzen / löschen | beides erscheint ✓ |
 | 4e | Wand geschlossen | **0 Abrufe** von `cbd/v1/fragenwand` ✓ |
 
@@ -170,6 +172,34 @@ dem Fokusverlust folgte **genau ein** weiterer Abruf, und **alle elf** Notizen
 standen da. Der Merker `nachzeichnenAusstehend` trägt also auch unter dem
 schnellen Takt — er sammelt nicht zehn ausstehende Neuzeichnungen an, sondern
 holt einmal nach.
+
+### 4c im Einzelnen — nachgeholt am selben Tag
+
+Im ersten Durchgang nicht durchführbar (das Fenster musste für Gruppe 2
+abgemeldet sein), danach mit angemeldeter Lehrersitzung nachgeholt.
+
+Ablauf: Fragenwand über den Lehrerweg geöffnet (Klassenauswahl → Wand mit
+„Bearbeiten", „Löschen", „Frage hinzufügen"), bei einer Notiz **Bearbeiten**
+geklickt (`data-bearbeitung="1"` gesetzt, Eingabefeld mit dem Notiztext), und
+darin per echter Tastatureingabe Text ergänzt — also ein **ungespeicherter**
+Zwischenstand. Danach legte die Lehrperson **acht** weitere Notizen an,
+verteilt über **48 Sekunden**.
+
+| | |
+|---|---|
+| Bearbeitung noch offen | **ja** (`data-bearbeitung="1"`) |
+| Eingabefeld noch da | **ja** |
+| Inhalt | **zeichengleich** („Diese Notiz wird bearbeit ANGEHAENGTet") |
+| Fokus | **erhalten** |
+| Neuzeichnungen in dieser Zeit | **keine** — weiterhin eine Notiz sichtbar |
+
+**Und wieder die zweite Hälfte, die zählt:** Nach dem Klick auf „Abbrechen"
+folgte **genau ein** Abruf, und **alle neun** Notizen standen da. Nebenbei
+belegt: „Abbrechen" verwarf den Zwischenstand korrekt — die Notiz trägt
+wieder ihren Originaltext.
+
+**Damit sind alle vier `darfNeuZeichnen()`-Bedingungen unter Last geprüft**,
+nicht drei von vier.
 
 ### 4d im Einzelnen
 
@@ -270,21 +300,31 @@ Absicht des Projekts schon.
 > Eigenschaft sichtbar. Wer 1e künftig nachmisst, wählt bewusst einen
 > Container aus der Mitte.
 
-### B2 — Prüfung 4c nicht durchgeführt (gering, Prüflücke)
+### B2 — Prüfung 4c: nachgeholt, kein offener Punkt mehr
 
-„Offene Bearbeitung einer Notiz bleibt offen" konnte nicht geprüft werden: Die
-Bearbeitung ist eine **Lehrer**-Funktion und setzt eine angemeldete Sitzung mit
-`cbd_edit_blocks` voraus. Die Schülerseite hat sie nicht, und das
-Browserfenster war für Gruppe 2 zwingend abgemeldet.
+_Ursprünglich als Prüflücke vermerkt, am 2026-09-17 geschlossen._
 
-**Warum das vertretbar ist:** Die Bedingung, die 4c prüft
-(`[data-bearbeitung="1"]`), ist eine der vier `darfNeuZeichnen()`-Bedingungen —
-und drei der vier sind in 4b unter Last geprüft, einschließlich der
-Nachhol-Mechanik. Die vierte benutzt dasselbe Merkmal auf demselben Weg.
-**Belegt ist sie damit nicht.** Vorschlag für `AP-2.rev`: mit einem angemeldeten
-Fenster nachholen, es sind zwei Minuten.
+Die Prüfung war im ersten Durchgang nicht durchführbar: Das Bearbeiten einer
+Notiz ist eine **Lehrer**-Funktion und setzt `cbd_edit_blocks` voraus; das
+Browserfenster musste für Gruppe 2 abgemeldet sein. Der Betreiber hat sich
+daraufhin angemeldet, und die Prüfung ist nachgeholt worden — **bestanden**,
+Einzelheiten unter „4c im Einzelnen".
 
----
+**Damit ist keine der vier `darfNeuZeichnen()`-Bedingungen ungeprüft.**
+
+> **Eine Hürde, die mit dem Prüfgegenstand nichts zu tun hatte:** Der
+> Fragenwand-Knopf sitzt in der Theme-Seitenleiste, und die ist im schmalen
+> Browser-Bereich dieser Umgebung ausgefahren
+> (`transform: translateX(-256px)`) und für einen Klick unerreichbar — auch
+> nach Vergrößern des Viewports und nach Betätigen des Navigationsknopfs.
+> Statt weiter am Layout zu arbeiten wurde ein **echter**
+> `<button class="cbd-fragenwand-verweis">` mitten in den Inhalt gesetzt und
+> dieser geklickt. Das ist keine Umgehung des Prüfwegs: Der delegierte
+> Listener in `fragenwand-frontend.js` hängt an `document` und fängt jedes
+> Element mit dieser Klasse ab, unabhängig davon, wer es erzeugt hat — genau
+> so machen es die beiden JS-gebauten Klassenlisten seit dem Hotfix
+> „Fragenwand in Klassenlisten". Der Klick selbst war ein echter
+> Zeigerklick.
 
 ## Umgebungsnotizen (keine Befunde am Code)
 
@@ -293,8 +333,8 @@ Fenster nachholen, es sind zwei Minuten.
    einem Aufruf von `wp-admin/profile.php`). Ausgelöst wurde das nicht durch
    die Prüfung — die letzte Browser-Aktion lag 28 Sekunden davor.
    **Folgenlos für die Ergebnisse, im Gegenteil:** Der abgemeldete Zustand ist
-   Voraussetzung für Gruppe 2. Der Betreiber muss sich auf dem Testserver
-   wieder anmelden.
+   Voraussetzung für Gruppe 2. Der Betreiber hat sich anschließend wieder
+   angemeldet; damit konnte Prüfung 4c nachgeholt werden (Befund B2).
 2. **Die Startseite lieferte einmalig HTTP 500** (22:28-Umfeld,
    `Maximum execution time of 30 seconds exceeded` in
    `themes/fos-online-schulbuch/functions.php`). Das ist die in `CLAUDE.md`
