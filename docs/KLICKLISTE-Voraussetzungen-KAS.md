@@ -2,6 +2,15 @@
 
 _Angelegt: 2026-09-17 · Gehört zu `PLAN-Schneller-Klassenpuls.md`, AP-0.2_
 
+> **✓ ERLEDIGT — die Antworten stehen nicht hier, sondern in
+> `docs/voraussetzungen-kas.md`.** Die Antwortfelder unten sind bis auf
+> Frage 2 leer geblieben, weil vier Fragen das Konsolenskript beantwortet
+> hat und zwei mündlich beantwortet wurden. Dieses Dokument bleibt als
+> Anleitung stehen — wer den Stand wissen will, liest das Protokoll.
+>
+> **Offen ist allein der Handtest zu Frage 6** (eine vorhandene `.json`
+> abrufen), im Plan als `NW-1` geführt.
+
 Sieben Fragen über die Produktivumgebung, die im Plan gebraucht werden und die
 ein Agent nicht selbst beantworten kann — sie brauchen eine Anmeldung im KAS
 (`https://kas.all-inkl.com`).

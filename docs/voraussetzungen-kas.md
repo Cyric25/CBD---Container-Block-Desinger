@@ -1,6 +1,7 @@
 # Voraussetzungen der Produktivumgebung
 
 _Erhoben: 2026-09-17 · Vervollständigt: 2026-09-17 (Frage 1 beantwortet) ·
+Nachgezogen: 2026-09-17 nach `AP-0.rev` (Befunde M1, G7–G9) ·
 Gehört zu `PLAN-Schneller-Klassenpuls.md`, AP-0.2_
 
 > **Alle sieben Fragen sind beantwortet oder gegenstandslos.** Kurzfassung:
@@ -23,7 +24,7 @@ Administrator. Das Skript arbeitet ausschließlich lesend.
 _Quelle: Angabe der Hosting-Administration über den Betreiber, 2026-09-17._
 
 **Damit ist die wichtigste Weiche gestellt: PHASE 4 ENTFÄLLT VOLLSTÄNDIG.**
-Ein Webhosting-Tarif ist Shared Hosting — eine gehaltene Verbindung belägt
+Ein Webhosting-Tarif ist Shared Hosting — eine gehaltene Verbindung belegt
 dort je Schüler einen PHP-Arbeitsprozess, und selbstdefinierte WebSockets
 sind laut all-inkl-Support im Shared Hosting „kaum umsetzbar und nicht
 empfehlenswert“. Die Entscheidung aus Abschnitt 3.1 der Erweiterungsanalyse
@@ -101,6 +102,8 @@ Sonde mit Kontrollgruppe, beide Dateien existieren nicht:
 |---|---|
 | `uploads/cbd-sonde-v5ijsd2d.json` | **404** |
 | `uploads/cbd-sonde-v5ijsd2d.txt` | **404** |
+
+_Quelle: Konsolenskript, Abschnitt D._
 
 Gleiches Verhalten für beide Dateitypen — es gibt **keine** Regel, die
 `.json` gezielt blockiert. Wäre eine vorhanden, stünde dort `403` gegen
@@ -214,11 +217,27 @@ die Größenordnung aus Abschnitt 4 des Plans bestätigt sich, allerdings auf
 Grundlage einer **Schätzung aus einer Differenz zweier Browser-Messungen**,
 nicht einer Servermessung.
 
-**Die belastbare Messung liefert erst AP-3.3** auf der Testdomain, mit
-`curl_multi_*` **auf dem Server selbst** — dort fällt die Netzlaufzeit
-vollständig weg, und die Sättigungskurve wird messbar.
+**Die belastbare Messung liefert erst AP-3.3**, mit `curl_multi_*` **auf
+dem Server selbst** — dort fällt die Netzlaufzeit vollständig weg.
+**Nachtrag 2026-09-17:** Die ursprünglich dafür vorgesehene Testdomain
+(`AP-0.3`) ist auf Entscheidung des Betreibers entfallen; gemessen wird
+auf der Produktivseite, außerhalb der Unterrichtszeit und mit einer
+Parallelität von höchstens 25. **Der Knick der Sättigungskurve bleibt
+damit unbelegt** — die Messung zeigt, dass der Betriebsfall weit
+unterhalb jeder Grenze liegt, nicht wo die Grenze ist.
 
 ---
+
+## Anmerkung zu den Handtests
+
+**Es wurde nie eine Testdatei angelegt** — weder die `phpinfo-test.php`
+aus Frage 4 (die Frage ist entfallen) noch die `test-puls.json` aus
+Frage 6 (der Handtest steht noch aus, siehe `NW-1` im Plan). Das ist die
+bessere Lage als geplant: Insbesondere war die `phpinfo()`-Datei, die
+Serverinterna preisgibt, zu keinem Zeitpunkt erreichbar. Das
+Akzeptanzkriterium „beide Testdateien sind nachweislich wieder
+gelöscht“ ist damit leer erfüllt — hier festgehalten, damit ein
+späterer Leser kein abgehaktes Kriterium ohne Beleg vorfindet.
 
 ## Folgen für den Plan
 
@@ -236,7 +255,7 @@ gebaute Serverseite.
 ### 2. Phase 4 findet statt: **NEIN** — entschieden am 2026-09-17
 
 Der Tarif ist Webhosting, also Shared Hosting. Eine gehaltene Verbindung
-belägt dort je Schüler einen PHP-Arbeitsprozess; die Zahl gleichzeitiger
+belegt dort je Schüler einen PHP-Arbeitsprozess; die Zahl gleichzeitiger
 Prozesse ist begrenzt und nicht öffentlich dokumentiert. **Phase 4 entfällt
 ersatzlos**, und mit ihr Frage 4 dieser Liste.
 
@@ -267,8 +286,13 @@ Was daraus folgt — und was ausdrücklich **nicht**:
   ausschließlich Prüfsummen sind. Dieser Satz galt vorher und gilt
   unverändert — er hängt nicht an der Frage, ob die Datei gelesen wird.
 - **Am Code ändert sich nichts.** Korrigiert wurde ausschließlich die
-  Begründung im Docblock von `verzeichnis_sicherstellen()`, in dieser Datei,
-  in `reference_file_map.md` und im Plan.
+  Begründung — im Docblock von `verzeichnis_sicherstellen()`, in dieser
+  Datei und in `reference_file_map.md` am 2026-09-17, **im Plan erst am
+  selben Tag nach Befund M1 aus `AP-0.rev`**: Dort stand die widerlegte
+  Aussage noch, während diese Zeile bereits behauptete, sie sei korrigiert.
+  Eine Behauptung über eine erfolgte Korrektur, die nicht erfolgt ist, ist
+  schlimmer als die stehen gebliebene Stelle — sie verhindert das
+  Nachsehen.
 
 ### 4. `WP_DEBUG_LOG` ist aus — kein Handlungsbedarf
 

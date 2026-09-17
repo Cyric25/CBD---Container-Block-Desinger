@@ -11,6 +11,67 @@ Container Block Designer is a WordPress plugin that creates customizable contain
 **PHP Requirements:** 7.4+ (rückwärtskompatibel; getestet auf 7.4.33)
 **Tested up to:** WordPress 6.4, PHP 8.4
 
+## Produktivumgebung (belegt, Stand 2026-09-17)
+
+Über die Zielumgebung stand in den Plänen dieses Projekts jahrelang nur
+„all-inkl Shared Hosting, kein SSH". `AP-0.2` des Vorhabens
+`PLAN-Schneller-Klassenpuls.md` hat sie erstmals systematisch erhoben. **Jede
+Angabe hier ist belegt, keine geraten**; Quelle je Zeile und die vollständigen
+Messwerte stehen in `docs/voraussetzungen-kas.md`, das Abfrageskript in
+`docs/pruefung-voraussetzungen.js` (ausschließlich lesend).
+
+| Angabe | Wert | Quelle |
+|---|---|---|
+| Adresse | `https://chemiefos.fos-meran.it`, **HTTPS** | Konsolenskript |
+| Produkt/Tarif | **„Privat Premium" — ein WEBHOSTING-Tarif**, kein Managed-, kein Root-Server | Hosting-Administration |
+| PHP-Version | **8.2.33-nmm1** | WordPress-Systembericht |
+| Cronjobs | **verfügbar** (enthalten ab Stufe `PrivatPlus`) | Betreiber |
+| `wp-content/uploads/` beschreibbar | **ja** — alle vier vom Plugin angelegten Unterverzeichnisse antworten mit HTTP 403, also „vorhanden, Auflistung aus" | Konsolenskript |
+| `.json` aus `uploads` ausgeliefert | **keine Sperre erkennbar** — `.json` und `.txt` antworten gleich (404 gegen 404); ein Filter auf den Pfad ergäbe 403 gegen 404 | Konsolenskript |
+| Verzeichnisauflistung in `uploads` | **aus** (HTTP 403) — anders als auf dem lokalen Testserver, wo sie an ist | Konsolenskript |
+| `.htaccess` wird ausgewertet | **ja** — dort sind auch die IP-Beschränkungen der Website umgesetzt | Hosting-Administration |
+| `WP_DEBUG_LOG` | **aus** — und muss es bleiben (rund 34 Boot-Protokollzeilen je Anfrage) | Konsolenskript |
+| WordPress-Version | 7.1 | Konsolenskript |
+
+**Die PHP-Version ändert nichts an der Zielvorgabe.** Das Plugin bleibt auf
+**PHP 7.4** ausgelegt und wird weiter mit `tools/check-php74.php` geprüft —
+die konservativere Grenze zählt, nicht die installierte Version.
+
+### Zwei Folgerungen, die künftigen Vorhaben Arbeit ersparen
+
+**1. Push scheidet aus, und der KAS-Zugang ändert daran nichts.** Der Tarif
+ist Webhosting — kein eigener Server, kein dauerhafter Prozess. Ein
+WebSocket-Dienst ist laut all-inkl-Support im Shared Hosting „kaum umsetzbar
+und nicht empfehlenswert"; SSE und Long-Polling belegen je Schüler einen
+PHP-Arbeitsprozess; Web Push erzwingt in allen Browsern
+`userVisibleOnly: true`, also eine sichtbare Systembenachrichtigung je
+Signal, und liefe über die Push-Server von Google/Mozilla/Apple (DSGVO).
+Cronjobs gibt es, aber Cron läuft Server→Server und erreicht keinen Browser.
+**KAS ist ein Verwaltungspanel, kein neues Prozessmodell.** Die geplante
+Phase 4 des Vorhabens „Schneller Klassenpuls" (gehaltene Verbindung) ist
+daraufhin **vollständig entfallen**. Wer die Frage erneut stellt: Die Antwort
+steht in `docs/voraussetzungen-kas.md`, Abschnitt „Folgen für den Plan",
+Punkt 2 — sie ist beantwortet, nicht offen.
+
+**2. Aus einem `Server:`-Antwortkopf lässt sich die Verarbeitungskette nicht
+ableiten.** Die Installation meldet `Server: nginx`. Daraus wurde einmal
+geschlossen, eine `.htaccess` sei dort wirkungslos — **falsch**: Dahinter
+arbeitet ein Apache, der sie liest. Der Kopf nennt die äußerste Schicht,
+nicht die verarbeitende; bei Shared Hosting ist nginx vor Apache die
+verbreitete Aufstellung. Die Fehlaussage stand bereits in drei Dateien, bevor
+eine Rückfrage bei der Hosting-Administration sie widerlegte.
+
+### Was noch offen ist
+
+**Ein Handtest fehlt** (im Plan als `NW-1` geführt): Die Sonde oben zeigt,
+dass **keine Regel auf den Pfad greift**. Sie kann nicht zeigen, dass eine
+**tatsächlich vorhandene** `.json` mit HTTP 200 und brauchbarem
+`Content-Type` ausgeliefert wird — beide Sondendateien existierten nicht.
+Dafür braucht es eine von Hand angelegte Datei. Das Risiko gilt als gering
+(lokal `application/json`, auf nginx ist `.json` Standard), aber es ist
+ungemessen.
+
+
 ## Architecture
 
 ### Core Plugin Structure
@@ -7408,7 +7469,7 @@ mittleren betrafen Buchführung und Testumgebung, nicht den Produktivcode):
 - `assets/js/interactivity-fallback.js` - jQuery-based fallback for interactive features
 - `assets/js/floating-pdf-button.js` - Floating PDF export button
 - `assets/js/latex-renderer.js` - LaTeX rendering with KaTeX
-- `assets/js/jspdf-loader.js` - PDF export functionality loader
+- `assets/js/html2pdf-loader.js` - PDF export functionality loader (älterer Weg; der Regelweg ist `assets/js/pdf-server-side.js`, ausgelöst über `assets/js/floating-pdf-button.js`)
 
 ### Admin Templates
 - `admin/blocks-list.php` - Block management list view
