@@ -825,6 +825,9 @@ class CBD_Fragenwand {
             wp_send_json_error(array('message' => 'Speichern fehlgeschlagen.'));
         }
 
+        // Pulsdatei der Klasse erneuern (Vorhaben „Schneller Klassenpuls“, AP-1.5).
+        do_action('cbd_klassenmodus_geaendert', (int) $class_id);
+
         wp_send_json_success(array('id' => (int) $wpdb->insert_id));
     }
 
@@ -844,7 +847,7 @@ class CBD_Fragenwand {
         }
 
         // Zugriff wird gegen die Klasse der Notiz geprüft, nicht gegen $_POST.
-        $this->require_note_access($note_id);
+        $class_id = $this->require_note_access($note_id);
 
         global $wpdb;
 
@@ -861,6 +864,9 @@ class CBD_Fragenwand {
             wp_send_json_error(array('message' => 'Speichern fehlgeschlagen.'));
         }
 
+        // Pulsdatei der Klasse erneuern (Vorhaben „Schneller Klassenpuls“, AP-1.5).
+        do_action('cbd_klassenmodus_geaendert', (int) $class_id);
+
         wp_send_json_success();
     }
 
@@ -876,7 +882,7 @@ class CBD_Fragenwand {
         }
 
         // Zugriff wird gegen die Klasse der Notiz geprüft, nicht gegen $_POST.
-        $this->require_note_access($note_id);
+        $class_id = $this->require_note_access($note_id);
 
         $text = sanitize_textarea_field(wp_unslash($_POST['text'] ?? ''));
         if ('' === $text) {
@@ -897,6 +903,9 @@ class CBD_Fragenwand {
             wp_send_json_error(array('message' => 'Speichern fehlgeschlagen.'));
         }
 
+        // Pulsdatei der Klasse erneuern (Vorhaben „Schneller Klassenpuls“, AP-1.5).
+        do_action('cbd_klassenmodus_geaendert', (int) $class_id);
+
         wp_send_json_success();
     }
 
@@ -912,7 +921,7 @@ class CBD_Fragenwand {
         }
 
         // Zugriff wird gegen die Klasse der Notiz geprüft, nicht gegen $_POST.
-        $this->require_note_access($note_id);
+        $class_id = $this->require_note_access($note_id);
 
         global $wpdb;
 
@@ -921,6 +930,9 @@ class CBD_Fragenwand {
         if (false === $geloescht) {
             wp_send_json_error(array('message' => 'Löschen fehlgeschlagen.'));
         }
+
+        // Pulsdatei der Klasse erneuern (Vorhaben „Schneller Klassenpuls“, AP-1.5).
+        do_action('cbd_klassenmodus_geaendert', (int) $class_id);
 
         wp_send_json_success();
     }
@@ -1263,6 +1275,9 @@ class CBD_Fragenwand {
 
         // Nur die ID zurück — das Frontend lädt die Liste danach ohnehin neu
         // und bekommt die Notiz dabei an ihrer sortierten Stelle.
+        // Pulsdatei der Klasse erneuern (Vorhaben „Schneller Klassenpuls“, AP-1.5).
+        do_action('cbd_klassenmodus_geaendert', (int) $class_id);
+
         return rest_ensure_response(array('id' => (int) $wpdb->insert_id));
     }
 

@@ -460,6 +460,16 @@ class CBD_Classroom {
         $wpdb->delete(CBD_TABLE_DRAWINGS, array('class_id' => $class_id));
         $wpdb->delete(CBD_TABLE_CLASSES, array('id' => $class_id));
 
+        // Pulsdatei der geloeschten Klasse entfernen (AP-1.5). Ohne das
+        // bliebe sie liegen und ihre Capability-URL gueltig. Hinter
+        // class_exists()/method_exists(), damit ein Teilstand des Plugins
+        // hier keinen Fatal Error erzeugt -- dasselbe Muster wie bei den
+        // Theme-Aufrufen im Klassenmodus.
+        if (class_exists('CBD_Klassenpuls')
+            && method_exists('CBD_Klassenpuls', 'loesche_pulsdatei')) {
+            CBD_Klassenpuls::loesche_pulsdatei((int) $class_id);
+        }
+
         wp_send_json_success(array('message' => 'Klasse geloescht.'));
     }
 
@@ -614,6 +624,9 @@ class CBD_Classroom {
                 'drawing_data' => $drawing_data
             ));
         }
+
+        // Pulsdatei der Klasse erneuern (Vorhaben „Schneller Klassenpuls“, AP-1.5).
+        do_action('cbd_klassenmodus_geaendert', (int) $class_id);
 
         wp_send_json_success(array('message' => 'Zeichnung gespeichert.'));
     }
@@ -834,6 +847,11 @@ class CBD_Classroom {
             $class_id, $page_id, $container_id
         ));
 
+        // Pulsdatei der Klasse erneuern (Vorhaben „Schneller Klassenpuls“, AP-1.5).
+        if ($verify) {
+            do_action('cbd_klassenmodus_geaendert', (int) $class_id);
+        }
+
         wp_send_json_success(array(
             'is_behandelt' => (bool) $new_status,
             'message' => $new_status ? 'Als behandelt markiert.' : 'Markierung entfernt.',
@@ -913,6 +931,9 @@ class CBD_Classroom {
                 'sort_order' => ($max_order !== null) ? ($max_order + 1) : 0
             ));
         }
+
+        // Pulsdatei der Klasse erneuern (Vorhaben „Schneller Klassenpuls“, AP-1.5).
+        do_action('cbd_klassenmodus_geaendert', (int) $class_id);
 
         wp_send_json_success(array('message' => 'Als behandelt markiert.'));
     }
