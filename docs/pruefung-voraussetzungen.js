@@ -192,7 +192,14 @@
         const debugLog = zeileAusBericht(bericht, ['WP_DEBUG_LOG']);
         if (debugLog) {
             ergebnis['WP_DEBUG_LOG'] = debugLog;
-            if (/true|wahr|aktiv/i.test(debugLog)) {
+            // ACHTUNG: Das Muster muss den GANZEN Wert prüfen, nicht auf ein
+            // Teilstück passen. Der erste Entwurf testete /true|wahr|aktiv/i
+            // — und „De-aktiv-iert" enthält „aktiv". Auf der
+            // Produktivinstallation warnte das Skript deshalb vor einem
+            // eingeschalteten Protokoll, obwohl es aus war.
+            const aus = /^\s*(false|falsch|deaktiviert|aus|nein|0|nicht gesetzt|undefined)\s*$/i.test(debugLog);
+            const an = !aus && /^\s*(true|wahr|aktiviert|ein|an|ja|1)\s*$/i.test(debugLog);
+            if (an) {
                 hinweise.push('WP_DEBUG_LOG ist EINGESCHALTET. Auf der Produktivinstallation ' +
                     'sollte er aus bleiben: Jede Anfrage erzeugt rund 34 Boot-Protokollzeilen, ' +
                     'bei 25 Schülern im Zehn-Sekunden-Takt also etwa 7.600 Zeilen je Minute.');
@@ -361,8 +368,21 @@
             : 'nicht messbar';
         ergebnis['Messung · Messziel'] = statischeDatei.replace(herkunft, '');
         if (zeitRoute && zeitStatisch) {
+            // Der Unterschied in Millisekunden ist die aussagekräftigere Zahl:
+            // Beide Messungen enthalten dieselbe Netzlaufzeit und denselben
+            // fetch()-Eigenaufwand, die sich hier wegkürzen. Übrig bleibt die
+            // Server-Rechenzeit, die der statische Weg spart — und genau die
+            // entscheidet über die Last, nicht das Verhältnis.
+            ergebnis['Messung · gesparte Serverzeit'] =
+                (zeitRoute - zeitStatisch).toFixed(1) + ' ms je Anfrage (der belastbare Wert)';
             ergebnis['Messung · Faktor'] =
                 (zeitRoute / zeitStatisch).toFixed(1) + '-mal schneller (UNTERGRENZE, siehe unten)';
+            hinweise.push('Die Zeile „gesparte Serverzeit" ist die belastbare Zahl dieser ' +
+                'Messung, NICHT der Faktor. Beide Messungen tragen dieselbe Netzlaufzeit; ' +
+                'bei einem entfernten Server macht die oft den größten Teil beider Werte aus ' +
+                'und drückt das Verhältnis gegen 1, obwohl die eingesparte Rechenzeit ' +
+                'unverändert anfällt. Der statische Weg belegt zusätzlich gar keinen ' +
+                'PHP-Arbeitsprozess — das zählt für die Serverlast mehr als jede Zeitangabe.');
             hinweise.push('Der gemessene Faktor ist eine UNTERGRENZE, kein Vergleichswert zu ' +
                 'einer Servermessung. `fetch()` im Browser kostet je Aufruf einige ' +
                 'Millisekunden Eigenaufwand, und dieser feste Betrag drückt den Quotienten ' +
