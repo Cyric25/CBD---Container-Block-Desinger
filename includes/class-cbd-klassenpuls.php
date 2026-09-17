@@ -826,12 +826,18 @@ class CBD_Klassenpuls {
      * Schreiblast und überschriebe eine vom Betrieb angepasste Datei.
      *
      * DIE `.htaccess` IST EINE ZWEITE ABSICHERUNG, KEIN TRAGENDER SCHUTZ.
-     * Die Produktivinstallation läuft hinter **nginx**, und nginx wertet eine
-     * `.htaccess` nicht aus — dort ist die Datei wirkungslos. Sie entsteht
-     * trotzdem, weil sie auf Apache-Umgebungen wirkt (unter anderem auf dem
-     * lokalen Testserver, wo die Verzeichnisauflistung nachweislich AN ist)
-     * und eine ignorierte Datei nichts kostet. Belege und Messwerte:
-     * `docs/voraussetzungen-kas.md`, Abschnitt „Folgen für den Plan", Punkt 3.
+     * Sie wirkt: Die Produktivinstallation meldet sich zwar als `nginx`, aber
+     * dahinter arbeitet ein Apache, der die Datei liest — dort sind auch die
+     * IP-Beschränkungen der Website umgesetzt. Produktiv ist sie trotzdem nur
+     * die zweite Verteidigungslinie, weil die Verzeichnisauflistung dort
+     * ohnehin abgeschaltet ist; auf dem lokalen Testserver ist sie die
+     * einzige. Beleg: `docs/voraussetzungen-kas.md`, Zusatzfrage zur
+     * `.htaccess`.
+     *
+     * (Eine frühere Fassung dieses Kommentars behauptete das Gegenteil — die
+     * Datei sei wirkungslos, weil nginx sie nicht auswerte. Das war aus dem
+     * `Server:`-Antwortkopf geschlossen und falsch: Der Kopf nennt die
+     * äußerste Schicht, nicht die verarbeitende.)
      *
      * **Der Schutz der Pulsdateien ruht deshalb NICHT auf dieser Datei**,
      * sondern auf dem unerratbaren HMAC-Anteil im Dateinamen (siehe

@@ -1,6 +1,11 @@
 # Voraussetzungen der Produktivumgebung
 
-_Erhoben: 2026-09-17 · Gehört zu `PLAN-Schneller-Klassenpuls.md`, AP-0.2_
+_Erhoben: 2026-09-17 · Vervollständigt: 2026-09-17 (Frage 1 beantwortet) ·
+Gehört zu `PLAN-Schneller-Klassenpuls.md`, AP-0.2_
+
+> **Alle sieben Fragen sind beantwortet oder gegenstandslos.** Kurzfassung:
+> Die Pulsdatei trägt, die Phasen 1–3 laufen — und **Phase 4 entfällt**, weil
+> der Tarif Webhosting ist und keinen eigenen Server umfasst.
 
 Quelle, soweit nicht anders vermerkt: ein Lauf von
 `docs/pruefung-voraussetzungen.js` in der Browser-Konsole des
@@ -13,15 +18,28 @@ Administrator. Das Skript arbeitet ausschließlich lesend.
 
 ### Frage 1 — Produkt/Tarif
 
-**Antwort: OFFEN.** Nur im KAS sichtbar; das Skript kann sie nicht
-beantworten.
+**Antwort: „Privat Premium“ — ein WEBHOSTING-TARIF, kein eigener Server.**
 
-**Was das blockiert:** ausschließlich die Entscheidung über Phase 4
-(gehaltene Verbindung). Die Phasen 1–3 sind davon unabhängig.
+_Quelle: Angabe der Hosting-Administration über den Betreiber, 2026-09-17._
 
-**Ein Hinweis, der die Frage NICHT ersetzt:** Der Server meldet sich als
-`nginx` (siehe „Server-Software" unten). Daraus lässt sich der Tarif nicht
-ableiten — er sagt nur, welche Software die Anfrage beantwortet.
+**Damit ist die wichtigste Weiche gestellt: PHASE 4 ENTFÄLLT VOLLSTÄNDIG.**
+Ein Webhosting-Tarif ist Shared Hosting — eine gehaltene Verbindung belägt
+dort je Schüler einen PHP-Arbeitsprozess, und selbstdefinierte WebSockets
+sind laut all-inkl-Support im Shared Hosting „kaum umsetzbar und nicht
+empfehlenswert“. Die Entscheidung aus Abschnitt 3.1 der Erweiterungsanalyse
+bleibt damit ohne Einschränkung gültig.
+
+**Zur Namensform:** Die öffentliche Tarifliste von all-inkl führt `Privat`,
+`PrivatPlus`, `Premium` und `Business`. Die gemeldete Bezeichnung wurde hier
+**wörtlich** übernommen, statt sie auf einen der vier Namen zurechtzubiegen.
+Für den Plan ist ohnehin nur die Einordnung entscheidend, und die ist
+eindeutig: Webhosting, nicht Managed und nicht Root. Sollte je eine
+Unterscheidung zwischen den Webhosting-Stufen nötig werden, ist die Angabe im
+KAS nachzuschlagen.
+
+**Konsistent mit Frage 2:** Cronjobs sind laut Betreiber verfügbar; enthalten
+sind sie ab der Stufe `PrivatPlus`. Das passt zu einem Tarif oberhalb von
+`Privat`.
 
 ### Frage 2 — Cronjobs verfügbar?
 
@@ -44,13 +62,15 @@ konservativere Grenze, nicht die installierte. Praktisch relevant wird die
 8.2 nur für Frage 4: Ab PHP 8 wirken `php_value`-Anweisungen in einer
 `.htaccess` bei all-inkl nicht mehr.
 
-### Frage 4 — `.user.ini` wirksam?
+### Frage 4 — Wird eine `.user.ini` ausgewertet?
 
-**Antwort: OFFEN.** Braucht Dateizugriff und rund fünf Minuten Wartezeit
-(`user_ini.cache_ttl`, Vorgabe 300 s).
+**Antwort: ENTFÄLLT.** Frage 1 hat einen Webhosting-Tarif ergeben, damit
+findet Phase 4 nicht statt und diese Frage ist gegenstandslos.
 
-**Nur für Phase 4 nötig.** Ergibt Frage 1 einen Webhosting-Tarif, entfällt
-sie ersatzlos.
+Sie wäre ausschließlich für die gehaltene Verbindung nötig gewesen, wo die
+maximale Laufzeit hätte erhöht werden müssen. **Die Prüfung ist nicht mehr
+durchzuführen** — sie kostet fünf Minuten Wartezeit und legt vorübergehend
+eine `phpinfo()`-Datei offen, beides ohne jeden Gegenwert.
 
 ### Frage 5 — Ist `wp-content/uploads/` beschreibbar?
 
@@ -100,13 +120,40 @@ ist gering, aber ungemessen. Der Handtest aus Frage 6 der Klickliste
 
 _Quelle: Konsolenskript, Abschnitt E._
 
-**Das widerspricht dem lokalen Testserver und korrigiert eine frühere
-Aussage.** Lokal (`fos.localhost:8080`, Apache ohne `Options -Indexes`)
-lieferte `wp-content/uploads/` eine echte Dateiliste („Index of
-/wp-content/uploads"). Daraus war notiert worden, die `.htaccess` aus AP-1.2
-sei „NÖTIG, nicht bloß vorsorglich". **Für die Produktivinstallation stimmt
-das nicht** — dort ist die Auflistung ohnehin aus. Siehe „Folgen für den
-Plan", Punkt 3.
+**Das weicht vom lokalen Testserver ab.** Dort (`fos.localhost:8080`, Apache
+ohne `Options -Indexes`) liefert `wp-content/uploads/` eine echte Dateiliste
+(„Index of /wp-content/uploads“). Produktiv ist die Auflistung also schon
+heute aus — die `.htaccess` aus AP-1.2 ist dort eine **zweite** Absicherung,
+auf dem Testserver dagegen die einzige. Wirksam ist sie in beiden Umgebungen
+(siehe „Wird die `.htaccess` gelesen?“ unten).
+
+### Zusatzfrage — Wird die `.htaccess` gelesen?
+
+**Antwort: JA.** Auf der Produktivinstallation sind unter anderem
+IP-Beschränkungen über `.htaccess` umgesetzt; ohne deren Auswertung wären
+sie kaum realisierbar.
+
+_Quelle: Auskunft der Hosting-Administration über den Betreiber, 2026-09-17._
+
+**Damit ist eine frühere Schlussfolgerung von mir widerlegt, und das ist
+wichtig genug, es hier festzuhalten:** Aus dem Antwortkopf `Server: nginx`
+hatte ich gefolgert, die `.htaccess` sei auf der Produktivinstallation
+wirkungslos — nginx wertet sie nämlich nicht aus. Diese Aussage stand
+bereits im Docblock von `verzeichnis_sicherstellen()`, in dieser Datei und
+im Plan. **Sie war falsch.** Hinter nginx arbeitet ein Apache, und der liest
+die Datei; der Antwortkopf nennt nur die äußerste Schicht.
+
+**Lehre für künftige Befunde:** Ein `Server:`-Kopf beschreibt, wer die
+Anfrage **entgegennimmt**, nicht, wer sie **verarbeitet**. Bei Shared
+Hosting ist nginx vor Apache die verbreitete Aufstellung. Wer daraus auf die
+Verarbeitungskette schließt, rät — geprüft hätte das nur ein echter Test
+mit einer wirksamen `.htaccess`-Anweisung.
+
+**Folge für AP-1.2:** Die `Options -Indexes`-Datei ist wirksam, nicht inert.
+Sie bleibt trotzdem **nicht** der tragende Schutz der Pulsdateien — der ruht
+unverändert auf dem unerratbaren HMAC-Anteil im Dateinamen und darauf, dass
+der Inhalt ausschließlich Prüfsummen sind. Geändert hat sich die
+Begründung, nicht der Code.
 
 ---
 
@@ -116,7 +163,8 @@ Plan", Punkt 3.
 |---|---|
 | Adresse | `https://chemiefos.fos-meran.it` |
 | Verbindung | **HTTPS** |
-| Server-Software | **nginx** (Antwortkopf `Server`) |
+| Server-Software | **nginx** (Antwortkopf `Server`) — dahinter jedoch ein Apache, siehe Zusatzfrage |
+| `.htaccess` wird gelesen | **ja** (Auskunft der Hosting-Administration; dort sind IP-Beschränkungen umgesetzt) |
 | WordPress-Version | 7.1 |
 | `WP_DEBUG_LOG` | **Deaktiviert** ✓ |
 | uploads-Adresse | `https://chemiefos.fos-meran.it/wp-content/uploads` |
@@ -185,38 +233,42 @@ abrufen) steht noch aus. Er ist billig und sollte vor Phase 2 nachgeholt
 werden — schlägt er fehl, betrifft das nur den Client-Teil, nicht die bereits
 gebaute Serverseite.
 
-### 2. Phase 4 findet statt: **UNENTSCHIEDEN**
+### 2. Phase 4 findet statt: **NEIN** — entschieden am 2026-09-17
 
-Frage 1 ist offen. **Die Phasen 1–3 hängen nicht daran** und können ohne
-diese Antwort vollständig abgearbeitet werden; erst am Ende von Phase 3 wird
-die Antwort gebraucht.
+Der Tarif ist Webhosting, also Shared Hosting. Eine gehaltene Verbindung
+belägt dort je Schüler einen PHP-Arbeitsprozess; die Zahl gleichzeitiger
+Prozesse ist begrenzt und nicht öffentlich dokumentiert. **Phase 4 entfällt
+ersatzlos**, und mit ihr Frage 4 dieser Liste.
 
-### 3. AP-1.2 muss die `.htaccess` neu bewerten — **`nginx` liest sie nicht**
+Das Vorhaben endet damit planmäßig mit `AP-3.doc`. Die erreichte Latenz von
+2–3 Sekunden ist das Ergebnis — ausdrücklich kein Kompromiss, sondern der
+Wert, den der Betreiber in der Planungsphase als Ziel gewählt hat.
 
-Der Server meldet sich als **nginx**. Eine `.htaccess` ist eine
-Apache-Einrichtung; nginx wertet sie **nicht** aus. Die in AP-1.2 geplante
-Datei mit `Options -Indexes` wäre dort also wirkungslos.
+**Diese Entscheidung gilt, solange der Tarif derselbe bleibt.** Wechselte die
+Installation je auf einen Managed- oder Root-Server, wäre Phase 4 erneut zu
+erwägen — aber auch dann erst, wenn eine Messung zeigt, dass 2–3 Sekunden im
+Unterricht nicht genügen.
 
-**Das ist kein Problem, sondern eine Korrektur der Begründung:**
+### 3. AP-1.2: Die `.htaccess` ist wirksam — Korrektur einer Korrektur
 
-- Die Auflistung ist auf der Produktivinstallation **ohnehin aus** (Frage 7,
-  HTTP 403). Der Schutz, den die `.htaccess` liefern sollte, besteht bereits.
-- Auf dem lokalen Testserver (Apache) ist die Auflistung **an** — dort wirkt
-  die Datei und ist nützlich.
-- Eine von nginx ignorierte Datei kostet nichts.
+**Stand 2026-09-17, nach Rückmeldung der Hosting-Administration.** Hier stand
+zuvor, nginx lese keine `.htaccess` und die Datei aus AP-1.2 sei auf der
+Produktivinstallation wirkungslos. **Das war falsch** (siehe Zusatzfrage
+oben): Sie wird gelesen, hinter nginx arbeitet ein Apache.
 
-**Anweisung für AP-1.2:** Die `.htaccess` **bleibt** im Umfang — aber als
-zweite Absicherung für Apache-Umgebungen, nicht als tragender Schutz. Die
-Begründung im Quelltextkommentar und in der Dokumentation ist entsprechend zu
-formulieren. **Der Schutz der Pulsdateien darf sich nicht auf sie stützen**;
-er ruht auf dem unerratbaren HMAC-Dateinamen und darauf, dass der Inhalt nur
-Prüfsummen sind.
+Was daraus folgt — und was ausdrücklich **nicht**:
 
-**Offene Folgefrage, in AP-1.rev zu prüfen:** Liegt hinter nginx noch ein
-Apache (verbreitete Aufstellung bei Shared Hosting), greift die `.htaccess`
-doch. Feststellbar auf der Testdomain (AP-0.3), indem dort eine `.htaccess`
-mit einer wirksamen, harmlosen Anweisung hinterlegt und deren Wirkung geprüft
-wird.
+- Die in AP-1.2 geschriebene `.htaccess` mit `Options -Indexes` **wirkt**.
+- Sie ist produktiv trotzdem eine **zweite** Absicherung, weil die
+  Verzeichnisauflistung dort ohnehin aus ist (Frage 7). Auf dem lokalen
+  Testserver ist sie die einzige.
+- **Der Schutz der Pulsdateien ruht weiterhin NICHT auf ihr**, sondern auf
+  dem unerratbaren HMAC-Anteil im Dateinamen und darauf, dass der Inhalt
+  ausschließlich Prüfsummen sind. Dieser Satz galt vorher und gilt
+  unverändert — er hängt nicht an der Frage, ob die Datei gelesen wird.
+- **Am Code ändert sich nichts.** Korrigiert wurde ausschließlich die
+  Begründung im Docblock von `verzeichnis_sicherstellen()`, in dieser Datei,
+  in `reference_file_map.md` und im Plan.
 
 ### 4. `WP_DEBUG_LOG` ist aus — kein Handlungsbedarf
 
