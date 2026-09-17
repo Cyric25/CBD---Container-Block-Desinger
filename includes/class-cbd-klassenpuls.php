@@ -112,12 +112,39 @@ class CBD_Klassenpuls {
     const SEITEN_OBERGRENZE = 400;
 
     /**
+     * Klassen, deren Pulsdatei in dieser Anfrage neu geschrieben werden muss.
+     *
+     * Schlüssel sind die Klassen-IDs — so verschwinden Dubletten von selbst,
+     * wenn dieselbe Klasse in einer Anfrage mehrfach gemeldet wird.
+     *
+     * @var array
+     */
+    private static $offene_klassen = array();
+
+    /**
+     * Ob die `shutdown`-Aktion in dieser Anfrage schon angemeldet wurde.
+     *
+     * Ohne diese Sperre hinge an jeder gemeldeten Änderung ein weiterer
+     * Rückruf, und `schreibe_offene()` liefe mehrfach.
+     *
+     * @var bool
+     */
+    private static $shutdown_angemeldet = false;
+
+    /**
      * Route auf `rest_api_init` anmelden.
      *
      * @return void
      */
     public static function init() {
         add_action('rest_api_init', array(__CLASS__, 'register_routes'));
+
+        // Der einzige Zuhörer auf die Aktion, die die Schreibstellen in
+        // `class-cbd-classroom.php` und `class-cbd-fragenwand.php` auslösen
+        // (AP-1.5). Die Kopplung ist dadurch einseitig: Jene Dateien müssen
+        // diese Klasse nicht kennen, und eine Aktion ohne Zuhörer ist
+        // wirkungslos statt fehlerhaft.
+        add_action('cbd_klassenmodus_geaendert', array(__CLASS__, 'merke_aenderung'), 10, 1);
     }
 
     /**
@@ -667,6 +694,164 @@ class CBD_Klassenpuls {
         }
 
         return $daten;
+    }
+
+    // ---------------------------------------------------------------------
+    // Die Pulsdatei: Schreiben, Löschen, Sammeln (AP-1.4)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Die Pulsdatei einer Klasse neu schreiben.
+     *
+     * DREI EIGENSCHAFTEN, DIE NICHT VERHANDELBAR SIND:
+     *
+     * 1. ATOMAR. Geschrieben wird erst in eine Zwischendatei im selben
+     *    Verzeichnis, dann per `rename()` an den Zielnamen. Auf demselben
+     *    Dateisystem ist das ein einziger Schritt — ein Leser bekommt
+     *    entweder die alte oder die neue Datei, nie eine halb geschriebene.
+     *    Die Prozess-ID im Namen der Zwischendatei verhindert, dass zwei
+     *    gleichzeitige Anfragen einander ins Gehege kommen.
+     *
+     * 2. LAUTLOS. Ein Fehlschlag wirft nie, erzeugt keine PHP-Warnung und
+     *    lässt den auslösenden Vorgang nicht scheitern. Der ist in der Regel
+     *    `ajax_toggle_behandelt()` — der Klick der Lehrperson vor der Klasse.
+     *    Eine fehlgeschlagene Schreibung holt der Herzschlag nach (AP-1.6);
+     *    ein fehlgeschlagenes Freigeben wäre dagegen sichtbar und ärgerlich.
+     *
+     * 3. KEINE ZWISCHENDATEI BLEIBT LIEGEN. Jeder Rückgabepfad nach dem
+     *    Anlegen räumt sie weg. Prüfung F7 des Harnischs wacht darüber.
+     *
+     * DIE NOTBREMSE GILT AUCH HIER: Steht `cbd_klassenpuls_takt` auf 0, wird
+     * nichts geschrieben. Bei 0 reiht `CBD_Classroom::enqueue_frontend_assets()`
+     * den Taktgeber auf keiner Seite ein — es liest also niemand. Dateien zu
+     * schreiben, die niemand liest, wäre stiller Ballast.
+     *
+     * @param int $class_id Klassen-ID.
+     * @return bool true nur bei tatsächlich geschriebener Datei.
+     */
+    public static function schreibe_pulsdatei($class_id) {
+        $class_id = (int) $class_id;
+
+        if ($class_id <= 0) {
+            return false;
+        }
+
+        // Notbremse: abgeschaltet heißt auch „nichts schreiben".
+        if (self::takt() <= 0) {
+            return false;
+        }
+
+        $ziel = self::pulsdatei_pfad($class_id);
+
+        if ('' === $ziel) {
+            return false;
+        }
+
+        if (!self::verzeichnis_sicherstellen()) {
+            return false;
+        }
+
+        $daten = self::baue_pulsdaten($class_id, self::signaturen_alle_seiten($class_id));
+
+        $json = function_exists('wp_json_encode')
+            ? wp_json_encode($daten)
+            : json_encode($daten);
+
+        if (!is_string($json) || '' === $json) {
+            return false;
+        }
+
+        $zwischen = $ziel . '.' . getmypid() . '.tmp';
+
+        if (false === @file_put_contents($zwischen, $json, LOCK_EX)) {
+            @unlink($zwischen);
+            return false;
+        }
+
+        if (!@rename($zwischen, $ziel)) {
+            @unlink($zwischen);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Die Pulsdatei einer Klasse entfernen.
+     *
+     * Gerufen beim Löschen einer Klasse (AP-1.5) und vom Aufräumdurchlauf
+     * (AP-1.7). Eine fehlende Datei ist KEIN Fehler: Der Rückgabewert ist dann
+     * schlicht `false`, und es entsteht keine PHP-Warnung — `file_exists()`
+     * fragt vorher, `@` fängt den Rest.
+     *
+     * @param int $class_id Klassen-ID.
+     * @return bool true nur, wenn wirklich eine Datei gelöscht wurde.
+     */
+    public static function loesche_pulsdatei($class_id) {
+        $pfad = self::pulsdatei_pfad($class_id);
+
+        if ('' === $pfad || !file_exists($pfad)) {
+            return false;
+        }
+
+        return (bool) @unlink($pfad);
+    }
+
+    /**
+     * Eine geänderte Klasse vormerken.
+     *
+     * Zuhörer der Aktion `cbd_klassenmodus_geaendert` (siehe `init()`), die
+     * die acht Schreibstellen in `class-cbd-classroom.php` und
+     * `class-cbd-fragenwand.php` auslösen (AP-1.5).
+     *
+     * WARUM NICHT SOFORT SCHREIBEN: Eine Anfrage kann mehrere Änderungen
+     * melden — etwa wenn ein Vorgang Freigabe und Tafelbild zugleich berührt.
+     * Jede einzeln zu schreiben hieße, dieselbe Datei mehrfach neu aufzubauen
+     * und dafür jedes Mal die Datenbank zu befragen. Gesammelt wird daraus
+     * genau ein Schreibvorgang je Klasse, und der läuft auf `shutdown`, also
+     * NACH der Antwort an den Browser — der Klick der Lehrperson wird dadurch
+     * nicht langsamer.
+     *
+     * @param int $class_id Klassen-ID.
+     * @return void
+     */
+    public static function merke_aenderung($class_id) {
+        $class_id = (int) $class_id;
+
+        if ($class_id <= 0) {
+            return;
+        }
+
+        self::$offene_klassen[$class_id] = true;
+
+        if (self::$shutdown_angemeldet) {
+            return;
+        }
+
+        self::$shutdown_angemeldet = true;
+
+        // Priorität 20: nach den üblichen Aufräumarbeiten anderer Zuhörer.
+        add_action('shutdown', array(__CLASS__, 'schreibe_offene'), 20);
+    }
+
+    /**
+     * Die vorgemerkten Klassen abarbeiten.
+     *
+     * DIE LISTE WIRD GELEERT, BEVOR GESCHRIEBEN WIRD. Löste ein Schreibvorgang
+     * seinerseits die Aktion aus, liefe die Schleife sonst endlos.
+     *
+     * Öffentlich, weil `add_action()` einen erreichbaren Rückruf braucht.
+     *
+     * @return void
+     */
+    public static function schreibe_offene() {
+        $klassen = array_keys(self::$offene_klassen);
+
+        self::$offene_klassen = array();
+
+        foreach ($klassen as $class_id) {
+            self::schreibe_pulsdatei($class_id);
+        }
     }
 
     // ---------------------------------------------------------------------
