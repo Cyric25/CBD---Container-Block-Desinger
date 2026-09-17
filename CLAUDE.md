@@ -7066,6 +7066,301 @@ beheben, falls gewünscht).
 (Plugin-Header `Version:` mitgezogen) — notwendiger Auslieferungsschritt
 für das Cache-Busting der geänderten CSS-Dateien, keine Kosmetik.
 
+## Schneller Klassenpuls: die Pulsdatei (`PLAN-Schneller-Klassenpuls.md`, Phase 1, seit 2026-09-17)
+
+Die Live-Aktualisierung des Klassenmodus (Abschnitt „Klassenmodus:
+Live-Aktualisierung" oben) fragt heute alle ~10 Sekunden die Route
+`cbd/v1/klassenpuls` ab und bekommt vier kurze Signaturen zurück. **Der
+Flaschenhals ist nicht der Takt, sondern der vollständige WordPress-Bootstrap
+je Anfrage:** `docs/messung-klassenpuls.md`, Abschnitt 4, weist nach, dass
+eine *abgelehnte* Pulsanfrage genauso teuer ist wie eine erfolgreiche — 108 ms
+für 109 Byte, und die Kosten stecken fast vollständig im Hochfahren von
+WordPress, nicht in der Sitzungsprüfung oder den SQL-Aggregaten.
+
+Dieses Vorhaben nimmt Stufe 1 deshalb aus dem Bootstrap heraus: Dieselben vier
+Signaturen stehen zusätzlich in einer winzigen JSON-Datei unter
+`wp-content/uploads/`, die Apache bzw. nginx ohne PHP ausliefert.
+
+**Phase 1 baut ausschließlich die Serverseite. Niemand liest die Datei** — das
+tut erst Phase 2. Nach Phase 1 entstehen Pulsdateien im laufenden Betrieb,
+aber der Klassenmodus verhält sich für den Schüler unverändert.
+
+### Warum kein Push — die Frage ist beantwortet, nicht offen
+
+Der Betreiber hat seit 2026-09 einen KAS-Zugang, und die naheliegende
+Vermutung war, damit sei Push möglich. **Sie trifft nicht zu**, und das ist
+belegt statt vermutet (`docs/ERWEITERUNGSANALYSE-Schneller-Klassenpuls.md`,
+Abschnitt 3.1, sowie `docs/voraussetzungen-kas.md`):
+
+| Weg | Urteil |
+|---|---|
+| **WebSocket / eigener Node-Dienst** | scheidet aus. Laut all-inkl-Support im Shared Hosting „kaum umsetzbar und nicht empfehlenswert". Der Tarif ist ein **Webhosting-Tarif** (Frage 1 des Voraussetzungsprotokolls) — kein Managed-, kein Root-Server |
+| **Web Push (VAPID + Service Worker)** | technisch machbar, **für diesen Zweck untauglich**: Chrome, Firefox und Safari erzwingen `userVisibleOnly: true`. Jede Push-Nachricht müsste eine sichtbare Systembenachrichtigung erzeugen — ein Signal auf 25 Schülergeräten je Freigabe. Dazu Berechtigungsdialog je Gerät, iOS nur als installierte PWA, Transport über die Push-Server von Google/Mozilla/Apple (DSGVO) |
+| **SSE / Long-Polling** | belegt weiterhin einen PHP-Arbeitsprozess je Schüler — genau der Grund, aus dem schon das Vorgänger-Vorhaben Push verworfen hat |
+| **Cronjobs** | ab Tarif PrivatPlus vorhanden und hier auch verfügbar, aber Cron läuft Server→Server und erreicht keinen Browser. Nützlich fürs Aufräumen, nicht als Transport |
+
+**KAS ist das Verwaltungspanel, kein neues Prozessmodell.** Wer diese Frage
+künftig erneut stellt: Die Antwort steht in `docs/voraussetzungen-kas.md`,
+Abschnitt „Folgen für den Plan", Punkt 2 — **Phase 4 des Plans (gehaltene
+Verbindung) entfällt vollständig.**
+
+### Der Aufbau: aus zwei Stufen werden drei
+
+| Stufe | Takt | Was | Kostet |
+|---|---|---|---|
+| **1 — Pulsdatei** (neu) | ~2 s | statische JSON bei Apache/nginx, `fetch(..., {cache: 'no-cache'})`, meist HTTP 304 ohne Body | **kein PHP** |
+| **0 — Herzschlag** (die bestehende Route, seltener) | ~60 s | prüft die Sitzung, nennt Takt und Dateiadresse, **repariert** eine veraltete Datei | wie bisher |
+| **2 — Inhalte** (unverändert) | bei Bedarf | `cbd_get_page_classroom_data`, `cbd_student_get_data`, `GET cbd/v1/fragenwand` | unverändert |
+
+Die Nummerierung ist Absicht: Die REST-Route bleibt der **Anker** des Systems
+— Sitzungsprüfung, Takt, Selbstheilung —, sie tickt nur seltener.
+
+**Auf der Produktivinstallation gemessen** (`docs/voraussetzungen-kas.md`):
+Eine Pulsanfrage kostet dort rund **47 ms Server-Rechenzeit** mehr als ein
+statischer Abruf. Hochgerechnet auf 25 Schüler: rund 120 ms PHP-Zeit je
+Sekunde heute gegen rund 20 ms danach — bei fünffach besserer Reaktionszeit.
+
+### Die Datei
+
+```
+wp-content/uploads/container-block-designer/klassenpuls/puls-<class_id>-<hmac16>.json
+```
+
+```json
+{ "klasse": "a1b2c3d4e5f6", "fragenwand": "0f1e2d3c4b5a",
+  "seiten": { "1618": ["9988776655ff", "1122334455aa"] },
+  "takt": 10, "stand": 1789456123 }
+```
+
+**Eine Datei je Klasse, nicht je Seite.** Ein Umschalten schreibt dann genau
+eine Datei statt einer je betroffener Seite; der Browser braucht einen
+einzigen Abruf, unabhängig davon, auf welcher Seite er steht; und die Zahl der
+Dateien wächst mit der Zahl der Klassen, nicht mit Klassen × Seiten.
+
+**Die Obergrenze: weglassen statt kürzen.** Überschreitet die
+`seiten`-Abbildung `SEITEN_OBERGRENZE` (400), entfällt der Schlüssel
+**vollständig** und `seiten_unvollstaendig: true` kommt hinzu; der Browser
+holt `seite`/`tafel` dann über die Route. Eine gekürzte Liste sähe gültig aus,
+verschwiege aber Seiten, und für genau diese käme nie wieder eine
+Aktualisierung an — **dieselbe Fehlerklasse, gegen die sich das
+Vorgänger-Vorhaben schon bei der SQL-Verkettungsfunktion entschieden hat**,
+deren Längengrenze stillschweigend abschneidet.
+
+### Die Capability-URL — und warum sie keine zweite Token-Deutung ist
+
+Der Dateiname trägt 16 Hex-Zeichen aus
+
+```php
+hash_hmac('sha256', 'klassenpuls|' . $class_id, wp_salt('auth'))
+```
+
+**Die Datei prüft nichts, und sie muss nichts prüfen.** Ihr Inhalt sind
+ausschließlich Prüfsummen — dieselbe Feststellung, mit der schon die Route
+begründet wurde: „Der Puls liefert nur Zahlen, nie Inhalte." Ihre Adresse
+erfährt ein Browser **ausschließlich** aus der Antwort von `liefere_puls()`,
+also erst **nachdem** `CBD_Classroom_Gate::sitzung()` ihn durchgelassen hat.
+Es entsteht damit **kein zweiter Weg zur Token-Deutung** — die härteste Regel
+dieses Plugins bleibt unangetastet.
+
+**Bewusst akzeptierte Einschränkung:** Wer die Adresse einmal hatte, kann sie
+weiter abrufen, auch nach Ablauf seiner Sitzung. Er sieht dann Prüfsummen, die
+sich ändern, aber keinen Inhalt. Eine Rotation von `wp_salt('auth')` entwertet
+alle Adressen auf einen Schlag; `raeume_auf()` entfernt die toten Dateien dann
+von selbst.
+
+### Die Reparaturbedingung — der heikelste Punkt der Phase
+
+Der Herzschlag schreibt die Pulsdatei **nur**, wenn sie fehlt oder älter als
+`2 × HERZSCHLAG` (120 s) ist. `datei_veraltet()` entscheidet das.
+
+**Ohne diese Bedingung wäre der Herzschlag ein Wettlauf gegen die
+Schreibstellen:** Ein Herzschlag, der die Datenbank kurz **vor** einem
+gleichzeitigen Umschalten gelesen hat, überschriebe die bereits frischere
+Datei mit veralteten Werten. Der Browser sähe eine Signatur, die
+zurückspringt, und meldete eine Änderung, die es nicht gab.
+
+Mit der Bedingung ist die Herzschlag-Schreibung eine reine **Reparatur** — und
+genau das macht den Entwurf tragfähig: Wird eine Schreibstelle übersehen oder
+umgangen (direkter Eingriff in die Datenbank, Migration, künftiges AP), altert
+die Datei und wird erneuert. **Der schlimmste Fall einer vergessenen
+Schreibstelle ist damit „die Änderung kommt nach bis zu 120 Sekunden an",
+nicht „sie kommt nie an".**
+
+`clearstatcache()` vor `filemtime()` ist dabei Pflicht — ohne sie liefert PHP
+innerhalb derselben Anfrage einen zwischengespeicherten Zeitstempel, und eine
+gerade geschriebene Datei sähe weiterhin alt aus.
+
+### Die Aktion `cbd_klassenmodus_geaendert`
+
+```php
+do_action('cbd_klassenmodus_geaendert', (int) $class_id);
+```
+
+Acht Auslösestellen, jede **nach** der Fehlerprüfung und **vor** der
+Erfolgsantwort:
+
+| Datei | Methode |
+|---|---|
+| `class-cbd-classroom.php` | `ajax_toggle_behandelt()` (hinter der vorhandenen Nachprüfung `$verify`) |
+| `class-cbd-classroom.php` | `ajax_set_behandelt()` |
+| `class-cbd-classroom.php` | `ajax_save_drawing()` |
+| `class-cbd-fragenwand.php` | `ajax_fragenwand_add_note()` |
+| `class-cbd-fragenwand.php` | `ajax_fragenwand_toggle_note()` |
+| `class-cbd-fragenwand.php` | `ajax_fragenwand_edit_note()` |
+| `class-cbd-fragenwand.php` | `ajax_fragenwand_delete_note()` |
+| `class-cbd-fragenwand.php` | `rest_add_note_from_student()` |
+
+Dazu entfernt `ajax_delete_class()` die Pulsdatei der gelöschten Klasse über
+`CBD_Klassenpuls::loesche_pulsdatei()`, hinter
+`class_exists()`/`method_exists()`.
+
+**Die Kopplung ist einseitig:** Beide Dateien lösen nur eine Aktion aus und
+müssen `CBD_Klassenpuls` nicht kennen; eine Aktion ohne Zuhörer ist wirkungslos
+statt fehlerhaft. Einziger Zuhörer ist `CBD_Klassenpuls::merke_aenderung()`,
+angemeldet in `init()`.
+
+**Die drei Einzelnotiz-Methoden nehmen jetzt den Rückgabewert von
+`require_note_access()` entgegen, den sie bisher verwarfen** — er **ist** die
+`class_id`. Bei `ajax_fragenwand_delete_note()` ist das zwingend: Nach dem
+`DELETE` gäbe es die Zeile nicht mehr, aus der sie zu lesen wäre.
+
+### Schreiben: atomar, lautlos, gesammelt
+
+`schreibe_pulsdatei()` hat drei Eigenschaften, die nicht verhandelbar sind:
+
+1. **Atomar.** Erst in eine Zwischendatei (`…json.<pid>.tmp`) im selben
+   Verzeichnis, dann `rename()`. Ein Leser bekommt nie eine halb geschriebene
+   Datei. Die Prozess-ID im Namen verhindert, dass zwei gleichzeitige Anfragen
+   einander ins Gehege kommen. **Jeder Rückgabepfad räumt die Zwischendatei
+   weg.**
+2. **Lautlos.** Ein Fehlschlag wirft nie, erzeugt keine PHP-Warnung und lässt
+   den auslösenden Vorgang nicht scheitern — das ist in der Regel der
+   Freigabe-Klick der Lehrperson vor der Klasse. Der Herzschlag holt es nach.
+3. **Gesammelt.** `merke_aenderung()` sammelt die Klassen-IDs je Anfrage und
+   meldet **einmal** `schreibe_offene()` auf `shutdown` an. Der Schreibvorgang
+   läuft damit **nach** der Antwort an den Browser. `schreibe_offene()` leert
+   die Liste **vor** dem Schreiben — sonst liefe eine selbst ausgelöste Aktion
+   endlos.
+
+**Die Notbremse gilt auch hier:** Bei `cbd_klassenpuls_takt = 0` wird nichts
+geschrieben. Bei 0 reiht `CBD_Classroom::enqueue_frontend_assets()` den
+Taktgeber auf keiner Seite ein — es liest also niemand.
+
+### Aufräumen
+
+`raeume_auf()`, täglich über den Termin `cbd_klassenpuls_aufraeumen`, entfernt
+
+- Pulsdateien, deren Klasse nicht mehr existiert,
+- Pulsdateien, deren Namensanteil nicht mehr zum heutigen `wp_salt()` passt
+  (tote Adressen aus einer früheren Salt-Generation),
+- Zwischendateien älter als eine Stunde.
+
+**Die Klassenliste wird einmal geholt, nicht je Datei** — sonst wäre das genau
+die N+1-Falle, die der Klassenpuls an anderer Stelle bewusst vermeidet.
+Fremde Dateien im Verzeichnis und frische Zwischendateien bleiben unangetastet.
+
+**Eingeplant wird in `init()`, nicht beim Aktivieren.** Der Aktivierungshaken
+dieses Plugins feuert nachweislich nie (siehe Abschnitt „Datenbank reparieren"
+oben); der **Deaktivierungs**haken feuert dagegen sehr wohl, und dort wird der
+Termin abgemeldet.
+
+### Die `.htaccess` — zweite Absicherung, kein tragender Schutz
+
+`verzeichnis_sicherstellen()` legt im Pulsverzeichnis einmalig eine
+`.htaccess` mit `Options -Indexes` und eine leere `index.php` an.
+
+**Sie wirkt:** Die Produktivinstallation meldet sich zwar als `nginx`, aber
+dahinter arbeitet ein Apache, der die Datei liest — dort sind auch die
+IP-Beschränkungen der Website umgesetzt (Auskunft der Hosting-Administration,
+2026-09-17). Produktiv ist sie trotzdem nur die zweite Verteidigungslinie,
+weil die Verzeichnisauflistung dort ohnehin abgeschaltet ist; auf dem lokalen
+Testserver ist sie die einzige.
+
+> **Aus dem `Server:`-Antwortkopf allein lässt sich das nicht ableiten.** Eine
+> frühere Fassung dieser Dokumentation schloss aus „nginx", die Datei sei
+> wirkungslos. Das war falsch: Der Kopf nennt die äußerste Schicht, nicht die
+> verarbeitende. Bei Shared Hosting ist nginx vor Apache die verbreitete
+> Aufstellung.
+
+**Der Schutz der Pulsdateien ruht nicht auf dieser Datei**, sondern auf dem
+unerratbaren HMAC-Anteil im Dateinamen und darauf, dass der Inhalt
+ausschließlich Prüfsummen sind.
+
+### Beim Kommentieren von `class-cbd-klassenpuls.php` beachten
+
+**Die Wächter der Gruppe D in `tools/test-klassenpuls.php` sind textbasiert
+und lesen den Quelltext samt Docblocks.** Die von ihnen verbotenen
+Zeichenfolgen dürfen deshalb auch in Kommentaren nicht wörtlich vorkommen —
+sonst schlägt der Wächter an, obwohl der Code in Ordnung ist. Der Bestandscode
+hält diese Regel seit je stillschweigend ein (er umschreibt die Begriffe);
+seit diesem Vorhaben steht sie als ausdrückliche Warnung in der Datei.
+
+Einzige Ausnahme ist **D7**, der seit AP-1.2 auf dem per `token_get_all()`
+kommentarfrei gemachten Quelltext arbeitet — er war ursprünglich so
+spezifiziert, dass er nie hätte grün werden können, weil die Klasse in zwei
+Bestandskommentaren zu Recht beschreibt, dass das Gate die Anfrageparameter
+selbst liest.
+
+### Prüfharnisch
+
+`php tools/test-klassenpuls.php` — **41 Prüfungen** ohne WordPress, in sechs
+Gruppen (A `baue_signatur()`, B `takt()`, C Konstanten/Registrierung, D
+Wächter, E Adresse und Pfad, F Inhalt und Schreiben). Entstanden nach TDD:
+roter Stand zuerst (22 grün / 19 rot), danach grün.
+
+**Zwei Schein-Grün-Fallen wurden beim Bauen gefunden und beseitigt** — beide
+hätten eine Prüfung geliefert, die gar nicht hätte fehlschlagen können:
+
+1. F7 war grün, bevor es etwas zu prüfen gab: Ohne Pulsverzeichnis findet
+   `glob()` trivialerweise keine Zwischendatei. Das Vorhandensein des
+   Verzeichnisses ist jetzt **Teil der Bedingung**.
+2. `dirname()` auf einen Fehlertext ergibt `'.'` — das aktuelle Verzeichnis,
+   das immer existiert. Der geprüfte Pfad kam aus dem Hilfsaufruf, der bei
+   fehlender Methode eine Zeichenkette zurückgibt. Der Pfad wird jetzt gegen
+   `wp_upload_dir()['basedir']` plausibilisiert.
+
+### Zwei Fallen beim Prüfen am lebenden WordPress
+
+Beide haben während dieser Phase Zeit gekostet und sehen wie Codefehler aus:
+
+1. **`$wp` ist das globale WordPress-Objekt.** Ein Prüfskript, das eine eigene
+   Variable `$wp` auf globaler Ebene setzt, überschreibt es — WordPress stirbt
+   dann an `Call to a member function add_query_var() on string`.
+2. **`CBD_Classroom_Gate::sitzung()` merkt sich ihr Ergebnis für die Dauer der
+   Anfrage.** Das ist richtig so: Eine HTTP-Anfrage hat genau eine Sitzung.
+   Mehrere Fälle in **einem** CLI-Prozess zu prüfen geht deshalb nur mit
+   `CBD_Classroom_Gate::sitzung_vergessen()` dazwischen — ohne das antwortet
+   jeder weitere Fall mit der zuerst geprüften Sitzung und sieht fälschlich
+   wie ein Sicherheitsloch aus.
+
+### Bekannte, bewusst akzeptierte Einschränkungen
+
+Aus dem unabhängigen Review `AP-1.rev` (0 kritisch, 3 mittel, 5 gering — die
+mittleren betrafen Buchführung und Testumgebung, nicht den Produktivcode):
+
+1. **Zwei der acht Auslösestellen feuern ohne Prüfung des
+   Datenbank-Rückgabewerts** — `ajax_save_drawing()` und
+   `ajax_set_behandelt()`. **Bewusst nicht behoben:** Beide Methoden haben
+   **gar keinen Fehlerpfad**, sie antworten seit jeher unbedingt mit
+   `wp_send_json_success()`. Eine Rückgabewertprüfung wäre eine Änderung an
+   Bestandscode. Die Fehlerrichtung ist harmlos: Wäre das Schreiben
+   fehlgeschlagen, hätte sich die Datenbank nicht geändert — die Signaturen
+   wären identisch, die Datei würde mit gleichem Inhalt neu geschrieben, der
+   Browser sähe nichts. **Eine verpasste Meldung wäre teuer, eine überflüssige
+   kostet einen Dateischreibvorgang.**
+2. **Der Wächter D7 deckt nur die Zeichenfolge `$_GET` ab.** Ein indirekter
+   Anfragezugriff (`$_REQUEST`, `$_COOKIE`, `filter_input(INPUT_GET, …)`,
+   `$GLOBALS['_GET']`, variable Variablen) ginge daran vorbei. Alle fünf
+   wurden im Review von Hand geprüft — 0 Treffer —, sind aber ungewacht.
+   Kandidat für ein `D9` in einer Folgephase.
+3. **Die Capability-URL bleibt nach Sitzungsende gültig.** Inhalt sind
+   ausschließlich Prüfsummen; eine Rotation von `wp_salt('auth')` entwertet
+   alle Adressen, und `raeume_auf()` entfernt die toten Dateien dann.
+4. **Eine übersehene oder umgangene Schreibstelle verzögert die
+   Aktualisierung um bis zu 120 Sekunden**, bis der Herzschlag repariert.
+   Nie länger — das ist die Eigenschaft, die den Entwurf tragfähig macht.
+
+
 ## Debugging-Konventionen
 
 - **PHP:** Informations-Logs laufen über klasseneigene `debug_log()`-Helper
