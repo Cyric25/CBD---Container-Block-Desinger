@@ -90,6 +90,28 @@ class CBD_Klassenpuls {
     const OPTION_TAKT = 'cbd_klassenpuls_takt';
 
     /**
+     * Unterordner der Pulsdateien unterhalb von `wp_upload_dir()['basedir']`
+     * bzw. `['baseurl']` (Vorhaben „Schneller Klassenpuls", AP-1.2).
+     *
+     * Bewusst OHNE führenden und ohne abschließenden Schrägstrich — die
+     * Trennzeichen setzen `pulsdatei_pfad()` und `pulsdatei_url()` selbst.
+     */
+    const UNTERORDNER = 'container-block-designer/klassenpuls';
+
+    /**
+     * Höchstzahl an Seiteneinträgen in einer Pulsdatei.
+     *
+     * Wird sie überschritten, lässt `baue_pulsdaten()` (AP-1.3) die Abbildung
+     * `seiten` GANZ weg und setzt stattdessen `seiten_unvollstaendig` —
+     * **niemals kürzen**. Ein still abgeschnittener Datensatz fröre die
+     * Signatur ein und verschluckte jede weitere Änderung; genau gegen diese
+     * Fehlerklasse hat sich das Vorgänger-Vorhaben schon bei jener SQL-Funktion
+     * entschieden, die Bezeichner zu einer Zeichenkette verkettet: Deren
+     * Längengrenze schneidet stillschweigend ab.
+     */
+    const SEITEN_OBERGRENZE = 400;
+
+    /**
      * Route auf `rest_api_init` anmelden.
      *
      * @return void
@@ -507,6 +529,213 @@ class CBD_Klassenpuls {
      *
      * @return WP_REST_Response
      */
+    // ---------------------------------------------------------------------
+    // Die Pulsdatei: Adresse, Pfad und Verzeichnis (AP-1.2)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Dateiname der Pulsdatei einer Klasse.
+     *
+     * Form: `puls-<class_id>-<16 Hex-Zeichen>.json`
+     *
+     * WARUM EIN HMAC IM NAMEN — DIE ENTSCHEIDENDE STELLE DIESES APs
+     * Die Pulsdatei wird von Apache bzw. nginx ausgeliefert, ohne dass PHP
+     * läuft. Sie kann also gar nichts prüfen — und sie MUSS auch nichts
+     * prüfen: Ihr Inhalt sind ausschließlich Prüfsummen, niemals Inhalte.
+     * Unerratbar wird die Adresse durch einen Anteil, der aus einem
+     * Servergeheimnis abgeleitet ist; erfahren kann sie ein Browser nur aus
+     * der Antwort von `liefere_puls()`, also erst NACHDEM
+     * `CBD_Classroom_Gate::sitzung()` ihn durchgelassen hat.
+     *
+     * Damit entsteht KEIN zweiter Weg zur Token-Deutung — die härteste Regel
+     * dieses Plugins bleibt unangetastet. `tools/test-klassenpuls.php`
+     * (Gruppe D) wacht darüber: Diese Datei darf weder selbst in den
+     * Sitzungsspeicher greifen noch die Anfrageparameter am Gate vorbei lesen.
+     *
+     * ACHTUNG BEIM KOMMENTIEREN DIESER DATEI: Die Wächter der Gruppe D sind
+     * textbasiert und lesen den Quelltext samt Docblocks. Die von ihnen
+     * verbotenen Zeichenfolgen dürfen deshalb auch in Kommentaren nicht
+     * wörtlich vorkommen — sonst schlägt der Wächter an, obwohl der Code in
+     * Ordnung ist. (Einzige Ausnahme ist D7, der seit AP-1.2 auf dem
+     * kommentarfreien Quelltext arbeitet.)
+     *
+     * BEWUSST KEIN `sanitize_file_name()`: Die Zeichenmenge ist durch die
+     * Konstruktion bereits auf Ziffern, Bindestriche und Hex beschränkt. Eine
+     * zusätzliche Bereinigung könnte den Namen nur verändern, ohne ihn
+     * sicherer zu machen — und ein verändeter Name fände seine Datei nicht.
+     *
+     * BEKANNTE, BEWUSST AKZEPTIERTE EINSCHRÄNKUNG: Wer die Adresse einmal
+     * hatte, kann sie weiter abrufen, auch nach Ablauf seiner Sitzung. Er
+     * sieht dann Prüfsummen, die sich ändern, aber keinen Inhalt. Eine
+     * Rotation von `wp_salt('auth')` entwertet alle Adressen auf einen Schlag.
+     *
+     * @param int $class_id Klassen-ID.
+     * @return string Dateiname, oder `''` bei unplausibler Klassen-ID.
+     */
+    public static function pulsdatei_name($class_id) {
+        $class_id = (int) $class_id;
+
+        if ($class_id <= 0) {
+            return '';
+        }
+
+        $hmac = hash_hmac('sha256', 'klassenpuls|' . $class_id, wp_salt('auth'));
+
+        return 'puls-' . $class_id . '-' . substr($hmac, 0, 16) . '.json';
+    }
+
+    /**
+     * Pfad und Adresse des Uploads-Verzeichnisses, beide normalisiert.
+     *
+     * STANDARD IST ABLEHNUNG: Fehlt eine der beiden Angaben, ist sie keine
+     * nicht-leere Zeichenkette, oder meldet `wp_upload_dir()` selbst einen
+     * Fehler, kommt `null` zurück. Es wird NICHT geraten und NICHT selbst ein
+     * Pfad zusammengesetzt — eine Pulsdatei an einer geratenen Stelle wäre
+     * schlimmer als gar keine.
+     *
+     * @return array|null array('pfad' => string, 'url' => string) oder null.
+     */
+    private static function basisverzeichnis() {
+        if (!function_exists('wp_upload_dir')) {
+            return null;
+        }
+
+        $verzeichnis = wp_upload_dir();
+
+        if (!is_array($verzeichnis) || !empty($verzeichnis['error'])) {
+            return null;
+        }
+
+        if (!isset($verzeichnis['basedir'], $verzeichnis['baseurl'])) {
+            return null;
+        }
+
+        if (!is_string($verzeichnis['basedir']) || '' === $verzeichnis['basedir']) {
+            return null;
+        }
+
+        if (!is_string($verzeichnis['baseurl']) || '' === $verzeichnis['baseurl']) {
+            return null;
+        }
+
+        return array(
+            // Trennzeichen vereinheitlichen: Unter Windows liefert
+            // `wp_upload_dir()` gemischte Pfade. Für den Dateizugriff ist das
+            // gleichgültig, für den Vergleich in Prüfungen nicht.
+            'pfad' => rtrim(str_replace('\\', '/', $verzeichnis['basedir']), '/'),
+            'url'  => rtrim($verzeichnis['baseurl'], '/'),
+        );
+    }
+
+    /**
+     * Dateisystempfad der Pulsdatei einer Klasse.
+     *
+     * @param int $class_id Klassen-ID.
+     * @return string Pfad, oder `''` wenn Name oder Basisverzeichnis fehlen.
+     */
+    public static function pulsdatei_pfad($class_id) {
+        $name = self::pulsdatei_name($class_id);
+
+        if ('' === $name) {
+            return '';
+        }
+
+        $basis = self::basisverzeichnis();
+
+        if (null === $basis) {
+            return '';
+        }
+
+        return $basis['pfad'] . '/' . self::UNTERORDNER . '/' . $name;
+    }
+
+    /**
+     * Öffentliche Adresse der Pulsdatei einer Klasse.
+     *
+     * DIE ADRESSE WIRD AUS `baseurl` GEBILDET, NIEMALS AUS DEM DATEIPFAD.
+     * Ein `str_replace()` von `basedir` gegen `baseurl` auf dem Ergebnis von
+     * `pulsdatei_pfad()` wäre naheliegend und falsch: Unter Windows geriete
+     * dabei ein Backslash in die URL, und der Browser fragte eine Adresse ab,
+     * die es nicht gibt. `tools/test-klassenpuls.php` (E7) prüft genau das.
+     *
+     * @param int $class_id Klassen-ID.
+     * @return string Adresse, oder `''` wenn Name oder Basisverzeichnis fehlen.
+     */
+    public static function pulsdatei_url($class_id) {
+        $name = self::pulsdatei_name($class_id);
+
+        if ('' === $name) {
+            return '';
+        }
+
+        $basis = self::basisverzeichnis();
+
+        if (null === $basis) {
+            return '';
+        }
+
+        return $basis['url'] . '/' . self::UNTERORDNER . '/' . $name;
+    }
+
+    /**
+     * Das Pulsverzeichnis anlegen und absichern.
+     *
+     * Legt bei Bedarf das Verzeichnis an und schreibt einmalig eine
+     * `.htaccess` sowie eine leere `index.php`. Beide nur, wenn sie noch
+     * nicht existieren — ein Überschreiben bei jedem Aufruf wäre unnötige
+     * Schreiblast und überschriebe eine vom Betrieb angepasste Datei.
+     *
+     * DIE `.htaccess` IST EINE ZWEITE ABSICHERUNG, KEIN TRAGENDER SCHUTZ.
+     * Die Produktivinstallation läuft hinter **nginx**, und nginx wertet eine
+     * `.htaccess` nicht aus — dort ist die Datei wirkungslos. Sie entsteht
+     * trotzdem, weil sie auf Apache-Umgebungen wirkt (unter anderem auf dem
+     * lokalen Testserver, wo die Verzeichnisauflistung nachweislich AN ist)
+     * und eine ignorierte Datei nichts kostet. Belege und Messwerte:
+     * `docs/voraussetzungen-kas.md`, Abschnitt „Folgen für den Plan", Punkt 3.
+     *
+     * **Der Schutz der Pulsdateien ruht deshalb NICHT auf dieser Datei**,
+     * sondern auf dem unerratbaren HMAC-Anteil im Dateinamen (siehe
+     * `pulsdatei_name()`) und darauf, dass der Inhalt ausschließlich
+     * Prüfsummen sind. Wer die `.htaccess` künftig entfernt, schwächt nichts
+     * Tragendes; wer sich auf sie verlässt, irrt.
+     *
+     * Alle Schreibvorgänge sind mit `@` unterdrückt und über den Rückgabewert
+     * geprüft: Ein Fehlschlag wirft nie, sondern liefert `false`. Der Aufrufer
+     * (`schreibe_pulsdatei()`, AP-1.4) bricht dann lautlos ab — der Herzschlag
+     * holt die Datei später nach.
+     *
+     * @return bool true, wenn das Verzeichnis danach existiert und beschreibbar ist.
+     */
+    private static function verzeichnis_sicherstellen() {
+        $basis = self::basisverzeichnis();
+
+        if (null === $basis) {
+            return false;
+        }
+
+        $verzeichnis = $basis['pfad'] . '/' . self::UNTERORDNER;
+
+        if (!is_dir($verzeichnis)) {
+            if (!function_exists('wp_mkdir_p') || !wp_mkdir_p($verzeichnis)) {
+                return false;
+            }
+        }
+
+        $htaccess = $verzeichnis . '/.htaccess';
+
+        if (!file_exists($htaccess)) {
+            @file_put_contents($htaccess, "Options -Indexes\n");
+        }
+
+        $index = $verzeichnis . '/index.php';
+
+        if (!file_exists($index)) {
+            @file_put_contents($index, '');
+        }
+
+        return is_dir($verzeichnis) && is_writable($verzeichnis);
+    }
+
     private static function ablehnen() {
         return new WP_REST_Response(
             array(

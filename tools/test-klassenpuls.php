@@ -206,6 +206,36 @@ if ($hat_klassenpuls_datei) {
 }
 $klassenpuls_quelltext = $hat_klassenpuls_datei ? file_get_contents($klassenpuls_datei) : '';
 
+/**
+ * Derselbe Quelltext OHNE Kommentare — nur fuer D7.
+ *
+ * D7 war in AP-1.1 falsch spezifiziert: Es verbot die Zeichenfolge `$_GET`
+ * im gesamten Dateitext. Die Datei beschreibt aber voellig zu Recht in zwei
+ * Bestandskommentaren, dass `CBD_Classroom_Gate::sitzung()` die
+ * Anfrageparameter selbst liest — der Waechter konnte deshalb NIE gruen
+ * werden, ohne richtige Dokumentation zu entfernen. Gemeint war immer die
+ * tatsaechliche Benutzung, nicht die Erwaehnung.
+ *
+ * Die uebrigen Waechter (D1, D2, D5) arbeiten weiterhin auf dem vollen Text.
+ * Das ist die im Projekt etablierte Konvention: Dort wird die verbotene
+ * Zeichenfolge in Kommentaren bewusst umschrieben. Sie duerften dieselbe
+ * Behandlung bekommen, das waere aber eine Aenderung an Bestandspruefungen
+ * und gehoert nicht in dieses AP.
+ */
+$klassenpuls_code = '';
+if ($hat_klassenpuls_datei) {
+    foreach (token_get_all($klassenpuls_quelltext) as $token) {
+        if (is_array($token)) {
+            if (T_COMMENT === $token[0] || T_DOC_COMMENT === $token[0]) {
+                continue;
+            }
+            $klassenpuls_code .= $token[1];
+        } else {
+            $klassenpuls_code .= $token;
+        }
+    }
+}
+
 // --- Prüfgerüst -------------------------------------------------------------
 
 $GLOBALS['fails'] = 0;
@@ -327,7 +357,7 @@ check('D6 · nutzt $wpdb->prepare', $hat_klassenpuls_datei && false !== strpos($
 // (Vorhaben „Schneller Klassenpuls") davon ab, ein zweiter Auth-Pfad zu
 // werden: Die Sitzung kommt weiterhin ausschliesslich aus dem Gate, und der
 // Dateiname ist wirklich abgeleitet statt aus der Klassen-ID geraten.
-check('D7 · kein $_GET (die Sitzung kommt nur aus dem Gate)', $hat_klassenpuls_datei && false === strpos($klassenpuls_quelltext, '$_GET'));
+check('D7 · kein $_GET im Code (Kommentare ausgenommen, s. o.)', $hat_klassenpuls_datei && false === strpos($klassenpuls_code, '$_GET'));
 check('D8 · nutzt hash_hmac und wp_salt (unerratbarer Dateiname)', $hat_klassenpuls_datei && false !== strpos($klassenpuls_quelltext, 'hash_hmac') && false !== strpos($klassenpuls_quelltext, 'wp_salt'));
 
 
