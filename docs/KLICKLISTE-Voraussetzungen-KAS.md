@@ -20,6 +20,44 @@ nächsten Mal.
 
 ---
 
+## Zuerst: das Konsolenskript laufen lassen
+
+`docs/pruefung-voraussetzungen.js` beantwortet **vier der sieben Fragen von
+selbst** und spart damit den größten Teil der Handarbeit.
+
+1. Als Administrator auf der Produktivwebsite anmelden.
+2. Irgendeine Seite im WP-Adminbereich öffnen (Dashboard genügt).
+3. Entwicklerwerkzeuge öffnen (F12) → Reiter **Konsole**.
+4. Die Datei `docs/pruefung-voraussetzungen.js` vollständig hineinkopieren
+   und Enter drücken. Der Lauf dauert rund 20 Sekunden.
+5. Der Textblock landet automatisch in der Zwischenablage — zurückschicken.
+   Klemmt die Zwischenablage: `copy(cbdVoraussetzungenBlock)` eingeben.
+
+Das Skript ist **ausschließlich lesend**: Es lädt nichts hoch, legt nichts an
+und ändert keine Einstellung.
+
+| Frage | Skript | Von Hand |
+|---|---|---|
+| 1 · Produkt/Tarif | — | **ja** |
+| 2 · Cronjobs | — | **ja** (bereits beantwortet) |
+| 3 · PHP-Version | **ja** | — |
+| 4 · `.user.ini` wirksam | — | **ja**, nur bei Managed-/Root-Server nötig |
+| 5 · uploads beschreibbar | **ja** | nur als Rückfall |
+| 6 · `.json` ausgeliefert | **teilweise** | siehe unten |
+| 7 · Verzeichnisauflistung | **ja** | — |
+
+**Was bei Frage 6 offenbleibt:** Das Skript fragt eine *nicht vorhandene*
+`.json` ab und vergleicht sie mit einer ebenso nicht vorhandenen `.txt`
+(Kontrollgruppe). Das erkennt eine Sperre, die den Dateityp generell
+blockiert — aber nicht eine, die nur *vorhandene* `.json` sperrt. Meldet das
+Skript „KEINE SPERRE erkennbar", ist der Handtest aus Frage 6 trotzdem die
+letzte Instanz; er ist dann aber nur noch eine Bestätigung.
+
+**Wenn das Skript alles Erwartete meldet**, bleiben von Hand nur noch die
+Fragen **1** und **4** — rund fünf Minuten.
+
+---
+
 ## Frage 1 — Welches Produkt? (die wichtigste Frage)
 
 **Warum:** Sie entscheidet, ob Phase 4 des Plans (gehaltene Verbindung,
@@ -57,7 +95,7 @@ Seite besucht. Ein echter Cronjob macht ihn zuverlässig.
   „alle 1 Minute".) **Den Cronjob dabei nicht speichern** — nur ansehen und
   abbrechen.
 
-**Antwort:**
+**Antwort:** Ja können eingerichtet werden
 
 ---
 
