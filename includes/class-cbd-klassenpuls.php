@@ -530,6 +530,146 @@ class CBD_Klassenpuls {
      * @return WP_REST_Response
      */
     // ---------------------------------------------------------------------
+    // Die Pulsdatei: Inhalt (AP-1.3)
+    // ---------------------------------------------------------------------
+
+    /**
+     * Dieselben zwei Signaturen wie `signaturen_seite()`, aber für ALLE Seiten
+     * einer Klasse in EINER Abfrage.
+     *
+     * Die Route braucht sie je Seite einzeln, die Pulsdatei für die ganze
+     * Klasse. Statt `signaturen_seite()` in einer Schleife aufzurufen (eine
+     * Abfrage je Seite), gruppiert diese Methode dieselben Aggregate über
+     * `page_id`.
+     *
+     * ES ENTSTEHT AUSDRÜCKLICH KEINE ZWEITE SIGNATURLOGIK. Die Werte laufen
+     * durch dieselbe Methode `baue_signatur()` und in derselben Reihenfolge
+     * wie in `signaturen_seite()`:
+     *
+     *     seite = baue_signatur([anzahl, frei, pruefsumme])
+     *     tafel = baue_signatur([zuletzt])
+     *
+     * **Diese Reihenfolge ist Vertrag, nicht Geschmackssache.** Weicht sie ab,
+     * liefern Pulsdatei und Route für denselben Zustand verschiedene
+     * Signaturen — der Browser sähe bei jedem Herzschlag eine Änderung, die es
+     * nicht gibt, und holte endlos Inhalte nach. Wer eine der beiden Methoden
+     * ändert, muss die andere mitziehen.
+     *
+     * Bewusst NICHT über eine SQL-Funktion, die die Bezeichner zu einer
+     * Zeichenkette verkettet: Deren Längengrenze (Vorgabe 1024 Byte) schneidet
+     * ab etwa 44 Containern je Seite STILLSCHWEIGEND ab und fröre die Signatur
+     * ein. `COUNT()`, `SUM()` und `MAX()` haben diese Grenze nicht.
+     *
+     * Der Index `UNIQUE KEY class_page_container (class_id, page_id,
+     * container_id)` trägt die `WHERE`-Klausel und die Gruppierung.
+     *
+     * @param int $class_id Aus der geprüften Sitzung.
+     * @return array array((string) page_id => array(seite, tafel)); leer bei
+     *               Abfragefehler — die stille Richtung, es wird nichts
+     *               zusätzlich angezeigt.
+     */
+    private static function signaturen_alle_seiten($class_id) {
+        global $wpdb;
+
+        $class_id = (int) $class_id;
+
+        if ($class_id <= 0 || !defined('CBD_TABLE_DRAWINGS')) {
+            return array();
+        }
+
+        $zeilen = $wpdb->get_results($wpdb->prepare(
+            'SELECT page_id,'
+            . ' COUNT(*) AS anzahl,'
+            . ' COALESCE(SUM(is_behandelt), 0) AS frei,'
+            . ' COALESCE(SUM(id * is_behandelt), 0) AS pruefsumme,'
+            . " COALESCE(MAX(updated_at), '') AS zuletzt"
+            . ' FROM ' . CBD_TABLE_DRAWINGS
+            . ' WHERE class_id = %d'
+            . ' GROUP BY page_id',
+            $class_id
+        ));
+
+        if (!is_array($zeilen)) {
+            return array();
+        }
+
+        $seiten = array();
+
+        foreach ($zeilen as $zeile) {
+            if (!is_object($zeile) || !isset($zeile->page_id)) {
+                continue;
+            }
+
+            $page_id = (int) $zeile->page_id;
+
+            if ($page_id <= 0) {
+                continue;
+            }
+
+            $anzahl     = isset($zeile->anzahl) ? (int) $zeile->anzahl : 0;
+            $frei       = isset($zeile->frei) ? (int) $zeile->frei : 0;
+            $pruefsumme = isset($zeile->pruefsumme) ? (int) $zeile->pruefsumme : 0;
+            $zuletzt    = isset($zeile->zuletzt) ? (string) $zeile->zuletzt : '';
+
+            // Schlüssel als Zeichenkette: Der Browser liest die Abbildung mit
+            // `daten.seiten[String(seiteId)]`, und JSON-Objektschlüssel sind
+            // ohnehin immer Zeichenketten.
+            $seiten[(string) $page_id] = array(
+                self::baue_signatur(array($anzahl, $frei, $pruefsumme)),
+                self::baue_signatur(array($zuletzt)),
+            );
+        }
+
+        return $seiten;
+    }
+
+    /**
+     * Der vollständige Inhalt einer Pulsdatei.
+     *
+     * `$seiten` wird ÜBERGEBEN statt intern geholt. Das ist Absicht: So lässt
+     * sich die Obergrenze unten ohne Datenbank prüfen (`tools/test-klassenpuls.php`,
+     * F3/F4), und der Aufrufer entscheidet, wann die teurere Abfrage läuft.
+     *
+     * DIE OBERGRENZE: WEGLASSEN STATT KÜRZEN.
+     * Trägt eine Klasse mehr als `SEITEN_OBERGRENZE` Seiten mit Zeichnungs-
+     * datensätzen, entfällt der Schlüssel `seiten` VOLLSTÄNDIG und es kommt
+     * `seiten_unvollstaendig` hinzu. Der Browser holt `seite` und `tafel` dann
+     * über die Route, wie vor diesem Vorhaben.
+     *
+     * Eine gekürzte Abbildung wäre der schlechtere Weg: Sie sähe gültig aus,
+     * verschwiege aber Seiten, und für genau diese käme nie wieder eine
+     * Aktualisierung an. Ein fehlender Schlüssel ist laut, eine gekürzte Liste
+     * ist still — und stille Fehler sind in diesem Bereich schon zweimal teuer
+     * geworden.
+     *
+     * @param int   $class_id Aus der geprüften Sitzung.
+     * @param array $seiten   Ergebnis von `signaturen_alle_seiten()`.
+     * @return array Der Dateiinhalt, fertig für `wp_json_encode()`.
+     */
+    public static function baue_pulsdaten($class_id, $seiten) {
+        $class_id = (int) $class_id;
+
+        if (!is_array($seiten)) {
+            $seiten = array();
+        }
+
+        $daten = array(
+            'klasse'     => self::signatur_klasse($class_id),
+            'fragenwand' => self::signatur_fragenwand($class_id),
+            'takt'       => self::takt(),
+            'stand'      => time(),
+        );
+
+        if (count($seiten) > self::SEITEN_OBERGRENZE) {
+            $daten['seiten_unvollstaendig'] = true;
+        } else {
+            $daten['seiten'] = $seiten;
+        }
+
+        return $daten;
+    }
+
+    // ---------------------------------------------------------------------
     // Die Pulsdatei: Adresse, Pfad und Verzeichnis (AP-1.2)
     // ---------------------------------------------------------------------
 
