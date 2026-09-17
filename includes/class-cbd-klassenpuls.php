@@ -616,23 +616,6 @@ class CBD_Klassenpuls {
 
         return substr(md5(implode('|', $teile)), 0, 12);
     }
-
-    /**
-     * Die einheitliche Ablehnung dieses Endpunkts.
-     *
-     * Zeichengleich für JEDEN Fehlschlag: Gate-Klasse fehlt, Tabellenkonstante
-     * fehlt, keine Sitzung, abgelaufenes oder gefälschtes Token, `?classroom=`
-     * passt nicht zur Sitzung, unplausible Klassen-ID. Es darf sich nicht
-     * ablesen lassen, WORAN es gelegen hat — sonst wäre der Endpunkt ein
-     * Prüfstand für geratene Klassen-IDs und Tokens.
-     *
-     * Als `WP_REST_Response` mit `code`/`message` statt als `WP_Error`, damit
-     * die Antwort zeichengleich zu `cbd/v1/block-html` ausfällt
-     * (`CBD_Block_Content_API::ablehnen()`) — beide Endpunkte sollen von außen
-     * nicht unterscheidbar sein.
-     *
-     * @return WP_REST_Response
-     */
     // ---------------------------------------------------------------------
     // Herzschlag: Dateitakt und Reparatur (AP-1.6)
     // ---------------------------------------------------------------------
@@ -1364,6 +1347,29 @@ class CBD_Klassenpuls {
         return is_dir($verzeichnis) && is_writable($verzeichnis);
     }
 
+    /**
+     * Die einheitliche Ablehnung dieses Endpunkts.
+     *
+     * Zeichengleich für JEDEN Fehlschlag: Gate-Klasse fehlt, Tabellenkonstante
+     * fehlt, keine Sitzung, abgelaufenes oder gefälschtes Token, `?classroom=`
+     * passt nicht zur Sitzung, unplausible Klassen-ID. Es darf sich nicht
+     * ablesen lassen, WORAN es gelegen hat — sonst wäre der Endpunkt ein
+     * Prüfstand für geratene Klassen-IDs und Tokens.
+     *
+     * Als `WP_REST_Response` mit `code`/`message` statt als `WP_Error`, damit
+     * die Antwort zeichengleich zu `cbd/v1/block-html` ausfällt
+     * (`CBD_Block_Content_API::ablehnen()`) — beide Endpunkte sollen von außen
+     * nicht unterscheidbar sein.
+     *
+     * @return WP_REST_Response
+     *
+     * PFLEGEHINWEIS (Befund G1 aus AP-1.rev): Dieser Docblock war seit
+     * AP-1.2 rund 750 Zeilen von seiner Methode getrennt — neue
+     * Abschnitte waren zwischen Beschreibung und Rumpf geraten, und er
+     * schien den Abschnitt zu beschreiben, vor dem er zufällig lag. Wer
+     * ganze Abschnitte einfügt, prüft deshalb, ob die Einfügestelle
+     * zwischen einem Docblock und seiner Methode liegt.
+     */
     private static function ablehnen() {
         return new WP_REST_Response(
             array(

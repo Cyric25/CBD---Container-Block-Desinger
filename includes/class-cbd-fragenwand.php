@@ -1273,11 +1273,11 @@ class CBD_Fragenwand {
             );
         }
 
-        // Nur die ID zurück — das Frontend lädt die Liste danach ohnehin neu
-        // und bekommt die Notiz dabei an ihrer sortierten Stelle.
         // Pulsdatei der Klasse erneuern (Vorhaben „Schneller Klassenpuls“, AP-1.5).
         do_action('cbd_klassenmodus_geaendert', (int) $class_id);
 
+        // Nur die ID zurück — das Frontend lädt die Liste danach ohnehin neu
+        // und bekommt die Notiz dabei an ihrer sortierten Stelle.
         return rest_ensure_response(array('id' => (int) $wpdb->insert_id));
     }
 
