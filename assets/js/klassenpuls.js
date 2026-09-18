@@ -1177,6 +1177,20 @@
 	 * `credentials: 'omit'`, weil die Datei keine Anmeldung braucht - so
 	 * reisen bei jedem Abruf keine Cookies mit.
 	 *
+	 * UMGEKEHRTE REIHENFOLGE ALS AUF DEM ROUTENPFAD, UND DAS IST KEIN
+	 * VERSEHEN (Befund G7 aus AP-2.rev). Hier wird im Erfolgszweig ERST
+	 * gemeldet (`verarbeiteDatei()` vergleicht und feuert) und DANN geplant;
+	 * `verarbeiteAntwort()` macht es andersherum und begruendet das
+	 * ausfuehrlich mit „ein Abonnent, der `halte()` ruft, gewinnt".
+	 *
+	 * Die Zusicherung gilt hier trotzdem, nur ueber einen anderen
+	 * Mechanismus: `halte()` setzt `aktiv = false` und loescht beide
+	 * Zeitgeber, und das nachfolgende `planeNaechsteDateiAbfrage()` steigt an
+	 * seinem eigenen `!aktiv`-Waechter wieder aus. WER DIESEN WAECHTER
+	 * ENTFERNT - er sieht neben `dateiModusAktiv()` redundant aus -, BRICHT
+	 * DIE REGEL STILL. Dann muss der Aufruf hierher vor `verarbeiteDatei()`
+	 * wandern.
+	 *
 	 * @returns {void}
 	 */
 	function frageDateiAb() {

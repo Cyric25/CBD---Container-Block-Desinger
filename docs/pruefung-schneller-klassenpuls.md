@@ -2,8 +2,8 @@
 
 _Durchgeführt: 2026-09-17 · Gehört zu `PLAN-Schneller-Klassenpuls.md`, AP-2.3_
 
-> **Kurzfassung: bestanden.** Alle 16 Einzelprüfungen der sechs Gruppen sind
-> durchgeführt. Kein Abonnent verhält sich unter dem fünfmal schnelleren Takt
+> **Kurzfassung: bestanden.** Alle **18** Einzelprüfungen der sechs Gruppen
+> sind durchgeführt. Kein Abonnent verhält sich unter dem fünfmal schnelleren Takt
 > anders als zuvor. **Ein Befund**, gering und nicht durch dieses Vorhaben
 > verursacht; dazu drei Umgebungsnotizen. Der zweite Befund B2 — eine
 > zunächst nicht durchführbare Prüfung — ist am selben Tag nachgeholt
@@ -255,10 +255,20 @@ muss eine **reduzierte** Seite byteweise dasselbe liefern wie vor Phase 2.
 `27fd540291402431d04ff5fdedc71650`, `cmp` meldet keinen Unterschied.
 `klassenpuls.js` kommt im Quelltext **0-mal** vor.
 
-Das ist auch strukturell zu erwarten — Phase 2 hat nur `klassenpuls.js`
-angefasst, und bei Takt 0 wird die Datei gar nicht erst eingereiht. Gemessen
-ist es trotzdem, weil „zu erwarten" in diesem Projekt schon mehrfach falsch
-war.
+> **Diese Prüfung hat für Phase 2 keine Unterscheidungskraft — deutlicher,
+> als die erste Fassung dieses Berichts sagte** (Befund G2 aus `AP-2.rev`).
+> Bei Takt 0 wird `klassenpuls.js` gar nicht eingereiht: `grep -c klassenpuls`
+> über den gespeicherten Antwortkörper ergibt **0**. Der Vergleich hätte also
+> **auch dann bestanden, wenn die Datei beliebiger Unsinn wäre** — und
+> `klassenpuls.js` ist die einzige geänderte Datei der Phase. Das Kriterium
+> ist formal erfüllt, sein Beweiswert für das, was sich geändert hat, ist
+> null. Die Ursache liegt im Plantext: Ein Kriterium, das „die
+> Regressionsgrenze des ganzen Vorhabens" prüfen soll, hätte einen Zustand
+> vergleichen müssen, in dem die Datei tatsächlich läuft.
+>
+> **Was die Prüfung trotzdem wert ist:** Sie belegt, dass die **Notbremse**
+> greift — bei Takt 0 ist die Auslieferung byteidentisch zum Zustand vor dem
+> Vorhaben. Das ist eine Zusicherung, nur eine andere als die behauptete.
 
 ---
 
@@ -275,7 +285,64 @@ Sie ist der Grund, warum `WP_DEBUG_LOG` produktiv aus bleiben muss.
 
 ---
 
+## Nachtrag: Stufe-2-Last auf normalen Seiten (Befund M1 aus AP-2.rev)
+
+_Nachgemessen am 2026-09-17, nachdem das Review die Lücke gefunden hatte._
+
+Prüfung 2b hat das Zeichnen nur auf der **gesperrten** Seite gemessen. Dort
+greift `MINDESTABSTAND_MS = 60000`, deshalb das beruhigende „1 Neuladung je
+Minute". Auf **normalen** Seiten gibt es diese Bremse nicht: Der `else`-Zweig
+von `verdrahteKlassenpuls()` (`classroom-page-filter.js:408`/`:418`) hängt
+`'seite'` und `'tafel'` direkt an `aktualisiere()` bzw.
+`aktualisiereTafelbilder()`, und jede gesehene Änderung löst **einen**
+`cbd_get_page_classroom_data` aus — also einen vollständigen
+WordPress-Bootstrap. Kein Mindestabstand, kein Entprellen.
+
+**Gemessen** (derselbe Aufbau wie 2b — 20 Tafelbild-Speicherungen in
+60 Sekunden, Zählung der Stufe-2-Aufrufe über einen `ajaxSend`-Zähler im
+Browser):
+
+| Takt | Stufe-2-Aufrufe |
+|---|---|
+| schnell (Pulsdatei, 2–3 s) | **20** |
+| Rückfalltakt 10 s (= Zustand vor Phase 2) | **9** |
+
+**Faktor rund 2,2 im ungünstigsten Fall.** Hochgerechnet auf PHP-Anfragen je
+Schüler und Minute, bei **durchgehendem** Zeichnen:
+
+| | Puls/Herzschlag | Stufe 2 | PHP gesamt |
+|---|---|---|---|
+| vor Phase 2 | ~6 | ~9 | **~15** |
+| nach Phase 2 | ~1 | ~20 | **~21** |
+
+Im **Regelfall** — Freigaben von Zeit zu Zeit, kein Dauerzeichnen — fällt die
+PHP-Last dagegen von ~6 auf ~1 je Schüler und Minute, und genau das war das
+Ziel. Der Anstieg tritt nur in dem einen Betriebsfall auf, in dem die
+Lehrperson minutenlang ohne Unterbrechung zeichnet und speichert.
+
+> **Die Vergleichsmessung wäre beinahe misslungen.** Der erste Anlauf spielte
+> die `main`-Fassung von `klassenpuls.js` auf den Testserver — und der
+> Browser lieferte weiterhin die **Phase-2-Fassung aus dem Zwischenspeicher**
+> (`transferSize: 0`, und es liefen weiterhin `puls-*.json`-Abrufe). Der
+> bekannte `?ver=`-Fallstrick. Gemessen wurde deshalb über den
+> **Rückfallweg**: Pulsdatei umbenannt, Dateimodus nach drei Fehlschlägen
+> aus, Herzschlag zurück auf `takt = 10` — derselbe Takt wie vor Phase 2, mit
+> demselben Code.
+
+**Das kann Phase 2 nicht beheben.** Die Bremse müsste in
+`classroom-page-filter.js` sitzen — einen der vier Abonnenten, die dieses
+Vorhaben ausdrücklich **nicht** anfassen darf (Nicht-Ziel, Abschnitt 2 des
+Plans). Der Befund geht mit dieser Zahl an Phase 3.
+
+---
+
 ## Befunde
+
+### M1 — Stufe-2-Last auf normalen Seiten ungebremst (mittel, an Phase 3)
+
+Gefunden von `AP-2.rev`, nachgemessen: **20 gegen 9** Stufe-2-Aufrufe bei 20
+Speicherungen in 60 Sekunden. Einzelheiten im Nachtrag oben. Nicht in Phase 2
+behebbar, weil die Bremse in einen der vier unberührbaren Abonnenten gehört.
 
 ### B1 — Nummerierungslücken beim Schüler (gering, Bestand)
 
