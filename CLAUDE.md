@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Container Block Designer is a WordPress plugin that creates customizable container blocks for the Gutenberg Block Editor. It allows users to create, manage, and apply styled container blocks with features like collapsible sections, copy-to-clipboard, screenshots, and automatic numbering.
 
-**Current Version:** 3.1.127
+**Current Version:** 3.1.131
 **WordPress Requirements:** 6.0+
 **PHP Requirements:** 7.4+ (rückwärtskompatibel; getestet auf 7.4.33)
 **Tested up to:** WordPress 6.4, PHP 8.4
@@ -7127,7 +7127,7 @@ beheben, falls gewünscht).
 (Plugin-Header `Version:` mitgezogen) — notwendiger Auslieferungsschritt
 für das Cache-Busting der geänderten CSS-Dateien, keine Kosmetik.
 
-## Schneller Klassenpuls: die Pulsdatei (`PLAN-Schneller-Klassenpuls.md`, Phase 1, seit 2026-09-17)
+## Schneller Klassenpuls: die Pulsdatei (`PLAN-Schneller-Klassenpuls.md`, Phasen 1 und 2, seit 2026-09-17)
 
 Die Live-Aktualisierung des Klassenmodus (Abschnitt „Klassenmodus:
 Live-Aktualisierung" oben) fragt heute alle ~10 Sekunden die Route
@@ -7142,9 +7142,12 @@ Dieses Vorhaben nimmt Stufe 1 deshalb aus dem Bootstrap heraus: Dieselben vier
 Signaturen stehen zusätzlich in einer winzigen JSON-Datei unter
 `wp-content/uploads/`, die Apache bzw. nginx ohne PHP ausliefert.
 
-**Phase 1 baut ausschließlich die Serverseite. Niemand liest die Datei** — das
-tut erst Phase 2. Nach Phase 1 entstehen Pulsdateien im laufenden Betrieb,
-aber der Klassenmodus verhält sich für den Schüler unverändert.
+**Phase 1 baut ausschließlich die Serverseite** — Pulsdateien entstehen, aber
+niemand liest sie. **Phase 2 (abgeschlossen 2026-09-18) liest sie**, und erst
+damit wird die Live-Aktualisierung wirklich schneller: Eine Freigabe erscheint
+beim Schüler in **1,2 bis 3,6 Sekunden** statt in 5 bis 8. Der Clientteil
+steht im eigenen Unterabschnitt „Phase 2: der Client liest die Pulsdatei"
+weiter unten.
 
 ### Warum kein Push — die Frage ist beantwortet, nicht offen
 
@@ -7347,6 +7350,109 @@ Testserver ist sie die einzige.
 unerratbaren HMAC-Anteil im Dateinamen und darauf, dass der Inhalt
 ausschließlich Prüfsummen sind.
 
+### Phase 2: der Client liest die Pulsdatei
+
+Geändert wurde dafür **genau eine** Codedatei: `assets/js/klassenpuls.js`. Der
+Vertrag `window.cbdKlassenpuls` ist unverändert (dieselben sieben Namen,
+dieselben fünf Abonnentennamen), und die vier Abonnenten
+(`classroom-page-filter.js`, `classroom-frontend.js`,
+`fragenwand-frontend.js`) sind **byteidentisch** zum Stand davor. Das ist
+keine Absichtserklärung, sondern die Abnahmegrundlage: Eine unbemerkte
+Änderung am Vertrag würde alle vier Live-Funktionen gleichzeitig beschädigen.
+
+**Zwei Zeitgeber statt einem.** Der schnelle fragt die Pulsdatei
+(`frageDateiAb()`), der bestehende wird zum Herzschlag:
+
+| Stufe | Takt | Aufgabe |
+|---|---|---|
+| **1 — Pulsdatei** | ~2 s | vier Signaturen, kein PHP |
+| **0 — Herzschlag** (die REST-Route) | ~60 s | Sitzung prüfen, Takt und Dateiadresse nennen, veraltete Datei reparieren |
+| **2 — Inhalte** | bei Bedarf | unverändert die bestehenden Endpunkte |
+
+Die Basis des Herzschlags ist `Math.max(herzschlag, takt)`. Das `Math.max()`
+ist nicht kosmetisch: Ein Betrieb mit `cbd_klassenpuls_takt = 300` soll durch
+den Dateimodus nicht plötzlich **häufiger** abfragen als eingestellt.
+
+**Die Signaturübernahme liegt in `uebernehmeSignaturen()` — eine Funktion für
+beide Quellen.** Zwei Kopien wären zwei Gelegenheiten, Regel 1 („die erste
+Antwort meldet nichts") unterschiedlich auszulegen. `verarbeiteDatei()`
+übersetzt nur die Form der Datei (klassenweit, mit `seiten`-Abbildung) in die
+flache Form, die die Route liefert.
+
+**Der Takt kommt weiterhin ausschließlich aus der Route.** Das Feld `takt` in
+der Pulsdatei wird gelesen, aber **nicht verwendet** — eine Autorität, nicht
+zwei.
+
+#### Der Dateitakt streut nur nach oben, der REST-Takt um den Wert herum
+
+`dateiIntervallMs()` rechnet `taktDatei * 1000 * (1 + Zufall * 0,5)`, bei
+Vorgabe 2 s also gleichverteilt 2000–3000 ms. **Bewusst nicht die Formel des
+REST-Takts** (`0,75 + Zufall * 0,5` plus Klemmung): Beim kleinen Dateitakt
+würde deren Untergrenze ständig erreicht, und dann landet rund die Hälfte
+aller Planungen exakt auf dem Minimum — genau die Entzerrung fällt damit weg,
+die die Streuung bewirken soll. Das ist der Bestandsbefund **B10** aus
+`AP-1.rev` des Vorgängervorhabens, hier von Anfang an vermieden. Die Klemmung
+`DATEI_INTERVALL_MIN_MS` bleibt reine Absicherung und greift nie.
+
+#### Die Rückfallkette — der Grund, warum das ohne Risiko ist
+
+**Drei** Fehlschläge in Folge schalten den Dateimodus für diesen Seitenaufruf
+ab. Alle drei Fehlerarten münden in `behandleDateiFehler()`:
+
+| Fehlerart | Weg |
+|---|---|
+| HTTP-Fehler (404 …) | `!antwort.ok` → `Promise.reject` |
+| unlesbares JSON | `antwort.json()` lehnt ab |
+| Netzfehler | `fetch()` lehnt ab |
+
+Danach kehrt der Herzschlag auf `takt` zurück, und der Klassenmodus verhält
+sich wie vor dem Vorhaben — **nur wieder langsamer, nie gar nicht**. Der
+Rückfall meldet sich **einmal** mit `console.warn`, bewusst **nicht** hinter
+`window.cbdDebug`: Sonst fiele der Ausfall des schnellen Wegs niemandem auf.
+
+Anders als beim Rückzug aus Regel 3 wird hier **nicht verlangsamt, sondern
+aufgegeben** — eine Datei ist entweder da oder nicht.
+
+Am Testserver scharf geprüft: Pulsdatei umbenannt → im Apache-Zugriffsprotokoll
+stehen **genau drei** HTTP 404, danach 42 Sekunden lang kein weiterer Abruf,
+und der Herzschlag sprang von 61 s auf 12,4 s zurück.
+
+#### Zwei Fälle, in denen `seite`/`tafel` NICHT aus der Datei kommen
+
+1. **`seiten_unvollstaendig === true`** — die Klasse überschreitet die
+   serverseitige Obergrenze, der Schlüssel `seiten` fehlt dann ganz
+   (weglassen statt kürzen).
+2. **Die aktuelle `seiteId` hat keinen Eintrag in `seiten`** — für diese Seite
+   existiert noch kein Zeichnungsdatensatz.
+
+In beiden Fällen zieht der nächste Herzschlag die Werte nach. **Ein Ersatzwert
+wäre hier falsch:** Er müsste zeichengleich zu dem sein, was die Route für
+eine leere Menge berechnet, und jede Abweichung ließe die Signatur dauerhaft
+zwischen beiden Quellen hin- und herspringen — jeder Sprung kostet einen
+Stufe-2-Abruf.
+
+Ein fehlendes Feld wird gar nicht erst in die Übergabe aufgenommen. So bleibt
+die `hasOwnProperty`-Prüfung in `uebernehmeSignaturen()` zeichengleich zum
+Bestand, und eine beschädigte Datei kann eine bereits bekannte Signatur nicht
+mit `undefined` überschreiben — was die **nächste** echte Änderung
+verschluckt hätte.
+
+#### Prüfharnisch für den Client
+
+`node tools/test-klassenpuls-js.js` — **69 Prüfungen** ohne Browser, ohne
+jsdom, ohne npm. Gruppe A fährt die ausgelieferte Datei in einem
+`vm`-Kontext über ihre öffentliche Schnittstelle, Gruppe B schneidet
+`uebernehmeSignaturen()` und `verarbeiteDatei()` heraus (von außen nicht
+erreichbar), Gruppe C ersetzt `setTimeout` durch eine **virtuelle Uhr** —
+anders sind zwei Zeitgeber im Verhältnis 1:25 nicht in ihrer echten
+Verschränkung prüfbar, ohne minutenlang zu warten.
+
+**Der Kopfkommentar listet die 20 tragenden Mutationen**, gegen die der
+Harnisch geprüft ist. Wer ihn erweitert, sollte das wiederholen: Beim Bauen
+haben drei Prüfungen genau daran versagt — eine war ein Münzwurf (die falsche
+Streuformel überlappt die richtige zur Hälfte), eine prüfte den falschen
+Zustand, eine prüfte gar nichts.
+
 ### Beim Kommentieren von `class-cbd-klassenpuls.php` beachten
 
 **Die Wächter der Gruppe D in `tools/test-klassenpuls.php` sind textbasiert
@@ -7420,6 +7526,54 @@ mittleren betrafen Buchführung und Testumgebung, nicht den Produktivcode):
 4. **Eine übersehene oder umgangene Schreibstelle verzögert die
    Aktualisierung um bis zu 120 Sekunden**, bis der Herzschlag repariert.
    Nie länger — das ist die Eigenschaft, die den Entwurf tragfähig macht.
+5. **Eine Seite ohne Zeichnungsdatensatz wird erst über den Herzschlag
+   aktualisiert**, nicht über die Pulsdatei: Ihre `seiteId` hat dort keinen
+   Eintrag, und ein Ersatzwert ist ausgeschlossen (siehe „Zwei Fälle" oben).
+   Die Verzögerung beträgt damit bis zu einen Herzschlag, also rund 60
+   Sekunden — betrifft ausschließlich die **erste** Freigabe auf einer bis
+   dahin unberührten Seite.
+
+Aus dem unabhängigen Review `AP-2.rev` (0 kritisch, 1 mittel, 7 gering, 2
+Prozessnotizen; alle geringen in `AP-2.fix1` abgearbeitet):
+
+6. **Auf normalen Seiten ist die Stufe-2-Last ungebremst.** Der Zweig für
+   nicht reduzierte Seiten in `classroom-page-filter.js` hängt `'seite'` und
+   `'tafel'` direkt an `aktualisiere()` bzw. `aktualisiereTafelbilder()` —
+   ohne Mindestabstand, ohne Entprellen. Jede gesehene Änderung kostet einen
+   `cbd_get_page_classroom_data` und damit einen vollständigen
+   WordPress-Bootstrap. **Gemessen:** 20 Tafelbild-Speicherungen in 60
+   Sekunden ergeben **20** Stufe-2-Aufrufe im schnellen Takt gegen **9** im
+   Rückfalltakt von 10 Sekunden. PHP je Schüler und Minute bei durchgehendem
+   Zeichnen rund **21** gegen **15** vorher; im Regelfall dagegen **1** gegen
+   **6**. **Nicht in Phase 2 behebbar**, weil die Bremse in einen der vier
+   Abonnenten gehört, die das Vorhaben nicht anfassen darf — der Befund liegt
+   bei Phase 3. Auf **reduzierten** Seiten greift `MINDESTABSTAND_MS`: dort
+   bleibt es bei **einer** Neuladung je Minute, auch unter dem schnellen
+   Takt.
+7. **Die erwarteten HTTP-304-Antworten treten nie auf.** Der Browser fragt
+   die Pulsdatei nicht bedingt ab (137 × 200 gegen 4 × 304 im
+   Zugriffsprotokoll, alle vier 304er von `curl`). Der Server beherrscht den
+   bedingten Abruf einwandfrei — `If-Modified-Since` **und**
+   `If-None-Match`, auch mit `Cache-Control: max-age=0`. Vier Erklärungen
+   sind gemessen und ausgeschlossen (`credentials` in drei Varianten, ein
+   fehlender `Cache-Control`-Kopf, `cache: 'default'` — das liefert eine
+   veraltete Datei aus dem Zwischenspeicher und scheidet aus). **Die Ursache
+   bleibt unbekannt**, belegt ist nur „dieser Messbrowser". `cache:
+   'no-cache'` bleibt richtig: Nur es schließt eine veraltete Antwort aus.
+   Folgen hat es keine — 128 Byte Körper, und serverseitig kostet eine 200
+   auf eine statische Datei dasselbe wie eine 304.
+8. **Der Klassenmodus zeigt dem Schüler weiterhin Lücken in den
+   Blocknummern** (etwa 1 und 5 statt 1 und 2). `CBDRenumberBlocks()` zählt
+   in Dokumentreihenfolge, nicht nach Sichtbarkeit. Vorbestehend und
+   dokumentierte Absicht: Eine sichtbarkeitsabhängige Nummerierung würde die
+   Nummern beim Schüler **live verschieben**, während die Lehrperson mündlich
+   eine Nummer nennt.
+9. **Der Term `erstanfrageErledigt &&` in der Feuerbedingung ist heute
+   redundant** — `signaturen` und `erstanfrageErledigt` werden nur gemeinsam
+   zurückgesetzt, weshalb der zweite Term jede Erstsichtung allein blockt. Er
+   bleibt als Vorsorge stehen und wird wieder tragend, sobald jemand eine der
+   beiden Marken einzeln zurücksetzt; die Prüfungen A9/A9b des
+   Client-Harnischs halten genau diese Voraussetzung fest.
 
 
 ## Debugging-Konventionen

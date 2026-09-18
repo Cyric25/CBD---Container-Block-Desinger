@@ -136,6 +136,96 @@
  *    verdoppelnden Rueckzugsstufen aus Regel 3 - dort wuerde sie nur addiert,
  *    ohne den Gleichschritt-Fall zu betreffen.
  *
+ * 10. ES GIBT ZWEI ZEITGEBER, NICHT EINEN (seit AP-2.2). Der schnelle
+ *    fragt die Pulsdatei (Vorgabe 2 s), der bestehende wird zum
+ *    HERZSCHLAG und tickt seltener (Vorgabe 60 s). Beide gehorchen
+ *    denselben Regeln 4, 6 und 7: Nach einer abgelaufenen Sitzung
+ *    stehen beide, bei verstecktem Tab pausieren beide, und je
+ *    Zeitgeber laeuft nie mehr als eine Abfrage (`laeuftGerade` fuer
+ *    die Route, `dateiLaeuftGerade` fuer die Datei).
+ *
+ * 11. DER DATEITAKT STREUT NUR NACH OBEN, der REST-Takt um den Wert
+ *    herum. Das ist kein Versehen: Die Formel des REST-Takts
+ *    (`0,75 + Zufall * 0,5` plus Klemmung) laesst beim kleinen
+ *    Dateitakt rund die Haelfte aller Planungen exakt auf der
+ *    Untergrenze landen - genau die Entzerrung faellt damit weg, die
+ *    die Streuung bewirken soll (Bestandsbefund B10 aus AP-1.rev des
+ *    Vorgaengervorhabens). `dateiIntervallMs()` benutzt deshalb
+ *    `1 + Zufall * 0,5`, und die Klemmung bleibt reine Absicherung.
+ *
+ * 12. DREI FEHLSCHLAEGE SCHALTEN DEN DATEIMODUS AB, DAUERHAFT FUER
+ *    DIESEN SEITENAUFRUF. Danach traegt der Herzschlag den Betrieb
+ *    allein und kehrt auf `takt` zurueck - der Klassenmodus verhaelt
+ *    sich dann wie vor diesem Vorhaben, nur wieder langsamer. **Das
+ *    ist der Grund, warum dieses Vorhaben den Unterrichtsbetrieb
+ *    nicht gefaehrden kann.** Anders als beim Rueckzug aus Regel 3
+ *    wird hier NICHT verlangsamt, sondern aufgegeben: Eine Datei ist
+ *    entweder da oder nicht. Der Rueckfall meldet sich einmal mit
+ *    `console.warn` - bewusst nicht hinter `window.cbdDebug`, sonst
+ *    faellt der Ausfall des schnellen Wegs niemandem auf.
+ *
+ * 13. DIE DATEIADRESSE KOMMT AUSSCHLIESSLICH AUS DER ROUTE. Sie wird
+ *    hier nie zusammengesetzt - der Server kennt Uploadverzeichnis
+ *    und HMAC-Anteil, der Browser nicht. Sie gehoert zur Sitzung: Ein
+ *    Sitzungswechsel verwirft sie samt Fehlerzaehler und Sperre, und
+ *    erst die naechste Antwort der Route nennt die neue. Derselbe
+ *    Gedanke wie bei der REST-Basis (siehe ADRESSBILDUNG unten).
+ *
+ * ---------------------------------------------------------------------------
+ * DIE ZWEITE DATENQUELLE: DIE PULSDATEI (AP-2.1)
+ * ---------------------------------------------------------------------------
+ *
+ * Seit dem Vorhaben „Schneller Klassenpuls" gibt es dieselben Signaturen an
+ * zwei Stellen. Der Grund ist Kosten, nicht Bequemlichkeit: Eine Anfrage an
+ * die Route kostet einen vollstaendigen WordPress-Bootstrap - auf der
+ * Produktivmaschine rund 47 ms Rechenzeit gemessen, und zwar AUCH dann, wenn
+ * sie abgelehnt wird. Eine statische Datei kostet den Webserver fast nichts
+ * und belegt keinen PHP-Arbeitsprozess.
+ *
+ *   Stufe 1  Pulsdatei     schnell (~2 s)    kein PHP
+ *   Stufe 0  Route         selten (~60 s)    prueft die Sitzung, nennt Takt
+ *                                            und Dateiadresse, repariert
+ *   Stufe 2  Inhalte       bei Bedarf        unveraendert
+ *
+ * FORM DER DATEI (nur Zahlen und Pruefsummen, niemals Inhalte):
+ *
+ *   {
+ *       "klasse":     "a1b2c3d4e5f6",
+ *       "fragenwand": "0f1e2d3c4b5a",
+ *       "seiten":     { "1618": ["9988776655ff", "1122334455aa"] },
+ *       "takt":       10,
+ *       "stand":      1789456123
+ *   }
+ *
+ * Sie gilt fuer eine ganze KLASSE, nicht fuer eine Seite - deshalb die
+ * Abbildung `seiten`. `verarbeiteDatei()` uebersetzt sie in die flache Form,
+ * die `uebernehmeSignaturen()` erwartet.
+ *
+ * DER TAKT KOMMT WEITERHIN NUR AUS DER ROUTE. Regel 5 unten gilt unveraendert;
+ * das Feld `takt` der Datei wird gelesen, aber nicht verwendet. Eine
+ * Autoritaet, nicht zwei.
+ *
+ * ZWEI FAELLE, IN DENEN `seite`/`tafel` NICHT AUS DER DATEI KOMMEN:
+ * `seiten_unvollstaendig === true` (die Klasse ueberschreitet die
+ * serverseitige Obergrenze; dann fehlt `seiten` ganz - weglassen statt
+ * kuerzen) und eine `seiteId` ohne Eintrag in `seiten`. In beiden Faellen
+ * zieht der naechste Herzschlag ueber die Route sie nach. Ein Ersatzwert
+ * waere falsch - die Begruendung steht ausfuehrlich am Docblock von
+ * `verarbeiteDatei()`.
+ *
+ * REGEL 1 GILT UNVERAENDERT UND DECKT ZWEI QUELLEN BEREITS AB. Sie lautet:
+ * „Ein Rueckruf feuert nie fuer eine Signatur, deren vorheriger Wert
+ * `undefined` war." Welche der beiden Quellen einen Namen zuerst sieht, ist
+ * damit gleichgueltig - sie legt den Ausgangswert fest und meldet nichts.
+ * Es braucht KEINE zweite Erstanfrage-Markierung je Quelle; `uebernehmeSignaturen()`
+ * setzt die eine vorhandene. Eine zweite waere eine zweite Auslegung
+ * derselben Regel.
+ *
+ * DER VERTRAG NACH AUSSEN AENDERT SICH NICHT. Dieselben sieben Namen,
+ * dieselben fuenf Abonnentennamen, dieselbe Rueckrufsignatur. Die vier
+ * Abonnenten wissen nicht, aus welcher Quelle eine Signatur stammt - und
+ * sollen es nicht wissen.
+ *
  * ---------------------------------------------------------------------------
  * ADRESSBILDUNG
  * ---------------------------------------------------------------------------
@@ -245,6 +335,39 @@
 	 */
 	var INTERVALL_MIN_MS = 5000;
 
+	/**
+	 * Ab dem wievielten Fehlschlag in Folge der DATEIMODUS endgueltig
+	 * abgeschaltet wird. Anders als beim Rueckzug des Herzschlags wird hier
+	 * nicht verlangsamt, sondern aufgegeben: Die Datei ist entweder da oder
+	 * nicht, und der Herzschlag traegt den Betrieb allein weiter.
+	 *
+	 * @type {number}
+	 */
+	var DATEI_RUECKZUG_AB_FEHLER = 3;
+
+	/**
+	 * Absolute Untergrenze des Dateiintervalls in Millisekunden.
+	 *
+	 * @type {number}
+	 */
+	var DATEI_INTERVALL_MIN_MS = 1000;
+
+	/**
+	 * Spanne der Streuung des Dateitakts. Zusammen mit dem festen Summanden
+	 * 1 ergibt das den Faktor 1,0 bis 1,5 - siehe `dateiIntervallMs()`.
+	 *
+	 * @type {number}
+	 */
+	var DATEI_STREUUNG_SPANNE_FAKTOR = 0.5;
+
+	/**
+	 * Rueckfallwert fuer den Herzschlag in Sekunden, falls die Antwort das
+	 * Feld `herzschlag` nicht oder unbrauchbar liefert.
+	 *
+	 * @type {number}
+	 */
+	var HERZSCHLAG_RUECKFALL = 60;
+
 	// =====================================================================
 	// ZUSTAND
 	// =====================================================================
@@ -341,6 +464,61 @@
 	 * @type {number}
 	 */
 	var cacheZaehler = 0;
+
+	/**
+	 * Adresse der Pulsdatei, wie sie die Route im Feld `datei` nennt.
+	 * `null` heisst: kein Dateimodus. Sie wird NIE hier zusammengesetzt -
+	 * der Server kennt Uploadverzeichnis und HMAC-Anteil, der Browser nicht.
+	 *
+	 * @type {?string}
+	 */
+	var dateiUrl = null;
+
+	/**
+	 * Takt der Dateiabfrage in Sekunden. `0` heisst abgeschaltet.
+	 *
+	 * @type {number}
+	 */
+	var taktDatei = 0;
+
+	/**
+	 * Takt des Herzschlags in Sekunden - also des REST-Zeitgebers, solange
+	 * der Dateimodus laeuft. Ohne Dateimodus ist er ohne Bedeutung.
+	 *
+	 * @type {number}
+	 */
+	var herzschlag = 0;
+
+	/**
+	 * Fehlschlaege der Dateiabfrage in Folge.
+	 *
+	 * @type {number}
+	 */
+	var dateiFehler = 0;
+
+	/**
+	 * Ob der Dateimodus fuer diesen Seitenaufruf aufgegeben wurde. Wird
+	 * nur durch einen Sitzungswechsel wieder `false`.
+	 *
+	 * @type {boolean}
+	 */
+	var dateiModusAus = false;
+
+	/**
+	 * Handle des schnellen Zeitgebers, sonst `null`.
+	 *
+	 * @type {?number}
+	 */
+	var zeitgeberDatei = null;
+
+	/**
+	 * Ob gerade eine Dateiabfrage unterwegs ist. Eigenes Flag neben
+	 * `laeuftGerade`: Die beiden Zeitgeber laufen unabhaengig, und Regel 7
+	 * („es laeuft nie mehr als eine Abfrage") soll fuer beide gelten.
+	 *
+	 * @type {boolean}
+	 */
+	var dateiLaeuftGerade = false;
 
 	// =====================================================================
 	// HILFEN
@@ -458,8 +636,53 @@
 	 *
 	 * @returns {number} Millisekunden.
 	 */
+	/**
+	 * Laeuft der Dateimodus gerade?
+	 *
+	 * Alle vier Bedingungen muessen erfuellt sein. Die Funktion ist die
+	 * EINZIGE Stelle, die diese Frage beantwortet - sie entscheidet ueber den
+	 * schnellen Zeitgeber UND ueber die Basis des Herzschlags.
+	 *
+	 * @returns {boolean}
+	 */
+	function dateiModusAktiv() {
+		return !dateiModusAus
+			&& 'string' === typeof dateiUrl
+			&& '' !== dateiUrl
+			&& taktDatei > 0
+			&& !endgueltigGestoppt;
+	}
+
+	/**
+	 * Das naechste Dateiintervall in Millisekunden, gestreut.
+	 *
+	 * BEWUSST NICHT DIE FORMEL DES REST-TAKTS. Dort wird mit
+	 * `0,75 + Zufall * 0,5` um den Takt gestreut und danach auf eine
+	 * Untergrenze geklemmt. Beim kleinen Dateitakt (Vorgabe 2 s) wird diese
+	 * Untergrenze staendig erreicht, und dann landet rund die Haelfte aller
+	 * Planungen exakt auf dem Minimum - genau die Entzerrung faellt damit
+	 * weg, die die Streuung bewirken soll. Das ist der bekannte
+	 * Bestandsbefund B10 aus `AP-1.rev` des Vorgaengervorhabens.
+	 *
+	 * Hier wird deshalb NUR NACH OBEN gestreut: `1 + Zufall * 0,5`. Bei
+	 * `taktDatei = 2` ergibt das gleichverteilt 2000-3000 ms, ohne dass die
+	 * Klemmung je greift - sie bleibt reine Absicherung.
+	 *
+	 * @returns {number} Millisekunden.
+	 */
+	function dateiIntervallMs() {
+		var wert = taktDatei * 1000
+			* (1 + Math.random() * DATEI_STREUUNG_SPANNE_FAKTOR);
+
+		return wert < DATEI_INTERVALL_MIN_MS ? DATEI_INTERVALL_MIN_MS : wert;
+	}
+
 	function aktuellesIntervallMs() {
-		var basis = takt * 1000;
+		// Im Dateimodus wird der REST-Zeitgeber zum Herzschlag und tickt
+		// seltener. `Math.max()` sorgt dafuer, dass ein Betrieb mit einem
+		// GROESSEREN Takt als dem Herzschlag (z. B. 300 s) dadurch nicht
+		// ploetzlich haeufiger abfragt als eingestellt.
+		var basis = (dateiModusAktiv() ? Math.max(herzschlag, takt) : takt) * 1000;
 		var exponent;
 		var wert;
 
@@ -574,6 +797,63 @@
 	 *
 	 * @returns {void}
 	 */
+	/**
+	 * Den laufenden Datei-Zeitgeber loeschen.
+	 *
+	 * @returns {void}
+	 */
+	function loescheDateiZeitgeber() {
+		if (null !== zeitgeberDatei) {
+			window.clearTimeout(zeitgeberDatei);
+			zeitgeberDatei = null;
+		}
+	}
+
+	/**
+	 * Die naechste Dateiabfrage einplanen.
+	 *
+	 * Zwilling von `planeNaechsteAbfrage()`, mit denselben Ausstiegen -
+	 * insbesondere demselben Verhalten bei verstecktem Tab (Regel 6). Der
+	 * Weckruf kommt in beiden Faellen aus `beiSichtbarkeitswechsel()`.
+	 *
+	 * @returns {void}
+	 */
+	function planeNaechsteDateiAbfrage() {
+		loescheDateiZeitgeber();
+
+		if (!aktiv || endgueltigGestoppt || !sitzung || !dateiModusAktiv()) {
+			return;
+		}
+
+		if (document.hidden) {
+			return;
+		}
+
+		zeitgeberDatei = window.setTimeout(function () {
+			zeitgeberDatei = null;
+			frageDateiAb();
+		}, dateiIntervallMs());
+	}
+
+	/**
+	 * Den schnellen Zeitgeber an den aktuellen Zustand angleichen.
+	 *
+	 * Ein bereits laufender Zeitgeber wird BEWUSST NICHT neu geplant - sonst
+	 * schoebe ihn jeder Herzschlag um ein volles Dateiintervall nach hinten.
+	 *
+	 * @returns {void}
+	 */
+	function dateiZeitgeberAbgleichen() {
+		if (!dateiModusAktiv()) {
+			loescheDateiZeitgeber();
+			return;
+		}
+
+		if (null === zeitgeberDatei) {
+			planeNaechsteDateiAbfrage();
+		}
+	}
+
 	function planeNaechsteAbfrage() {
 		loescheZeitgeber();
 
@@ -612,21 +892,102 @@
 	}
 
 	/**
-	 * Eine erfolgreiche Antwort auswerten.
+	 * Eine Menge frischer Signaturen uebernehmen und die Rueckrufe ausloesen.
 	 *
-	 * Reihenfolge mit Absicht: erst Takt uebernehmen und den naechsten
-	 * Durchlauf einplanen, DANN die Rueckrufe aufrufen. So gewinnt ein
-	 * Abonnent, der in seinem Rueckruf `halte()` ruft.
+	 * HERAUSGELOEST IN AP-2.1, damit beide Datenquellen - die Route und die
+	 * Pulsdatei - durch DIESELBE Vergleichslogik laufen. Zwei Kopien waeren
+	 * zwei Gelegenheiten, Regel 1 unterschiedlich auszulegen.
 	 *
-	 * @param {Object} daten Die geparste Antwort.
+	 * Der Rumpf ist zeichengleich aus `verarbeiteAntwort()` uebernommen,
+	 * einschliesslich der Feuerbedingung. DREI Eigenschaften duerfen dabei
+	 * nicht verloren gehen:
+	 *
+	 * 1. EIN FEHLENDER NAME WIRD UEBERSPRUNGEN, nicht auf `undefined`
+	 *    zurueckgesetzt. `signaturen[name]` behaelt seinen Wert. Sonst
+	 *    verlaere eine Quelle, die einen Namen gar nicht kennt (die
+	 *    Pulsdatei ohne Seitenbezug kennt `seite`/`tafel` nicht), die von
+	 *    der anderen Quelle bereits gesetzte Signatur - und die naechste
+	 *    echte Aenderung fiele unter Regel 1 und wuerde verschluckt.
+	 * 2. ERST ALLE VERGLEICHEN, DANN ALLE MELDEN. Ein Rueckruf darf nicht
+	 *    mitten in der Vergleichsschleife laufen; er koennte `halte()`
+	 *    rufen oder selbst Signaturen beruehren.
+	 * 3. `erstanfrageErledigt` WIRD HIER GESETZT, nicht beim Aufrufer - und
+	 *    es ist EINE Markierung fuer BEIDE Quellen, keine je Quelle. Regel 1
+	 *    („ein Rueckruf feuert nie fuer eine Signatur, deren vorheriger Wert
+	 *    `undefined` war") deckt zwei Quellen damit bereits ab: Welche
+	 *    Quelle einen Namen zuerst sieht, ist gleichgueltig - sie legt den
+	 *    Ausgangswert fest und meldet nichts.
+	 *
+	 *    EHRLICH DAZU (Mutationsprobe zu AP-2.1): Der Term
+	 *    `erstanfrageErledigt &&` in der Feuerbedingung ist HEUTE redundant.
+	 *    Der zweite Term (`alt` ist `undefined`) blockt jede Erstsichtung
+	 *    bereits allein, weil `signaturen` und `erstanfrageErledigt` nur
+	 *    GEMEINSAM zurueckgesetzt werden - beim Sitzungswechsel in
+	 *    `setzeSitzung()` und sonst nirgends. Der Term bleibt trotzdem
+	 *    stehen: Er kostet nichts und wird wieder tragend, sobald jemand
+	 *    eine der beiden Marken einzeln zuruecksetzt. Wer das tut, sollte
+	 *    wissen, dass er es tut.
+	 *
+	 * @param {Object} werte Name -> Signatur. Nur eigene Schluessel zaehlen.
 	 * @returns {void}
 	 */
-	function verarbeiteAntwort(daten) {
+	function uebernehmeSignaturen(werte) {
 		var aenderungen = [];
 		var i;
 		var name;
 		var neu;
 		var alt;
+
+		if (!werte || 'object' !== typeof werte) {
+			return;
+		}
+
+		for (i = 0; i < SIGNATURNAMEN.length; i++) {
+			name = SIGNATURNAMEN[i];
+
+			if (!Object.prototype.hasOwnProperty.call(werte, name)) {
+				continue;
+			}
+
+			neu = werte[name];
+			alt = Object.prototype.hasOwnProperty.call(signaturen, name)
+				? signaturen[name]
+				: undefined;
+
+			signaturen[name] = neu;
+
+			// Gemeldet wird nur, was sich gegenueber einem BEKANNTEN Wert
+			// unterscheidet - und erst ab der zweiten Antwort.
+			if (erstanfrageErledigt && 'undefined' !== typeof alt && alt !== neu) {
+				aenderungen.push({ name: name, neu: neu, alt: alt });
+			}
+		}
+
+		erstanfrageErledigt = true;
+
+		for (i = 0; i < aenderungen.length; i++) {
+			melde('Signatur "' + aenderungen[i].name + '" geaendert.', aenderungen[i]);
+			rufeAbonnenten(aenderungen[i].name, aenderungen[i].neu, aenderungen[i].alt);
+		}
+	}
+
+	/**
+	 * Eine erfolgreiche Antwort der ROUTE auswerten.
+	 *
+	 * Reihenfolge mit Absicht: erst Takt uebernehmen und den naechsten
+	 * Durchlauf einplanen, DANN die Rueckrufe aufrufen. So gewinnt ein
+	 * Abonnent, der in seinem Rueckruf `halte()` ruft.
+	 *
+	 * DESHALB steht der Aufruf von `uebernehmeSignaturen()` hier NACH der
+	 * Planung, obwohl die Vergleichsschleife frueher davor stand: Die
+	 * Funktion vergleicht UND meldet. Zwischen Vergleich und Planung liegt
+	 * nichts, was `signaturen` oder `erstanfrageErledigt` liest - das
+	 * Verhalten bleibt dasselbe, die Regel „planen vor melden" auch.
+	 *
+	 * @param {Object} daten Die geparste Antwort.
+	 * @returns {void}
+	 */
+	function verarbeiteAntwort(daten) {
 		var taktWert;
 
 		if (!daten || 'object' !== typeof daten) {
@@ -645,29 +1006,20 @@
 			}
 		}
 
-		// --- Signaturen vergleichen ---------------------------------------
-		for (i = 0; i < SIGNATURNAMEN.length; i++) {
-			name = SIGNATURNAMEN[i];
+		// --- Dateimodus ---------------------------------------------------
+		// MUSS vor der Planung stehen: `aktuellesIntervallMs()` liest
+		// `dateiModusAktiv()` und damit alle drei Felder.
+		dateiUrl = ('string' === typeof daten.datei && '' !== daten.datei)
+			? daten.datei
+			: null;
 
-			if (!Object.prototype.hasOwnProperty.call(daten, name)) {
-				continue;
-			}
+		taktWert = parseInt(daten.takt_datei, 10);
+		taktDatei = (isNaN(taktWert) || taktWert < 0) ? 0 : taktWert;
 
-			neu = daten[name];
-			alt = Object.prototype.hasOwnProperty.call(signaturen, name)
-				? signaturen[name]
-				: undefined;
-
-			signaturen[name] = neu;
-
-			// Gemeldet wird nur, was sich gegenueber einem BEKANNTEN Wert
-			// unterscheidet - und erst ab der zweiten Antwort.
-			if (erstanfrageErledigt && 'undefined' !== typeof alt && alt !== neu) {
-				aenderungen.push({ name: name, neu: neu, alt: alt });
-			}
-		}
-
-		erstanfrageErledigt = true;
+		taktWert = parseInt(daten.herzschlag, 10);
+		herzschlag = (isNaN(taktWert) || taktWert <= 0)
+			? HERZSCHLAG_RUECKFALL
+			: taktWert;
 
 		// --- Naechster Durchlauf ------------------------------------------
 		if (takt <= 0) {
@@ -675,13 +1027,85 @@
 			halte();
 		} else {
 			planeNaechsteAbfrage();
+			dateiZeitgeberAbgleichen();
 		}
 
-		// --- Rueckrufe -----------------------------------------------------
-		for (i = 0; i < aenderungen.length; i++) {
-			melde('Signatur "' + aenderungen[i].name + '" geaendert.', aenderungen[i]);
-			rufeAbonnenten(aenderungen[i].name, aenderungen[i].neu, aenderungen[i].alt);
+		// --- Signaturen vergleichen und melden -----------------------------
+		uebernehmeSignaturen(daten);
+	}
+
+	/**
+	 * Eine erfolgreiche Antwort der PULSDATEI auswerten.
+	 *
+	 * Die Datei hat eine andere Form als die Route: Sie gilt fuer die ganze
+	 * Klasse und traegt die Seitensignaturen als Abbildung
+	 * `seiten: { "<page_id>": ["<seite>", "<tafel>"] }`. Diese Funktion
+	 * uebersetzt sie in die flache Form, die `uebernehmeSignaturen()`
+	 * erwartet.
+	 *
+	 * DER TAKT WIRD AUS DER DATEI NICHT UEBERNOMMEN. `takt`, `takt_datei`
+	 * und `herzschlag` kommen ausschliesslich aus der Antwort der Route -
+	 * eine Autoritaet, nicht zwei. Das Feld `takt` in der Datei wird hier
+	 * bewusst ignoriert; es steht dort nur, damit die Datei fuer sich
+	 * gelesen verstaendlich bleibt. Zwei Quellen fuer denselben Wert waeren
+	 * zwei Gelegenheiten, unterschiedlich schnell zu takten.
+	 *
+	 * ZWEI FAELLE, IN DENEN `seite`/`tafel` BEWUSST NICHT AUS DER DATEI
+	 * KOMMEN - in beiden zieht erst der naechste Herzschlag ueber die Route
+	 * sie nach:
+	 *
+	 * 1. `seiten_unvollstaendig === true`. Die Klasse hat mehr Seiten mit
+	 *    Zeichnungsdatensaetzen als die serverseitige Obergrenze zulaesst;
+	 *    der Schluessel `seiten` fehlt dann GANZ (weglassen statt kuerzen).
+	 * 2. Die aktuelle `seiteId` hat keinen Eintrag in `seiten`. Fuer diese
+	 *    Seite existiert noch kein Datensatz.
+	 *
+	 * EIN ERSATZWERT WAERE HIER FALSCH. Er muesste zeichengleich zu dem
+	 * sein, was die Route fuer eine leere Menge berechnet; jede Abweichung
+	 * erzeugte einen Rueckruf, sobald die Route das naechste Mal antwortet -
+	 * und danach gleich wieder einen, sobald die Datei antwortet. Die
+	 * Signatur spraenge dauerhaft zwischen beiden Quellen hin und her, und
+	 * jeder Sprung kostet einen Stufe-2-Abruf.
+	 *
+	 * Ein fehlendes Feld wird gar nicht erst in `werte` aufgenommen - so
+	 * bleibt die `hasOwnProperty`-Pruefung in `uebernehmeSignaturen()`
+	 * zeichengleich zum Bestand, und eine beschaedigte Datei kann eine
+	 * bereits bekannte Signatur nicht mit `undefined` ueberschreiben.
+	 *
+	 * @param {Object} daten Der geparste Inhalt der Pulsdatei.
+	 * @returns {void}
+	 */
+	function verarbeiteDatei(daten) {
+		var werte = {};
+		var schluessel;
+		var paar;
+
+		if (!daten || 'object' !== typeof daten) {
+			return;
 		}
+
+		if ('undefined' !== typeof daten.klasse && null !== daten.klasse) {
+			werte.klasse = daten.klasse;
+		}
+
+		if ('undefined' !== typeof daten.fragenwand && null !== daten.fragenwand) {
+			werte.fragenwand = daten.fragenwand;
+		}
+
+		if (seiteId > 0 && true !== daten.seiten_unvollstaendig
+				&& daten.seiten && 'object' === typeof daten.seiten) {
+			schluessel = String(seiteId);
+			paar = Object.prototype.hasOwnProperty.call(daten.seiten, schluessel)
+				? daten.seiten[schluessel]
+				: null;
+
+			if (paar && paar.length >= 2) {
+				werte.seite = paar[0];
+				werte.tafel = paar[1];
+			}
+		}
+
+		uebernehmeSignaturen(werte);
 	}
 
 	/**
@@ -703,6 +1127,106 @@
 	 *
 	 * @returns {void}
 	 */
+	/**
+	 * Einen Fehlschlag der Dateiabfrage verbuchen.
+	 *
+	 * DIE RUECKFALLKETTE IST DER GRUND, WARUM DIESES VORHABEN OHNE RISIKO
+	 * FUER DEN UNTERRICHTSBETRIEB IST. Drei Fehlschlaege in Folge schalten
+	 * den Dateimodus fuer diesen Seitenaufruf ab; der Herzschlag kehrt auf
+	 * `takt` zurueck, und der Klassenmodus verhaelt sich danach wie vor
+	 * diesem Vorhaben - nur wieder langsamer, nie gar nicht.
+	 *
+	 * @param {*} fehler Was schiefging.
+	 * @returns {void}
+	 */
+	function behandleDateiFehler(fehler) {
+		dateiFehler++;
+
+		melde('Dateiabfrage fehlgeschlagen (' + dateiFehler + ' in Folge).', fehler);
+
+		if (dateiFehler < DATEI_RUECKZUG_AB_FEHLER) {
+			planeNaechsteDateiAbfrage();
+			return;
+		}
+
+		dateiModusAus = true;
+		loescheDateiZeitgeber();
+
+		// Nicht hinter `window.cbdDebug`: Diese Zeile ist der einzige
+		// Hinweis darauf, dass der schnelle Weg ausgefallen ist.
+		if (window.console && window.console.warn) {
+			window.console.warn('[CBD Klassenpuls] Pulsdatei dreimal nicht '
+				+ 'erreichbar - Rueckfall auf den Servertakt.');
+		}
+
+		// Sofort neu planen, damit der Herzschlag ohne Umweg wieder auf
+		// `takt` statt auf `herzschlag` laeuft.
+		planeNaechsteAbfrage();
+	}
+
+	/**
+	 * Die Pulsdatei abfragen.
+	 *
+	 * `cache: 'no-cache'` erzwingt clientseitig eine Revalidierung: Der
+	 * Browser schickt `If-None-Match`/`If-Modified-Since` und bekommt im
+	 * Normalfall HTTP 304 ohne Koerper zurueck - und das OHNE dass der
+	 * Server dafuer eigene Kopfzeilen setzen muesste. `fetch()` loest dabei
+	 * mit Status 200 und dem zwischengespeicherten Koerper auf; die 304
+	 * sieht man im Netzwerkmitschnitt, nicht am Rueckgabewert.
+	 *
+	 * `credentials: 'omit'`, weil die Datei keine Anmeldung braucht - so
+	 * reisen bei jedem Abruf keine Cookies mit.
+	 *
+	 * UMGEKEHRTE REIHENFOLGE ALS AUF DEM ROUTENPFAD, UND DAS IST KEIN
+	 * VERSEHEN (Befund G7 aus AP-2.rev). Hier wird im Erfolgszweig ERST
+	 * gemeldet (`verarbeiteDatei()` vergleicht und feuert) und DANN geplant;
+	 * `verarbeiteAntwort()` macht es andersherum und begruendet das
+	 * ausfuehrlich mit „ein Abonnent, der `halte()` ruft, gewinnt".
+	 *
+	 * Die Zusicherung gilt hier trotzdem, nur ueber einen anderen
+	 * Mechanismus: `halte()` setzt `aktiv = false` und loescht beide
+	 * Zeitgeber, und das nachfolgende `planeNaechsteDateiAbfrage()` steigt an
+	 * seinem eigenen `!aktiv`-Waechter wieder aus. WER DIESEN WAECHTER
+	 * ENTFERNT - er sieht neben `dateiModusAktiv()` redundant aus -, BRICHT
+	 * DIE REGEL STILL. Dann muss der Aufruf hierher vor `verarbeiteDatei()`
+	 * wandern.
+	 *
+	 * @returns {void}
+	 */
+	function frageDateiAb() {
+		if (dateiLaeuftGerade || !dateiModusAktiv()) {
+			return;
+		}
+
+		if (document.hidden) {
+			return;
+		}
+
+		if ('function' !== typeof window.fetch) {
+			return;
+		}
+
+		dateiLaeuftGerade = true;
+
+		window.fetch(dateiUrl, { cache: 'no-cache', credentials: 'omit' })
+			.then(function (antwort) {
+				if (!antwort.ok) {
+					return Promise.reject(new Error('HTTP ' + antwort.status));
+				}
+
+				return antwort.json();
+			}).then(function (daten) {
+				dateiLaeuftGerade = false;
+				dateiFehler = 0;
+
+				verarbeiteDatei(daten);
+				planeNaechsteDateiAbfrage();
+			})['catch'](function (fehler) {
+				dateiLaeuftGerade = false;
+				behandleDateiFehler(fehler);
+			});
+	}
+
 	function frageAb() {
 		var url;
 
@@ -796,6 +1320,25 @@
 			signaturen = {};
 			erstanfrageErledigt = false;
 			fehlerZaehler = 0;
+
+			// Der Dateimodus gehoert zur Sitzung: andere Klasse, andere
+			// Adresse. Auch ein frueher aufgegebener Dateimodus bekommt
+			// damit eine neue Gelegenheit.
+			dateiUrl = null;
+			taktDatei = 0;
+			dateiFehler = 0;
+			dateiModusAus = false;
+			loescheDateiZeitgeber();
+
+			// Den Herzschlag neu planen. Noetig, weil `starte()` weiter unten
+			// bei bereits laufendem Taktgeber sofort zurueckkehrt: Der schon
+			// geplante Zeitgeber traegt dann noch die HERZSCHLAG-Basis (bis zu
+			// 60 s), waehrend der Dateimodus soeben verworfen wurde - die neue
+			// Sitzung wuerde also bis zu eine Minute lang gar nicht abgefragt.
+			// Ohne den Dateimodus rechnet `aktuellesIntervallMs()` wieder mit
+			// `takt`, der Zeitgeber steht damit sofort wieder auf dem
+			// gewohnten Abstand.
+			planeNaechsteAbfrage();
 
 			melde('Sitzung gesetzt: Klasse ' + id + '.');
 		}
@@ -926,6 +1469,12 @@
 
 		frageAb();
 		planeNaechsteAbfrage();
+
+		// Im Regelfall wirkungslos: Beim ersten Start ist noch keine
+		// Dateiadresse bekannt. Noetig fuer die Folge `halte()` ->
+		// `setzeSitzung()` mit UNVERAENDERTEN Werten - dort bliebe der
+		// schnelle Zeitgeber sonst bis zum naechsten Herzschlag aus.
+		dateiZeitgeberAbgleichen();
 	}
 
 	/**
@@ -936,6 +1485,7 @@
 	function halte() {
 		aktiv = false;
 		loescheZeitgeber();
+		loescheDateiZeitgeber();
 	}
 
 	/**
@@ -950,6 +1500,10 @@
 	 */
 	function sofort() {
 		frageAb();
+
+		if (dateiModusAktiv()) {
+			frageDateiAb();
+		}
 	}
 
 	/**
@@ -979,6 +1533,7 @@
 	function beiSichtbarkeitswechsel() {
 		if (document.hidden) {
 			loescheZeitgeber();
+			loescheDateiZeitgeber();
 			melde('Tab versteckt - Abfragen pausiert.');
 			return;
 		}
@@ -991,6 +1546,11 @@
 
 		frageAb();
 		planeNaechsteAbfrage();
+
+		if (dateiModusAktiv()) {
+			frageDateiAb();
+			planeNaechsteDateiAbfrage();
+		}
 	}
 
 	if (document.addEventListener) {
