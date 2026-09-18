@@ -86,7 +86,18 @@ const vm = require('vm');
 const QUELLDATEI = process.env.CBD_PULS_DATEI
 	|| path.join(__dirname, '..', 'assets', 'js', 'klassenpuls.js');
 
-const quelle = fs.readFileSync(QUELLDATEI, 'utf8');
+/**
+ * Zeilenenden werden beim Einlesen auf LF normalisiert.
+ *
+ * NICHT KOSMETIK, SONDERN NOTWENDIG: Git normalisiert die Datei auf dieser
+ * Plattform beim Auschecken auf CRLF. `schneideAus()` unten sucht das
+ * Funktionsende als `\n\t}\n` — in einer CRLF-Datei steht dort `\r\n\t}\r\n`,
+ * und die Suche geht ins Leere. Der Harnisch brach dann mit „Funktionsende
+ * nicht gefunden" ab, obwohl am geprueften Code nichts falsch war. Gefunden
+ * beim ersten Lauf auf `main` unmittelbar nach dem Merge der Phase 2 — auf
+ * dem Arbeitsbranch lag die Datei noch mit LF vor.
+ */
+const quelle = fs.readFileSync(QUELLDATEI, 'utf8').replace(/\r\n/g, '\n');
 
 /** Eine erfundene, aber formgerechte Pulsdatei-Adresse. */
 const DATEI_URL = 'https://example.test/wp-content/uploads/'
