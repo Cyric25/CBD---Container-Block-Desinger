@@ -61,15 +61,45 @@ nicht die verarbeitende; bei Shared Hosting ist nginx vor Apache die
 verbreitete Aufstellung. Die Fehlaussage stand bereits in drei Dateien, bevor
 eine Rückfrage bei der Hosting-Administration sie widerlegte.
 
-### Was noch offen ist
+### Der `.json`-Handtest ist erbracht (2026-09-18)
 
-**Ein Handtest fehlt** (im Plan als `NW-1` geführt): Die Sonde oben zeigt,
-dass **keine Regel auf den Pfad greift**. Sie kann nicht zeigen, dass eine
-**tatsächlich vorhandene** `.json` mit HTTP 200 und brauchbarem
-`Content-Type` ausgeliefert wird — beide Sondendateien existierten nicht.
-Dafür braucht es eine von Hand angelegte Datei. Das Risiko gilt als gering
-(lokal `application/json`, auf nginx ist `.json` Standard), aber es ist
-ungemessen.
+Die Sonde aus `AP-0.2` konnte nur zeigen, dass **keine Regel auf den Pfad
+greift** (beide Sondendateien existierten nicht). Ob eine **tatsächlich
+vorhandene** `.json` ausgeliefert wird, blieb ungemessen und war im Plan als
+`NW-1` als Gate vor dem Ausrollen geführt. **Jetzt gemessen**, mit einer von
+Hand angelegten `wp-content/uploads/nw1-probe.json` auf der
+Produktivinstallation:
+
+| | |
+|---|---|
+| Status | **HTTP 200** |
+| `Content-Type` | **`application/json`** |
+| Rumpf | unversehrt, als JSON lesbar |
+| `Content-Encoding` | `br` (67 Byte auf der Leitung) |
+| `Accept-Ranges` / `ETag` | `bytes` / `"49-65bc198c1beaa-br"` |
+
+**Drei Nebenbefunde, die über den Handtest hinaus zählen:**
+
+1. **Der Passwortschutz der Seite gilt nicht für statische Dateien.** Die
+   Produktivseite zeigt für jede von WordPress gerenderte Adresse eine
+   Passwortabfrage; `wp-includes/js/jquery/jquery.min.js` antwortet dagegen
+   mit 200 und `application/javascript`. Ein **nicht angemeldeter**
+   Schülerbrowser erreicht die Pulsdatei also — die Voraussetzung, auf der
+   Stufe 1 des Vorhabens „Schneller Klassenpuls" ruht.
+2. **Die Auslieferung läuft ohne PHP.** `Accept-Ranges: bytes` und das
+   Apache-ETag-Format (`"<größe>-<mtime>"`) zeigen den Dateiweg des
+   Webservers, nicht einen PHP-Durchlauf. Das ist der ganze Zweck der
+   Pulsdatei und am Zielsystem nachgewiesen statt angenommen.
+3. **Der Server unterscheidet Groß- und Kleinschreibung.** Die Probedatei
+   hieß zunächst `nw1-probe.JSON`; der Aufruf mit kleiner Endung lieferte
+   404 **mitsamt der WordPress-Passwortseite** — byteartgleich zu einem frei
+   erfundenen Dateinamen. Für das Plugin folgenlos (es schreibt durchgehend
+   klein), aber eine Falle für jeden künftigen Handtest: **Eine falsch
+   geschriebene Datei ist von einer blockierten nicht zu unterscheiden.**
+   Wer so etwas misst, braucht eine Gegenprobe mit einem Namen, der sicher
+   nicht existiert.
+
+Die Probedatei wurde nach der Messung wieder entfernt.
 
 
 ## Architecture
@@ -7557,8 +7587,25 @@ Prozessnotizen; alle geringen in `AP-2.fix1` abgearbeitet):
    `If-None-Match`, auch mit `Cache-Control: max-age=0`. Vier Erklärungen
    sind gemessen und ausgeschlossen (`credentials` in drei Varianten, ein
    fehlender `Cache-Control`-Kopf, `cache: 'default'` — das liefert eine
-   veraltete Datei aus dem Zwischenspeicher und scheidet aus). **Die Ursache
-   bleibt unbekannt**, belegt ist nur „dieser Messbrowser". `cache:
+   veraltete Datei aus dem Zwischenspeicher und scheidet aus). **Die Ursache ist
+   seit dem 2026-09-18 bekannt und auf der Produktivinstallation gemessen**
+   (im Zuge von `NW-1`): Apache hängt beim Komprimieren ein Suffix an den
+   ETag (`"49-65bc198c1beaa-br"`), vergleicht ein `If-None-Match` aber gegen
+   den **unsuffigierten** Wert. Ein Browser schickt pflichtgemäß genau den
+   ETag zurück, den er bekommen hat — also den mit `-br` — und bekommt
+   deshalb **nie** eine 304. Am selben Server nachgemessen:
+
+   | gesendeter Bedingungskopf | Antwort |
+   |---|---|
+   | `If-None-Match` wie geliefert (`…-br`) | **200**, voller Rumpf |
+   | `If-None-Match` ohne `-br`-Suffix | **304**, leerer Rumpf |
+   | `If-Modified-Since` | **304**, leerer Rumpf |
+
+   Der Server beherrscht bedingte Abrufe also einwandfrei; es ist die
+   ETag-Verstümmelung der Komprimierung, die sie für einen Browser
+   unerreichbar macht. Wer es je beheben will, tut das serverseitig in der
+   `.htaccess`, indem er das Suffix aus `If-None-Match` entfernt, bevor
+   Apache vergleicht — **nicht** im Plugin. `cache:
    'no-cache'` bleibt richtig: Nur es schließt eine veraltete Antwort aus.
    Folgen hat es keine — 128 Byte Körper, und serverseitig kostet eine 200
    auf eine statische Datei dasselbe wie eine 304.
