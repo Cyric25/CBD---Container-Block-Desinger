@@ -277,8 +277,14 @@ var b = befund(zeilen);
 console.log('\n--- A: die Datei sieht ueberhaupt nach Tabellen aus ---');
 console.log('  ' + b.tabellen + ' Tabellen, ' + b.zeilen
 	+ ' Inhaltszeilen, ' + zeilen.length + ' Zeilen gesamt');
-pruefe('A - es gibt Tabellenzeilen zu pruefen', b.zeilen > 50,
-	'n=' + b.zeilen);
+// Absichtlich nur „mehr als nichts": Diese Pruefung soll den stummen
+// Totalausfall fangen (falscher Pfad, CRLF nicht normalisiert, Datei ohne
+// Tabellen) - nicht die Groesse einer bestimmten Map festschreiben. Eine
+// feste Untergrenze stand hier zuerst und schlug prompt bei der kleineren
+// Datei-Map des Themes an, obwohl mit der nichts verkehrt war.
+pruefe('A - es gibt Tabellen mit Inhaltszeilen zu pruefen',
+	b.tabellen > 0 && b.zeilen > 0,
+	b.tabellen + ' Tabellen, ' + b.zeilen + ' Inhaltszeilen');
 pruefe('A2 - jede Tabellenzeile hat eine Kopfzeile ueber sich',
 	0 === b.ohneKopf, b.ohneKopf + ' ohne');
 pruefe('A3 - jede Kopfzeile hat so viele Zellen wie ihre Trennzeile',

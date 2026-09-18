@@ -7686,6 +7686,54 @@ Recent fixes:
   zuständig ist, inklusive der drei toten CSS-Dateien und der Hinweise zum
   ZIP-Bau. Navigationshilfe; die fachlichen Details stehen in dieser Datei.
 
+  **Vor dem Schreiben in eine Datei-Map lesen — eine stille Falle.** GFM
+  zerlegt eine Tabellenzeile an **jeder** nicht maskierten Pipe. Auch an
+  einer, die in Backticks steht: Die Tabellenzerlegung läuft **vor** der
+  Inline-Auswertung, ein Code-Span schützt hier nichts. Zellen jenseits der
+  Spaltenzahl der Kopfzeile werden anschließend **ersatzlos verworfen** —
+  ohne Warnung, ohne Lücke im Layout. Wer in einer zweispaltigen Tabelle ein
+  Code-Beispiel wie `implode('|', …)` oder `a || b` notiert, hat damit den
+  Rest der Zeile unsichtbar gemacht. **An der Datei selbst sieht man nichts**,
+  im Editor steht alles da; aufgefallen ist es beide Male nur, weil ein frisch
+  angehängter Absatz auf GitHub spurlos fehlte. Zweimal an der echten
+  GitHub-Darstellung gemessen, nicht am Parser: erst **20 669** Zeichen in
+  einer einzigen Zeile (AP-3.2 aus `PLAN-Schneller-Klassenpuls.md`), dann
+  **30 150** in elf weiteren — zusammen rund ein Viertel der Datei. Die
+  größte Zeile (`pdf-server-side.js`) zeigte 1 334 statt 17 748 Zeichen.
+
+  **Die Regel beim Schreiben:**
+
+  1. Pipe im Zelleninhalt → als `\|` maskieren. GFM ersetzt `\|` **vor** der
+     Inline-Auswertung durch `|`; die Maskierung wirkt deshalb auch innerhalb
+     von Backticks, wo ein Backslash sonst nichts bedeutet.
+  2. Mehr Zellen, als die Kopfzeile Spalten vorsieht → den überzähligen
+     Inhalt in den **Flusstext der letzten gültigen Zelle** holen, **nicht**
+     löschen. Der Text ist Dokumentation, keine Formatierung.
+  3. Backticks paarweise halten. Ein einzelner öffnet einen Code-Span, der
+     den Rest der Zeile verschluckt — derselbe stille Fehler, andere Ursache.
+
+  **Achtung, im Fließtext gilt Regel 1 NICHT.** Die Ersetzung von `\|` ist
+  eine Eigenheit der Tabellenzerlegung. Außerhalb einer Tabelle bleibt der
+  Backslash in einem Code-Span sichtbar stehen, und eine rohe Pipe ist dort
+  ohnehin harmlos. Wer einen Absatz *über* die Regel schreibt, notiert die
+  Beispiele also mit roher Pipe.
+
+  **Geprüft wird das von `tools/test-datei-map-pipes.js`** (13 Prüfungen,
+  Aufruf: `node tools/test-datei-map-pipes.js`). **Nach jeder Änderung an
+  einer Datei-Map laufen lassen** — die Falle ist am Ergebnis nicht zu sehen,
+  nur am Harnisch. Er prüft die Zellzahl gegen die Kopfzeile in beide
+  Richtungen, Pipes in Code-Spans, verworfene Zeichen und die
+  Backtick-Paarigkeit; **Fall F ist der Gegenbeweis** an einer erfundenen
+  Tabelle, ohne den auch ein Harnisch grün wäre, der die Zerlegungsregel gar
+  nicht nachbildet. Fünf tragende Mutationen sind gemessen, alle fünf sterben.
+
+  Mit `CBD_MAP_DATEI=<pfad>` prüft derselbe Harnisch **jede** Datei-Map des
+  Projekts — die Regel gilt für alle drei gleichermaßen. Stand 2026-09-18:
+  CDB-Designer und Theme grün, `Plugins/Eigene WP Blocks/reference_file_map.md`
+  **rot** (Zeile zu `blocks/summary-block/view.js`: die Liste der verbotenen
+  Dateinamenzeichen enthält eine rohe Pipe, 101 Zeichen fallen weg). Das liegt
+  in einem anderen Repository und ist dort zu beheben.
+
 - **`docs/VERBESSERUNGSPLAN.md` bis `-4.md`** — Review-Runden 2026-07 über das
   gesamte Website-Projekt (CDB, Modular-Plugin, Theme): 42 Arbeitspakete mit
   Problem, Fundstelle, Lösung, Verifikation und Erledigt-Status; inkl.
