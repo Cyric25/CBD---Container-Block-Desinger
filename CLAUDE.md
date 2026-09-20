@@ -7199,6 +7199,13 @@ Sperrzeit bis zu 56 Sekunden — jetzt sind es **unter 4**.
 > Webhosting-Tarif, kein Managed- oder Root-Server. Das Vorhaben ist mit
 > Phase 3 abgeschlossen.
 
+> **Seit dem 2026-09-20 im Einsatz:** Version **3.1.132** ist auf
+> `chemiefos.fos-meran.it` eingespielt, der Betreiber hat die Funktion
+> bestätigt. Wer hier etwas ändert, ändert etwas, das im Unterricht läuft.
+> **Zwei Notbremsen ohne Neuauslieferung** (Einstellungen → Container
+> Designer): „Schneller Takt" auf `0` schaltet nur die Pulsdatei ab, „Live-
+> Aktualisierung" auf `0` den ganzen Klassenpuls.
+
 ### Warum kein Push — die Frage ist beantwortet, nicht offen
 
 Der Betreiber hat seit 2026-09 einen KAS-Zugang, und die naheliegende
