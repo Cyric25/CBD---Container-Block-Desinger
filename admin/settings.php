@@ -67,6 +67,11 @@ if (isset($_POST['cbd_save_settings']) && wp_verify_nonce($_POST['cbd_settings_n
     // liest CBD_Klassenpuls::takt() im Frontend, damit beide nie auseinanderlaufen.
     update_option('cbd_klassenpuls_takt', cbd_sanitize_klassenpuls_takt($_POST['klassenpuls_takt'] ?? ''));
 
+    // Takt der Pulsdatei (Sekunden, 0 = nur der schnelle Weg aus). Kann die
+    // Notbremse darueber NICHT aushebeln - Einzelheiten im Docblock von
+    // cbd_sanitize_klassenpuls_takt_datei() (includes/functions.php).
+    update_option('cbd_klassenpuls_takt_datei', cbd_sanitize_klassenpuls_takt_datei($_POST['klassenpuls_takt_datei'] ?? ''));
+
     // Formeln im PDF als Vektor (Vorgabe an). Ein Kontrollkaestchen sendet
     // nichts, wenn es leer ist - deshalb die isset()-Form, sonst liesse sich
     // die Option nie abschalten.
@@ -119,6 +124,7 @@ $default_status = get_option('cbd_default_block_status', 'draft');
 $enable_caching = get_option('cbd_enable_block_caching', 1);
 $classroom_enabled = get_option('cbd_classroom_enabled', 0);
 $klassenpuls_takt = (int) get_option('cbd_klassenpuls_takt', 10);
+$klassenpuls_takt_datei = (int) get_option('cbd_klassenpuls_takt_datei', 2);
 $formeln_als_vektor = function_exists('cbd_formeln_als_vektor') ? cbd_formeln_als_vektor() : true;
 $html_annotation = get_option('cbd_html_annotation', 1);
 $notes_manager_mode = get_option('cbd_personal_notes_manager', 'toc');
@@ -333,6 +339,20 @@ $needs_migration = !$is_default_exists || !$classroom_tables_exist || version_co
                             <?php esc_html_e('Wie oft der Browser der Schülerinnen und Schüler nachfragt, ob etwas freigegeben wurde. Empfohlen: 10. Zulässig: 5 bis 300.', 'container-block-designer'); ?>
                             <strong><?php esc_html_e('0 schaltet die Live-Aktualisierung ab', 'container-block-designer'); ?></strong>
                             <?php esc_html_e('– der Klassenmodus verhält sich dann wie zuvor, Freigaben erscheinen erst beim Neuladen.', 'container-block-designer'); ?>
+                        </p>
+                    </td>
+                </tr>
+
+                <tr>
+                    <th scope="row"><?php esc_html_e('Schneller Takt (Sekunden)', 'container-block-designer'); ?></th>
+                    <td>
+                        <input type="number" name="klassenpuls_takt_datei" min="0" max="60" step="1" value="<?php echo esc_attr($klassenpuls_takt_datei); ?>">
+                        <p class="description">
+                            <?php esc_html_e('Wie oft der Browser die kleine Signaturdatei abfragt – sie kostet kein PHP, deshalb darf sie häufiger abgefragt werden. Vorgabe 2 Sekunden. Zulässig: 1 bis 60.', 'container-block-designer'); ?>
+                            <strong><?php esc_html_e('0 verzichtet auf die Signaturdatei', 'container-block-designer'); ?></strong>
+                            <?php esc_html_e('– dann gilt wieder allein das Feld darüber, wie vor dieser Erweiterung.', 'container-block-designer'); ?>
+                            <br>
+                            <?php esc_html_e('Das Feld darüber bleibt die Notbremse: Steht es auf 0, ist die Live-Aktualisierung vollständig aus – unabhängig von diesem Wert.', 'container-block-designer'); ?>
                         </p>
                     </td>
                 </tr>

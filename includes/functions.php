@@ -126,6 +126,53 @@ if (!function_exists('cbd_sanitize_klassenpuls_takt')) {
 }
 
 /**
+ * Takt der PULSDATEI (Sekunden) auf den erlaubten Bereich bringen.
+ *
+ * Zwilling der Funktion darueber, und aus demselben Grund vorhanden:
+ * Speicherseite (admin/settings.php) und Frontend-Auslieferung
+ * (CBD_Klassenpuls::takt_datei()) sollen denselben Wert auslegen.
+ *
+ * DIE GRENZEN STEHEN DAMIT AN ZWEI STELLEN, und das ist Absicht mit einem
+ * Preis: Sie muessen von Hand synchron gehalten werden. Wer 1, 2 oder 60
+ * aendert, aendert sie in BEIDEN Funktionen - hier und in
+ * `CBD_Klassenpuls::takt_datei()` samt deren Konstanten
+ * `TAKT_DATEI_MIN`/`TAKT_DATEI_VORGABE`/`TAKT_DATEI_MAX`. Ein
+ * Auseinanderlaufen bliebe folgenlos, weil die Leseseite ohnehin nachklemmt -
+ * es waere aber eine Einladung, die Doppelung zu vergroessern. Dieselbe Lage
+ * wie bei `cbd_sanitize_klassenpuls_takt()` oben, dort ebenso vermerkt.
+ *
+ * VERHAELTNIS ZUR NOTBREMSE: Diese Option kann `cbd_klassenpuls_takt` nicht
+ * aushebeln. Steht der Takt auf 0, wird `klassenpuls.js` gar nicht erst
+ * eingereiht - der Dateitakt ist dann gegenstandslos, egal was hier steht.
+ * Umgekehrt schaltet `0` hier nur den schnellen Weg ab; die Route tickt
+ * weiter wie vor dem Vorhaben „Schneller Klassenpuls".
+ *
+ * Regeln (PLAN-Schneller-Klassenpuls.md, AP-3.1): nicht numerisch -> 2;
+ * numerisch <= 0 -> 0 (nur der schnelle Weg aus); sonst geklemmt auf 1…60.
+ *
+ * @param mixed $wert
+ * @return int
+ */
+if (!function_exists('cbd_sanitize_klassenpuls_takt_datei')) {
+    function cbd_sanitize_klassenpuls_takt_datei($wert) {
+        // Komma als Dezimaltrenner - dieselbe Begruendung wie beim Zwilling.
+        $value = str_replace(',', '.', trim((string) wp_unslash($wert)));
+
+        if ('' === $value || !is_numeric($value)) {
+            return 2;
+        }
+
+        $value = (int) round((float) $value);
+
+        if ($value <= 0) {
+            return 0;
+        }
+
+        return max(1, min(60, $value));
+    }
+}
+
+/**
  * Sollen Formeln im PDF als Vektor gesetzt werden?
  *
  * Die Reissleine des Vorhabens "Formeln als Vektor im PDF" (Abschnitt 5

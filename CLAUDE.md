@@ -61,15 +61,56 @@ nicht die verarbeitende; bei Shared Hosting ist nginx vor Apache die
 verbreitete Aufstellung. Die Fehlaussage stand bereits in drei Dateien, bevor
 eine Rückfrage bei der Hosting-Administration sie widerlegte.
 
-### Was noch offen ist
+### Der `.json`-Handtest ist erbracht (2026-09-18)
 
-**Ein Handtest fehlt** (im Plan als `NW-1` geführt): Die Sonde oben zeigt,
-dass **keine Regel auf den Pfad greift**. Sie kann nicht zeigen, dass eine
-**tatsächlich vorhandene** `.json` mit HTTP 200 und brauchbarem
-`Content-Type` ausgeliefert wird — beide Sondendateien existierten nicht.
-Dafür braucht es eine von Hand angelegte Datei. Das Risiko gilt als gering
-(lokal `application/json`, auf nginx ist `.json` Standard), aber es ist
-ungemessen.
+Die Sonde aus `AP-0.2` konnte nur zeigen, dass **keine Regel auf den Pfad
+greift** (beide Sondendateien existierten nicht). Ob eine **tatsächlich
+vorhandene** `.json` ausgeliefert wird, blieb ungemessen und war im Plan als
+`NW-1` als Gate vor dem Ausrollen geführt. **Jetzt gemessen**, mit einer von
+Hand angelegten `wp-content/uploads/nw1-probe.json` auf der
+Produktivinstallation:
+
+| | |
+|---|---|
+| Status | **HTTP 200** |
+| `Content-Type` | **`application/json`** |
+| Rumpf | unversehrt, als JSON lesbar |
+| `Content-Encoding` | `br` (67 Byte auf der Leitung) |
+| `Accept-Ranges` / `ETag` | `bytes` / `"49-65bc198c1beaa-br"` |
+
+**Drei Nebenbefunde, die über den Handtest hinaus zählen:**
+
+1. **Der Passwortschutz der Seite gilt nicht für statische Dateien.** Die
+   Produktivseite zeigt für jede von WordPress gerenderte Adresse eine
+   Passwortabfrage; `wp-includes/js/jquery/jquery.min.js` antwortet dagegen
+   mit 200 und `application/javascript`. Ein **nicht angemeldeter**
+   Schülerbrowser erreicht die Pulsdatei also — die Voraussetzung, auf der
+   Stufe 1 des Vorhabens „Schneller Klassenpuls" ruht.
+2. **Die Auslieferung läuft ohne PHP.** `Accept-Ranges: bytes` und das
+   Apache-ETag-Format (`"<größe>-<mtime>"`) zeigen den Dateiweg des
+   Webservers, nicht einen PHP-Durchlauf. Das ist der ganze Zweck der
+   Pulsdatei und am Zielsystem nachgewiesen statt angenommen.
+3. **Der Server unterscheidet Groß- und Kleinschreibung.** Die Probedatei
+   hieß zunächst `nw1-probe.JSON`; der Aufruf mit kleiner Endung lieferte
+   404 **mitsamt der WordPress-Passwortseite** — byteartgleich zu einem frei
+   erfundenen Dateinamen. Für das Plugin folgenlos (es schreibt durchgehend
+   klein), aber eine Falle für jeden künftigen Handtest: **Eine falsch
+   geschriebene Datei ist von einer blockierten nicht zu unterscheiden.**
+   Wer so etwas misst, braucht eine Gegenprobe mit einem Namen, der sicher
+   nicht existiert.
+
+**Die Probedatei ist seit dem 2026-09-20 entfernt — nachgewiesen, nicht
+behauptet:** Der Abruf antwortet mit HTTP 404, während
+`wp-includes/js/jquery/jquery.min.js` im selben Lauf mit 200 antwortet (die
+404 ist also die Abwesenheit der Datei, keine Sperre), Gegenprobe mit einem
+erfundenen Namen ebenfalls 404.
+
+> **Hier stand vorher „wurde nach der Messung wieder entfernt" — zwei Tage
+> lang falsch.** Das Review `AP-3.rev` hat die Datei am 2026-09-19 noch mit
+> HTTP 200 und demselben `Last-Modified` auf die Sekunde abgerufen. Drei
+> Dokumente behaupteten die Entfernung, keines hatte sie geprüft (Befund
+> `B1`, mittel; korrigiert in `AP-3.fix1`). Die Lehre steht schon in Punkt 3
+> darüber und gilt hier genauso: **abrufen, nicht annehmen.**
 
 
 ## Architecture
@@ -1138,7 +1179,8 @@ Container **anderer** Seiten fehlen naturgemäß.
 
 ### Prüfharnisch
 
-`php tools/test-classroom-gate.php` — 37 Prüfungen ohne WordPress.
+`php tools/test-classroom-gate.php` — 38 Prüfungen ohne WordPress
+(nachgezählt am 2026-09-20; hier stand „37", Befund `B10` aus `AP-3.rev`).
 
 **Beim Prüfen mit `curl` daran denken:** Die REST-Schnittstelle verlangt zur
 Cookie-Anmeldung zusätzlich `X-WP-Nonce`; ohne den gilt die Anfrage als anonym.
@@ -7127,7 +7169,7 @@ beheben, falls gewünscht).
 (Plugin-Header `Version:` mitgezogen) — notwendiger Auslieferungsschritt
 für das Cache-Busting der geänderten CSS-Dateien, keine Kosmetik.
 
-## Schneller Klassenpuls: die Pulsdatei (`PLAN-Schneller-Klassenpuls.md`, Phasen 1 und 2, seit 2026-09-17)
+## Schneller Klassenpuls: die Pulsdatei (`PLAN-Schneller-Klassenpuls.md`, Phasen 1–3 abgeschlossen, 2026-09-17 bis 2026-09-20)
 
 Die Live-Aktualisierung des Klassenmodus (Abschnitt „Klassenmodus:
 Live-Aktualisierung" oben) fragt heute alle ~10 Sekunden die Route
@@ -7147,7 +7189,15 @@ niemand liest sie. **Phase 2 (abgeschlossen 2026-09-18) liest sie**, und erst
 damit wird die Live-Aktualisierung wirklich schneller: Eine Freigabe erscheint
 beim Schüler in **1,2 bis 3,6 Sekunden** statt in 5 bis 8. Der Clientteil
 steht im eigenen Unterabschnitt „Phase 2: der Client liest die Pulsdatei"
-weiter unten.
+weiter unten. **Phase 3 (abgeschlossen 2026-09-20)** macht den Dateitakt im
+Backend einstellbar, misst den Nutzen auf der Produktivseite (**Faktor ≈ 16**
+beim Serveranteil) und behebt den Widerspruch, den der schnelle Takt auf
+**gesperrten** Seiten erzeugt hatte: Dort wartete eine Freigabe in der
+Sperrzeit bis zu 56 Sekunden — jetzt sind es **unter 4**.
+
+> **Phase 4 (gehaltene Verbindung) entfällt** — der Tarif ist ein
+> Webhosting-Tarif, kein Managed- oder Root-Server. Das Vorhaben ist mit
+> Phase 3 abgeschlossen.
 
 ### Warum kein Push — die Frage ist beantwortet, nicht offen
 
@@ -7500,6 +7550,120 @@ Beide haben während dieser Phase Zeit gekostet und sehen wie Codefehler aus:
    jeder weitere Fall mit der zuerst geprüften Sitzung und sieht fälschlich
    wie ein Sicherheitsloch aus.
 
+### Phase 3: Einstellung, Messung, Feinschliff (`AP-3.1`–`AP-3.doc`, seit 2026-09-18)
+
+Phase 3 fügt dem Vorhaben **keine neue Mechanik** hinzu. Sie macht den
+Dateitakt einstellbar, misst den Nutzen auf der echten Maschine und behebt
+eine Verhaltensschwäche, die erst durch den schnellen Takt sichtbar wurde.
+
+#### Die zweite Einstellung — und ihre Rangfolge zur Notbremse
+
+| Option | Feld im Backend | Vorgabe | Bereich | 0 bedeutet |
+|---|---|---|---|---|
+| `cbd_klassenpuls_takt` | „Live-Aktualisierung (Sekunden)" | 10 | 5–300 | **Notbremse:** der ganze Klassenpuls ist aus |
+| `cbd_klassenpuls_takt_datei` | „Schneller Takt (Sekunden)" | 2 | 1–60 | nur die **Pulsdatei** ist aus, der REST-Takt läuft weiter |
+
+**Die Rangfolge ist an drei unabhängigen Stellen gesichert, nicht bloß
+verabredet** (vom Review `AP-3.rev` im Quelltext nachvollzogen):
+
+1. `class-cbd-klassenpuls.php:371` — bei `takt() <= 0` wird `takt_datei` in
+   der Antwort auf **0 gezwungen**;
+2. `:360-368` — die Dateiadresse verlässt den Server gar nicht erst;
+3. `class-cbd-classroom.php:1954` und `:2222` — `klassenpuls.js` wird bei
+   Takt 0 nicht eingereiht. Das sind die **einzigen zwei**
+   `wp_enqueue_script`-Aufrufe für dieses Handle im ganzen Repository.
+
+Hinzu kommt serverseitig `schreibe_pulsdatei()` (`:1019-1022`): Bei Takt 0
+kehrt sie zurück, **bevor** Pfad und Verzeichnis überhaupt bestimmt werden —
+es entsteht nicht einmal das Verzeichnis. **Die zweite Option kann die erste
+also nicht aushebeln.** Beide Sanitizer nehmen das deutsche Komma an
+(`1,5` → 2), weil eine Eingabe wie `1,5` sonst stillschweigend zu 1 würde.
+
+#### Die Entscheidung aus `AP-3.2`: getrennte Mindestabstände je Grund
+
+Auf **gesperrten** Seiten lädt der Klassenmodus die Seite neu, statt Teile
+nachzuziehen — und ein `MINDESTABSTAND_MS` von 60 Sekunden verhindert, dass
+das Zeichnen der Lehrperson beim Schüler einen Neulade-Sturm auslöst. Unter
+dem schnellen Takt wurde daraus ein Widerspruch: **Eine Freigabe, die in die
+Sperrzeit fiel, wartete gemessene 55 750 ms** — das Ziel „unter 10 Sekunden"
+war unerfüllbar, egal wie schnell die Pulsdatei bemerkt wurde.
+
+Umgesetzt ist daher **Option 3: ein eigener, kürzerer Abstand je Grund** —
+`ABSTAND_FREIGABE_MS = 5000` neben dem unveränderten `MINDESTABSTAND_MS =
+60000`, und `ladeNeu()` wählt nach dem Grund des **neuen** Ereignisses. Damit
+das auch dann greift, wenn schon ein Tafelbild-Zeitgeber läuft, wird ein
+späterer Zeitgeber **vorgezogen**.
+
+| Fall | vorher | nachher |
+|---|---|---|
+| Freigabe in der Sperrzeit (kopflos) | 55 750 ms | **750 ms** |
+| dieselbe Freigabe im echten Browser | ≈ 58 500 ms | **3757 ms** |
+| schlechtester Fall (kopflos) | 60 250 ms | **5250 ms** |
+| Tafelbild nach einer Freigabe (**Gegenbeweis**) | 60 250 ms | **60 250 ms** |
+
+Die letzte Zeile ist die wichtigste: **Der Neulade-Schutz beim Zeichnen ist
+unangetastet.** Nur Freigaben sind schnell geworden. Warum 5 s und nicht 10:
+Der zurückgestellte Zeitgeber feuert nach `rest + 250 ms`, dazu kommen bis zu
+3 s Dateitakt — in Summe unter 8,5 s. Mit 10 s wären es rund 13 s gewesen.
+**Diese Reserve ist im Harnisch festgeschrieben** (`BUDGET_MS = 10000 −
+DATEI_TAKT_MAX_MS`); wer den Dateitakt im Backend hochsetzt, verbraucht mehr
+davon, und die Zusicherung gilt dann nicht mehr — sie gilt für die Vorgabe.
+
+#### Die Kernzahlen (`docs/messung-pulsdatei.md`, auf der **Produktivseite**)
+
+| | REST-Route | Pulsdatei |
+|---|---|---|
+| Median roh | 64,3 ms | 26,7 ms |
+| abzüglich Netzweg (24,2 ms aus der 304-Messung) | **≈ 40,1 ms** | **≈ 2,5 ms** |
+
+**Faktor ≈ 16; betrieblich zählt die Differenz: rund 40 ms gesparte PHP-Zeit
+je vermiedenem Routenaufruf.** Eine unabhängige Nachmessung des Reviews mit
+anderem Werkzeug bestätigt die Größenordnung (59,8 gegen 21,3 ms Median).
+
+Betriebsfall **eine Klasse, 25 Schüler**: REST-Anfragen sinken von 2,5/s auf
+**0,42/s**, die PHP-Last von ≈ 100 auf **≈ 17 ms je Sekunde** — rund ein
+Sechstel. Dafür kommen 12,5 statische Abrufe/s hinzu, die kein PHP kosten.
+Die Sättigungskurve erreichte **767 Anfragen/s ohne einen einzigen
+Fehlschlag auf 265 Anfragen**; der Drei-Klassen-Fall (37,5 Abrufe/s) liegt
+bei **5 %** davon. **Wo der Knick liegt, sagt die Messung nicht** — die
+Obergrenze 25 ist eine Auflage des Betreibers, keine gemessene Grenze.
+
+#### Prüfharnisch der Phase 3
+
+`node tools/test-classroom-abstand.js` — **13 Prüfungen** ohne Browser gegen
+die **ausgelieferte** `classroom-page-filter.js`. `ladeNeu()` wird
+herausgeschnitten und gegen eine **virtuelle Uhr** gefahren; die Frage ist
+reine Zeitarithmetik, eine Minute echtes Warten je Durchgang wäre teuer und
+ungenauer. Die Konstanten liest er aus der Quelle, statt sie zu wiederholen.
+`CBD_FILTER_DATEI=<pfad>` lässt ihn gegen eine Kopie laufen, damit
+Mutationen die Originaldatei nicht anfassen.
+
+**Drei Prüfungen tragen mehr als die übrigen:**
+
+- **Fall `G` ist der Gegenbeweis** — ein Tafelbild wartet weiterhin rund 60 s.
+  Ohne ihn wäre auch ein Harnisch grün, der jeden Abstand abgeschafft hat.
+- **Fall `D2` verdankt sich der Mutationsprobe:** Ohne ihn überlebte das
+  Entfernen des Zeitgeber-Vorziehens, obwohl eine Freigabe dann weiterhin bis
+  zu eine Minute gewartet hätte.
+- **Prüfung `0b` und das `BUDGET_MS` in `C`/`D2`/`F` verdanken sich dem
+  Review:** Vorher ließ sogar `ABSTAND_FREIGABE_MS = 9700` alle Prüfungen
+  grün, obwohl das 10-Sekunden-Kriterium dann gerissen wäre — der Harnisch
+  rechnete nur die Wartezeit im JavaScript, nicht die bis zu 3 s des
+  Dateitakts davor.
+
+#### Betriebsempfehlung: den Aufräumdurchlauf an einen KAS-Cronjob hängen
+
+`raeume_auf()` (aus `AP-1.7`) entfernt verwaiste Pulsdateien einmal täglich
+über `wp_schedule_event()`. **WordPress' eigener Zeitplan hängt an
+Seitenaufrufen** — auf einer Seite, die nachts und in den Ferien niemand
+aufruft, läuft er schlicht nicht. Cronjobs sind im Tarif verfügbar
+(`docs/voraussetzungen-kas.md`, Frage 2). **Empfohlen, aber nicht
+erzwungen:** im KAS einen täglichen Aufruf von `wp-cron.php` einrichten und
+in der `wp-config.php` `DISABLE_WP_CRON` setzen. Ohne das ist nichts kaputt —
+verwaiste Dateien enthalten nur Prüfsummen und werden beim nächsten Aufruf
+mitgeräumt; es ist eine Empfehlung zur Zuverlässigkeit, **keine
+Codeänderung**.
+
 ### Bekannte, bewusst akzeptierte Einschränkungen
 
 Aus dem unabhängigen Review `AP-1.rev` (0 kritisch, 3 mittel, 5 gering — die
@@ -7557,8 +7721,25 @@ Prozessnotizen; alle geringen in `AP-2.fix1` abgearbeitet):
    `If-None-Match`, auch mit `Cache-Control: max-age=0`. Vier Erklärungen
    sind gemessen und ausgeschlossen (`credentials` in drei Varianten, ein
    fehlender `Cache-Control`-Kopf, `cache: 'default'` — das liefert eine
-   veraltete Datei aus dem Zwischenspeicher und scheidet aus). **Die Ursache
-   bleibt unbekannt**, belegt ist nur „dieser Messbrowser". `cache:
+   veraltete Datei aus dem Zwischenspeicher und scheidet aus). **Die Ursache ist
+   seit dem 2026-09-18 bekannt und auf der Produktivinstallation gemessen**
+   (im Zuge von `NW-1`): Apache hängt beim Komprimieren ein Suffix an den
+   ETag (`"49-65bc198c1beaa-br"`), vergleicht ein `If-None-Match` aber gegen
+   den **unsuffigierten** Wert. Ein Browser schickt pflichtgemäß genau den
+   ETag zurück, den er bekommen hat — also den mit `-br` — und bekommt
+   deshalb **nie** eine 304. Am selben Server nachgemessen:
+
+   | gesendeter Bedingungskopf | Antwort |
+   |---|---|
+   | `If-None-Match` wie geliefert (`…-br`) | **200**, voller Rumpf |
+   | `If-None-Match` ohne `-br`-Suffix | **304**, leerer Rumpf |
+   | `If-Modified-Since` | **304**, leerer Rumpf |
+
+   Der Server beherrscht bedingte Abrufe also einwandfrei; es ist die
+   ETag-Verstümmelung der Komprimierung, die sie für einen Browser
+   unerreichbar macht. Wer es je beheben will, tut das serverseitig in der
+   `.htaccess`, indem er das Suffix aus `If-None-Match` entfernt, bevor
+   Apache vergleicht — **nicht** im Plugin. `cache:
    'no-cache'` bleibt richtig: Nur es schließt eine veraltete Antwort aus.
    Folgen hat es keine — 128 Byte Körper, und serverseitig kostet eine 200
    auf eine statische Datei dasselbe wie eine 304.
@@ -7574,6 +7755,43 @@ Prozessnotizen; alle geringen in `AP-2.fix1` abgearbeitet):
    bleibt als Vorsorge stehen und wird wieder tragend, sobald jemand eine der
    beiden Marken einzeln zurücksetzt; die Prüfungen A9/A9b des
    Client-Harnischs halten genau diese Voraussetzung fest.
+
+Aus dem unabhängigen Review `AP-3.rev` (0 kritisch, 1 mittel, 11 gering;
+Urteil **auslieferbar**; die behebbaren Befunde sind in `AP-3.fix1`
+abgearbeitet):
+
+10. **Einschränkung 6 bleibt nach Phase 3 offen.** Die Bremse für die
+    Stufe-2-Last gehört auf **normale** Seiten, Phase 3 hat aber nur
+    **gesperrte** angefasst. Das Review hat das ausdrücklich bestätigt. Wer
+    sie angeht, ändert `classroom-page-filter.js` im `else`-Zweig von
+    `verdrahteKlassenpuls()` — und braucht dafür ein eigenes Vorhaben, weil
+    dort ein Abonnent hängt.
+11. **Auf gesperrten Seiten sind bei dichten Freigaben jetzt bis zu 12
+    Neuladungen je Minute möglich** (vorher 1). Das ist die gewollte Kehrseite
+    von `ABSTAND_FREIGABE_MS = 5000` und betrifft **nur** Freigaben: Für das
+    Zeichnen gilt unverändert eine Neuladung je Minute, im Harnisch als Fall
+    `G` gegenbewiesen. Eine Lehrperson, die zwölfmal in einer Minute eine
+    Freigabe umschaltet, ist der Ausnahmefall, für den das gilt.
+12. **Springt die Uhr zur Laufzeit zurück** (NTP-Korrektur, Zeitumstellung,
+    Nutzer), hält die Zusicherung „unter 10 Sekunden" nicht: `verstrichen`
+    ist negativ, `rest` wird auf den vollen Abstand geklemmt, und die
+    Freigabe erscheint erst, wenn die Uhr aufgeholt hat. **Bestand** — der
+    Kommentar an `classroom-page-filter.js:616-618` nennt die Richtung
+    ausdrücklich als bewusst vorsichtig gewählt. Phase 3 verstärkt es
+    insofern, als die Warteschleife für `'freigabe'` jetzt alle 5,25 s statt
+    alle 60,25 s läuft — rund 11,5-mal häufiger. **Folgen: keine.** Kein
+    Netzverkehr, kein Neuladen, nur ein Zeitgeberzyklus und eine
+    Debug-Zeile. Beim **Laden** fängt `stelleWiederaufnahmeHer()` den Fall
+    korrekt ab (`:1068`).
+13. **Eine Array-Eingabe erzeugt eine PHP-Warnung.**
+    `cbd_sanitize_klassenpuls_takt_datei(array('1'))` meldet „Array to string
+    conversion" und gibt dann korrekt die Vorgabe zurück. Der Zwilling
+    verhält sich identisch — **das Bestandsmuster wurde getreu kopiert, wie
+    der Plan es verlangte.** Erreichbar nur mit gültigem Nonce und
+    `manage_options` über `?klassenpuls_takt_datei[]=1`; das Ergebnis bleibt
+    in jedem Fall ein gültiger Wert. Bemerkenswert nur, weil
+    `CBD_Klassenpuls::liefere_puls()` (`:324-328`) genau diese Eingabeform
+    mit `is_scalar()` abfängt — das Projekt kennt die Klasse also.
 
 
 ## Debugging-Konventionen
@@ -7685,6 +7903,54 @@ Recent fixes:
 - **`reference_file_map.md`** — Datei-Map des Plugins: welche Datei wofür
   zuständig ist, inklusive der drei toten CSS-Dateien und der Hinweise zum
   ZIP-Bau. Navigationshilfe; die fachlichen Details stehen in dieser Datei.
+
+  **Vor dem Schreiben in eine Datei-Map lesen — eine stille Falle.** GFM
+  zerlegt eine Tabellenzeile an **jeder** nicht maskierten Pipe. Auch an
+  einer, die in Backticks steht: Die Tabellenzerlegung läuft **vor** der
+  Inline-Auswertung, ein Code-Span schützt hier nichts. Zellen jenseits der
+  Spaltenzahl der Kopfzeile werden anschließend **ersatzlos verworfen** —
+  ohne Warnung, ohne Lücke im Layout. Wer in einer zweispaltigen Tabelle ein
+  Code-Beispiel wie `implode('|', …)` oder `a || b` notiert, hat damit den
+  Rest der Zeile unsichtbar gemacht. **An der Datei selbst sieht man nichts**,
+  im Editor steht alles da; aufgefallen ist es beide Male nur, weil ein frisch
+  angehängter Absatz auf GitHub spurlos fehlte. Zweimal an der echten
+  GitHub-Darstellung gemessen, nicht am Parser: erst **20 669** Zeichen in
+  einer einzigen Zeile (AP-3.2 aus `PLAN-Schneller-Klassenpuls.md`), dann
+  **30 150** in elf weiteren — zusammen rund ein Viertel der Datei. Die
+  größte Zeile (`pdf-server-side.js`) zeigte 1 334 statt 17 748 Zeichen.
+
+  **Die Regel beim Schreiben:**
+
+  1. Pipe im Zelleninhalt → als `\|` maskieren. GFM ersetzt `\|` **vor** der
+     Inline-Auswertung durch `|`; die Maskierung wirkt deshalb auch innerhalb
+     von Backticks, wo ein Backslash sonst nichts bedeutet.
+  2. Mehr Zellen, als die Kopfzeile Spalten vorsieht → den überzähligen
+     Inhalt in den **Flusstext der letzten gültigen Zelle** holen, **nicht**
+     löschen. Der Text ist Dokumentation, keine Formatierung.
+  3. Backticks paarweise halten. Ein einzelner öffnet einen Code-Span, der
+     den Rest der Zeile verschluckt — derselbe stille Fehler, andere Ursache.
+
+  **Achtung, im Fließtext gilt Regel 1 NICHT.** Die Ersetzung von `\|` ist
+  eine Eigenheit der Tabellenzerlegung. Außerhalb einer Tabelle bleibt der
+  Backslash in einem Code-Span sichtbar stehen, und eine rohe Pipe ist dort
+  ohnehin harmlos. Wer einen Absatz *über* die Regel schreibt, notiert die
+  Beispiele also mit roher Pipe.
+
+  **Geprüft wird das von `tools/test-datei-map-pipes.js`** (13 Prüfungen,
+  Aufruf: `node tools/test-datei-map-pipes.js`). **Nach jeder Änderung an
+  einer Datei-Map laufen lassen** — die Falle ist am Ergebnis nicht zu sehen,
+  nur am Harnisch. Er prüft die Zellzahl gegen die Kopfzeile in beide
+  Richtungen, Pipes in Code-Spans, verworfene Zeichen und die
+  Backtick-Paarigkeit; **Fall F ist der Gegenbeweis** an einer erfundenen
+  Tabelle, ohne den auch ein Harnisch grün wäre, der die Zerlegungsregel gar
+  nicht nachbildet. Fünf tragende Mutationen sind gemessen, alle fünf sterben.
+
+  Mit `CBD_MAP_DATEI=<pfad>` prüft derselbe Harnisch **jede** Datei-Map des
+  Projekts — die Regel gilt für alle drei gleichermaßen. Stand 2026-09-18:
+  CDB-Designer und Theme grün, `Plugins/Eigene WP Blocks/reference_file_map.md`
+  **rot** (Zeile zu `blocks/summary-block/view.js`: die Liste der verbotenen
+  Dateinamenzeichen enthält eine rohe Pipe, 101 Zeichen fallen weg). Das liegt
+  in einem anderen Repository und ist dort zu beheben.
 
 - **`docs/VERBESSERUNGSPLAN.md` bis `-4.md`** — Review-Runden 2026-07 über das
   gesamte Website-Projekt (CDB, Modular-Plugin, Theme): 42 Arbeitspakete mit

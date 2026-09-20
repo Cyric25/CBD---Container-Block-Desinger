@@ -47,14 +47,61 @@
     var SPEICHER_SCHLUESSEL = 'cbd_klassenmodus_wiederaufnahme';
 
     /**
-     * Frühestens 60 Sekunden zwischen zwei selbst ausgelösten Neuladungen.
+     * Frühestens 60 Sekunden zwischen zwei selbst ausgelösten Neuladungen —
+     * **für Tafelbilder.** Freigaben haben seit AP-3.2 ihren eigenen, viel
+     * kürzeren Abstand, siehe `ABSTAND_FREIGABE_MS` darunter.
      *
      * Zeichnet die Lehrperson fortlaufend an einem Tafelbild, bewegt sich die
      * Signatur 'tafel' bei jedem Speichern. Ohne Mindestabstand lüde die
      * reduzierte Seite dem Schüler im Minutentakt unter den Händen weg.
-     * Derselbe Wert dient als Höchstalter eines Wiederaufnahme-Eintrags.
+     *
+     * **Der Wert bleibt bei 60 Sekunden, und das ist gemessen, nicht
+     * geschätzt** (AP-3.2, Messwert aus AP-2.3): Bei 20 Speicherungen in 60
+     * Sekunden lädt die Schülerseite **genau einmal** neu — der Abstand hält
+     * unter dem zweisekündigen Dateitakt der Phase 2 genauso wie unter dem
+     * zehnsekündigen davor. Der schnellere Takt bewirkt nur, dass die
+     * **erste** Neuladung früher kommt, nicht dass es mehr werden.
+     *
+     * **Derselbe Wert dient als Höchstalter eines Wiederaufnahme-Eintrags**
+     * (siehe `stelleWiederaufnahmeHer()`) — dort ist er bewusst NICHT durch
+     * den kürzeren Freigabe-Abstand ersetzt: Ein Eintrag soll so lange
+     * gelten, wie überhaupt eine Sperrzeit laufen kann.
      */
     var MINDESTABSTAND_MS = 60000;
+
+    /**
+     * Mindestabstand für Neuladungen wegen einer FREIGABE — fünf Sekunden.
+     *
+     * WARUM ES ZWEI ABSTÄNDE GIBT (AP-3.2). Mit einem einzigen Abstand von 60
+     * Sekunden geriet die Freigabe in Sippenhaft für das Zeichnen. Gemessen
+     * am Quelltext mit virtueller Uhr: Tafelbild gespeichert, Neuladen bei
+     * 2,5 s, dann eine Freigabe bei 7 s — der Schüler sah sie erst nach
+     * **55 750 ms**. Genau das Ereignis, um dessen Beschleunigung es in
+     * diesem Vorhaben geht, war auf gesperrten Seiten also am langsamsten.
+     *
+     * Die beiden Gründe sind ungleich und verdienen ungleiche Abstände:
+     *
+     * | Grund      | Häufigkeit                          | Neuladen ist … |
+     * |------------|-------------------------------------|----------------|
+     * | `'tafel'`  | bei JEDEM Pinselstrich-Speichern    | störend        |
+     * | `'freigabe'`| ein bewusster Klick der Lehrperson | erwünscht      |
+     *
+     * **Warum ausgerechnet 5 Sekunden:** Der zurückgestellte Zeitgeber feuert
+     * nach `rest + 250 ms`, im schlechtesten Fall also nach rund 5,25 s. Dazu
+     * kommen die höchstens 3 s, die der Dateitakt zum Bemerken braucht — in
+     * Summe unter 8,5 s und damit unter der Zehn-Sekunden-Grenze, die das
+     * Akzeptanzkriterium von AP-3.2 setzt. Mit 10 s wären es rund 13 s
+     * gewesen, also zu langsam.
+     *
+     * **Was das im schlimmsten Fall kostet:** Gibt eine Lehrperson eine
+     * Minute lang alle fünf Sekunden etwas frei, lädt die Schülerseite bis zu
+     * zwölfmal neu. Mehrere Freigaben INNERHALB der fünf Sekunden ergeben
+     * dabei nur EIN Neuladen (der Zeitgeber fasst zusammen), und jedes dieser
+     * Neuladen bringt tatsächlich neuen Inhalt. Der Tausch ist bewusst: Ein
+     * Neuladen wegen einer Freigabe ist gewollt, eines wegen eines
+     * Pinselstrichs nicht.
+     */
+    var ABSTAND_FREIGABE_MS = 5000;
 
     /**
      * Anzeigedauer des Wiederaufnahme-Hinweises in Millisekunden — dieselben
@@ -116,6 +163,19 @@
          */
         vorgemerkterGrund: null,
         abstandZeitgeber: null,
+
+        /**
+         * Wann der zurückgestellte Zeitgeber feuert (ms seit Epoche), `0`
+         * wenn keiner läuft.
+         *
+         * Nötig seit AP-3.2: Eine Freigabe darf einen bereits für ein
+         * Tafelbild laufenden, viel späteren Zeitgeber VORZIEHEN. Ohne diesen
+         * Wert wüsste `ladeNeu()` nicht, ob der laufende Zeitgeber schon früh
+         * genug feuert — und die Verdrängung des Grundes (`'freigabe'`
+         * überschreibt ein vorgemerktes `'tafel'`) bliebe wirkungslos, weil
+         * der Zeitpunkt der alte geblieben wäre.
+         */
+        abstandFaellig: 0,
 
         /**
          * Ob gerade eine Freigabeprüfung unterwegs ist bzw. die Umleitung
@@ -539,6 +599,16 @@
             var jetzt = Date.now();
             var verstrichen;
             var rest;
+            var faellig;
+
+            // DER ABSTAND HÄNGT AM GRUND DES NEUEN EREIGNISSES, nicht am
+            // Grund der letzten Neuladung (AP-3.2). Eine Freigabe soll kurz
+            // warten, auch wenn zuvor ein Tafelbild geladen hat; ein
+            // Tafelbild soll lange warten, auch wenn zuvor eine Freigabe
+            // geladen hat.
+            var abstand = ('freigabe' === grund)
+                ? ABSTAND_FREIGABE_MS
+                : MINDESTABSTAND_MS;
 
             if (this.letzteNeuladung) {
                 verstrichen = jetzt - this.letzteNeuladung;
@@ -546,23 +616,37 @@
                 // Eine zurückgestellte Uhr (verstrichen < 0) gilt bewusst als
                 // „noch nicht abgelaufen" – die vorsichtige Richtung, denn ein
                 // zu frühes Neuladen ist der teurere Fehler.
-                if (verstrichen < MINDESTABSTAND_MS) {
-                    rest = MINDESTABSTAND_MS - verstrichen;
-                    if (rest < 0 || rest > MINDESTABSTAND_MS) {
-                        rest = MINDESTABSTAND_MS;
+                if (verstrichen < abstand) {
+                    rest = abstand - verstrichen;
+                    if (rest < 0 || rest > abstand) {
+                        rest = abstand;
                     }
 
                     if (grund === 'freigabe' || !this.vorgemerkterGrund) {
                         this.vorgemerkterGrund = grund;
                     }
 
+                    faellig = jetzt + rest + 250;
+
+                    // EINE FREIGABE ZIEHT EINEN SPÄTEREN ZEITGEBER VOR.
+                    // Ohne das bliebe die Verdrängung des Grundes drei Zeilen
+                    // höher wirkungslos: Der für ein Tafelbild gesetzte
+                    // Zeitgeber feuerte weiterhin erst nach bis zu einer
+                    // Minute, nur eben mit dem Grund 'freigabe'.
+                    if (this.abstandZeitgeber && faellig < this.abstandFaellig) {
+                        window.clearTimeout(this.abstandZeitgeber);
+                        this.abstandZeitgeber = null;
+                    }
+
                     // Nur EIN Zeitgeber, egal wie viele Änderungen in der
                     // Sperrzeit gemeldet werden.
                     if (!this.abstandZeitgeber) {
+                        this.abstandFaellig = faellig;
                         this.abstandZeitgeber = window.setTimeout(function() {
                             var nachgezogen = self.vorgemerkterGrund;
 
                             self.abstandZeitgeber = null;
+                            self.abstandFaellig = 0;
                             self.vorgemerkterGrund = null;
 
                             if (nachgezogen) {
