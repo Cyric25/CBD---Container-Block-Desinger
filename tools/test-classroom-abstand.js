@@ -105,6 +105,27 @@ function konstante(name) {
 var MINDESTABSTAND_MS = konstante('MINDESTABSTAND_MS');
 var ABSTAND_FREIGABE_MS = konstante('ABSTAND_FREIGABE_MS');
 
+/**
+ * Was der Dateitakt schlimmstenfalls VOR `ladeNeu()` verbraucht.
+ *
+ * Das Akzeptanzkriterium von AP-3.2 lautet „in unter 10 Sekunden" — und
+ * zwar beim SCHUELER. Bis `ladeNeu()` ueberhaupt gerufen wird, hat der
+ * Dateitakt die Aenderung schon bemerken muessen: Vorgabe 2 s, nach oben
+ * gestreut mit `1 + Zufall * 0,5`, also hoechstens 3000 ms.
+ *
+ * WARUM DAS HIER STEHT (Befund B3 aus AP-3.rev): Die Faelle C und F
+ * prueften urspruenglich gegen die vollen 10 000 ms und uebersahen damit
+ * genau diese Reserve. Nachgemessen: `ABSTAND_FREIGABE_MS = 9700` liess
+ * alle Pruefungen gruen, obwohl das Kriterium dann in Wirklichkeit
+ * gerissen waere. Seither rechnen C und F gegen das echte Budget.
+ *
+ * Wer den Dateitakt im Backend hochsetzt, verbraucht mehr davon — bei
+ * einem eingestellten Takt von 5 s waeren es 7500 ms statt 3000, und die
+ * Zusicherung traegt nicht mehr. Sie gilt fuer die Vorgabe.
+ */
+var DATEI_TAKT_MAX_MS = 3000;
+var BUDGET_MS = 10000 - DATEI_TAKT_MAX_MS;
+
 // =====================================================================
 // Virtuelle Uhr + Attrappe des Filterobjekts
 // =====================================================================
@@ -198,6 +219,10 @@ pruefe('0 - der Freigabe-Abstand ist kuerzer als der allgemeine',
 	ABSTAND_FREIGABE_MS < MINDESTABSTAND_MS,
 	ABSTAND_FREIGABE_MS + ' vs ' + MINDESTABSTAND_MS);
 
+pruefe('0b - Abstand + Zeitgeberzuschlag + Dateitakt bleiben unter 10 s',
+	ABSTAND_FREIGABE_MS + 250 + DATEI_TAKT_MAX_MS < 10000,
+	(ABSTAND_FREIGABE_MS + 250 + DATEI_TAKT_MAX_MS) + ' ms');
+
 console.log('\n--- A: Freigabe ohne laufende Sperrzeit ---');
 var u = baue();
 u.setze(1000);
@@ -229,8 +254,9 @@ u.spuleBis(200000);
 var freigabe = u.neuladungen.filter(function (n) { return 'freigabe' === n.grund; })[0];
 var wartezeit = freigabe ? freigabe.t - 7000 : null;
 console.log('  Wartezeit: ' + wartezeit + ' ms  (vor AP-3.2: 55 750 ms)');
-pruefe('C - Freigabe in unter 10 s beim Schueler',
-	null !== wartezeit && wartezeit < 10000, 'wartezeit=' + wartezeit);
+pruefe('C - Freigabe in unter 10 s beim Schueler (Budget ohne Dateitakt)',
+	null !== wartezeit && wartezeit < BUDGET_MS,
+	'wartezeit=' + wartezeit + ' ms, Budget ' + BUDGET_MS);
 
 console.log('\n--- D/E: Freigabe verdraengt ein vorgemerktes Tafelbild ---');
 u = baue();
@@ -260,7 +286,7 @@ var wartenD = freigabeD ? freigabeD.t - 6000 : null;
 console.log('  Wartezeit der verdraengenden Freigabe: ' + wartenD + ' ms');
 pruefe('D2 - sie wartet auch dann unter 10 s, wenn schon ein '
 	+ 'Tafelbild-Zeitgeber laeuft',
-	null !== wartenD && wartenD < 10000, 'wartezeit=' + wartenD);
+	null !== wartenD && wartenD < BUDGET_MS, 'wartezeit=' + wartenD);
 
 console.log('\n--- F: schlechtester Fall (Freigabe direkt nach einem Neuladen) ---');
 u = baue();
@@ -272,8 +298,8 @@ u.spuleBis(200000);
 var fr = u.neuladungen.filter(function (n) { return 'freigabe' === n.grund; })[0];
 var w = fr ? fr.t - 2500 : null;
 console.log('  Wartezeit: ' + w + ' ms');
-pruefe('F - auch im schlechtesten Fall unter 10 s',
-	null !== w && w < 10000, 'wartezeit=' + w);
+pruefe('F - auch im schlechtesten Fall unter 10 s (Budget ohne Dateitakt)',
+	null !== w && w < BUDGET_MS, 'wartezeit=' + w + ' ms, Budget ' + BUDGET_MS);
 
 console.log('\n--- G: DER GEGENBEWEIS - eine Freigabe verkuerzt den ---');
 console.log('    Tafelbild-Abstand NICHT. Ohne diesen Fall waere auch ein');
@@ -305,6 +331,30 @@ pruefe('H - die Freigabe zwischen 20 Pinselstrichen kommt durch',
 	1 === frH.length, 'n=' + frH.length + ' ' + JSON.stringify(laden(u)));
 pruefe('H2 - und die Gesamtzahl bleibt klein (hoechstens 4 in 90 s)',
 	u.neuladungen.length <= 4, 'n=' + u.neuladungen.length);
+
+console.log('\n--- I: der vorgemerkte Grund wird nach dem Nachziehen ---');
+console.log('    wirklich zurueckgesetzt.');
+// Ohne `self.vorgemerkterGrund = null` im Zeitgeber-Rueckruf bleibt der
+// alte Grund stehen. Die Bedingung `grund === 'freigabe' ||
+// !this.vorgemerkterGrund` laesst ein spaeteres 'tafel' dann NICHT mehr
+// durch - die naechste nachgezogene Neuladung traegt faelschlich
+// weiterhin 'freigabe'. Befund B7/R8 aus AP-3.rev: Diese Luecke hat jede
+// andere Pruefung ueberlebt, obwohl auf genau dieser Zeile die
+// Begruendung ruht, warum die Zeitgeber-Sperre entbehrlich sein darf.
+u = baue();
+u.setze(0);
+u.spuleBis(2500);
+u.filter.ladeNeu.call(u.filter, 'tafel');        // laedt sofort
+u.spuleBis(4000);
+u.filter.ladeNeu.call(u.filter, 'freigabe');     // wird zurueckgestellt
+u.spuleBis(8000);                                // Nachzug ist gelaufen
+u.filter.ladeNeu.call(u.filter, 'tafel');        // neue Sperrzeit
+u.spuleBis(200000);
+var dritte = u.neuladungen[2];
+console.log('  Neuladungen: ' + JSON.stringify(laden(u)));
+pruefe('I - die dritte Neuladung traegt "tafel", nicht den alten Grund',
+	dritte && 'tafel' === dritte.grund,
+	dritte ? dritte.grund : 'keine dritte Neuladung');
 
 console.log('\n----------------------------------------');
 console.log('gruen: ' + gruen + '   rot: ' + rot);

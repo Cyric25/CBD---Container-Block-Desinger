@@ -92,15 +92,30 @@ der Beleg: Ein 304-Abruf kostet den Server praktisch nichts und braucht
 trotzdem 24 ms. Das ist der Netzweg. Zieht man ihn ab, bleibt als
 Serveranteil:
 
-| | Serveranteil (Median) |
-|---|---|
-| REST-Route | **≈ 40,8 ms** |
-| Pulsdatei | **≈ 4,6 ms** |
+| | Rechnung | Serveranteil (Median) |
+|---|---|---|
+| REST-Route | 64,3 − 24,2 | **≈ 40,1 ms** |
+| Pulsdatei | 26,7 − 24,2 | **≈ 2,5 ms** |
 
 **Jeder vermiedene Routenaufruf spart also rund 40 ms PHP-Zeit** auf einer
 Maschine, die mit anderen Kunden geteilt wird. Das deckt sich mit der
 unabhängigen Schätzung aus `AP-0.2` (`voraussetzungen-kas.md`: rund 47 ms),
 die mit anderem Werkzeug entstand.
+
+> **Korrigiert am 2026-09-20 (`AP-3.fix1`, Befund `B5` aus `AP-3.rev`).**
+> Hier standen zuerst **40,8** und **4,6 ms** — Zahlen, die sich aus den
+> Tabellen dieses Abschnitts nicht nachrechnen lassen. Der Routenwert lag im
+> Rundungsbereich, der Dateiwert war um rund 84 % zu hoch. Jetzt steht die
+> Rechnung in der Tabelle selbst, und zwar nach der Regel, die der Absatz
+> darüber nennt: Median minus Netzweg aus der 304-Zeile.
+>
+> **Die Richtung des alten Fehlers war günstig** — ein zu hoch angesetzter
+> statischer Serveranteil macht den Vergleich konservativer. Das Review hat
+> mit eigenem Werkzeug (nacktes `curl`, eine Verbindung, 2026-09-19)
+> **19,1 ms** als schnellsten statischen Abruf und daraus rund **2 ms**
+> Serveranteil gemessen — dieselbe Größenordnung wie die 2,5 ms hier, nicht
+> wie die alten 4,6 ms. **Der Faktor steigt dadurch von ≈ 9 auf ≈ 16**; die
+> betrieblich tragende Größe, die Differenz von rund 40 ms, ändert sich nicht.
 
 ---
 
@@ -128,6 +143,26 @@ einen zweiten, niedrigen Ankerpunkt — Begründung in Abschnitt 6.
 21,8 / 22,1 ms. Der Durchsatz steigt dabei praktisch linear auf **767
 Anfragen je Sekunde**. **0 Fehlschläge auf 265 Anfragen insgesamt.**
 
+> **Wie die Spalte „Anfr./s" zu lesen ist** (nachgetragen am 2026-09-20,
+> `AP-3.fix1`, Befund `B6` aus `AP-3.rev`): Sie rechnet mit der **vollen**
+> Anfragezahl der Stufe, nicht mit der um die Aufwärmrunden verringerten
+> (30 ÷ 0,67 = 44,8 · 50 ÷ 0,137 = 365 · 125 ÷ 0,163 = 767). Abschnitt 2
+> sagt dagegen, die Durchsatzuhr starte erst nach den verworfenen ersten
+> `parallel` Ergebnissen. **Beides zusammen geht nur auf eine von zwei
+> Weisen, und welche es war, lässt sich nicht mehr entscheiden** — das
+> Messskript liegt planmäßig nicht im Repository:
+>
+> - Entweder enthält der Zähler die Aufwärmrunden, die Uhr aber nicht —
+>   dann ist der ausgewiesene Durchsatz **zu hoch**, bei Stufe 10 um bis zu
+>   ein Fünftel.
+> - Oder die Aufwärmrunden waren zusätzliche Anfragen — dann stimmt der
+>   Durchsatz, und die Statuscode-Bilanz „200 × 205, 404 × 60" nennt nur
+>   die **gewerteten** Anfragen; an die Maschine gingen entsprechend mehr.
+>
+> Auf die Bewertung hat es in keiner der beiden Lesarten Einfluss: Selbst
+> die ungünstige („zu hoch") lässt den Drei-Klassen-Fall bei rund 6 % statt
+> 5 % der gemessenen Rate liegen.
+
 **Wo der Knick liegt, sagt diese Messung nicht — und das ist kein Versehen.**
 Bei Parallelität 25 ist der Server erkennbar noch nicht die Grenze: 25
 gleichzeitige Anfragen bei 22 ms Antwortzeit ergeben rechnerisch rund 1100
@@ -145,8 +180,10 @@ Form, nicht der Wert.
 
 ## 5. Betriebsfallrechnung
 
-Serveranteil je Anfrage aus Abschnitt 3: Route ≈ 40,8 ms, Pulsdatei ≈ 4,6 ms
-(davon 0 ms PHP).
+Serveranteil je Anfrage aus Abschnitt 3: Route ≈ 40,1 ms, Pulsdatei ≈ 2,5 ms
+(davon 0 ms PHP). **Die Zeile „PHP-Zeit/s" hängt allein am Routenwert** —
+die statischen Abrufe kosten kein PHP, ihr Serveranteil geht in diese
+Rechnung gar nicht ein.
 
 ### Eine Klasse, 25 Schüler
 
@@ -154,7 +191,7 @@ Serveranteil je Anfrage aus Abschnitt 3: Route ≈ 40,8 ms, Pulsdatei ≈ 4,6 ms
 |---|---|---|
 | statische Abrufe/s | – | 12,5 |
 | REST-Anfragen/s | **2,5** | **0,42** |
-| PHP-Zeit/s | ≈ **102 ms** | ≈ **17 ms** |
+| PHP-Zeit/s | ≈ **100 ms** | ≈ **17 ms** |
 | Reaktionszeit auf eine Freigabe | 5–8 s | **1,2–3,6 s** |
 
 ### Drei Klassen, 75 Schüler
@@ -163,7 +200,7 @@ Serveranteil je Anfrage aus Abschnitt 3: Route ≈ 40,8 ms, Pulsdatei ≈ 4,6 ms
 |---|---|---|
 | statische Abrufe/s | – | 37,5 |
 | REST-Anfragen/s | **7,5** | **1,25** |
-| PHP-Zeit/s | ≈ **306 ms** | ≈ **51 ms** |
+| PHP-Zeit/s | ≈ **301 ms** | ≈ **50 ms** |
 
 **Die PHP-Last sinkt auf rund ein Sechstel, während die Reaktionszeit sich
 verfünffacht.** Die 37,5 statischen Abrufe/s im Drei-Klassen-Fall sind
@@ -191,8 +228,20 @@ als er zeigt.
    hier.
 2. **Statt der Pulsdatei diente eine von Hand angelegte Probedatei**
    (`uploads/nw1-probe.json`, 73 Byte, aus `NW-1`). Sie ist in Größe und
-   Ablageort das, was das Plugin später selbst schreibt. Nach der Messung
-   entfernt.
+   Ablageort das, was das Plugin später selbst schreibt. **Entfernt am
+   2026-09-20 durch den Betreiber, und diesmal nachgewiesen statt
+   behauptet:** Der Abruf antwortet mit **HTTP 404**, während
+   `wp-includes/js/jquery/jquery.min.js` im selben Lauf mit **200** und
+   `application/javascript` antwortet — die 404 ist also die Abwesenheit
+   der Datei, keine allgemeine Sperre. Gegenprobe mit einem erfundenen
+   Namen: ebenfalls 404.
+
+   > **Hier stand bis zum 2026-09-20 „Nach der Messung entfernt."** — und
+   > das war zu diesem Zeitpunkt falsch: Das Review `AP-3.rev` hat die
+   > Datei am 2026-09-19 um 08:47 Uhr noch mit HTTP 200 und demselben
+   > `Last-Modified` auf die Sekunde abgerufen (Befund `B1`, mittel). Drei
+   > Dokumente behaupteten die Entfernung, keines hatte sie geprüft.
+   > Korrigiert in `AP-3.fix1`.
 3. **Die Maschine wird mit anderen Kunden geteilt.** Jede Zahl ist eine
    Momentaufnahme eines Freitagnachmittags. Fremdlast ist weder bekannt
    noch kontrollierbar.
@@ -231,9 +280,10 @@ als er zeigt.
 
 **Ja.** Roh über die Gesamtzeit: **Faktor 2,4** (64,3 gegen 26,7 ms Median).
 Das ist die vorsichtige Lesart, und sie untertreibt, weil bei 73 Byte rund
-22 ms reiner Netzweg sind. Nach Abzug dieses Bodens: **rund 40,8 gegen
-4,6 ms Serveranteil, Faktor ≈ 9.** Die betrieblich entscheidende Größe ist
-die Differenz: **jeder vermiedene Routenaufruf spart rund 40 ms PHP-Zeit.**
+22 ms reiner Netzweg sind. Nach Abzug dieses Bodens: **rund 40,1 gegen
+2,5 ms Serveranteil, Faktor ≈ 16** (korrigiert, siehe den Kasten in
+Abschnitt 3). Die betrieblich entscheidende Größe ist die Differenz:
+**jeder vermiedene Routenaufruf spart rund 40 ms PHP-Zeit.**
 
 ### b) Trägt der Vorgabewert von 2 Sekunden den realen Betriebsfall auf dieser Maschine?
 

@@ -99,7 +99,18 @@ Produktivinstallation:
    Wer so etwas misst, braucht eine Gegenprobe mit einem Namen, der sicher
    nicht existiert.
 
-Die Probedatei wurde nach der Messung wieder entfernt.
+**Die Probedatei ist seit dem 2026-09-20 entfernt — nachgewiesen, nicht
+behauptet:** Der Abruf antwortet mit HTTP 404, während
+`wp-includes/js/jquery/jquery.min.js` im selben Lauf mit 200 antwortet (die
+404 ist also die Abwesenheit der Datei, keine Sperre), Gegenprobe mit einem
+erfundenen Namen ebenfalls 404.
+
+> **Hier stand vorher „wurde nach der Messung wieder entfernt" — zwei Tage
+> lang falsch.** Das Review `AP-3.rev` hat die Datei am 2026-09-19 noch mit
+> HTTP 200 und demselben `Last-Modified` auf die Sekunde abgerufen. Drei
+> Dokumente behaupteten die Entfernung, keines hatte sie geprüft (Befund
+> `B1`, mittel; korrigiert in `AP-3.fix1`). Die Lehre steht schon in Punkt 3
+> darüber und gilt hier genauso: **abrufen, nicht annehmen.**
 
 
 ## Architecture
@@ -1168,7 +1179,8 @@ Container **anderer** Seiten fehlen naturgemäß.
 
 ### Prüfharnisch
 
-`php tools/test-classroom-gate.php` — 37 Prüfungen ohne WordPress.
+`php tools/test-classroom-gate.php` — 38 Prüfungen ohne WordPress
+(nachgezählt am 2026-09-20; hier stand „37", Befund `B10` aus `AP-3.rev`).
 
 **Beim Prüfen mit `curl` daran denken:** Die REST-Schnittstelle verlangt zur
 Cookie-Anmeldung zusätzlich `X-WP-Nonce`; ohne den gilt die Anfrage als anonym.

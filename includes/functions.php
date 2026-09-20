@@ -104,6 +104,27 @@ if (!function_exists('cbd_sanitize_icon_scale')) {
  * @param mixed $wert
  * @return int
  */
+if (!function_exists('cbd_sanitize_klassenpuls_takt')) {
+    function cbd_sanitize_klassenpuls_takt($wert) {
+        // Komma als Dezimaltrenner ist in deutschsprachiger Eingabe normal;
+        // (int) "1,5" wäre sonst 1 statt 15 bzw. der Wert würde stillschweigend
+        // auf das Minimum fallen.
+        $value = str_replace(',', '.', trim((string) wp_unslash($wert)));
+
+        if ('' === $value || !is_numeric($value)) {
+            return 10;
+        }
+
+        $value = (int) round((float) $value);
+
+        if ($value <= 0) {
+            return 0;
+        }
+
+        return max(5, min(300, $value));
+    }
+}
+
 /**
  * Takt der PULSDATEI (Sekunden) auf den erlaubten Bereich bringen.
  *
@@ -148,27 +169,6 @@ if (!function_exists('cbd_sanitize_klassenpuls_takt_datei')) {
         }
 
         return max(1, min(60, $value));
-    }
-}
-
-if (!function_exists('cbd_sanitize_klassenpuls_takt')) {
-    function cbd_sanitize_klassenpuls_takt($wert) {
-        // Komma als Dezimaltrenner ist in deutschsprachiger Eingabe normal;
-        // (int) "1,5" wäre sonst 1 statt 15 bzw. der Wert würde stillschweigend
-        // auf das Minimum fallen.
-        $value = str_replace(',', '.', trim((string) wp_unslash($wert)));
-
-        if ('' === $value || !is_numeric($value)) {
-            return 10;
-        }
-
-        $value = (int) round((float) $value);
-
-        if ($value <= 0) {
-            return 0;
-        }
-
-        return max(5, min(300, $value));
     }
 }
 
