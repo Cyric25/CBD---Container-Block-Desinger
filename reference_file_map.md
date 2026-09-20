@@ -1,6 +1,6 @@
 # Datei-Map: Plugin „Container Block Designer"
 
-_Stand: 2026-09-20 · Plugin-Version 3.1.131 (`PLAN-Schneller-Klassenpuls.md`, Phasen 0–3 inhaltlich abgeschlossen — Pulsdatei serverseitig, Client liest sie, Freigaben erscheinen in 1,2–3,6 s, Takt im Backend einstellbar, auf der Produktivseite gemessen; Review `AP-3.rev` erteilt das Urteil „auslieferbar". Offen ist nur noch `AP-3.doc`, und dort steht auch der Versionssprung). Zuvor: 3.1.127, `PLAN-Tafelmodus-Text-und-Notizen-Restore.md`
+_Stand: 2026-09-20 · Plugin-Version 3.1.132 (`PLAN-Schneller-Klassenpuls.md`, **abgeschlossen** — Pulsdatei serverseitig, Client liest sie, Freigaben erscheinen in 1,2–3,6 s, Takt im Backend einstellbar, auf der Produktivseite gemessen; Review `AP-3.rev` erteilt das Urteil „auslieferbar"; das ZIP 3.1.132 ist gebaut und auf einer wiederhergestellten lokalen Installation installiert, aktiviert und gemessen — Freigabe beim Schüler nach 1245 ms). Zuvor: 3.1.127, `PLAN-Tafelmodus-Text-und-Notizen-Restore.md`
 vollständig abgeschlossen — Phase 1 Text-Werkzeug im Tafelmodus und Phase 2
 automatische Notizen-Manager-Sichtbarkeit auf Inhaltsverzeichnis-Seiten,
 jeweils inkl. Korrektur-APs nach unabhängigem Review)_
