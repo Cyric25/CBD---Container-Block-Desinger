@@ -1119,6 +1119,54 @@
     box-shadow: 0 0 22px 6px color-mix(in srgb, var(--cbd-classroom-accent, #e24614) 65%, transparent) !important;
 }
 
+/* --- NUR DER AEUSSERSTE MARKIERTE CONTAINER WIRD GERAHMT (2026-09-21) -----
+
+   Container duerfen ineinander liegen (InnerBlocks ohne Einschraenkung, siehe
+   Root-CLAUDE.md). Auf einer echten Unterrichtsseite ist das der Regelfall und
+   nicht die Ausnahme: Auf der Probeseite „Reinstoffe und Gemische" sind
+   15 von 30 Containern in einem anderen Container verschachtelt.
+
+   `filterContainers()` in classroom-page-filter.js arbeitet ALLE Container
+   der Seite ab und ruft `markiereNeuFreigegeben()` fuer jeden, der gerade von
+   versteckt auf sichtbar wechselt. Gibt die Lehrperson einen aeusseren
+   Container frei, wechseln seine inneren zwangslaeufig mit -- und bekamen
+   dadurch jeder ihren eigenen Rahmen samt eigener Fahne. Beim Schueler
+   erschien dann nicht eine Markierung, sondern eine geschachtelte Serie:
+   ein Rahmen aussen um den Block und ein zweiter mitten im Text.
+
+   Behoben wird das hier im CSS und NICHT im Skript -- mit Absicht, denn die
+   Regel „nur der aeusserste" ist relativ zu dem, was gerade markiert ist:
+   Wird ein innerer Container ALLEIN freigegeben (der aeussere war schon
+   sichtbar), traegt nur er die Klasse, findet keinen markierten Vorfahren und
+   behaelt seinen Rahmen -- genau richtig. Eine Skriptloesung muesste dieselbe
+   Beziehung von Hand nachrechnen; der Nachfahren-Selektor kann sie umsonst.
+
+   SPEZIFITAET: (0,4,0) -- vier Klassen. Das schlaegt alle drei Regeln, die
+   hier sonst greifen wuerden, unabhaengig von der Ladereihenfolge: die
+   Grundregel oben (0,2,0), ihr Darkmode-Gegenstueck (0,3,0) und
+   `outline: none !important` aus cbd-frontend-clean.css (0,1,0). `!important`
+   steht auf outline und box-shadow, weil die Gegenspieler es ebenfalls tragen
+   -- unter !important-Deklarationen entscheidet wieder die Spezifitaet.
+
+   box-shadow darf hier gefahrlos auf `none`: Der Schein gehoert der
+   Markierung, der Gestaltungsschatten des Blocks sitzt auf
+   `.cbd-container-block` weiter innen und bleibt unberuehrt (am gerenderten
+   Block nachgemessen: Wrapper `none`, Karte `rgb(183,183,183) 0 0 14px`).
+
+   Die Fahne wird ueber `content: none` abgeraeumt statt ueber `display: none`
+   -- ohne content erzeugt ::before gar kein Kaestchen, es bleibt also auch
+   nichts, was die Animation `cbd-neu-freigegeben-einblenden` noch bewegen
+   koennte. Kein !important noetig: Auf `content` liegt keine konkurrierende
+   !important-Deklaration, und (0,4,1) schlaegt die (0,2,1) der Grundregel. */
+.cbd-container.cbd-neu-freigegeben .cbd-container.cbd-neu-freigegeben {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.cbd-container.cbd-neu-freigegeben .cbd-container.cbd-neu-freigegeben::before {
+    content: none;
+}
+
 /* === LEISTE „WIEDERAUFNAHME" (PLAN-Klassenmodus-Live.md, AP-3.1) === */
 
 /* Auf einer serverseitig REDUZIERTEN Seite (nur-fuer-Lehrpersonen, Schueler

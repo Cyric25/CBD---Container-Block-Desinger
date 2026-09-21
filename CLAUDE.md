@@ -6106,6 +6106,28 @@ einzeln nachgezählt: **kein `!important` in diesem Abschnitt ist
 unabhängig von der Ladereihenfolge der beiden Dateien) mit `!important` auf
 genau den drei kollidierenden Eigenschaften.
 
+**Nur der äußerste markierte Container wird gerahmt (seit 2026-09-21).**
+Container dürfen ineinander liegen, und auf echten Unterrichtsseiten ist das
+der Regelfall — auf der Probeseite „Reinstoffe und Gemische" sind **15 von
+30** Containern verschachtelt. Da `filterContainers()` jeden Container
+abarbeitet, der von versteckt auf sichtbar wechselt, bekam beim Freigeben
+eines äußeren Containers **jeder innere seinen eigenen Rahmen samt eigener
+Fahne**: Der Schüler sah einen Rahmen außen um den Block und einen zweiten
+mitten im Text. Unterdrückt wird das mit
+`.cbd-container.cbd-neu-freigegeben .cbd-container.cbd-neu-freigegeben`
+(Spezifität 0-4-0 — schlägt die Grundregel 0-2-0, die Darkmode-Regel 0-3-0
+und `outline: none !important` aus `cbd-frontend-clean.css` 0-1-0) plus
+`content: none` auf dessen `::before`.
+
+**Warum im CSS und nicht im Skript:** Die Regel „nur der äußerste" ist
+relativ zu dem, was gerade markiert ist. Wird ein innerer Container **allein**
+freigegeben, weil der äußere schon sichtbar war, findet er keinen markierten
+Vorfahren und behält seinen Rahmen — genau richtig, und im Browser
+gegengeprüft. Ein Skript müsste dieselbe Beziehung von Hand nachrechnen; der
+Nachfahren-Selektor bekommt sie geschenkt. Der `box-shadow: none` trifft dabei
+nur den Schein der Markierung: Der Gestaltungsschatten des Blocks sitzt auf
+`.cbd-container-block` weiter innen (am gerenderten Block nachgemessen).
+
 #### Bekannte, bewusst akzeptierte Einschränkungen
 
 Alle unten genannten Befunde stammen aus `AP-2.rev`
