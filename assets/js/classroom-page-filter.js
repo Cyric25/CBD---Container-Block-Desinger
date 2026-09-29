@@ -1360,6 +1360,37 @@
         },
 
         /**
+         * Rückweg zur Seitenliste der Klasse (#7061, AP-2.2).
+         *
+         * Liefert die Adresse der Klassen-Zugangsseite ([cbd_classroom]) samt
+         * ?classroom=&token= der laufenden Sitzung – classroom-frontend.js
+         * übernimmt die Sitzung dort und zeigt sofort die Seitenliste.
+         * Die Adresse kommt vom Server (cbdClassroomPageData.zugangUrl,
+         * CBD_Classroom::zugangsseite_url()). Fehlt sie, gibt es keine
+         * Zugangsseite: Rückgabe null, der Klassenname bleibt reiner Text.
+         *
+         * interceptLinks() lässt diese Adresse unverändert, weil sie
+         * `classroom` bereits trägt.
+         *
+         * @return {string|null}
+         */
+        baueZugangLink: function() {
+            try {
+                var basis = (typeof cbdClassroomPageData !== 'undefined' && cbdClassroomPageData)
+                    ? cbdClassroomPageData.zugangUrl : '';
+                if (!basis || !this.classroomId || !this.token) {
+                    return null;
+                }
+                var url = new URL(basis, window.location.href);
+                url.searchParams.set('classroom', this.classroomId);
+                url.searchParams.set('token', this.token);
+                return url.toString();
+            } catch (e) {
+                return null;
+            }
+        },
+
+        /**
          * Filter containers based on classroom data.
          *
          * Seit AP-2.1 beliebig oft aufrufbar: Die Methode enthält nur noch den
@@ -1897,6 +1928,13 @@
             $leaveBtn.on('click', function() {
                 try {
                     localStorage.removeItem('cbd_classroom_token');
+                    // Die Zugangsseite speichert die Klasse unter
+                    // cbd_classroom_class_id (classroom-frontend.js,
+                    // storeClassId()). Bis #7061/AP-2.2 wurde hier nur der nie
+                    // geschriebene Schlüssel cbd_classroom_id gelöscht – die
+                    // Zugangsseite meldete die Klasse danach automatisch wieder
+                    // an. cbd_classroom_id bleibt als Altbestand-Aufräumung.
+                    localStorage.removeItem('cbd_classroom_class_id');
                     localStorage.removeItem('cbd_classroom_id');
                 } catch (e) {}
                 var url = new URL(window.location.href);
@@ -1913,9 +1951,19 @@
             });
 
             // ---- Aufbau ----
+            // Klassenname: Link zurück zur Seitenliste der Klasse, sofern es
+            // eine Zugangsseite gibt (#7061, AP-2.2), sonst Text wie bisher.
+            var zugangLink = self.baueZugangLink();
+            var $name = zugangLink
+                ? $('<a class="cbd-classroom-nav-name cbd-classroom-zugang-link">')
+                    .attr('href', zugangLink)
+                    .attr('title', 'Zur Übersicht der Klasse')
+                    .text(className || '')
+                : $('<span class="cbd-classroom-nav-name">').text(className || '');
+
             var $left = $('<div class="cbd-classroom-nav-left">')
                 .append('<span class="cbd-classroom-nav-badge">📚 Klassen-Modus</span>')
-                .append('<span class="cbd-classroom-nav-name">' + self.escapeHtml(className) + '</span>');
+                .append($name);
 
             var $center = $('<div class="cbd-classroom-nav-center">').append($nav);
             var $right  = $('<div class="cbd-classroom-nav-right">').append($menuToggle).append($leaveBtn);
@@ -2011,10 +2059,24 @@
             var $nav = $sidebar.find('.sidebar-navigation');
             $nav.empty();
 
-            // Abschnitts-Überschrift mit Klassenname
-            $nav.append(
-                $('<div class="sidebar-section-title">').text('📚 ' + (className || 'Klassen-Modus'))
-            );
+            // Abschnitts-Überschrift mit Klassenname. Seit #7061/AP-2.2 ein
+            // Link zurück zur Seitenliste der Klasse, sofern es eine
+            // Zugangsseite gibt. Entsteht bei JEDEM Aufruf neu (diese Methode
+            // läuft bei jeder Live-Aktualisierung erneut nach $nav.empty()).
+            var ueberschriftText = '📚 ' + (className || 'Klassen-Modus');
+            var zugangLink = self.baueZugangLink();
+            var $ueberschrift = $('<div class="sidebar-section-title">');
+            if (zugangLink) {
+                $ueberschrift.append(
+                    $('<a class="cbd-classroom-zugang-link">')
+                        .attr('href', zugangLink)
+                        .attr('title', 'Zur Übersicht der Klasse')
+                        .text(ueberschriftText)
+                );
+            } else {
+                $ueberschrift.text(ueberschriftText);
+            }
+            $nav.append($ueberschrift);
 
             // Fragenwand-Einstieg ganz oben in der Liste (Hotfix „Fragenwand
             // in Klassenlisten"). Diese Methode ersetzt den Inhalt der
