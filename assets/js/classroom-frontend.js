@@ -62,7 +62,55 @@
         init: function() {
             this.loadClasses();
             this.bindEvents();
-            this.checkExistingAuth();
+            // Rückweg aus dem Klassenmodus (#7061, AP-2.3): Trägt die Adresse
+            // ?classroom=&token=, gilt DIESE Sitzung – auch wenn im
+            // localStorage eine andere oder keine liegt. Ungültiges Token
+            // behandelt loadClassroomData() wie bisher (Zugangsdaten oder
+            // Anmeldeformular).
+            if (this.uebernimmSitzungAusAdresse()) {
+                this.loadClassroomData();
+            } else {
+                this.checkExistingAuth();
+            }
+        },
+
+        /**
+         * Sitzung aus der Adresse übernehmen (#7061, AP-2.3).
+         *
+         * Der Klassenname in Kopf- und Seitenleiste einer Klassenseite
+         * (classroom-page-filter.js, baueZugangLink()) führt hierher mit
+         * ?classroom=<id>&token=<token>. Beide Werte werden übernommen, im
+         * localStorage abgelegt (Neuladen findet die Sitzung dann über
+         * checkExistingAuth()) und per history.replaceState aus der
+         * Adresszeile entfernt – das Token soll nicht in Lesezeichen oder
+         * geteilten Links landen. Andere Parameter und der Hash bleiben.
+         *
+         * Nur eine Plausibilitätsprüfung (Ziffern bzw. [A-Za-z0-9]); ob die
+         * Sitzung gilt, entscheidet der Server beim Datenabruf.
+         *
+         * @return {boolean} true, wenn eine Sitzung übernommen wurde.
+         */
+        uebernimmSitzungAusAdresse: function() {
+            try {
+                var url = new URL(window.location.href);
+                var klasse = url.searchParams.get('classroom') || '';
+                var token = url.searchParams.get('token') || '';
+                if (!/^[1-9][0-9]*$/.test(klasse) || !/^[A-Za-z0-9]+$/.test(token)) {
+                    return false;
+                }
+                this.classId = klasse;
+                this.token = token;
+                this.storeClassId(klasse);
+                this.storeToken(token);
+                url.searchParams.delete('classroom');
+                url.searchParams.delete('token');
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+                }
+                return true;
+            } catch (e) {
+                return false;
+            }
         },
 
         /**
