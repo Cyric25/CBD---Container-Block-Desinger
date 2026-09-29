@@ -729,8 +729,18 @@
                 pointerDown: function(e) { self.onPointerDown(e); },
                 pointerMove: function(e) { self.onPointerMove(e); },
                 pointerUp: function(e) { self.onPointerUp(e); },
-                keyDown: function(e) { self.onKeyDown(e); }
+                keyDown: function(e) { self.onKeyDown(e); },
+                contextMenu: function(e) { self.onContextMenu(e); }
             };
+
+            // Kontextmenü im ganzen Overlay unterdrücken (Fehlermeldung #7063):
+            // Edge/Chrome unter Windows öffnen bei langem Halten mit Finger
+            // oder Stift das Browsermenü (Kopieren …) – mitten beim Schreiben.
+            // touch-action:none am Canvas verhindert das NICHT. Der Listener
+            // hängt am Overlay, nicht am Canvas, weil das Menü sonst weiter über
+            // Werkzeugleiste und Blockinhalt-Hälfte käme. Ausnahmen siehe
+            // onContextMenu().
+            this.overlay.addEventListener('contextmenu', this.boundHandlers.contextMenu);
 
             // Drawing Canvas Events (nur auf dem obersten Layer)
             this.drawingCanvas.addEventListener('pointerdown', this.boundHandlers.pointerDown);
@@ -1009,7 +1019,29 @@
                 document.removeEventListener('keydown', this.boundHandlers.keyDown);
             }
 
+            if (this.overlay && this.boundHandlers.contextMenu) {
+                this.overlay.removeEventListener('contextmenu', this.boundHandlers.contextMenu);
+            }
+
             this.boundHandlers = {};
+        },
+
+        /**
+         * Kontextmenü im Tafel-Overlay unterdrücken (Fehlermeldung #7063).
+         *
+         * AUSNAHME Eingabefelder: In input/textarea/select/[contenteditable]
+         * bleibt das Menü erhalten (Einfügen in die Schieberegler-Nachbarn,
+         * Dialoge). Das Textfeld des Text-Werkzeugs
+         * (textarea.cbd-board-text-input) hängt openTextInput() an
+         * document.body, NICHT ans Overlay – es erreicht diesen Listener gar
+         * nicht erst und behält sein Menü ohnehin.
+         */
+        onContextMenu: function(e) {
+            var ziel = e.target;
+            if (ziel && ziel.closest && ziel.closest('input, textarea, select, [contenteditable]')) {
+                return;
+            }
+            e.preventDefault();
         },
 
         // =============================================

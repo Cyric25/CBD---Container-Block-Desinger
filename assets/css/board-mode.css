@@ -18,6 +18,22 @@
     display: flex;
     flex-direction: column;
     animation: cbdBoardFadeIn 0.25s ease-out;
+    /* Fehlermeldung #7063: langes Halten darf beim Schreiben weder Text
+       markieren noch das iOS-Kontextmenü (Callout) öffnen. Das
+       Browser-Kontextmenü selbst unterdrückt board-mode.js
+       (onContextMenu()). Eingabefelder bekommen die Markierbarkeit
+       unten zurück. */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
+.cbd-board-overlay input,
+.cbd-board-overlay textarea,
+.cbd-board-overlay select,
+.cbd-board-overlay [contenteditable] {
+    -webkit-user-select: text;
+    user-select: text;
 }
 
 .cbd-board-overlay.cbd-board-closing {
@@ -764,6 +780,7 @@
     height: 100%;
     display: block;
     touch-action: none;
+    -webkit-user-drag: none; /* #7063: kein Ziehen der Leinwand als Bild */
 }
 
 .cbd-board-canvas-background {
