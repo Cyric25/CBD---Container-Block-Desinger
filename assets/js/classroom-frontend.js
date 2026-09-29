@@ -28,6 +28,31 @@
         try { localStorage.setItem('cbd_classroom_toc_collapsed', JSON.stringify(idsArray)); } catch (e) {}
     }
 
+    // Schwebender Fragenwand-Knopf (#7061, AP-2.4): sitzt über dem PDF-Knopf
+    // (#cbd-pdf-export-fab aus floating-pdf-button.js), falls es ihn gibt,
+    // sonst an dessen Platz. Der PDF-Knopf entsteht bei $(document).ready –
+    // je nach Ladereihenfolge vor oder nach diesem Knopf; deshalb beobachtet
+    // ein MutationObserver die direkten Kinder von body, bis er da ist
+    // (spätestens 10 s). Wortgleiche Kopie in classroom-page-filter.js – das
+    // Plugin hat keinen JS-Build, siehe cbdKlassenverzeichnis*-Helfer oben.
+    function cbdFragenwandFabPositionieren(knopf) {
+        function setze() {
+            var ueberPdf = !!document.getElementById('cbd-pdf-export-fab');
+            knopf.classList.toggle('cbd-fragenwand-fab--ueber-pdf', ueberPdf);
+            return ueberPdf;
+        }
+        if (setze() || typeof MutationObserver === 'undefined') {
+            return;
+        }
+        var beobachter = new MutationObserver(function() {
+            if (setze()) {
+                beobachter.disconnect();
+            }
+        });
+        beobachter.observe(document.body, { childList: true });
+        setTimeout(function() { beobachter.disconnect(); }, 10000);
+    }
+
     var ClassroomFrontend = {
         classId: null,
         token: null,
@@ -522,6 +547,11 @@
                 );
             }
 
+            // Schwebender Knopf rechts unten (#7061, AP-2.4) – derselbe
+            // Auslöser, MIT data-classroom/data-token aus demselben Grund wie
+            // der Listenknopf oben.
+            this.zeigeFragenwandFab();
+
             window.cbdDebug && console.log('[CBD Classroom] Rendering content, pages:', data.pages);
             window.cbdDebug && console.log('[CBD Classroom] Pages length:', data.pages ? data.pages.length : 'undefined');
 
@@ -713,9 +743,46 @@
             }
         },
 
+        /**
+         * Schwebenden Fragenwand-Knopf anlegen oder aktualisieren (#7061,
+         * AP-2.4). renderClassroomContent() läuft bei jeder
+         * Live-Aktualisierung erneut – deshalb höchstens EIN Knopf; bei
+         * vorhandenem Knopf werden nur die Sitzungsattribute nachgezogen.
+         * Ohne Sitzung wird er entfernt. Gestaltung: fragenwand.css,
+         * „SCHWEBENDER KNOPF".
+         */
+        zeigeFragenwandFab: function() {
+            try {
+                var knopf = document.getElementById('cbd-fragenwand-fab');
+                if (!this.classId || !this.token) {
+                    if (knopf && knopf.parentNode) {
+                        knopf.parentNode.removeChild(knopf);
+                    }
+                    return;
+                }
+                if (!knopf) {
+                    knopf = document.createElement('button');
+                    knopf.type = 'button';
+                    knopf.id = 'cbd-fragenwand-fab';
+                    knopf.className = 'cbd-fragenwand-verweis cbd-fragenwand-fab';
+                    knopf.setAttribute('aria-label', 'Fragenwand öffnen');
+                    knopf.title = 'Fragenwand öffnen';
+                    knopf.textContent = 'Fragen';
+                    document.body.appendChild(knopf);
+                    cbdFragenwandFabPositionieren(knopf);
+                }
+                knopf.setAttribute('data-classroom', String(this.classId));
+                knopf.setAttribute('data-token', String(this.token));
+            } catch (e) {
+                window.cbdDebug && console.warn('[CBD Classroom] Fragenwand-Knopf nicht angelegt', e);
+            }
+        },
+
         clearAuth: function() {
             this.token = null;
             this.classId = null;
+            // Schwebenden Fragenwand-Knopf mit der Sitzung entfernen (AP-2.4).
+            this.zeigeFragenwandFab();
             // Zuerst abmelden, DANN die Sperre zuruecksetzen (AP-4.fix1,
             // Befund R2 aus AP-4.rev) -- vorher blieben die Abonnements
             // der alten Sitzung bestehen, und ein Re-Login im selben Tab

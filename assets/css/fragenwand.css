@@ -631,6 +631,87 @@
 }
 
 /* =============================================
+   SCHWEBENDER KNOPF (#7061, AP-2.4 aus
+   PLAN-Rueckmeldungen-Klassenmodus-und-Tafel-Lasso.md)
+
+   Im Klassenmodus sitzt rechts unten ein Knopf, der die Fragenwand oeffnet
+   - direkt ueber dem PDF-Knopf. Erzeugt von classroom-page-filter.js
+   (Inhaltsseiten) bzw. classroom-frontend.js (Zugangsseite); geoeffnet
+   wird ueber dieselbe Trigger-Klasse cbd-fragenwand-verweis wie alle
+   anderen Einstiege (delegierter Listener in fragenwand-frontend.js).
+
+   GEOMETRIE GEKOPPELT an #cbd-pdf-export-fab in
+   assets/js/floating-pdf-button.js (dort inline per jQuery gestylt):
+   52 x 52 px, Radius 12 px, 20 px Abstand zu Rand und Unterkante. Wer dort
+   etwas aendert, zieht es hier nach. Ueber dem PDF-Knopf:
+   bottom = 20 + 52 + 12 = 84 px (Klasse --ueber-pdf, gesetzt vom Skript).
+   Plastischer Look nach derselben Rezeptur; immer background-image, nie
+   die Kurzschreibweise background (sonst waere der Knopf in Browsern ohne
+   color-mix() durchsichtig statt einfarbig).
+   z-index knapp unter dem PDF-Knopf (999999) und unter den
+   Fragenwand-Dialogen (1000000).
+   ============================================= */
+
+#cbd-fragenwand-fab {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 999998;
+    width: 52px;
+    height: 52px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--color-text-on-accent, #ffffff);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    background-color: var(--color-ui-surface, #e24614);
+    background-image:
+        radial-gradient(75% 75% at 30% 22%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0) 100%),
+        linear-gradient(135deg, var(--color-ui-surface, #e24614) 0%, color-mix(in srgb, var(--color-ui-surface, #e24614) 80%, #000) 100%);
+    /* Rueckfall ohne color-mix(), danach die plastische Fassung */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    box-shadow:
+        inset 0 2px 2px -1px color-mix(in srgb, color-mix(in srgb, var(--color-ui-surface, #e24614) 45%, #000) 75%, transparent),
+        inset 0 -2px 2px -1px rgba(255, 255, 255, 0.5),
+        inset -1px 0 1px color-mix(in srgb, color-mix(in srgb, var(--color-ui-surface, #e24614) 45%, #000) 25%, transparent),
+        0 4px 10px color-mix(in srgb, color-mix(in srgb, var(--color-ui-surface, #e24614) 45%, #000) 55%, transparent);
+    transition: background-color 0.15s ease;
+}
+
+#cbd-fragenwand-fab.cbd-fragenwand-fab--ueber-pdf {
+    bottom: 84px;
+}
+
+#cbd-fragenwand-fab:hover {
+    background-color: var(--color-ui-surface-dark, #c93d12);
+    background-image:
+        radial-gradient(75% 75% at 30% 22%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.08) 45%, rgba(255, 255, 255, 0) 100%),
+        linear-gradient(135deg, var(--color-ui-surface-dark, #c93d12) 0%, color-mix(in srgb, var(--color-ui-surface-dark, #c93d12) 80%, #000) 100%);
+}
+
+#cbd-fragenwand-fab:focus-visible {
+    outline: 2px solid var(--color-ui-surface, #e24614);
+    outline-offset: 3px;
+}
+
+/* Waehrend der Tafelmodus offen ist, stoert der Knopf beim Schreiben. */
+body:has(.cbd-board-overlay) #cbd-fragenwand-fab {
+    display: none;
+}
+
+@media print {
+    #cbd-fragenwand-fab {
+        display: none;
+    }
+}
+
+/* =============================================
    KLEINE VIEWPORTS
    ============================================= */
 

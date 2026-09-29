@@ -138,6 +138,31 @@
         try { localStorage.setItem('cbd_classroom_toc_collapsed', JSON.stringify(idsArray)); } catch (e) {}
     }
 
+    // Schwebender Fragenwand-Knopf (#7061, AP-2.4): sitzt über dem PDF-Knopf
+    // (#cbd-pdf-export-fab aus floating-pdf-button.js), falls es ihn gibt,
+    // sonst an dessen Platz. Der PDF-Knopf entsteht bei $(document).ready –
+    // je nach Ladereihenfolge vor oder nach diesem Knopf; deshalb beobachtet
+    // ein MutationObserver die direkten Kinder von body, bis er da ist
+    // (spätestens 10 s). Wortgleiche Kopie in classroom-frontend.js – das
+    // Plugin hat keinen JS-Build, siehe cbdKlassenverzeichnis*-Helfer oben.
+    function cbdFragenwandFabPositionieren(knopf) {
+        function setze() {
+            var ueberPdf = !!document.getElementById('cbd-pdf-export-fab');
+            knopf.classList.toggle('cbd-fragenwand-fab--ueber-pdf', ueberPdf);
+            return ueberPdf;
+        }
+        if (setze() || typeof MutationObserver === 'undefined') {
+            return;
+        }
+        var beobachter = new MutationObserver(function() {
+            if (setze()) {
+                beobachter.disconnect();
+            }
+        });
+        beobachter.observe(document.body, { childList: true });
+        setTimeout(function() { beobachter.disconnect(); }, 10000);
+    }
+
     var ClassroomPageFilter = {
         classroomId: null,
         token: null,
@@ -1357,6 +1382,38 @@
             this.className = data.class_name;
             this.injectClassroomNavBar(data.class_name);
             this.interceptLinks();
+            this.injectFragenwandFab();
+        },
+
+        /**
+         * Schwebender Fragenwand-Knopf rechts unten (#7061, AP-2.4).
+         *
+         * Einmal je Seitenaufruf (Aufruf nur aus einmaligAufbauen(), nie aus
+         * injectClassroomSidebar(), das bei jeder Live-Aktualisierung läuft).
+         * Keine eigene Klicklogik: die Klasse cbd-fragenwand-verweis fängt
+         * der delegierte Listener in fragenwand-frontend.js ab. OHNE
+         * data-classroom/data-token – diese Seite trägt ?classroom=&token= in
+         * der Adresse, dort liest fragenwand-frontend.js die Sitzung (siehe
+         * Kommentar am Fragenwand-Knopf in injectClassroomSidebar()).
+         * Gestaltung: assets/css/fragenwand.css, „SCHWEBENDER KNOPF".
+         */
+        injectFragenwandFab: function() {
+            try {
+                if (document.getElementById('cbd-fragenwand-fab')) {
+                    return;
+                }
+                var knopf = document.createElement('button');
+                knopf.type = 'button';
+                knopf.id = 'cbd-fragenwand-fab';
+                knopf.className = 'cbd-fragenwand-verweis cbd-fragenwand-fab';
+                knopf.setAttribute('aria-label', 'Fragenwand öffnen');
+                knopf.title = 'Fragenwand öffnen';
+                knopf.textContent = 'Fragen';
+                document.body.appendChild(knopf);
+                cbdFragenwandFabPositionieren(knopf);
+            } catch (e) {
+                window.cbdDebug && console.warn('CBD Classroom Page Filter: Fragenwand-Knopf nicht angelegt', e);
+            }
         },
 
         /**
