@@ -3528,6 +3528,56 @@ geringfügig, kein Korrekturbedarf:
    Inhalt im `baseImageObj` — Undo und Strich-Radierer greifen dann nicht
    mehr, nur „Zeichnung löschen" (alles) entfernt ihn noch.
 
+## Kein Kontextmenü im Tafelmodus (#7063, `PLAN-Rueckmeldungen-Klassenmodus-und-Tafel-Lasso.md`, Phase 1, 2026-09-29)
+
+**Anlass:** Fehlermeldung #7063 aus dem Unterricht (Edge 153, Windows,
+Klassenmodus): Langes Halten mit Finger oder Stift auf der Tafelfläche
+öffnete das Browser-Kontextmenü (Kopieren …) und riss beim Schreiben ab.
+`touch-action: none` am Canvas verhindert das **nicht** – das
+`contextmenu`-Ereignis kommt trotzdem.
+
+**Mechanismus (`assets/js/board-mode.js`):** `bindEvents()` legt
+`boundHandlers.contextMenu` an und hängt ihn an das **Overlay**
+(`.cbd-board-overlay`), nicht nur an den Canvas – sonst käme das Menü
+weiter über Werkzeugleiste und Blockinhalt-Hälfte. `onContextMenu(e)` ruft
+`preventDefault()`, außer das Ziel liegt in
+`input, textarea, select, [contenteditable]`. `unbindEvents()` entfernt den
+Listener; `destroy()` ruft es auf, bevor `this.overlay` auf `null` fällt.
+Ein zweiter Listener kann nicht entstehen: `open()` bricht bei vorhandenem
+Overlay ab, jedes Öffnen erzeugt ein neues Overlay.
+
+**CSS (`assets/css/board-mode.css`):** `.cbd-board-overlay` mit
+`user-select: none` und `-webkit-touch-callout: none` (Eingabefelder im
+Overlay bekommen `user-select: text` zurück); `.cbd-board-canvas` mit
+`-webkit-user-drag: none`. `-webkit-touch-callout` wirkt nur unter iOS –
+unter Edge/Windows trägt allein der JS-Listener.
+
+**Warum das Textfeld des Text-Werkzeugs sein Menü behält:**
+`openTextInput()` hängt `textarea.cbd-board-text-input` an
+`document.body`, also **außerhalb** des Overlays – der Listener erreicht es
+nie. Ebenso liegen Klassen-Selektor und Lösch-Bestätigung am `body`.
+**Wer eines davon ins Overlay verschiebt**, ist durch die Ausnahmeliste
+trotzdem abgesichert, sollte aber Markierbarkeit von Dialogtext prüfen
+(`user-select: none` erbt sich).
+
+**Bekannte, bewusst offene Punkte (Review AP-1.rev, alle gering):**
+1. `[contenteditable]` trifft auch `contenteditable="false"` – derzeit ohne
+   Auswirkung, kein solches Element im Overlay.
+2. Ein **Rechtsklick** auf die Zeichenfläche setzt einen Punkt-Strich, weil
+   `onPointerDown` die Maustaste nicht prüft (vorbestehend, fällt ohne Menü
+   stärker auf). Behebung eingeplant in AP-4.3 desselben Plans.
+3. Auf echtem Touch-/Stiftgerät ist die Wirkung bei Planabschluss der
+   Phase noch nicht geprüft (nur Maus + synthetische Ereignisse auf der
+   Testinstallation).
+
+**Testumgebungs-Falle:** Die lokale Testinstallation
+(`fos.localhost:8080`) sendet eine strenge Content-Security-Policy
+(`script-src 'self'`), die alle Inline-Skripte blockiert – u. a. die
+Import-Map für `@wordpress/interactivity`. Der Knopf „Tafel-Modus" öffnet
+dort deshalb gar nicht. Getestet wurde über den direkten Aufruf
+`CBDBoardMode.open(containerId, html, '#ffffff', options)` – derselbe
+Aufruf wie in `interactivity-fallback.js`.
+
 ## Persönliche Notizen: automatische Sichtbarkeit auf Inhaltsverzeichnis-Seiten
 (Phase 2 von `PLAN-Tafelmodus-Text-und-Notizen-Restore.md`, abgeschlossen
 2026-09-10)
