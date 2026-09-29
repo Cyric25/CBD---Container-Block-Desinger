@@ -1968,6 +1968,120 @@ von sich aus gar nichts, das Ausschalten käme sonst nie beim Server an.
 Ändern; `ajax_get_classes()` liefert das Flag als echten Boolean zurück
 (`$wpdb` gibt alles als String, und `"0"` wäre in JavaScript wahr).
 
+### Schwebender Fragenwand-Knopf (#7061, seit 3.1.135)
+
+Vierter Einstieg neben Fließtext-Verweis, Inhaltsverzeichnis-Eintrag und
+den Knöpfen in den zwei JS-Listen: `button#cbd-fragenwand-fab` rechts
+unten, **im Klassenmodus für Schüler und Lehrpersonen**. Keine eigene
+Klicklogik – Klasse `cbd-fragenwand-verweis`, delegierter Listener wie
+oben. Details im Abschnitt „Klassenmodus: Rückweg zur Zugangsseite und
+schwebender Fragenwand-Knopf" weiter unten.
+
+## Klassenmodus: Rückweg zur Zugangsseite und schwebender Fragenwand-Knopf (#7061, `PLAN-Rueckmeldungen-Klassenmodus-und-Tafel-Lasso.md`, Phase 2, 2026-09-29)
+
+**Anlass:** Fehlermeldung #7061 (Lehrperson): Im Klassenmodus war die
+Seitenliste der Klasse nur beim Einstieg zu sehen; zurück kam man nur über
+„Verlassen" und erneutes Betreten. Gewünscht: Klick auf die Klasse oben in
+der Seitenleiste führt zur Übersicht, dazu ein Fragenwand-Knopf über dem
+PDF-Knopf.
+
+### Adresse der Zugangsseite: `CBD_Classroom::zugangsseite_url()`
+
+Die Seite mit `[cbd_classroom]` (produktiv ID 3779, `/klassen-zugang/`)
+kennt das JavaScript auf Inhaltsseiten nicht. Der Server gibt sie als
+`cbdClassroomPageData.zugangUrl` mit (`enqueue_frontend_assets()`, Zweig
+für normale Klassenseiten).
+
+| Baustein | Aufgabe |
+|---|---|
+| Option `cbd_classroom_seite_id` (Konstante `OPTION_ZUGANGSSEITE`, nicht autoloaded) | gemerkte Seiten-ID |
+| `merke_zugangsseite()` an `save_post_page` (Priorität 20) | setzt die Option, sobald eine veröffentlichte Seite den Shortcode trägt; löscht sie, wenn genau diese Seite ihn oder den Status `publish` verliert (auch Papierkorb) |
+| `zugangsseite_url()` | gemerkte ID prüfen (`ist_zugangsseite()`: veröffentlicht + `has_shortcode()`), sonst EINE prepared `LIKE '%[cbd_classroom%'`-Suche, Treffer mit `has_shortcode()` nachprüfen (schließt `[cbd_classroom_…]` aus), merken. Ohne Treffer `''` – **nichts wird geschrieben** |
+
+Fehlt die Zugangsseite, bleibt der Klassenname reiner Text (Rückfall).
+
+### Rückweg: Klassenname als Link (`classroom-page-filter.js`)
+
+`baueZugangLink()` hängt `?classroom=<id>&token=<token>` an `zugangUrl`.
+Link in der Kopfleiste (`a.cbd-classroom-nav-name.cbd-classroom-zugang-link`,
+in `injectClassroomNavBar()`) und in der Seitenleisten-Überschrift
+(`.sidebar-section-title > a.cbd-classroom-zugang-link`, in
+`injectClassroomSidebar()` – entsteht bei jeder Live-Aktualisierung neu,
+kein zusätzlicher Handler). `interceptLinks()` lässt die Adresse durch, weil
+sie `classroom` schon trägt. CSS: `classroom-frontend.css` direkt nach
+`.cbd-classroom-nav-name` (Farbe wie bisheriger Text, Unterstreichung bei
+Hover/Fokus).
+
+### Sitzungsübernahme auf der Zugangsseite (`classroom-frontend.js`)
+
+`init()` ruft zuerst `uebernimmSitzungAusAdresse()`: Tragen die Parameter
+eine plausible Sitzung (`classroom` = positive Ganzzahl, `token` =
+`[A-Za-z0-9]+`), werden beide übernommen, im `localStorage` abgelegt
+(`cbd_classroom_class_id`, `cbd_classroom_token`) und per
+`history.replaceState` aus der Adresse entfernt (andere Parameter und Hash
+bleiben); dann `loadClassroomData()`. Sonst `checkExistingAuth()` wie
+bisher. Die Adresse hat **Vorrang** vor dem `localStorage` – so funktioniert
+der Rückweg auch, wenn dort eine andere Klasse liegt.
+
+### „Verlassen" meldet wirklich ab
+
+Der Knopf „✕ Verlassen" in der Klassen-Kopfleiste löschte
+`cbd_classroom_token` und `cbd_classroom_id` – die Zugangsseite speichert die
+Klasse aber unter **`cbd_classroom_class_id`** (`storeClassId()`). Folge:
+Nach „Verlassen" meldete die Zugangsseite die alte Klasse automatisch wieder
+an (Lehrpersonen per `autoLogin(classId, '')`, Schüler über gespeicherte
+Zugangsdaten). Seit 3.1.135 werden alle drei Schlüssel gelöscht.
+
+### Schwebender Fragenwand-Knopf
+
+`#cbd-fragenwand-fab`, Text „Fragen", `aria-label`/`title` „Fragenwand
+öffnen".
+
+| Seite | Erzeugt von | Besonderheit |
+|---|---|---|
+| Inhaltsseite im Klassenmodus | `injectFragenwandFab()` in `classroom-page-filter.js`, einmalig aus `einmaligAufbauen()` | ohne Datenattribute (Sitzung steht in der Adresse) |
+| Zugangsseite nach dem Einstieg | `zeigeFragenwandFab()` in `classroom-frontend.js`, aus `renderClassroomContent()` | mit `data-classroom`/`data-token` (Adresse ist parameterlos); höchstens ein Knopf, bei erneutem Rendern nur Attribute nachgezogen; `clearAuth()` entfernt ihn |
+
+**Position:** `cbdFragenwandFabPositionieren(knopf)` – wortgleiche Kopie in
+beiden Dateien (kein JS-Build) – setzt `.cbd-fragenwand-fab--ueber-pdf`
+(`bottom: 84px` = 20 + 52 + 12), wenn `#cbd-pdf-export-fab` existiert; sonst
+`bottom: 20px`. Weil der PDF-Knopf bei `$(document).ready` entsteht, wartet
+ein `MutationObserver` (nur direkte Kinder von `body`, max. 10 s) auf ihn.
+
+**Gestaltung:** `fragenwand.css`, Abschnitt „SCHWEBENDER KNOPF" – Geometrie
+**gekoppelt an `floating-pdf-button.js`** (52×52, Radius 12, 20 px), gleicher
+plastischer Look (`background-image`, nie `background`), `z-index: 999998`
+(unter PDF-Knopf 999999 und Fragenwand-Dialogen 1000000). Ausgeblendet
+während der Tafelmodus offen ist (`body:has(.cbd-board-overlay)`) und im
+Druck.
+
+### Bekannte, bewusst akzeptierte Einschränkungen (Review AP-2.rev)
+
+1. Lehrperson mit **abgelaufenem** Token in der Adresse und ohne
+   gespeicherte Zugangsdaten landet im Anmeldeformular, statt per
+   `autoLogin(classId,'')` wieder angemeldet zu werden (Randfall; der
+   bestehende Fehlerpfad von `loadClassroomData()` kennt `isUserLoggedIn`
+   nicht).
+2. Ein manipulierter Rückweg-Link kann die im Browser gespeicherte Sitzung
+   überschreiben oder – bei ungültigem Token – löschen. Der Server prüft
+   jedes Token unverändert gegen den Transient.
+3. `cbd_classroom_seite_id` ist nicht autoloaded (+1 Abfrage je
+   Klassenseite); gibt es gar keine Zugangsseite, läuft die `LIKE`-Suche bei
+   jedem Klassenseitenaufruf (kein Negativ-Cache). Kandidat: kurzes
+   Transient für „keine Zugangsseite".
+4. `body:has()` fehlt in Firefox < 121 / Safari < 15.4 – harmlos, das
+   Tafel-Overlay (z-index 999999) überdeckt den Knopf ohnehin.
+5. Vorbestehend: `.cbd-classroom-nav-name` nutzt `color:
+   var(--color-background)` und wird im Dunkelmodus dunkel auf Orange
+   (Kandidat: `--color-text-on-accent`).
+
+**Testumgebung:** Auf `fos.localhost:8080` blockiert eine
+Content-Security-Policy aus der übergeordneten `.htaccess` alle
+Inline-Skripte, also auch alle `wp_localize_script`-Daten. Getestet wurde,
+indem die `-js-extra`-Blöcke per `fetch` + `JSON.parse` in `window`
+übernommen und die Skripte neu eingehängt wurden (kein `eval`, das die CSP
+ebenfalls sperrt).
+
 ## Klassenverwaltung im Frontend: `[cbd_lehrer_klassen]` (seit 3.1.115)
 
 Lehrpersonen verwalten ihre Klassen bisher ausschließlich über

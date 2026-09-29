@@ -352,8 +352,10 @@
             // this.classId/this.token bereits gesetzt -- loadClassroomData()
             // wird ausschliesslich aus checkExistingAuth() (Wiederaufnahme
             // einer gespeicherten Sitzung), autoLogin() und handleAuth()
-            // (beide nach erfolgreichem Login) gerufen, alle drei setzen
-            // beide Werte unmittelbar vorher. verdrahteKlassenpuls() ist
+            // (beide nach erfolgreichem Login) sowie aus init() nach
+            // uebernimmSitzungAusAdresse() (Rueckweg aus dem Klassenmodus,
+            // #7061/AP-2.3) gerufen, alle vier setzen beide Werte
+            // unmittelbar vorher. verdrahteKlassenpuls() ist
             // idempotent, ein mehrfacher Aufruf hier ist deshalb unschaedlich.
             self.verdrahteKlassenpuls();
 
