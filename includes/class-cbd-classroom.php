@@ -119,6 +119,116 @@ class CBD_Classroom {
 
         // Enqueue frontend assets
         add_action('wp_enqueue_scripts', array($this, 'enqueue_frontend_assets'));
+
+        // Rückweg zur Klassen-Zugangsseite (#7061, AP-2.1): Seite mit
+        // [cbd_classroom] beim Speichern merken, siehe zugangsseite_url().
+        add_action('save_post_page', array($this, 'merke_zugangsseite'), 20, 2);
+    }
+
+    // =========================================================================
+    // RÜCKWEG ZUR KLASSEN-ZUGANGSSEITE (#7061, AP-2.1)
+    // =========================================================================
+
+    /**
+     * Option, unter der die ID der Seite mit [cbd_classroom] gemerkt wird.
+     */
+    const OPTION_ZUGANGSSEITE = 'cbd_classroom_seite_id';
+
+    /**
+     * Adresse der Klassen-Zugangsseite (Seite mit [cbd_classroom]).
+     *
+     * Das JavaScript auf Inhaltsseiten im Klassenmodus kennt diese Seite
+     * nicht; es bekommt die Adresse als cbdClassroomPageData.zugangUrl, damit
+     * ein Klick auf den Klassennamen zur Seitenliste der Klasse zurückführt.
+     *
+     * Weg: zuerst die gemerkte ID (Option, gesetzt von merke_zugangsseite()
+     * beim Speichern). Stimmt sie nicht (mehr) – Seite gelöscht, nicht
+     * veröffentlicht, Shortcode entfernt –, sucht EINE Abfrage nach der
+     * Seite und merkt das Ergebnis. Ohne Treffer wird NICHTS geschrieben,
+     * sonst würde jede Klassenseite suchen UND schreiben; das Ergebnis ist
+     * dann '' und der Klassenname bleibt reiner Text (Rückfall).
+     *
+     * has_shortcode() prüft jeden Treffer nach, weil LIKE '%[cbd_classroom%'
+     * auch fremde Shortcodes wie [cbd_classroom_xyz] träfe.
+     *
+     * @return string Permalink oder '' (keine Zugangsseite vorhanden).
+     */
+    public static function zugangsseite_url() {
+        static $ergebnis = null;
+        if (null !== $ergebnis) {
+            return $ergebnis;
+        }
+
+        $id = (int) get_option(self::OPTION_ZUGANGSSEITE, 0);
+        if ($id > 0 && self::ist_zugangsseite($id)) {
+            $ergebnis = (string) get_permalink($id);
+            return $ergebnis;
+        }
+
+        global $wpdb;
+        $treffer = $wpdb->get_col($wpdb->prepare(
+            "SELECT ID FROM {$wpdb->posts}
+             WHERE post_status = 'publish'
+               AND post_type IN ('page', 'post')
+               AND post_content LIKE %s
+             ORDER BY ID ASC LIMIT 5",
+            '%' . $wpdb->esc_like('[cbd_classroom') . '%'
+        ));
+
+        foreach ((array) $treffer as $kandidat) {
+            $kandidat = (int) $kandidat;
+            if (self::ist_zugangsseite($kandidat)) {
+                update_option(self::OPTION_ZUGANGSSEITE, $kandidat, false);
+                $ergebnis = (string) get_permalink($kandidat);
+                return $ergebnis;
+            }
+        }
+
+        $ergebnis = '';
+        return $ergebnis;
+    }
+
+    /**
+     * Ist die Seite veröffentlicht und enthält sie [cbd_classroom]?
+     *
+     * @param int $id Beitrags-ID.
+     * @return bool
+     */
+    private static function ist_zugangsseite($id) {
+        if ($id <= 0 || 'publish' !== get_post_status($id)) {
+            return false;
+        }
+        return has_shortcode((string) get_post_field('post_content', $id), 'cbd_classroom');
+    }
+
+    /**
+     * save_post_page: Zugangsseite merken bzw. vergessen.
+     *
+     * Merkt die ID, sobald eine veröffentlichte Seite [cbd_classroom] trägt.
+     * Verliert genau die gemerkte Seite den Shortcode (oder ihren
+     * Veröffentlichungsstatus), wird die Option gelöscht – zugangsseite_url()
+     * sucht dann beim nächsten Klassenseitenaufruf neu.
+     *
+     * @param int     $post_id Seiten-ID.
+     * @param WP_Post $post    Seite.
+     * @return void
+     */
+    public function merke_zugangsseite($post_id, $post) {
+        if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)) {
+            return;
+        }
+        if (!is_a($post, 'WP_Post')) {
+            return;
+        }
+
+        $hat_shortcode = 'publish' === $post->post_status
+            && has_shortcode((string) $post->post_content, 'cbd_classroom');
+
+        if ($hat_shortcode) {
+            update_option(self::OPTION_ZUGANGSSEITE, (int) $post_id, false);
+        } elseif ((int) get_option(self::OPTION_ZUGANGSSEITE, 0) === (int) $post_id) {
+            delete_option(self::OPTION_ZUGANGSSEITE);
+        }
     }
 
     /**
@@ -1981,7 +2091,11 @@ class CBD_Classroom {
             $seitendaten = array(
                 'ajaxUrl' => admin_url('admin-ajax.php'),
                 'pageId' => $page_id,
-                'reduziert' => (bool) $reduziert
+                'reduziert' => (bool) $reduziert,
+                // Rückweg zur Seitenliste der Klasse (#7061, AP-2.1). Leer,
+                // wenn es keine Seite mit [cbd_classroom] gibt – dann bleibt
+                // der Klassenname in Kopf- und Seitenleiste reiner Text.
+                'zugangUrl' => self::zugangsseite_url()
             );
 
             // Flackerschutz (Nachtrag zu PLAN-Klassenmodus-Live.md): Der Server

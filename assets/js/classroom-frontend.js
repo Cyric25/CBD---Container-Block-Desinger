@@ -28,6 +28,31 @@
         try { localStorage.setItem('cbd_classroom_toc_collapsed', JSON.stringify(idsArray)); } catch (e) {}
     }
 
+    // Schwebender Fragenwand-Knopf (#7061, AP-2.4): sitzt über dem PDF-Knopf
+    // (#cbd-pdf-export-fab aus floating-pdf-button.js), falls es ihn gibt,
+    // sonst an dessen Platz. Der PDF-Knopf entsteht bei $(document).ready –
+    // je nach Ladereihenfolge vor oder nach diesem Knopf; deshalb beobachtet
+    // ein MutationObserver die direkten Kinder von body, bis er da ist
+    // (spätestens 10 s). Wortgleiche Kopie in classroom-page-filter.js – das
+    // Plugin hat keinen JS-Build, siehe cbdKlassenverzeichnis*-Helfer oben.
+    function cbdFragenwandFabPositionieren(knopf) {
+        function setze() {
+            var ueberPdf = !!document.getElementById('cbd-pdf-export-fab');
+            knopf.classList.toggle('cbd-fragenwand-fab--ueber-pdf', ueberPdf);
+            return ueberPdf;
+        }
+        if (setze() || typeof MutationObserver === 'undefined') {
+            return;
+        }
+        var beobachter = new MutationObserver(function() {
+            if (setze()) {
+                beobachter.disconnect();
+            }
+        });
+        beobachter.observe(document.body, { childList: true });
+        setTimeout(function() { beobachter.disconnect(); }, 10000);
+    }
+
     var ClassroomFrontend = {
         classId: null,
         token: null,
@@ -62,7 +87,55 @@
         init: function() {
             this.loadClasses();
             this.bindEvents();
-            this.checkExistingAuth();
+            // Rückweg aus dem Klassenmodus (#7061, AP-2.3): Trägt die Adresse
+            // ?classroom=&token=, gilt DIESE Sitzung – auch wenn im
+            // localStorage eine andere oder keine liegt. Ungültiges Token
+            // behandelt loadClassroomData() wie bisher (Zugangsdaten oder
+            // Anmeldeformular).
+            if (this.uebernimmSitzungAusAdresse()) {
+                this.loadClassroomData();
+            } else {
+                this.checkExistingAuth();
+            }
+        },
+
+        /**
+         * Sitzung aus der Adresse übernehmen (#7061, AP-2.3).
+         *
+         * Der Klassenname in Kopf- und Seitenleiste einer Klassenseite
+         * (classroom-page-filter.js, baueZugangLink()) führt hierher mit
+         * ?classroom=<id>&token=<token>. Beide Werte werden übernommen, im
+         * localStorage abgelegt (Neuladen findet die Sitzung dann über
+         * checkExistingAuth()) und per history.replaceState aus der
+         * Adresszeile entfernt – das Token soll nicht in Lesezeichen oder
+         * geteilten Links landen. Andere Parameter und der Hash bleiben.
+         *
+         * Nur eine Plausibilitätsprüfung (Ziffern bzw. [A-Za-z0-9]); ob die
+         * Sitzung gilt, entscheidet der Server beim Datenabruf.
+         *
+         * @return {boolean} true, wenn eine Sitzung übernommen wurde.
+         */
+        uebernimmSitzungAusAdresse: function() {
+            try {
+                var url = new URL(window.location.href);
+                var klasse = url.searchParams.get('classroom') || '';
+                var token = url.searchParams.get('token') || '';
+                if (!/^[1-9][0-9]*$/.test(klasse) || !/^[A-Za-z0-9]+$/.test(token)) {
+                    return false;
+                }
+                this.classId = klasse;
+                this.token = token;
+                this.storeClassId(klasse);
+                this.storeToken(token);
+                url.searchParams.delete('classroom');
+                url.searchParams.delete('token');
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+                }
+                return true;
+            } catch (e) {
+                return false;
+            }
         },
 
         /**
@@ -279,8 +352,10 @@
             // this.classId/this.token bereits gesetzt -- loadClassroomData()
             // wird ausschliesslich aus checkExistingAuth() (Wiederaufnahme
             // einer gespeicherten Sitzung), autoLogin() und handleAuth()
-            // (beide nach erfolgreichem Login) gerufen, alle drei setzen
-            // beide Werte unmittelbar vorher. verdrahteKlassenpuls() ist
+            // (beide nach erfolgreichem Login) sowie aus init() nach
+            // uebernimmSitzungAusAdresse() (Rueckweg aus dem Klassenmodus,
+            // #7061/AP-2.3) gerufen, alle vier setzen beide Werte
+            // unmittelbar vorher. verdrahteKlassenpuls() ist
             // idempotent, ein mehrfacher Aufruf hier ist deshalb unschaedlich.
             self.verdrahteKlassenpuls();
 
@@ -474,6 +549,11 @@
                 );
             }
 
+            // Schwebender Knopf rechts unten (#7061, AP-2.4) – derselbe
+            // Auslöser, MIT data-classroom/data-token aus demselben Grund wie
+            // der Listenknopf oben.
+            this.zeigeFragenwandFab();
+
             window.cbdDebug && console.log('[CBD Classroom] Rendering content, pages:', data.pages);
             window.cbdDebug && console.log('[CBD Classroom] Pages length:', data.pages ? data.pages.length : 'undefined');
 
@@ -665,9 +745,46 @@
             }
         },
 
+        /**
+         * Schwebenden Fragenwand-Knopf anlegen oder aktualisieren (#7061,
+         * AP-2.4). renderClassroomContent() läuft bei jeder
+         * Live-Aktualisierung erneut – deshalb höchstens EIN Knopf; bei
+         * vorhandenem Knopf werden nur die Sitzungsattribute nachgezogen.
+         * Ohne Sitzung wird er entfernt. Gestaltung: fragenwand.css,
+         * „SCHWEBENDER KNOPF".
+         */
+        zeigeFragenwandFab: function() {
+            try {
+                var knopf = document.getElementById('cbd-fragenwand-fab');
+                if (!this.classId || !this.token) {
+                    if (knopf && knopf.parentNode) {
+                        knopf.parentNode.removeChild(knopf);
+                    }
+                    return;
+                }
+                if (!knopf) {
+                    knopf = document.createElement('button');
+                    knopf.type = 'button';
+                    knopf.id = 'cbd-fragenwand-fab';
+                    knopf.className = 'cbd-fragenwand-verweis cbd-fragenwand-fab';
+                    knopf.setAttribute('aria-label', 'Fragenwand öffnen');
+                    knopf.title = 'Fragenwand öffnen';
+                    knopf.textContent = 'Fragen';
+                    document.body.appendChild(knopf);
+                    cbdFragenwandFabPositionieren(knopf);
+                }
+                knopf.setAttribute('data-classroom', String(this.classId));
+                knopf.setAttribute('data-token', String(this.token));
+            } catch (e) {
+                window.cbdDebug && console.warn('[CBD Classroom] Fragenwand-Knopf nicht angelegt', e);
+            }
+        },
+
         clearAuth: function() {
             this.token = null;
             this.classId = null;
+            // Schwebenden Fragenwand-Knopf mit der Sitzung entfernen (AP-2.4).
+            this.zeigeFragenwandFab();
             // Zuerst abmelden, DANN die Sperre zuruecksetzen (AP-4.fix1,
             // Befund R2 aus AP-4.rev) -- vorher blieben die Abonnements
             // der alten Sitzung bestehen, und ein Re-Login im selben Tab

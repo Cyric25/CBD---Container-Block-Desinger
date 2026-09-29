@@ -446,6 +446,34 @@
     text-overflow: ellipsis;
 }
 
+/* Rückweg zur Seitenliste der Klasse (#7061, AP-2.2): Klassenname in
+   Kopfleiste (a.cbd-classroom-nav-name) und Seitenleisten-Überschrift
+   (.sidebar-section-title > a) ist ein Link. Farbe wie der bisherige Text –
+   in der Kopfleiste über .cbd-classroom-nav-name oben, in der Seitenleiste
+   geerbt von der Theme-Regel .sidebar-section-title. */
+a.cbd-classroom-nav-name,
+.sidebar-section-title .cbd-classroom-zugang-link {
+    text-decoration: none;
+}
+
+.sidebar-section-title .cbd-classroom-zugang-link {
+    display: block;
+    color: inherit;
+}
+
+a.cbd-classroom-nav-name:hover,
+a.cbd-classroom-nav-name:focus-visible,
+.sidebar-section-title .cbd-classroom-zugang-link:hover,
+.sidebar-section-title .cbd-classroom-zugang-link:focus-visible {
+    text-decoration: underline;
+}
+
+a.cbd-classroom-nav-name:focus-visible,
+.sidebar-section-title .cbd-classroom-zugang-link:focus-visible {
+    outline: 2px solid var(--color-ui-surface, #e24614);
+    outline-offset: 2px;
+}
+
 /* Mitte: geklontes Menü */
 .cbd-classroom-nav-center {
     flex: 1;
