@@ -402,6 +402,187 @@
         return rest.length ? { ok: false, detail: rest.join(', ') } : true;
     }
 
+    // ------------------------------------------------------------------
+    // AP-2.2: iOS-Gesten sperren, Seitenknöpfe ausblenden
+    // ------------------------------------------------------------------
+    function ereignis(ziel, typ, Konstruktor) {
+        var ev;
+        if (Konstruktor === 'touch' && typeof TouchEvent === 'function') {
+            ev = new TouchEvent(typ, { bubbles: true, cancelable: true, composed: true });
+        } else if (Konstruktor === 'mouse') {
+            ev = new MouseEvent(typ, { bubbles: true, cancelable: true, composed: true });
+        } else {
+            ev = new Event(typ, { bubbles: true, cancelable: true, composed: true });
+        }
+        ziel.dispatchEvent(ev);
+        return ev.defaultPrevented;
+    }
+
+    function klasseAnHtml() {
+        oeffnen();
+        var offen = document.documentElement.classList.contains('cbd-board-offen');
+        B.destroy();
+        var danach = document.documentElement.classList.contains('cbd-board-offen');
+        return (offen && !danach) ? true : { ok: false, detail: 'offen=' + offen + ', nach destroy=' + danach };
+    }
+
+    function markierungBeimOeffnenWeg() {
+        var r = document.createRange();
+        r.selectNodeContents(document.getElementById('seitentext'));
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+        var vorher = sel.toString();
+        oeffnen();
+        var nachher = window.getSelection().toString();
+        return (vorher.length > 0 && nachher === '') ? true : { ok: false, detail: 'vorher "' + vorher + '", nachher "' + nachher + '"' };
+    }
+
+    function selectstartGesperrt() {
+        oeffnen();
+        var inhalt = B.overlay.querySelector('.cbd-board-content p');
+        var textknoten = inhalt.firstChild;
+        var werkzeug = B.overlay.querySelector('.cbd-board-tool');
+        var seite = document.getElementById('seitentext').firstChild;
+        var f = [];
+        if (!ereignis(textknoten, 'selectstart')) f.push('Inhalt (Textknoten) nicht gesperrt');
+        if (!ereignis(werkzeug, 'selectstart')) f.push('Toolbar nicht gesperrt');
+        if (!ereignis(seite, 'selectstart')) f.push('Seitentext hinter der Tafel nicht gesperrt');
+        var breite = B.overlay.querySelector('.cbd-board-width');
+        if (ereignis(breite, 'selectstart')) f.push('input range gesperrt');
+        // Textfeld des Text-Werkzeugs (hängt an body)
+        B.setTool('text');
+        zeiger('pointerdown', 1, 'mouse', 120, 80);
+        var feld = document.querySelector('.cbd-board-text-input');
+        if (!feld) f.push('kein Textfeld');
+        else if (ereignis(feld, 'selectstart')) f.push('Textfeld gesperrt');
+        if (feld) {
+            var us = getComputedStyle(feld).webkitUserSelect || getComputedStyle(feld).userSelect;
+            if (us !== 'text' && us !== 'auto') f.push('Textfeld user-select=' + us);
+            feld.value = '';
+            feld.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        }
+        B.destroy();
+        if (ereignis(seite, 'selectstart')) f.push('nach Schließen weiter gesperrt');
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    function touchAmCanvasGesperrt() {
+        if (typeof TouchEvent !== 'function') return { ok: false, detail: 'TouchEvent nicht konstruierbar (Browser)' };
+        oeffnen();
+        var f = [];
+        if (!ereignis(B.drawingCanvas, 'touchstart', 'touch')) f.push('touchstart am Canvas nicht verhindert');
+        if (!ereignis(B.drawingCanvas, 'touchmove', 'touch')) f.push('touchmove am Canvas nicht verhindert');
+        var inhalt = B.overlay.querySelector('.cbd-board-content p');
+        if (ereignis(inhalt, 'touchstart', 'touch')) f.push('touchstart im Inhalt verhindert (Scrollen kaputt)');
+        if (ereignis(inhalt, 'touchmove', 'touch')) f.push('touchmove im Inhalt verhindert (Scrollen kaputt)');
+        var breite = B.overlay.querySelector('.cbd-board-width');
+        if (ereignis(breite, 'touchstart', 'touch')) f.push('touchstart am Schieberegler verhindert');
+        var farbe = B.overlay.querySelector('.cbd-board-color');
+        if (ereignis(farbe, 'touchstart', 'touch')) f.push('touchstart an Farbwahl verhindert');
+        var canvas = B.drawingCanvas;
+        B.destroy();
+        if (ereignis(canvas, 'touchstart', 'touch')) f.push('nach Schließen weiter verhindert');
+        if (ereignis(document.body, 'touchstart', 'touch')) f.push('body nach Schließen verhindert');
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    function doppelklickGesperrt() {
+        oeffnen();
+        var f = [];
+        if (!ereignis(B.overlay.querySelector('.cbd-board-content p'), 'dblclick', 'mouse')) f.push('dblclick im Inhalt nicht verhindert');
+        if (!ereignis(B.overlay.querySelector('.cbd-board-tool'), 'dblclick', 'mouse')) f.push('dblclick in Toolbar nicht verhindert');
+        if (ereignis(B.overlay.querySelector('.cbd-board-width'), 'dblclick', 'mouse')) f.push('dblclick an input verhindert');
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    function kontextmenueWeiterGesperrt() {
+        // Regression #7063
+        oeffnen();
+        var f = [];
+        if (!ereignis(B.drawingCanvas, 'contextmenu', 'mouse')) f.push('Canvas');
+        if (!ereignis(B.overlay.querySelector('.cbd-board-tool'), 'contextmenu', 'mouse')) f.push('Toolbar');
+        if (ereignis(B.overlay.querySelector('.cbd-board-width'), 'contextmenu', 'mouse')) f.push('input gesperrt');
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    function cssGestensperre() {
+        oeffnen();
+        var f = [];
+        var cs = function(el) { return getComputedStyle(el); };
+        var html = cs(document.documentElement), body = cs(document.body);
+        var usH = html.webkitUserSelect || html.userSelect, usB = body.webkitUserSelect || body.userSelect;
+        if (usH !== 'none') f.push('html user-select=' + usH);
+        if (usB !== 'none') f.push('body user-select=' + usB);
+        if (html.overscrollBehaviorY !== 'none') f.push('html overscroll=' + html.overscrollBehaviorY);
+        var ov = cs(B.overlay);
+        if (ov.touchAction !== 'none') f.push('Overlay touch-action=' + ov.touchAction);
+        if (ov.zIndex !== '1000000') f.push('Overlay z-index=' + ov.zIndex);
+        if (ov.overscrollBehaviorY !== 'contain') f.push('Overlay overscroll=' + ov.overscrollBehaviorY);
+        var inhalt = cs(B.overlay.querySelector('.cbd-board-content'));
+        if (inhalt.touchAction !== 'pan-y') f.push('Inhalt touch-action=' + inhalt.touchAction);
+        var knopf = cs(B.overlay.querySelector('.cbd-board-tool'));
+        if (knopf.touchAction !== 'manipulation') f.push('Werkzeugknopf touch-action=' + knopf.touchAction);
+        var regler = cs(B.overlay.querySelector('.cbd-board-width'));
+        if (regler.touchAction !== 'manipulation') f.push('Regler touch-action=' + regler.touchAction);
+        B.destroy();
+        var htmlDanach = cs(document.documentElement);
+        var usDanach = htmlDanach.webkitUserSelect || htmlDanach.userSelect;
+        if (usDanach === 'none') f.push('html nach Schließen weiter user-select:none');
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    function dialogeUeberOverlay() {
+        oeffnen();
+        B.showClearConfirm();
+        var dlg = document.querySelector('.cbd-board-confirm-overlay');
+        var z = dlg ? parseInt(getComputedStyle(dlg).zIndex, 10) : 0;
+        var ov = parseInt(getComputedStyle(B.overlay).zIndex, 10);
+        if (dlg && dlg.parentNode) dlg.parentNode.removeChild(dlg);
+        return (z > ov) ? true : { ok: false, detail: 'Dialog z-index ' + z + ' <= Overlay ' + ov };
+    }
+
+    function seitenknoepfeAusgeblendet() {
+        var ids = ['#cbd-pdf-export-fab', '.cbd-notes-manager-button', '.sidebar-toggle-btn'];
+        var f = [];
+        ids.forEach(function(s) {
+            if (getComputedStyle(document.querySelector(s)).display === 'none') f.push(s + ' schon vor dem Öffnen unsichtbar');
+        });
+        oeffnen();
+        ids.forEach(function(s) {
+            if (getComputedStyle(document.querySelector(s)).display !== 'none') f.push(s + ' bei offener Tafel sichtbar');
+        });
+        B.destroy();
+        ids.forEach(function(s) {
+            if (getComputedStyle(document.querySelector(s)).display === 'none') f.push(s + ' nach dem Schließen unsichtbar');
+        });
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    function keineDoppeltenListener() {
+        var z = window.__listenerZaehler;
+        if (B.overlay) B.destroy();
+        var basis = JSON.stringify(z.offen);
+        window.__zaehlerAktiv = true;
+        var nachOeffnen = [];
+        try {
+            for (var i = 0; i < 3; i++) {
+                oeffnen();
+                var summe = 0;
+                for (var k in z.offen) summe += z.offen[k];
+                nachOeffnen.push(summe);
+                B.destroy();
+            }
+        } finally {
+            window.__zaehlerAktiv = false;
+        }
+        var offen = [];
+        for (var k2 in z.offen) if (z.offen[k2] !== 0) offen.push(k2 + '=' + z.offen[k2]);
+        if (offen.length) return { ok: false, detail: 'nach 3x Öffnen/Schließen offen: ' + offen.join(', ') + ' (je Öffnen ' + nachOeffnen.join('/') + ')' };
+        if (nachOeffnen[0] !== nachOeffnen[2]) return { ok: false, detail: 'Listener wachsen je Öffnen: ' + nachOeffnen.join('/') };
+        return { ok: true, detail: 'je Öffnen ' + nachOeffnen[0] + ' document/html/body/window-Listener, nach Schließen 0 (Basis ' + basis + ')' };
+    }
+
     function laufen() {
         pruefe('A: Ballen (klein) liegt auf, dann Stift', szenarioA(10));
         pruefe('A: Ballen (groß) liegt auf, dann Stift', szenarioA(40));
@@ -425,6 +606,18 @@
         pruefe('Regression: Mehrseitigkeit', mehrseitig);
         pruefe('Regression: Speichern (localStorage)', speichernLaden);
         pruefe('Zustand nach destroy() zurückgesetzt', zustandNachDestroy);
+
+        // AP-2.2
+        pruefe('AP-2.2: Klasse cbd-board-offen an html, nach Schließen weg', klasseAnHtml);
+        pruefe('AP-2.2: vorhandene Markierung beim Öffnen aufgehoben', markierungBeimOeffnenWeg);
+        pruefe('AP-2.2: selectstart gesperrt (außer Eingabefelder), nach Schließen frei', selectstartGesperrt);
+        pruefe('AP-2.2: touchstart/touchmove am Canvas gesperrt, Inhalt/Regler frei', touchAmCanvasGesperrt);
+        pruefe('AP-2.2: Doppelklick im Overlay gesperrt (außer Eingabefelder)', doppelklickGesperrt);
+        pruefe('AP-2.2: Regression Kontextmenü-Sperre #7063', kontextmenueWeiterGesperrt);
+        pruefe('AP-2.2: CSS-Gestensperre (html/body/Overlay/Inhalt/Knöpfe)', cssGestensperre);
+        pruefe('AP-2.2: Dialoge liegen über dem Overlay', dialogeUeberOverlay);
+        pruefe('AP-2.2: Seitenknöpfe bei offener Tafel ausgeblendet', seitenknoepfeAusgeblendet);
+        pruefe('AP-2.2: keine doppelten Listener nach 3x Öffnen/Schließen', keineDoppeltenListener);
 
         // Zusatztests späterer APs hängen sich hier ein
         if (typeof window.__zusatzTests === 'function') {
