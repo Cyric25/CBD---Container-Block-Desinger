@@ -3679,10 +3679,182 @@ trotzdem abgesichert, sollte aber Markierbarkeit von Dialogtext prüfen
    Auswirkung, kein solches Element im Overlay.
 2. Ein **Rechtsklick** auf die Zeichenfläche setzt einen Punkt-Strich, weil
    `onPointerDown` die Maustaste nicht prüft (vorbestehend, fällt ohne Menü
-   stärker auf). Behebung eingeplant in AP-4.3 desselben Plans.
+   stärker auf). **Erledigt seit 3.1.137 (#7149, Regel 5 der
+   Zeigerverwaltung, siehe unten).**
 3. Auf echtem Touch-/Stiftgerät ist die Wirkung bei Planabschluss der
    Phase noch nicht geprüft (nur Maus + synthetische Ereignisse auf der
-   Testinstallation).
+   Testinstallation). **Stand 3.1.137:** weiter nur synthetisch geprüft;
+   die Abnahme am iPad mit Apple Pencil (Safari und Edge) liegt beim
+   Betreiber, Checkliste in `PLAN-Rueckmeldungen-Blockverweis-iPad-Tafel-Darkmode-Formeln.md`,
+   AP-2.doc. Bis zur Rückmeldung gilt das Verhalten am Gerät als
+   unbestätigt.
+
+### Schreiben auf Tablets: Zeigerverwaltung, Stift-Vorrang, iOS-Gesten (#7149)
+
+Rückmeldung #7149 (iPad, iPadOS 18, Edge iOS = WebKit): Mit aufliegender
+Hand brachen Pencil-Striche ab, der Handballen mischte sich ein, Markierung/
+Lupe/Zoom schlugen auf die Seite durch, der PDF-Knopf lag über bzw. unter
+der Tafel und das Zeichnen wurde mit vielen Strichen zäh. Umgesetzt im
+Vorhaben `PLAN-Rueckmeldungen-Blockverweis-iPad-Tafel-Darkmode-Formeln.md`,
+Phase 2 (nur `assets/js/board-mode.js` und `assets/css/board-mode.css`,
+kein PHP). **Alles Folgende muss beim Umbau der Tafel (Elementmodell/Lasso,
+`PLAN-Rueckmeldungen-Klassenmodus-und-Tafel-Lasso.md`, AP-4.3 ff.) erhalten
+bleiben.**
+
+**Zeigerverwaltung (Kommentarblock „Zeigerverwaltung (#7149) - bitte nicht
+vereinfachen" über `onPointerDown`).** Sechs Regeln:
+1. Genau EIN zeichnender Zeiger: `this.drawingPointerId` (+
+   `drawingPointerType`). `onPointerMove`/`onPointerUp` wirken nur für
+   diese ID; alle anderen Zeiger beeinflussen den Strich nicht.
+   `activePointers` ist nur noch Buchführung und entscheidet nichts.
+2. **Stift-Vorrang (Entscheidung E5, ohne Schalter):** Sobald in der Sitzung
+   einmal `pointerType === 'pen'` auftrat (`stiftGesehen`), startet `touch`
+   weder Strich noch Radierer noch Textfeld – nur noch Zwei-Finger-Zoom.
+   Gilt je Öffnen der Tafel (Reset in `_openOverlay` UND `destroy`). Ohne
+   Stift zeichnet ein Finger wie früher (Smartboards). Restrisiko R3: meldet
+   ein Smartboard Touch fälschlich als `pen`, zeichnen Finger dort nach dem
+   ersten Kontakt nicht mehr – Abhilfe wäre ein Schalter in der Toolbar
+   (Fix-AP, nur bei entsprechender Rückmeldung).
+3. Ein Stift übernimmt einen laufenden FINGER-Strich (Ballen setzte vor dem
+   ersten Stiftkontakt auf); der Finger-Teilstrich wird verworfen
+   (`_strichVerwerfen()`), nicht gespeichert.
+4. Pinch/Zoom nur aus Touch-Zeigern (`_pinchPointers`); Stift-IDs kommen
+   nie hinein. Er startet nicht, solange Stift oder Maus zeichnen. Zeichnet
+   ein Finger und kommt ein zweiter dazu, wird der Finger-Strich verworfen
+   und der Zoom gestartet (wie früher).
+5. Nur `e.button === 0` startet etwas: Rechts-/Mittelklick zeichnen keinen
+   Punkt mehr (erledigt Befund G3 bzw. Schritt 10 von AP-4.3 des
+   Vorgängerplans). **Bewusste Folge (Review G8):** Auch ein Stift mit
+   gedrückter Seitentaste bzw. das Radierende von Surface-/Windows-Stiften
+   (`button` 2 bzw. 5) zeichnet nicht mehr; früher zeichneten diese mit dem
+   aktiven Werkzeug. Der Apple Pencil liefert `button 0` und ist nicht
+   betroffen.
+6. `pointerleave` beendet einen Strich nicht, solange der Canvas die
+   Zeiger-Erfassung (`setPointerCapture`) für diesen Zeiger hält (der Aufruf
+   steckt in `try/catch`, weil er bei synthetischen Zeigern wirft). Ohne
+   Erfassung wie bisher. `pointercancel` übernimmt den Strich (nicht
+   verwerfen).
+
+**iOS-Gestensperre (E6/E7).** `_openOverlay` setzt die Klasse
+`cbd-board-offen` an `<html>` und hebt eine bestehende Markierung auf
+(`getSelection().removeAllRanges()`, in `try`); `destroy()` entfernt sie –
+einziger Abbaupfad. CSS (`board-mode.css`, Abschnitt „iOS-GESTENSPERRE"):
+`user-select:none`, `-webkit-touch-callout:none`, `overscroll-behavior:none`
+an `html`/`body`; Overlay `touch-action:none`; Bedienelemente
+`touch-action:manipulation`; Inhaltshälfte `.cbd-board-content`
+`touch-action:pan-y` (Scrollen bleibt); Eingabefelder und
+`.cbd-board-text-input` bekommen `user-select:text` zurück. Warum an
+`html`/`body`: WebKit ignoriert `user-select` am Overlay allein teilweise.
+JS (`bindEvents`, alle in `boundHandlers`, Entfernen in `unbindEvents()`):
+`touchstart`/`touchmove` am `.cbd-board-canvas-area` mit `{passive:false}`
+und `preventDefault()`, `selectstart` am `document` und `dblclick` am
+Overlay; Ausnahme jeweils über `_istEingabefeld()`
+(`input, textarea, select, [contenteditable="true"], [contenteditable=""]`,
+Textknoten → Elternelement). `dblclick`-`preventDefault` ist praktisch
+wirkungslos (Review G4); die Sperre leisten `selectstart` und CSS.
+
+**Ausgeblendete schwebende Knöpfe.** `html.cbd-board-offen` blendet
+`#cbd-pdf-export-fab`, `.cbd-notes-manager-button` und `.sidebar-toggle-btn`
+(Navigationsknopf des Themes; der Selektor steht nur im Plugin-CSS) mit
+`display:none !important` aus. Der Fragenwand-Knopf hat seine eigene Regel
+(`body:has(.cbd-board-overlay)` in `fragenwand.css`). Bewusst NICHT
+ausgeblendet: `.cbd-toast`, `.cbd-live-hinweis`, `.fos-meldung-fenster`.
+**Neuer schwebender Seitenknopf → hier eintragen**, sonst liegt er über
+oder unter der Tafel und ist markierbar.
+
+**Stapelordnung (Review G10).** Overlay-z-index ist `1000000`; Glossar-
+Tooltip/-Sidebar und `.cbd-board-confirm-overlay` (Lösch-Bestätigung,
+Klassen-Selektor) liegen auf `1000001`. `1000000` haben auch das
+Blockverweis-Modal (`blocks/block-reference/style.css`), der
+Behandelt-Dialog (`cbd-frontend-clean.css`) und die Fragenwand-Overlays
+(`fragenwand.css`). Diese gewinnen über der Tafel **nur durch die
+DOM-Reihenfolge**: Sie werden erst beim Öffnen/Klick an das Ende von
+`body` gehängt. **Wer solche Elemente künftig vorab ins DOM legt, muss
+über 1000000 gehen**, sonst liegen sie unter der Tafel.
+
+**Inkrementelles Zeichnen (E8).** `onPointerMove` zeichnet nur das neue
+Stück (`_segmentZeichnen(stroke, von, punkte)`), nicht mehr alles
+(`redrawAllStrokes()` war O(Striche×Punkte) je Ereignis: ~27 ms bei 500
+Strichen, jetzt ~0,7 ms). Punkte kommen über `_punkteAusEreignis()` inkl.
+`getCoalescedEvents()` (Feature-Erkennung; die Liste enthält das Ereignis
+selbst als letzten Eintrag); der Strich-Radierer prüft wie bisher nur den
+letzten Punkt. `_segmentZeichnen` setzt alle Linienparameter je Aufruf neu
+und überlebt damit ein `resizeAllCanvases()` mitten im Strich. In
+`onPointerUp` läuft EINMAL `redrawAllStrokes()` – das Endbild ist
+pixelgleich zum bisherigen (gemessen 0 Pixel Abweichung; Zwischenstand
+0,31 % wegen Kantenglättung an den Segmentgelenken).
+**Entscheidung Textmarker:** Er wird ebenfalls inkrementell gezeichnet,
+mit `globalCompositeOperation='destination-over'` (unter alles bereits
+Gezeichnete), nicht `lighten` obenauf – sonst überdeckte der deckende
+helle Marker beim Ziehen die Stiftstriche darunter (im Neuzeichnen liegt
+er UNTER den Stiftstrichen). Einzige Abweichung bis zum Abheben: über
+einem anderen Textmarker liegt der neue darunter statt per `lighten`
+gemischt. Eigene Ebene oder O(n)-Neuzeichnen waren die Alternativen.
+
+**Niedrige Bildschirmhöhe (AP-2.4).** `@media (max-height: 500px)` in
+`board-mode.css` (Abschnitt „NIEDRIGE BILDSCHIRMHÖHE", nach dem
+`max-width:768px`-Block): Kopfzeile 32 px, Toolbar einzeilig
+(`nowrap`, `overflow-x:auto`, `touch-action:pan-x`), Knöpfe mind. 32 px.
+Bei 1141×253: Zeichenfläche 130 → 175 px; 1366×768 und 820×1180
+unverändert. `visualViewport` `resize` ruft gedrosselt (100 ms)
+`resizeAllCanvases()`, falls sich die Containergröße geändert hat
+(`boundHandlers.viewportResize`, Timer in `unbindEvents()` gelöscht; laut
+Review G5 neben dem `ResizeObserver` redundant, aber leckfrei).
+**Grenze:** iOS Safari verkleinert bei eingeblendeter Tastatur den
+Layout-Viewport nicht (nur den visuellen); das `position:fixed`-Overlay
+kann dann unter die Tastatur reichen. Mitführen der Overlay-Höhe an
+`visualViewport.height` ist nicht umgesetzt (Kandidat Fix-AP, falls die
+Abnahme es zeigt). Smartphone quer (`max-width:768px` UND
+`max-height:500px`) behält die Zeilenaufteilung des Mobil-Blocks.
+
+**Prüfwerkzeuge (nicht im ZIP – `create-plugin-zip.js` hat eine
+Positivliste ohne `tools/`).**
+- `tools/test-board-zeiger.html` mit `tools/test-board-zeiger.js`
+  (Testlogik) und `tools/test-board-zeiger-zaehler.js` (Listener-Zähler,
+  vor `board-mode.js` geladen). Extern, weil die CSP der Testinstallation
+  Inline-Skripte blockiert. Spielt per synthetischen `PointerEvent`s die
+  Szenarien A–E, Stift-Vorrang je Öffnen, Rechts-/Mittelklick, Gestensperre,
+  FABs, Listener-Lebenszyklus (3× Öffnen/Schließen: 0 Rest-Listener) und
+  die Zeitmessung samt Pixelvergleich ab (40 Prüfungen). Aufruf:
+  `http://fos.localhost:8080/wp-content/plugins/container-block-designer/tools/test-board-zeiger.html`
+  (Dateien dorthin kopieren). Ergebnis in `window.__zusammenfassung` und
+  `window.__ergebnisse`. **Cache-Falle:** nach dem Kopieren von
+  `board-mode.js` einen Abfrage-Parameter an die Testseite hängen bzw.
+  `fetch(…, {cache:'reload'})`, sonst läuft die alte Fassung. Die
+  Zeitmessung braucht je Ereignis einen erzwungenen Rasterabgleich (1-px-
+  `getImageData`); ohne ihn misst `performance.now()` nur das Aufzeichnen
+  und die alte Fassung wäre „grün".
+- `tools/test-board-layout.js`: auf der Testseite (oder jeder Seite mit
+  `CBDBoardMode`) `await window.__tafelLayout()` liefert Boxen von
+  Kopfzeile, Split, Inhalt, Zeichenfläche, Toolbar und Knöpfen. Zum
+  Vergleich vorher/nachher bei 1366×768, 820×1180 und 1141×253.
+- Grenzen: Synthetische Zeiger haben keine echte Erfassung
+  (`pointerleave` mit Capture nicht prüfbar); echtes Finger-Scrollen unter
+  `pan-y`, Lupe/Callout unter iOS und Tastaturverhalten sind am Agenten
+  nicht prüfbar (Browser-Pane liefert nur Mausereignisse) – Betreiber-
+  Abnahme am iPad.
+
+**Bekannte Einschränkungen (Review AP-2.rev, alle gering):**
+1. `img.onload` in `loadFromCache()`/`goToPage()` greift nach `destroy()`
+   auf `drawingCtx === null` zu (TypeError in der Konsole, wenn die Tafel
+   vor dem Laden des Hintergrundbilds geschlossen wird; vorbestehend).
+2. Der Punkt-Radierer radiert nur Pixel; das nächste `redrawAllStrokes()`
+   (Strichbeginn, Rückgängig, Strichende) baut aus `baseImageObj + strokes`
+   neu und holt radierte Stellen zurück (vorbestehend, Kandidat für den
+   Elementmodell-Plan).
+3. Das O(n)-Neuzeichnen beim `pointerdown` (einmal je Strich) blieb
+   (G7): Bei vielen Strichen kostet jeder Strichbeginn ~27 ms (Desktop),
+   auf älteren iPads mehr; der Strichanfang erscheint verzögert, Punkte
+   gehen wegen der coalesced Events nicht verloren.
+4. Fehlerpfad (G3): Wirft `_openOverlay` zwischen dem Setzen der Klasse und
+   `bindEvents()`, bleiben Klasse und `overflow:hidden` stehen (wie früher
+   schon für `overflow`).
+5. Nur am Gerät prüfbar, deshalb in der Abnahme-Checkliste: Handballen mit
+   zwei Kontaktpunkten zwischen zwei Strichen kann im Stift-Modus Zoom
+   auslösen (G1); Tastatur/Fokus des Text-Werkzeugs bei Pencil-Tipp (G2);
+   Scroll-Verkettung am Ende der Inhaltshälfte, ggf. eine Zeile
+   `overscroll-behavior: contain` an `.cbd-board-content` (G6); Schieberegler
+   in der wischbaren Leiste bei niedriger Höhe (G9).
 
 **Testumgebungs-Falle:** Die lokale Testinstallation
 (`fos.localhost:8080`) sendet eine strenge Content-Security-Policy
