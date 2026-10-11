@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Test: Klassenmodus-Linkabfang und Blockverweis (#7109)</title>
+<!--
+  Handtestseite fuer AP-1.1/AP-1.2. Wird NICHT ins Plugin-ZIP gepackt (tools/).
+  Einsatz: Diese Datei plus test-klassenmodus-linkabfang.js in das WordPress-
+  Wurzelverzeichnis der lokalen Testinstallation legen (gleicher Ursprung wie
+  die Skripte) und aufrufen mit
+  http://fos.localhost:8080/test-klassenmodus-linkabfang.html?classroom=18&token=TEST
+  Sie laedt jQuery, view.js und classroom-page-filter.js des Plugins, mockt den
+  AJAX-Aufruf des Klassenmodus und stellt je einen Verweis jeder Sorte bereit.
+-->
+<style>body{font:16px sans-serif;padding:1em} a{display:block;margin:.5em 0}</style>
+</head>
+<body>
+<h1>Linkabfang-Test</h1>
+<div id="ziel" class="cbd-container" data-stable-id="cbd-1-aaa"><div class="cbd-container-block"><p>ZIELBLOCK-INHALT</p></div></div>
+
+<div id="ziel-alt" class="cbd-container" data-stable-id="cbd-1.7E+12-z" style="margin-top:1500px"><div class="cbd-container-block"><p>ALTBESTAND-ZIEL (E+12)</p></div></div>
+
+<a id="modal-same" class="cbd-block-reference-link" data-display-mode="modal" data-same-page="true"
+   data-target-stable-id="cbd-1-aaa" data-target-post="1" href="/test-klassenmodus-linkabfang.html?cbd-ref=cbd-1-aaa">Block-Verweis (Modal, gleiche Seite)</a>
+<a id="modal-fehler" class="cbd-block-reference-inline" data-display-mode="modal" aria-haspopup="dialog"
+   data-target-stable-id="cbd-1.78752232945E+12-2ixi6mg4" data-target-post="999999"
+   href="/andere-seite/?cbd-ref=cbd-1.78752232945E%2B12-2ixi6mg4">Inline-Verweis (Modal, andere Seite, Fehler)</a>
+<a id="link-modus" class="cbd-block-reference-link" data-display-mode="link" data-same-page="false"
+   data-target-stable-id="cbd-3-ccc" data-target-post="2" href="/link-modus-ziel/?cbd-ref=cbd-3-ccc">Block-Verweis (Link-Modus)</a>
+<a id="normal" href="/normaler-link/">Normaler interner Link</a>
+<a id="blank" href="/neuer-tab/" target="_blank">Link mit target=_blank</a>
+<a id="extern" href="https://example.org/">Externer Link</a>
+<a id="anker" href="#ziel">Anker</a>
+
+<script src="/wp-includes/js/jquery/jquery.min.js"></script>
+<script src="/test-klassenmodus-linkabfang.js"></script>
+<script src="/wp-content/plugins/container-block-designer/blocks/block-reference/view.js"></script>
+<script src="/wp-content/plugins/container-block-designer/assets/js/classroom-page-filter.js"></script>
+</body>
+</html>
