@@ -661,7 +661,11 @@ class CBD_Block_Serializer {
         for ($i = 0; $i < 8; $i++) {
             $zufall .= $zeichen[wp_rand(0, strlen($zeichen) - 1)];
         }
-        return 'cbd-' . (string) round(microtime(true) * 1000) . '-' . $zufall;
+        // #7109 (E3): sprintf('%.0f') statt (string) round(...): Der Float-
+        // Cast folgt der ini-Einstellung `precision` und lieferte auf
+        // manchen Servern E-Notation (`1.78752232945E+12`). `%.0f` ist
+        // unabhängig davon und auch auf 32-bit-PHP ausreichend (kein (int)).
+        return 'cbd-' . sprintf('%.0f', round(microtime(true) * 1000)) . '-' . $zufall;
     }
 
     /** Gruppenschlüssel eines Abschnitts (mit Rückfall auf die Kompetenzstufe). */

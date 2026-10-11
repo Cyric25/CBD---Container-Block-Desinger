@@ -466,7 +466,7 @@ class CBD_Inline_Reference {
             return self::url_bereinigen($permalink);
         }
 
-        return self::url_bereinigen(add_query_arg('cbd-ref', $stable, $permalink));
+        return self::url_bereinigen(add_query_arg('cbd-ref', rawurlencode($stable), $permalink));
     }
 
     /**

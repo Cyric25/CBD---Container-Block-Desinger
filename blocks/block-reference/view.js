@@ -116,7 +116,7 @@
 	 * @param {string} name
 	 * @return {string} leer, wenn nicht vorhanden
 	 */
-	function ausAdresse(name) {
+	function ausAdresse(name, ohnePlusUmwandlung) {
 		var muster = new RegExp('[?&]' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^&#]*)');
 		var treffer = muster.exec(window.location.search || '');
 
@@ -125,7 +125,9 @@
 		}
 
 		try {
-			return decodeURIComponent(treffer[1].replace(/\+/g, ' '));
+			// #7109 (E3): Altbestands-Adressen tragen ein rohes `+` (aus
+			// `E+12`-IDs). Mit `ohnePlusUmwandlung` bleibt es ein `+`.
+			return decodeURIComponent(ohnePlusUmwandlung ? treffer[1] : treffer[1].replace(/\+/g, ' '));
 		} catch (fehler) {
 			return treffer[1];
 		}
@@ -358,6 +360,59 @@
 		absatz.className = 'cbd-block-reference-modal__fehler';
 		absatz.textContent = t('nichtVerfuegbar', 'Dieser Block ist nicht verf\u00fcgbar.');
 		modalKoerper.appendChild(absatz);
+
+		// #7109 (E2): Zusaetzlich ein sichtbarer Link zur Zielseite \u2014 KEINE
+		// automatische Weiterleitung. Entscheidung: Bei data-same-page="true"
+		// entfaellt der Link, denn der Block ist dann auf DIESER Seite nicht
+		// (mehr) auffindbar; ein Link auf die eigene Seite fuehrte nirgendwohin.
+		var href = seiteOeffnenHref(ausloeser);
+		if (href) {
+			var zeile = document.createElement('p');
+			zeile.className = 'cbd-block-reference-modal__fehler-link';
+			var a = document.createElement('a');
+			a.className = 'cbd-block-reference-modal__seite-oeffnen';
+			a.setAttribute('href', href);
+			a.textContent = t('seiteOeffnen', 'Seite \u00f6ffnen');
+			zeile.appendChild(a);
+			modalKoerper.appendChild(zeile);
+		}
+	}
+
+	/**
+	 * Zieladresse fuer den Fehler-Link: href des ausloesenden Verweises,
+	 * im Klassenmodus um die aktuellen classroom/token ergaenzt. Nur ueber das
+	 * URL-Objekt (kein String-Gebastel, kein innerHTML); ohne URL-Unterstuetzung
+	 * bzw. bei ungueltiger Adresse wird der Rohwert unveraendert verwendet.
+	 *
+	 * @param {HTMLElement|null} link
+	 * @return {string} leer = kein Link anzeigen
+	 */
+	function seiteOeffnenHref(link) {
+		if (!link || link.getAttribute('data-same-page') === 'true') {
+			return '';
+		}
+		var roh = link.getAttribute('href') || '';
+		if (!roh || /^\s*javascript:/i.test(roh)) {
+			return '';
+		}
+		if (typeof window.URL !== 'function') {
+			return roh;
+		}
+		try {
+			var ziel = new window.URL(roh, window.location.href);
+			if (ziel.protocol !== 'http:' && ziel.protocol !== 'https:') {
+				return '';
+			}
+			var klasse = ausAdresse('classroom');
+			var token = ausAdresse('token');
+			if (klasse && token && ziel.origin === window.location.origin) {
+				ziel.searchParams.set('classroom', klasse);
+				ziel.searchParams.set('token', token);
+			}
+			return ziel.toString();
+		} catch (fehler) {
+			return roh;
+		}
 	}
 
 	// =====================================================================
@@ -919,6 +974,15 @@
 		}
 
 		var targetElement = findeZiel('', stableId);
+
+		// #7109 (E3): Altbestands-Adressen mit rohem `+` (IDs wie
+		// `cbd-1.78752232945E+12-…`): zweite Fassung ohne +→Leerzeichen.
+		if (!targetElement) {
+			var roh = ausAdresse('cbd-ref', true);
+			if (roh && roh !== stableId) {
+				targetElement = findeZiel('', roh);
+			}
+		}
 
 		if (targetElement) {
 			setTimeout(function () {

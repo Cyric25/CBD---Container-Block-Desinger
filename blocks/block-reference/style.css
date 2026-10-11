@@ -298,6 +298,18 @@
 	color: var(--color-text-muted, #666);
 }
 
+/* #7109: Link "Seite öffnen" unter der Fehlermeldung. */
+.cbd-block-reference-modal__fehler-link {
+	margin: 0;
+	padding: 0 0 1.5em;
+	text-align: center;
+}
+
+.cbd-block-reference-modal__fehler-link a {
+	color: var(--color-ui-surface, #e24614);
+	text-decoration: underline;
+}
+
 /* Der geklonte bzw. nachgeladene Container soll im Modal nicht noch einmal
    den Seitenabstand mitbringen. */
 .cbd-block-reference-modal__inhalt > .cbd-container {

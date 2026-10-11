@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Container Block Designer is a WordPress plugin that creates customizable container blocks for the Gutenberg Block Editor. It allows users to create, manage, and apply styled container blocks with features like collapsible sections, copy-to-clipboard, screenshots, and automatic numbering.
 
-**Current Version:** 3.1.131
+**Current Version:** 3.1.136 (Stand Merge Phase 1 von `PLAN-Rueckmeldungen-Blockverweis-iPad-Tafel-Darkmode-Formeln.md`; die genaue Nummer steht in `CBD_VERSION`)
 **WordPress Requirements:** 6.0+
 **PHP Requirements:** 7.4+ (rückwärtskompatibel; getestet auf 7.4.33)
 **Tested up to:** WordPress 6.4, PHP 8.4
@@ -3042,6 +3042,86 @@ Theme-Funktion ist **nicht** definiert → kein Fatal Error, Ablehnung und
 Nichtexistenz sind zeichengleich, keine Antwort nennt Seitentitel oder
 Permalink, eine Ausnahme beim Rendern führt zu 404 statt eines Fatal Errors,
 und der globale `$post` wird in jedem Fall wiederhergestellt.
+
+### Klassenmodus-Linkabfang und Blockverweis (#7109)
+
+Rückmeldung #7109 (Edge/Windows, Klassenmodus): Ein Blockverweis im
+Modal-Modus blitzte kurz auf und navigierte dann doch zur Seite. Ursache:
+`interceptLinks()` in `assets/js/classroom-page-filter.js` hängt im
+Klassenmodus an jeden internen Link `classroom` und `token` und navigiert
+dorthin – auch, wenn `blocks/block-reference/view.js` den Klick schon für
+das Modal übernommen hatte. Beide Handler hängen an `document`; ihre
+Reihenfolge ist nicht garantiert (jQuery registriert EINEN nativen
+Dispatcher beim ersten `.on('click')` an `document`; bindet irgendein
+früheres Skript dort einen Klick, läuft der jQuery-Zweig vor `view.js`).
+Deshalb gibt es zwei voneinander unabhängige Sicherungen am Anfang des
+Handlers:
+
+1. `e.isDefaultPrevented()` – deckt die Reihenfolge „`view.js` zuerst" ab.
+2. **Selektor-Ausschluss** – deckt „jQuery zuerst" ab, ohne selbst
+   `preventDefault()` zu setzen, sodass `view.js` danach das Modal öffnet.
+
+**Ausschlussliste** (der Handler kehrt ohne Eingriff zurück):
+`e.isDefaultPrevented()`; kein einfacher Linksklick (`which > 1`,
+`button > 0`) oder Modifikatortaste (Meta/Strg/Shift/Alt) – Strg/Mittelklick
+öffnet so einen neuen Tab mit der Originaladresse; `target="_blank"`;
+`a.cbd-block-reference-link[data-display-mode="modal"]`,
+`a.cbd-block-reference-inline[data-display-mode="modal"]` und
+`.cbd-fragenwand-verweis`. Der Selektor schließt NUR den Modal-Modus aus:
+Ein Blockverweis im Link-Modus bleibt abgefangen und bekommt
+`classroom`/`token`. Der Inline-Verweis setzt `data-display-mode` nur mit dem
+Wert `modal`. `.cbd-fragenwand-verweis` gibt es sowohl als `<button>` als auch
+(Textformat) als `<a class="cbd-fragenwand-verweis" href="#">`; der Ausschluss
+greift bei beiden, beim `<a>` wäre der `#`-href ohnehin übersprungen worden.
+Duplikatswächter: Der Klassenname `cbd-block-reference-inline` kommt in
+`classroom-page-filter.js` nur in diesem Selektor vor;
+`tools/test-inline-reference.php` Gruppe 11 prüft nur die vier benannten
+Dateien und schlägt nicht an.
+
+**Fehler-Modal mit Link.** Kann das Modal den Block nicht laden, zeigt
+`zeigeFehler()` in `view.js` unter dem Text „Dieser Block ist nicht
+verfügbar." einen Link „Seite öffnen"
+(`.cbd-block-reference-modal__seite-oeffnen`, Text aus
+`texte.seiteOeffnen`, serverseitig in `class-cbd-block-reference.php`). Die
+Adresse kommt aus `seiteOeffnenHref()`: nur über das `URL`-Objekt, nur
+http/https, `classroom`/`token` aus `location.search` nur im Klassenmodus und
+nur bei gleichem Origin; aufgebaut mit `setAttribute`/`textContent`, nie mit
+`innerHTML`. **Keine automatische Weiterleitung.** Bei `data-same-page="true"`
+entfällt der Link (der Block ist auf der eigenen Seite nicht auffindbar, ein
+Link auf dieselbe Seite wäre sinnlos).
+
+**Kodierung von `cbd-ref`.** `render.php` und
+`class-cbd-inline-reference.php` setzen den Wert mit `rawurlencode()` in die
+Adresse (`add_query_arg()` kodiert neue Werte nicht; `esc_url` lässt `%2B`
+stehen). Altbestands-IDs wie `cbd-1.78752232945E+12-…` enthalten ein `+`, das
+sonst zu einem Leerzeichen wird. `ausAdresse(name, ohnePlusUmwandlung)` in
+`view.js` liefert wahlweise den Rohwert, und `handleQueryNavigation()`
+probiert beide Fassungen – so bleiben auch gecachte Seiten mit rohem `+`
+gültig.
+
+**Ganzzahlige IDs.** `CBD_Block_Serializer::erzeuge_stable_id()` formatiert die
+Zeit mit `sprintf('%.0f', round(microtime(true) * 1000))`; bei niedriger
+PHP-`precision` auf dem Server entstand sonst E-Notation. `(int)` wäre auf
+32-bit-PHP zu klein. Bestehende IDs in der Datenbank werden NICHT migriert.
+
+**Bekannte Einschränkungen (Review-Befunde, bewusst nicht behoben):**
+- `view.js` (`seiteOeffnenHref()`, Rückfälle bei fehlender `URL`-API und im
+  `catch`) gibt den Roh-`href` zurück, gefiltert wird nur `javascript:`.
+  Praktisch ungefährlich (der `href` stammt aus `esc_url`); defensiver wäre
+  `return ''`.
+- Blockverweis im Link-Modus auf DERSELBEN Seite sowie auf `link`
+  zurückgestufte Modal-Verweise: Läuft der jQuery-Zweig zuerst, lädt
+  `interceptLinks()` die Seite mit Parametern neu, statt im Dokument zu
+  springen (das `preventDefault()` aus `springeOderFolge()` kommt zu spät).
+  Vorbestehendes Verhalten, keine Regression dieses Vorhabens.
+
+**Prüfung.** `php tools/test-block-reference-ids.php` (6 Prüfungen, Argument:
+optionaler Plugin-Ordner für den Rot-Nachweis gegen einen alten Stand) und
+`tools/test-klassenmodus-linkabfang.html` (Handtestseite, nicht im ZIP; mit
+`&jqfirst=1` bindet sie VOR `view.js` einen leeren jQuery-Klickhandler und
+erzwingt damit die Reihenfolge „jQuery zuerst"). Der erste Testnachweis über
+`jQuery.event.trigger(…, onlyHandlers)` war wertlos – er bubbelt nicht, der an
+`document` delegierte Handler lief gar nicht; maßgeblich sind echte Klicks.
 
 ## Blockreferenz als Textformat und hierarchische Zielauswahl (seit 3.1.93)
 

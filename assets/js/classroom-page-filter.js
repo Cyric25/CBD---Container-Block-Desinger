@@ -2284,7 +2284,20 @@
             $(document).off('click.cbdClassroomLinks');
 
             $(document).on('click.cbdClassroomLinks', 'a[href]', function(e) {
-                var href = $(this).attr('href');
+                // #7109: Blockverweise im Modal-Modus (Block- und Inline-Variante)
+                // und Fragenwand-Verweise öffnen ihr Modal selbst und rufen dazu
+                // preventDefault() auf. Die Reihenfolge der document-Handler ist
+                // nicht garantiert, deshalb gilt BEIDES: schon verhinderte Klicks
+                // und der Selektor-Ausschluss. Ohne das navigierte dieser Handler
+                // nach dem Aufblitzen des Modals trotzdem zur Zielseite.
+                if (e.isDefaultPrevented()) return;
+                // Strg/Cmd/Shift/Alt/Mittelklick: Browser-Standard (neuer Tab mit
+                // Originaladresse) statt die aktuelle Seite zu ersetzen.
+                if (e.which > 1 || e.button > 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                var $link = $(this);
+                if ($link.is('a.cbd-block-reference-link[data-display-mode="modal"], a.cbd-block-reference-inline[data-display-mode="modal"], .cbd-fragenwand-verweis')) return;
+                if ($link.attr('target') === '_blank') return;
+                var href = $link.attr('href');
                 if (!href || href.charAt(0) === '#') return;
                 try {
                     var url = new URL(href, window.location.href);
