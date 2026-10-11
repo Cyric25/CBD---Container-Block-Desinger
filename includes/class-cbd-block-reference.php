@@ -154,6 +154,7 @@ class CBD_Block_Reference {
             'texte'   => array(
                 'laden'            => __('Inhalt wird geladen …', 'container-block-designer'),
                 'nichtVerfuegbar'  => __('Dieser Block ist nicht verfügbar.', 'container-block-designer'),
+                'seiteOeffnen'     => __('Seite öffnen', 'container-block-designer'),
                 'schliessen'       => __('Schließen', 'container-block-designer'),
                 'titelVorgabe'     => __('Block', 'container-block-designer'),
             ),

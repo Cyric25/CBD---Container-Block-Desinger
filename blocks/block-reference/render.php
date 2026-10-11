@@ -64,7 +64,7 @@ if (!$target_url) {
 // Aufruf einer ANDEREN Seite beim Zielblock landet (view.js wertet ihn beim
 // Laden aus).
 if ('' === $fragment && '' !== $target_stable_id) {
-	$full_url = add_query_arg('cbd-ref', $target_stable_id, $target_url);
+	$full_url = add_query_arg('cbd-ref', rawurlencode($target_stable_id), $target_url);
 } else {
 	$full_url = $target_url;
 	if ('' !== $fragment) {
