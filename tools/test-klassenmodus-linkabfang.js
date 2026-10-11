@@ -24,3 +24,10 @@ window.addEventListener('click', function (e) {
 		}));
 	} catch (x) { /* ignorieren */ }
 }, false);
+// Review-Befund G1 (AP-1.rev): Mit ?jqfirst=1 wird VOR view.js ein leerer jQuery-Klickhandler
+// an document gebunden. jQuery haengt dann seinen nativen Dispatcher vor view.js' Listener,
+// sodass interceptLinks() VOR beiKlick() laeuft (die produktiv moegliche "falsche" Reihenfolge).
+if (/[?&]jqfirst=1/.test(location.search)) {
+	jQuery(document).on('click', function () {});
+	window.cbdJqFirst = true;
+}
