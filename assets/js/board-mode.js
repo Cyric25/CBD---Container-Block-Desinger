@@ -1760,6 +1760,7 @@
             var y = (e.clientY - rect.top) / this.zoom;
 
             // Strich-Radierer: Prüfe kontinuierlich ob ein Strich getroffen wird
+            // (nur am letzten Punkt wie bisher - jeder Test ist O(Punkte aller Striche))
             if (this.currentTool === 'eraser-stroke') {
                 this.eraseStrokeAtPoint(x, y);
                 this.lastX = x;
@@ -1767,30 +1768,111 @@
                 return;
             }
 
+            // Zwischenpunkte, die der Browser seit dem letzten Ereignis
+            // zusammengefasst hat (Apple Pencil: 120-240 Hz, Bildwiederholung
+            // nur 60-120 Hz). Ohne sie wird der Strich bei schnellen Bögen eckig.
+            var punkte = this._punkteAusEreignis(e, rect);
+
             // Punkt-Radierer: Zeichne Kreis an jeder Position (kontinuierlich)
             if (this.currentTool === 'eraser-point') {
-                this.drawingCtx.beginPath();
-                this.drawingCtx.arc(x, y, this.lineWidth * 3, 0, Math.PI * 2);
                 this.drawingCtx.globalCompositeOperation = 'destination-out';
                 this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
-                this.drawingCtx.fill();
+                for (var r = 0; r < punkte.length; r++) {
+                    this.drawingCtx.beginPath();
+                    this.drawingCtx.arc(punkte[r].x, punkte[r].y, this.lineWidth * 3, 0, Math.PI * 2);
+                    this.drawingCtx.fill();
+                }
                 this.drawingCtx.globalCompositeOperation = 'source-over';
                 this.lastX = x;
                 this.lastY = y;
                 return;
             }
 
-            // Punkt zum aktuellen Strich hinzufügen
+            // Punkte zum aktuellen Strich hinzufügen und NUR das neue Stück
+            // zeichnen (#7149, E8) - siehe _segmentZeichnen().
             if (this.currentStroke) {
-                this.currentStroke.points.push({x: x, y: y});
+                var pts = this.currentStroke.points;
+                var von = pts.length ? pts[pts.length - 1] : {x: x, y: y};
+                for (var p = 0; p < punkte.length; p++) {
+                    pts.push(punkte[p]);
+                }
+                this._segmentZeichnen(this.currentStroke, von, punkte);
             }
-
-            // Canvas mit korrekter Ebenen-Reihenfolge neu zeichnen
-            // (Textmarker unten, normale Striche oben)
-            this.redrawAllStrokes();
 
             this.lastX = x;
             this.lastY = y;
+        },
+
+        /**
+         * Canvas-Koordinaten (CSS-Pixel, Zoom herausgerechnet) aller Punkte
+         * eines pointermove - inkl. getCoalescedEvents(), falls vorhanden.
+         * Gleiche Umrechnung wie onPointerDown/onPointerMove: rect ist die
+         * bereits transformierte (Zoom/Pan) Canvas-Box.
+         */
+        _punkteAusEreignis: function(e, rect) {
+            var liste = null;
+            if (typeof e.getCoalescedEvents === 'function') {
+                try {
+                    liste = e.getCoalescedEvents();
+                } catch (err) {
+                    liste = null;
+                }
+            }
+            if (!liste || !liste.length) {
+                liste = [e];
+            }
+            var punkte = [];
+            for (var i = 0; i < liste.length; i++) {
+                punkte.push({
+                    x: (liste[i].clientX - rect.left) / this.zoom,
+                    y: (liste[i].clientY - rect.top) / this.zoom
+                });
+            }
+            return punkte;
+        },
+
+        /**
+         * Inkrementelles Zeichnen (#7149, E8) - bitte nicht durch
+         * redrawAllStrokes() je pointermove ersetzen: das zeichnete bei jedem
+         * Ereignis ALLE Striche neu (O(n)) und machte das Schreiben auf dem
+         * iPad mit vielen Strichen zäh.
+         *
+         * Zeichnet nur das neue Stück (von -> neue Punkte) des laufenden
+         * Strichs mit denselben Linienparametern wie redrawAllStrokes().
+         * Kontext-Transformation (DPR-scale) ist dieselbe; Zoom/Pan wirken
+         * per CSS-Transform am Container und sind in den Punkten schon
+         * herausgerechnet.
+         *
+         * Stift: 'source-over' obenauf - während des Strichs liegt er damit
+         * auch über Text-Einträgen; das pointerup-Neuzeichnen stellt die
+         * Ebenen-Reihenfolge (Textmarker < Stift < Text) wieder her.
+         *
+         * Textmarker (Entscheidung AP-2.3): 'destination-over', also UNTER
+         * alles bereits Gezeichnete. Mit 'lighten' obenauf (wie im
+         * Neuzeichnen-Pass 1) würde der helle Marker darunterliegende
+         * Stiftstriche während des Zeichnens überdecken, weil er dort zuletzt
+         * käme. destination-over hält Stift- und Textstriche sichtbar; da der
+         * Marker deckend ist (getLighterHighlightColor: Alpha 1.0), sieht
+         * die Überlappung mit sich selbst gleich aus. Einziger Unterschied
+         * bis zum pointerup: Überlappt er einen ANDEREN Textmarker, liegt der
+         * neue darunter statt per lighten gemischt. Das pointerup-Neuzeichnen
+         * stellt das bisherige Endbild exakt her.
+         */
+        _segmentZeichnen: function(stroke, von, punkte) {
+            if (!this.drawingCtx || !punkte.length) return;
+            var ctx = this.drawingCtx;
+            ctx.lineWidth = stroke.width;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = stroke.color;
+            ctx.globalCompositeOperation = stroke.tool === 'highlighter' ? 'destination-over' : 'source-over';
+            ctx.beginPath();
+            ctx.moveTo(von.x, von.y);
+            for (var i = 0; i < punkte.length; i++) {
+                ctx.lineTo(punkte[i].x, punkte[i].y);
+            }
+            ctx.stroke();
+            ctx.globalCompositeOperation = 'source-over';
         },
 
         onPointerUp: function(e) {
@@ -1815,6 +1897,11 @@
                 if (this.currentStroke && this.currentTool !== 'eraser-stroke') {
                     this.strokes.push(this.currentStroke);
                     this.currentStroke = null;
+                    // #7149 (E8): während des Strichs wurde nur inkrementell
+                    // gezeichnet - jetzt EINMAL alles neu, damit Ebenen-
+                    // Reihenfolge und Endbild exakt dem bisherigen Verfahren
+                    // (redrawAllStrokes je pointermove) entsprechen.
+                    this.redrawAllStrokes();
                 }
             }
         },
