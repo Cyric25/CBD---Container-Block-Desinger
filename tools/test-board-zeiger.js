@@ -583,6 +583,184 @@
         return { ok: true, detail: 'je Öffnen ' + nachOeffnen[0] + ' document/html/body/window-Listener, nach Schließen 0 (Basis ' + basis + ')' };
     }
 
+    // ------------------------------------------------------------------
+    // AP-2.3: Flüssiges Zeichnen (inkrementell, coalesced events)
+    // ------------------------------------------------------------------
+    function bildDaten() {
+        return B.drawingCtx.getImageData(0, 0, B.drawingCanvas.width, B.drawingCanvas.height).data;
+    }
+
+    function pixelAbweichung(a, b) {
+        var n = 0, gesamt = a.length / 4;
+        for (var i = 0; i < a.length; i += 4) {
+            if (Math.abs(a[i] - b[i]) > 8 || Math.abs(a[i + 1] - b[i + 1]) > 8 ||
+                Math.abs(a[i + 2] - b[i + 2]) > 8 || Math.abs(a[i + 3] - b[i + 3]) > 8) n++;
+        }
+        return { anzahl: n, anteil: n / gesamt };
+    }
+
+    var ZICKZACK = [[60, 60], [90, 140], [130, 70], [170, 160], [200, 90], [260, 180], [300, 100], [330, 220]];
+
+    // Ein vollständiger Stiftstrich: Endzustand gleich dem Neuzeichnen aus strokes
+    function pixelGleichNachPointerup(werkzeug) {
+        return function() {
+            oeffnen();
+            B.setTool('pen');
+            // Vorhandene Striche inkl. Textmarker und Text, damit die Ebenen-Reihenfolge zählt
+            zeiger('pointerdown', 3, 'pen', 40, 120);
+            zeiger('pointermove', 3, 'pen', 360, 120);
+            zeiger('pointerup', 3, 'pen', 360, 120);
+            B.setTool('highlighter');
+            zeiger('pointerdown', 3, 'pen', 40, 150);
+            zeiger('pointermove', 3, 'pen', 360, 150);
+            zeiger('pointerup', 3, 'pen', 360, 150);
+            B.setTool(werkzeug);
+            zeiger('pointerdown', 3, 'pen', ZICKZACK[0][0], ZICKZACK[0][1]);
+            for (var i = 1; i < ZICKZACK.length; i++) zeiger('pointermove', 3, 'pen', ZICKZACK[i][0], ZICKZACK[i][1]);
+            zeiger('pointerup', 3, 'pen', ZICKZACK[ZICKZACK.length - 1][0], ZICKZACK[ZICKZACK.length - 1][1]);
+            var neu = bildDaten();
+            if (B.strokes.length !== 3) return { ok: false, detail: B.strokes.length + ' Striche' };
+            B.redrawAllStrokes(); // bisheriges Verfahren: alles aus strokes
+            var alt = bildDaten();
+            var d = pixelAbweichung(neu, alt);
+            return d.anzahl === 0 ? true : { ok: false, detail: d.anzahl + ' Pixel abweichend (' + (d.anteil * 100).toFixed(3) + ' %)' };
+        };
+    }
+
+    // Während des Strichs: inkrementelles Bild nahe am bisherigen Neuzeichnen
+    function zwischenstandStift() {
+        oeffnen();
+        B.setTool('pen');
+        zeiger('pointerdown', 3, 'pen', ZICKZACK[0][0], ZICKZACK[0][1]);
+        for (var i = 1; i < ZICKZACK.length; i++) zeiger('pointermove', 3, 'pen', ZICKZACK[i][0], ZICKZACK[i][1]);
+        var neu = bildDaten();
+        B.redrawAllStrokes(); // bisheriges Verfahren mit currentStroke
+        var alt = bildDaten();
+        zeiger('pointerup', 3, 'pen', ZICKZACK[ZICKZACK.length - 1][0], ZICKZACK[ZICKZACK.length - 1][1]);
+        var d = pixelAbweichung(neu, alt);
+        return d.anteil <= 0.01 ? { ok: true, detail: d.anzahl + ' Pixel (' + (d.anteil * 100).toFixed(3) + ' %) Kantenglättung an Gelenken' } :
+            { ok: false, detail: d.anzahl + ' Pixel (' + (d.anteil * 100).toFixed(3) + ' %)' };
+    }
+
+    function textmarkerUeberStiftSichtbar() {
+        // Während eines Textmarker-Strichs bleibt ein darunter liegender
+        // Stiftstrich sichtbar (Textmarker liegt beim Neuzeichnen UNTER den Stiftstrichen)
+        oeffnen();
+        B.setTool('pen');
+        B.setColor('#000000');
+        zeiger('pointerdown', 3, 'pen', 200, 40);
+        zeiger('pointermove', 3, 'pen', 200, 300);
+        zeiger('pointerup', 3, 'pen', 200, 300);
+        B.setTool('highlighter');
+        B.setColor('#ffff00');
+        zeiger('pointerdown', 3, 'pen', 100, 150);
+        zeiger('pointermove', 3, 'pen', 300, 150);
+        var dpr = B.dpr || 1;
+        var px = B.drawingCtx.getImageData(Math.round(200 * dpr), Math.round(150 * dpr), 1, 1).data;
+        var mitte = B.drawingCtx.getImageData(Math.round(150 * dpr), Math.round(150 * dpr), 1, 1).data;
+        zeiger('pointerup', 3, 'pen', 300, 150);
+        if (mitte[3] === 0) return { ok: false, detail: 'Textmarker während des Strichs unsichtbar' };
+        return (px[0] < 80 && px[1] < 80 && px[2] < 80) ? true : { ok: false, detail: 'Stiftstrich unter Textmarker überdeckt: rgba ' + Array.prototype.join.call(px, ',') };
+    }
+
+    // Erzwingt das Rastern der bisher gepufferten Zeichenbefehle (sonst misst
+    // performance.now() nur das Aufzeichnen, nicht das Zeichnen).
+    function abgleich() {
+        B.drawingCtx.getImageData(0, 0, 1, 1);
+    }
+
+    function dauerProMove() {
+        oeffnen();
+        B.setTool('pen');
+        // 500 vorhandene Striche à 20 Punkte
+        var viele = [];
+        for (var s = 0; s < 500; s++) {
+            var pts = [];
+            for (var p = 0; p < 20; p++) pts.push({ x: (s * 7 + p * 3) % 380, y: (s * 13 + p * 5) % 300 });
+            viele.push({ tool: s % 10 === 0 ? 'highlighter' : 'pen', color: s % 10 === 0 ? 'rgba(255,255,180,1.0)' : '#000000', width: 3, points: pts });
+        }
+        B.strokes = viele;
+        B.redrawAllStrokes();
+        zeiger('pointerdown', 3, 'pen', 20, 20);
+        var n = 200, t0 = performance.now();
+        for (var i = 1; i <= n; i++) { zeiger('pointermove', 3, 'pen', 20 + (i % 300), 20 + (i * 7 % 280)); abgleich(); }
+        var dauer = (performance.now() - t0) / n;
+        zeiger('pointerup', 3, 'pen', 20, 20);
+        // Vergleich: bisheriges Verfahren (Neuzeichnen je Ereignis)
+        var t1 = performance.now();
+        for (var j = 0; j < 20; j++) { B.redrawAllStrokes(); abgleich(); }
+        var alt = (performance.now() - t1) / 20;
+        var text = 'pointermove ' + dauer.toFixed(3) + ' ms (bisher je Ereignis ca. ' + alt.toFixed(2) + ' ms Neuzeichnen)';
+        return dauer < 4 ? { ok: true, detail: text } : { ok: false, detail: text };
+    }
+
+    function textmarkerDauerProMove() {
+        oeffnen();
+        var viele = [];
+        for (var s = 0; s < 500; s++) {
+            var pts = [];
+            for (var p = 0; p < 20; p++) pts.push({ x: (s * 7 + p * 3) % 380, y: (s * 13 + p * 5) % 300 });
+            viele.push({ tool: 'pen', color: '#000000', width: 3, points: pts });
+        }
+        B.strokes = viele;
+        B.redrawAllStrokes();
+        B.setTool('highlighter');
+        zeiger('pointerdown', 3, 'pen', 20, 20);
+        var n = 200, t0 = performance.now();
+        for (var i = 1; i <= n; i++) { zeiger('pointermove', 3, 'pen', 20 + (i % 300), 20 + (i * 7 % 280)); abgleich(); }
+        var dauer = (performance.now() - t0) / n;
+        zeiger('pointerup', 3, 'pen', 20, 20);
+        var text = 'Textmarker-pointermove ' + dauer.toFixed(3) + ' ms';
+        return dauer < 4 ? { ok: true, detail: text } : { ok: false, detail: text };
+    }
+
+    function zoomPanSegmente() {
+        oeffnen();
+        B.setTool('pen');
+        B.zoom = 2;
+        B.panX = -100;
+        B.panY = -50;
+        B.updateCanvasTransform();
+        // Bildschirmabstand 160 px vom Canvas-Ursprung = 80 Canvas-Pixel bei Zoom 2
+        zeiger('pointerdown', 3, 'pen', 200, 160);
+        zeiger('pointermove', 3, 'pen', 300, 160);
+        zeiger('pointermove', 3, 'pen', 400, 160);
+        var dpr = B.dpr || 1;
+        var waehrend = B.drawingCtx.getImageData(Math.round(175 * dpr), Math.round(80 * dpr), 1, 1).data[3];
+        var daneben = B.drawingCtx.getImageData(Math.round(175 * dpr), Math.round(160 * dpr), 1, 1).data[3];
+        zeiger('pointerup', 3, 'pen', 400, 160);
+        var p = B.strokes[0] ? B.strokes[0].points : [];
+        B.resetZoom();
+        if (!(p.length === 3 && Math.abs(p[0].x - 100) < 0.01 && Math.abs(p[2].x - 200) < 0.01 && Math.abs(p[0].y - 80) < 0.01)) return { ok: false, detail: 'Punkte ' + JSON.stringify(p) };
+        return (waehrend > 0 && daneben === 0) ? true : { ok: false, detail: 'Segment-Pixel alpha=' + waehrend + ', daneben=' + daneben };
+    }
+
+    function coalescedPunkte() {
+        oeffnen();
+        B.setTool('pen');
+        var rect = B.drawingCanvas.getBoundingClientRect();
+        zeiger('pointerdown', 3, 'pen', 100, 100);
+        var teile = [[110, 100], [120, 100], [130, 100]].map(function(q) {
+            return new PointerEvent('pointermove', { pointerId: 3, pointerType: 'pen', clientX: rect.left + q[0], clientY: rect.top + q[1], buttons: 1 });
+        });
+        var ev;
+        try {
+            ev = new PointerEvent('pointermove', { bubbles: true, cancelable: true, pointerId: 3, pointerType: 'pen', isPrimary: true,
+                clientX: rect.left + 130, clientY: rect.top + 100, buttons: 1, coalescedEvents: teile });
+        } catch (e) {
+            return { ok: false, detail: 'coalescedEvents im Konstruktor nicht unterstützt' };
+        }
+        if (!ev.getCoalescedEvents || ev.getCoalescedEvents().length !== 3) {
+            zeiger('pointerup', 3, 'pen', 130, 100);
+            return { ok: true, detail: 'Browser übernimmt coalescedEvents synthetisch nicht - übersprungen' };
+        }
+        B.drawingCanvas.dispatchEvent(ev);
+        zeiger('pointerup', 3, 'pen', 130, 100);
+        var p = B.strokes[0] ? B.strokes[0].points : [];
+        var xs = p.map(function(q) { return Math.round(q.x); }).join(',');
+        return xs === '100,110,120,130' ? true : { ok: false, detail: 'Punkte x=' + xs };
+    }
+
     function laufen() {
         pruefe('A: Ballen (klein) liegt auf, dann Stift', szenarioA(10));
         pruefe('A: Ballen (groß) liegt auf, dann Stift', szenarioA(40));
@@ -618,6 +796,16 @@
         pruefe('AP-2.2: Dialoge liegen über dem Overlay', dialogeUeberOverlay);
         pruefe('AP-2.2: Seitenknöpfe bei offener Tafel ausgeblendet', seitenknoepfeAusgeblendet);
         pruefe('AP-2.2: keine doppelten Listener nach 3x Öffnen/Schließen', keineDoppeltenListener);
+
+        // AP-2.3
+        pruefe('AP-2.3: Stift - Endzustand pixelgleich zum Neuzeichnen', pixelGleichNachPointerup('pen'));
+        pruefe('AP-2.3: Textmarker - Endzustand pixelgleich zum Neuzeichnen', pixelGleichNachPointerup('highlighter'));
+        pruefe('AP-2.3: Stift - Zwischenstand ≤ 1 % Abweichung', zwischenstandStift);
+        pruefe('AP-2.3: Textmarker überdeckt Stiftstrich während des Zeichnens nicht', textmarkerUeberStiftSichtbar);
+        pruefe('AP-2.3: 500 Striche - Stift-pointermove < 4 ms', dauerProMove);
+        pruefe('AP-2.3: 500 Striche - Textmarker-pointermove < 4 ms', textmarkerDauerProMove);
+        pruefe('AP-2.3: Zoom/Pan - Segmente an richtiger Stelle', zoomPanSegmente);
+        pruefe('AP-2.3: getCoalescedEvents-Punkte übernommen', coalescedPunkte);
 
         // Zusatztests späterer APs hängen sich hier ein
         if (typeof window.__zusatzTests === 'function') {
