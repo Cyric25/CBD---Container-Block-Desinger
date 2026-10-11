@@ -22,6 +22,7 @@
         gridCtx: null,
         drawingCanvas: null,
         drawingCtx: null,
+        canvasArea: null, // .cbd-board-canvas-area, Träger der Touch-Gestensperre (#7149)
 
         isDrawing: false,
         currentTool: 'pen',
@@ -183,6 +184,20 @@
             // Scroll sperren
             document.body.style.overflow = 'hidden';
 
+            // iOS-Gestensperre (#7149, E6): Klasse an <html> sperrt per CSS
+            // (board-mode.css) Markieren/Callout/Overscroll der GANZEN Seite
+            // und blendet schwebende Seitenknöpfe aus (E7). Rückstandsfrei
+            // entfernbar in destroy(). Eine schon bestehende Markierung auf
+            // der Seite (z. B. „PDF" des PDF-Knopfs) wird aufgehoben.
+            document.documentElement.classList.add('cbd-board-offen');
+            try {
+                if (window.getSelection) {
+                    window.getSelection().removeAllRanges();
+                }
+            } catch (selErr) {
+                // ohne Markierungs-API weiter
+            }
+
             // Canvas-Elemente initialisieren
             this.initCanvases();
             this.resizeAllCanvases();
@@ -266,6 +281,9 @@
 
             // Scroll freigeben
             document.body.style.overflow = '';
+
+            // iOS-Gestensperre aufheben (#7149, siehe _openOverlay)
+            document.documentElement.classList.remove('cbd-board-offen');
 
             // State zuruecksetzen
             this.overlay = null;
@@ -747,8 +765,33 @@
                 pointerUp: function(e) { self.onPointerUp(e); },
                 pointerLeave: function(e) { self.onPointerLeave(e); },
                 keyDown: function(e) { self.onKeyDown(e); },
-                contextMenu: function(e) { self.onContextMenu(e); }
+                contextMenu: function(e) { self.onContextMenu(e); },
+                touchGeste: function(e) { self.onTouchGeste(e); },
+                selectStart: function(e) { self.onSelectStart(e); },
+                doppelklick: function(e) { self.onDoppelklick(e); }
             };
+
+            // iOS-Gestensperre (#7149, E6). WebKit ignoriert user-select am
+            // Overlay teilweise; Lupe, Markieren und Doppeltipp-Zoom lassen
+            // sich auf der Zeichenfläche nur über preventDefault() auf
+            // Touch-Ebene zuverlässig unterdrücken. Deshalb:
+            // - touchstart/touchmove NUR am Canvas-Bereich, nicht-passiv
+            //   (sonst ignoriert der Browser preventDefault). Die
+            //   Inhaltshälfte bleibt frei, damit sie per Finger scrollt.
+            //   Pointer-Ereignisse kommen trotzdem an (Zeichnen unberührt).
+            // - selectstart am document: keine Markierung auf der GANZEN
+            //   Seite, solange die Tafel offen ist (auch hinter dem Overlay).
+            // - dblclick am Overlay: kein Wort-Markieren/Doppeltipp-Zoom.
+            // Ausnahme jeweils Eingabefelder (siehe _istEingabefeld), u. a.
+            // textarea.cbd-board-text-input, das an document.body hängt.
+            // Alle drei in boundHandlers, entfernt in unbindEvents().
+            this.canvasArea = this.overlay.querySelector('.cbd-board-canvas-area');
+            if (this.canvasArea) {
+                this.canvasArea.addEventListener('touchstart', this.boundHandlers.touchGeste, { passive: false });
+                this.canvasArea.addEventListener('touchmove', this.boundHandlers.touchGeste, { passive: false });
+            }
+            document.addEventListener('selectstart', this.boundHandlers.selectStart);
+            this.overlay.addEventListener('dblclick', this.boundHandlers.doppelklick);
 
             // Kontextmenü im ganzen Overlay unterdrücken (Fehlermeldung #7063):
             // Edge/Chrome unter Windows öffnen bei langem Halten mit Finger
@@ -1040,7 +1083,53 @@
                 this.overlay.removeEventListener('contextmenu', this.boundHandlers.contextMenu);
             }
 
+            // iOS-Gestensperre (#7149) - Gegenstück zu bindEvents()
+            if (this.canvasArea && this.boundHandlers.touchGeste) {
+                this.canvasArea.removeEventListener('touchstart', this.boundHandlers.touchGeste, { passive: false });
+                this.canvasArea.removeEventListener('touchmove', this.boundHandlers.touchGeste, { passive: false });
+            }
+            this.canvasArea = null;
+            if (this.boundHandlers.selectStart) {
+                document.removeEventListener('selectstart', this.boundHandlers.selectStart);
+            }
+            if (this.overlay && this.boundHandlers.doppelklick) {
+                this.overlay.removeEventListener('dblclick', this.boundHandlers.doppelklick);
+            }
+
             this.boundHandlers = {};
+        },
+
+        /**
+         * Liegt das Ziel in einem Eingabefeld? Dort bleiben Markieren,
+         * Lupe und Einfügen erlaubt (#7149). selectstart liefert in manchen
+         * Browsern einen Textknoten als Ziel - dann dessen Elternelement.
+         */
+        _istEingabefeld: function(ziel) {
+            if (ziel && ziel.nodeType === 3) {
+                ziel = ziel.parentNode;
+            }
+            return !!(ziel && ziel.closest &&
+                ziel.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]'));
+        },
+
+        /** touchstart/touchmove am Canvas-Bereich (#7149, E6) */
+        onTouchGeste: function(e) {
+            if (this._istEingabefeld(e.target)) return;
+            if (e.cancelable) {
+                e.preventDefault();
+            }
+        },
+
+        /** selectstart am document, solange die Tafel offen ist (#7149, E6) */
+        onSelectStart: function(e) {
+            if (this._istEingabefeld(e.target)) return;
+            e.preventDefault();
+        },
+
+        /** dblclick im Overlay: kein Wort-Markieren/Doppeltipp-Zoom (#7149, E6) */
+        onDoppelklick: function(e) {
+            if (this._istEingabefeld(e.target)) return;
+            e.preventDefault();
         },
 
         /**
