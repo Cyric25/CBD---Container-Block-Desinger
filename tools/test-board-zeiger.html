@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test: Tafel-Zeigerverwaltung (#7149)</title>
+<!--
+    Prüfseite für assets/js/board-mode.js (PLAN-Rueckmeldungen-Blockverweis-
+    iPad-Tafel-Darkmode-Formeln.md, Phase 2). NICHT Teil des Plugin-ZIPs
+    (create-plugin-zip.js nimmt tools/ nicht auf).
+
+    Aufruf: als statische Datei im Browser öffnen (file:///…/tools/test-board-zeiger.html)
+    oder über den lokalen Webserver. Ergebnisse stehen in der Tabelle und in
+    window.__ergebnisse (für Konsole/Automatisierung), Zusammenfassung in
+    window.__zusammenfassung.
+
+    Echte Apple-Geräte stehen nicht zur Verfügung: Stift und Finger werden mit
+    synthetischen PointerEvents (pointerType 'pen'/'touch'/'mouse',
+    unterschiedliche pointerId, width/height) nachgestellt. setPointerCapture()
+    wirft bei synthetischen Zeigern (kein aktiver Zeiger) - board-mode.js
+    muss das abfangen.
+-->
+<link rel="stylesheet" href="../assets/css/board-mode.css">
+<style>
+    body { font-family: sans-serif; margin: 16px; }
+    #ergebnis { border-collapse: collapse; margin-top: 12px; }
+    #ergebnis td, #ergebnis th { border: 1px solid #ccc; padding: 4px 8px; font-size: 13px; vertical-align: top; }
+    .ok { background: #e6f6e6; }
+    .fehl { background: #fde2e2; }
+    #zusammenfassung { font-weight: bold; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>Tafel-Zeigerverwaltung (#7149)</h1>
+<p>Synthetische PointerEvents gegen <code>CBDBoardMode</code>. Läuft automatisch beim Laden.</p>
+<div id="zusammenfassung">läuft …</div>
+<p id="seitentext">Markierbarer Seitentext außerhalb der Tafel (für Markierungs-Tests).</p>
+<!-- Attrappen der schwebenden Seitenknöpfe (AP-2.2): PDF-Knopf (floating-pdf-button.js),
+     Notizen-Knopf (personal-notes-manager.css), Navigationsknopf des Themes -->
+<div id="cbd-pdf-export-fab" style="position:fixed;bottom:20px;right:20px;z-index:999999;width:52px;height:52px;background:#e24614;color:#fff;">PDF</div>
+<div class="cbd-notes-manager-button" style="position:fixed;bottom:80px;right:20px;width:52px;height:52px;background:#e24614;"></div>
+<button class="sidebar-toggle-btn" style="position:fixed;bottom:20px;left:20px;">Navigation</button>
+<table id="ergebnis"><thead><tr><th>Test</th><th>Ergebnis</th><th>Detail</th></tr></thead><tbody></tbody></table>
+
+<script src="test-board-zeiger-zaehler.js"></script>
+<script src="../assets/js/board-mode.js"></script>
+<script src="test-board-zeiger.js"></script>
+<script src="test-board-layout.js"></script>
+</body>
+</html>

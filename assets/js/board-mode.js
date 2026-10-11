@@ -22,6 +22,7 @@
         gridCtx: null,
         drawingCanvas: null,
         drawingCtx: null,
+        canvasArea: null, // .cbd-board-canvas-area, Träger der Touch-Gestensperre (#7149)
 
         isDrawing: false,
         currentTool: 'pen',
@@ -41,10 +42,18 @@
         lastX: 0,
         lastY: 0,
         resizeObserver: null,
+        _viewportTimer: null, // Drossel für visualViewport-resize (#7149, AP-2.4)
         boundHandlers: {},
 
-        // Palm rejection: Track active pointers
+        // Alle aktuell aufliegenden Zeiger (nur noch Buchführung - die
+        // Zeichen-Entscheidungen treffen drawingPointerId/stiftGesehen,
+        // siehe "Zeigerverwaltung (#7149)" an onPointerDown()).
         activePointers: new Set(),
+
+        // Zeigerverwaltung (#7149): genau EIN zeichnender Zeiger
+        drawingPointerId: null,    // pointerId des Zeigers, der den laufenden Strich/Radiervorgang führt
+        drawingPointerType: null,  // dessen pointerType ('pen' | 'touch' | 'mouse')
+        stiftGesehen: false,       // Stift-Vorrang: true ab dem ersten pointerType 'pen' dieser Tafelsitzung
 
         // Stroke-based drawing: Store all strokes for stroke-eraser
         strokes: [],
@@ -161,6 +170,12 @@
             this._pinchStartDist = null;
             this.baseImageObj = null;
 
+            // Zeigerverwaltung (#7149): Stift-Vorrang gilt je Tafelsitzung
+            this.activePointers.clear();
+            this.drawingPointerId = null;
+            this.drawingPointerType = null;
+            this.stiftGesehen = false;
+
             // Overlay-DOM erstellen
             this.createOverlayDOM(contentHtml);
 
@@ -169,6 +184,20 @@
 
             // Scroll sperren
             document.body.style.overflow = 'hidden';
+
+            // iOS-Gestensperre (#7149, E6): Klasse an <html> sperrt per CSS
+            // (board-mode.css) Markieren/Callout/Overscroll der GANZEN Seite
+            // und blendet schwebende Seitenknöpfe aus (E7). Rückstandsfrei
+            // entfernbar in destroy(). Eine schon bestehende Markierung auf
+            // der Seite (z. B. „PDF" des PDF-Knopfs) wird aufgehoben.
+            document.documentElement.classList.add('cbd-board-offen');
+            try {
+                if (window.getSelection) {
+                    window.getSelection().removeAllRanges();
+                }
+            } catch (selErr) {
+                // ohne Markierungs-API weiter
+            }
 
             // Canvas-Elemente initialisieren
             this.initCanvases();
@@ -254,6 +283,9 @@
             // Scroll freigeben
             document.body.style.overflow = '';
 
+            // iOS-Gestensperre aufheben (#7149, siehe _openOverlay)
+            document.documentElement.classList.remove('cbd-board-offen');
+
             // State zuruecksetzen
             this.overlay = null;
             this.backgroundCanvas = null;
@@ -270,8 +302,11 @@
             this.isSaving = false;
             this.showGrid = false;
 
-            // Palm Rejection: Aktive Pointer löschen
+            // Zeigerverwaltung (#7149): aktive Zeiger und Stift-Vorrang zurücksetzen
             this.activePointers.clear();
+            this.drawingPointerId = null;
+            this.drawingPointerType = null;
+            this.stiftGesehen = false;
 
             // Stroke-basiertes Radieren: Striche löschen
             this.strokes = [];
@@ -729,9 +764,35 @@
                 pointerDown: function(e) { self.onPointerDown(e); },
                 pointerMove: function(e) { self.onPointerMove(e); },
                 pointerUp: function(e) { self.onPointerUp(e); },
+                pointerLeave: function(e) { self.onPointerLeave(e); },
                 keyDown: function(e) { self.onKeyDown(e); },
-                contextMenu: function(e) { self.onContextMenu(e); }
+                contextMenu: function(e) { self.onContextMenu(e); },
+                touchGeste: function(e) { self.onTouchGeste(e); },
+                selectStart: function(e) { self.onSelectStart(e); },
+                doppelklick: function(e) { self.onDoppelklick(e); }
             };
+
+            // iOS-Gestensperre (#7149, E6). WebKit ignoriert user-select am
+            // Overlay teilweise; Lupe, Markieren und Doppeltipp-Zoom lassen
+            // sich auf der Zeichenfläche nur über preventDefault() auf
+            // Touch-Ebene zuverlässig unterdrücken. Deshalb:
+            // - touchstart/touchmove NUR am Canvas-Bereich, nicht-passiv
+            //   (sonst ignoriert der Browser preventDefault). Die
+            //   Inhaltshälfte bleibt frei, damit sie per Finger scrollt.
+            //   Pointer-Ereignisse kommen trotzdem an (Zeichnen unberührt).
+            // - selectstart am document: keine Markierung auf der GANZEN
+            //   Seite, solange die Tafel offen ist (auch hinter dem Overlay).
+            // - dblclick am Overlay: kein Wort-Markieren/Doppeltipp-Zoom.
+            // Ausnahme jeweils Eingabefelder (siehe _istEingabefeld), u. a.
+            // textarea.cbd-board-text-input, das an document.body hängt.
+            // Alle drei in boundHandlers, entfernt in unbindEvents().
+            this.canvasArea = this.overlay.querySelector('.cbd-board-canvas-area');
+            if (this.canvasArea) {
+                this.canvasArea.addEventListener('touchstart', this.boundHandlers.touchGeste, { passive: false });
+                this.canvasArea.addEventListener('touchmove', this.boundHandlers.touchGeste, { passive: false });
+            }
+            document.addEventListener('selectstart', this.boundHandlers.selectStart);
+            this.overlay.addEventListener('dblclick', this.boundHandlers.doppelklick);
 
             // Kontextmenü im ganzen Overlay unterdrücken (Fehlermeldung #7063):
             // Edge/Chrome unter Windows öffnen bei langem Halten mit Finger
@@ -746,7 +807,7 @@
             this.drawingCanvas.addEventListener('pointerdown', this.boundHandlers.pointerDown);
             this.drawingCanvas.addEventListener('pointermove', this.boundHandlers.pointerMove);
             this.drawingCanvas.addEventListener('pointerup', this.boundHandlers.pointerUp);
-            this.drawingCanvas.addEventListener('pointerleave', this.boundHandlers.pointerUp);
+            this.drawingCanvas.addEventListener('pointerleave', this.boundHandlers.pointerLeave);
             this.drawingCanvas.addEventListener('pointercancel', this.boundHandlers.pointerUp);
 
             // ESC-Taste
@@ -1001,6 +1062,25 @@
                 });
                 this.resizeObserver.observe(this.backgroundCanvas.parentElement);
             }
+
+            // Sichtbarer Bereich (iPad: Tastatur, Split View, #7149 AP-2.4).
+            // Gedrosselt; zeichnet die Leinwände nur neu, wenn sich die Größe
+            // des Canvas-Containers wirklich geändert hat (visualViewport
+            // meldet auch reine Verschiebungen/Zoom).
+            if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') {
+                this.boundHandlers.viewportResize = function() {
+                    if (self._viewportTimer) return;
+                    self._viewportTimer = setTimeout(function() {
+                        self._viewportTimer = null;
+                        if (!self.overlay || !self.backgroundCanvas) return;
+                        var behaelter = self.backgroundCanvas.parentElement;
+                        if (behaelter.clientWidth !== self.cssWidth || behaelter.clientHeight !== self.cssHeight) {
+                            self.resizeAllCanvases();
+                        }
+                    }, 100);
+                };
+                window.visualViewport.addEventListener('resize', this.boundHandlers.viewportResize);
+            }
         },
 
         /**
@@ -1011,7 +1091,7 @@
                 this.drawingCanvas.removeEventListener('pointerdown', this.boundHandlers.pointerDown);
                 this.drawingCanvas.removeEventListener('pointermove', this.boundHandlers.pointerMove);
                 this.drawingCanvas.removeEventListener('pointerup', this.boundHandlers.pointerUp);
-                this.drawingCanvas.removeEventListener('pointerleave', this.boundHandlers.pointerUp);
+                this.drawingCanvas.removeEventListener('pointerleave', this.boundHandlers.pointerLeave);
                 this.drawingCanvas.removeEventListener('pointercancel', this.boundHandlers.pointerUp);
             }
 
@@ -1023,7 +1103,62 @@
                 this.overlay.removeEventListener('contextmenu', this.boundHandlers.contextMenu);
             }
 
+            // iOS-Gestensperre (#7149) - Gegenstück zu bindEvents()
+            if (this.canvasArea && this.boundHandlers.touchGeste) {
+                this.canvasArea.removeEventListener('touchstart', this.boundHandlers.touchGeste, { passive: false });
+                this.canvasArea.removeEventListener('touchmove', this.boundHandlers.touchGeste, { passive: false });
+            }
+            this.canvasArea = null;
+            if (this.boundHandlers.selectStart) {
+                document.removeEventListener('selectstart', this.boundHandlers.selectStart);
+            }
+            if (this.overlay && this.boundHandlers.doppelklick) {
+                this.overlay.removeEventListener('dblclick', this.boundHandlers.doppelklick);
+            }
+
+            // visualViewport (#7149, AP-2.4)
+            if (this.boundHandlers.viewportResize && window.visualViewport) {
+                window.visualViewport.removeEventListener('resize', this.boundHandlers.viewportResize);
+            }
+            if (this._viewportTimer) {
+                clearTimeout(this._viewportTimer);
+                this._viewportTimer = null;
+            }
+
             this.boundHandlers = {};
+        },
+
+        /**
+         * Liegt das Ziel in einem Eingabefeld? Dort bleiben Markieren,
+         * Lupe und Einfügen erlaubt (#7149). selectstart liefert in manchen
+         * Browsern einen Textknoten als Ziel - dann dessen Elternelement.
+         */
+        _istEingabefeld: function(ziel) {
+            if (ziel && ziel.nodeType === 3) {
+                ziel = ziel.parentNode;
+            }
+            return !!(ziel && ziel.closest &&
+                ziel.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""]'));
+        },
+
+        /** touchstart/touchmove am Canvas-Bereich (#7149, E6) */
+        onTouchGeste: function(e) {
+            if (this._istEingabefeld(e.target)) return;
+            if (e.cancelable) {
+                e.preventDefault();
+            }
+        },
+
+        /** selectstart am document, solange die Tafel offen ist (#7149, E6) */
+        onSelectStart: function(e) {
+            if (this._istEingabefeld(e.target)) return;
+            e.preventDefault();
+        },
+
+        /** dblclick im Overlay: kein Wort-Markieren/Doppeltipp-Zoom (#7149, E6) */
+        onDoppelklick: function(e) {
+            if (this._istEingabefeld(e.target)) return;
+            e.preventDefault();
         },
 
         /**
@@ -1422,35 +1557,100 @@
         // Canvas Event-Handler
         // =============================================
 
+        /*
+         * ============================================================
+         * Zeigerverwaltung (#7149) - bitte nicht vereinfachen
+         * ============================================================
+         * Anlass: Auf dem iPad (Apple Pencil, Hand liegt auf) riss der Strich
+         * ab, der Handballen mischte Punkte in den Stiftstrich (Zickzack) oder
+         * beendete ihn beim Abheben. Ursache war ein gemeinsames
+         * activePointers-Set für ALLE Zeiger: Ballen + Stift = 2 -> Pinch +
+         * isDrawing=false, und pointermove/pointerup prüften keine pointerId.
+         *
+         * Regeln (PLAN-Rueckmeldungen-Blockverweis-iPad-Tafel-Darkmode-Formeln.md, E4/E5):
+         * 1. Genau EIN zeichnender Zeiger: drawingPointerId wird beim Start
+         *    eines Strichs/Radiervorgangs gesetzt. Nur DESSEN pointermove/
+         *    pointerup/pointercancel wirken auf den Strich; alle anderen
+         *    Zeiger werden für das Zeichnen ignoriert.
+         * 2. Stift-Vorrang: Sobald in dieser Tafelsitzung einmal
+         *    pointerType 'pen' auftrat (stiftGesehen), startet 'touch' weder
+         *    Strich noch Radierer noch Textfeld - nur noch Zwei-Finger-Zoom.
+         *    Gilt bis zum Schließen (destroy/_openOverlay setzen zurück).
+         *    Ohne Stift zeichnet ein Finger wie bisher (Smartboards).
+         * 3. Ein Stift übernimmt einen laufenden FINGER-Strich (Ballen setzte
+         *    vor dem ersten Stiftkontakt auf): der Finger-Strich wird verworfen.
+         * 4. Pinch nur aus Touch-Zeigern (_pinchPointers), Stift-IDs kommen nie
+         *    hinein. Pinch startet nicht, solange Stift oder Maus zeichnen;
+         *    zeichnet ein Finger, bricht der zweite Finger dessen Strich ab
+         *    (bisheriges Verhalten) und startet den Zoom.
+         * 5. Nur e.button === 0 (linke Maustaste, Stiftspitze, Finger) startet
+         *    etwas - Rechts-/Mittelklick zeichnen keinen Punkt mehr.
+         * 6. pointerleave beendet einen Strich NICHT, solange der Canvas die
+         *    Zeiger-Erfassung (setPointerCapture) für diesen Zeiger hält.
+         */
         onPointerDown: function(e) {
-            // Handballenunterdrückung (Palm Rejection)
-            // Nur Stift (pen) oder Maus (mouse) erlauben - Touch mit mehreren Kontaktpunkten ignorieren
+            var istTouch = e.pointerType === 'touch';
+            var istStift = e.pointerType === 'pen';
 
-            // Pointer zur Liste hinzufügen
+            // Buchführung aller aufliegenden Zeiger
             this.activePointers.add(e.pointerId);
 
-            // Pinch-Tracking: alle Touch-Pointer erfassen
-            if (e.pointerType === 'touch') {
-                this._pinchPointers[e.pointerId] = {x: e.clientX, y: e.clientY};
+            if (istStift) {
+                this.stiftGesehen = true;
             }
 
-            if (e.pointerType === 'touch') {
-                if (this.activePointers.size > 1) {
-                    // Zwei Finger: Pinch-Zoom initialisieren
-                    if (this.activePointers.size === 2) {
-                        this._startPinch();
-                        this.isDrawing = false; // Laufendes Zeichnen abbrechen
+            if (istTouch) {
+                // Pinch-Tracking: nur Touch-Zeiger (Regel 4)
+                this._pinchPointers[e.pointerId] = {x: e.clientX, y: e.clientY};
+                var anzahlTouch = Object.keys(this._pinchPointers).length;
+
+                if (anzahlTouch >= 2) {
+                    // Zwei Finger: Zoom - aber nicht, solange Stift/Maus zeichnen
+                    if (this.drawingPointerId === null || this.drawingPointerType === 'touch') {
+                        if (this.drawingPointerType === 'touch') {
+                            this._strichVerwerfen(); // Finger-Strich abbrechen (wie bisher)
+                        }
+                        if (anzahlTouch === 2) {
+                            this._startPinch();
+                        }
                     }
                     return; // Nicht zeichnen
                 }
 
-                // Große Kontaktfläche deutet auf Handballen hin
+                // Stift-Vorrang (Regel 2)
+                if (this.stiftGesehen) {
+                    return;
+                }
+
+                // Es zeichnet schon jemand (z. B. die Maus)
+                if (this.drawingPointerId !== null) {
+                    return;
+                }
+
+                // Große Kontaktfläche deutet auf Handballen hin (ohne Stift)
                 if (e.width > 25 || e.height > 25) {
                     return; // Wahrscheinlich Handballen
                 }
-            }
+            } else {
+                // Maus/Stift: nur linke Taste bzw. Stiftspitze (Regel 5)
+                if (e.button !== 0) {
+                    return;
+                }
 
-            // Stift (pen) und Maus (mouse) immer erlauben
+                if (this.drawingPointerId !== null) {
+                    if (istStift && this.drawingPointerType === 'touch') {
+                        // Regel 3: Stift übernimmt den laufenden Finger-Strich
+                        this._strichVerwerfen();
+                    } else {
+                        return; // Regel 1: es gibt schon einen zeichnenden Zeiger
+                    }
+                }
+
+                // Ein aufsetzender Stift beendet einen laufenden Zwei-Finger-Zoom
+                if (istStift) {
+                    this._pinchStartDist = null;
+                }
+            }
 
             var rect = this.drawingCanvas.getBoundingClientRect();
             this.lastX = (e.clientX - rect.left) / this.zoom;
@@ -1495,6 +1695,10 @@
 
             this.isDrawing = true;
 
+            // Zeigerverwaltung (#7149), Regel 1: dieser Zeiger führt den Strich
+            this.drawingPointerId = e.pointerId;
+            this.drawingPointerType = e.pointerType;
+
             // Neuen Strich beginnen (für Strich-basiertes Radieren)
             // Radierer werden nicht als Strich gespeichert
             if (this.currentTool !== 'eraser-stroke' && this.currentTool !== 'eraser-point') {
@@ -1514,8 +1718,54 @@
                 this.redrawAllStrokes();
             }
 
-            // Pointer capture
-            this.drawingCanvas.setPointerCapture(e.pointerId);
+            // Pointer capture - wirft u. a. bei synthetischen Zeigern ohne
+            // aktiven Kontakt (Prüfseite tools/test-board-zeiger.html) oder
+            // wenn der Zeiger schon wieder abgehoben hat; der Strich läuft
+            // dann eben ohne Erfassung weiter.
+            try {
+                this.drawingCanvas.setPointerCapture(e.pointerId);
+            } catch (captureErr) {
+                // ohne Pointer-Capture weiter
+            }
+        },
+
+        /**
+         * Laufenden Strich/Radiervorgang verwerfen, ohne ihn in strokes zu
+         * übernehmen (Zeigerverwaltung #7149, Regeln 3 und 4).
+         */
+        _strichVerwerfen: function() {
+            var hatteStrich = !!this.currentStroke;
+            this.isDrawing = false;
+            this.currentStroke = null;
+            this.drawingPointerId = null;
+            this.drawingPointerType = null;
+            if (this.drawingCtx) {
+                this.drawingCtx.globalCompositeOperation = 'source-over';
+                if (hatteStrich) {
+                    this.redrawAllStrokes(); // Teilstrich wieder von der Fläche nehmen
+                }
+            }
+        },
+
+        /**
+         * pointerleave: beendet einen Strich nur, wenn der Canvas den Zeiger
+         * NICHT erfasst hat (Zeigerverwaltung #7149, Regel 6). Mit Erfassung
+         * kommt pointerup ohnehin am Canvas an.
+         */
+        onPointerLeave: function(e) {
+            if (e.pointerId === this.drawingPointerId && this.drawingCanvas &&
+                typeof this.drawingCanvas.hasPointerCapture === 'function') {
+                var erfasst = false;
+                try {
+                    erfasst = this.drawingCanvas.hasPointerCapture(e.pointerId);
+                } catch (err) {
+                    erfasst = false;
+                }
+                if (erfasst) {
+                    return;
+                }
+            }
+            this.onPointerUp(e);
         },
 
         onPointerMove: function(e) {
@@ -1531,11 +1781,15 @@
 
             if (!this.isDrawing) return;
 
+            // Zeigerverwaltung (#7149), Regel 1: nur der zeichnende Zeiger
+            if (e.pointerId !== this.drawingPointerId) return;
+
             var rect = this.drawingCanvas.getBoundingClientRect();
             var x = (e.clientX - rect.left) / this.zoom;
             var y = (e.clientY - rect.top) / this.zoom;
 
             // Strich-Radierer: Prüfe kontinuierlich ob ein Strich getroffen wird
+            // (nur am letzten Punkt wie bisher - jeder Test ist O(Punkte aller Striche))
             if (this.currentTool === 'eraser-stroke') {
                 this.eraseStrokeAtPoint(x, y);
                 this.lastX = x;
@@ -1543,30 +1797,111 @@
                 return;
             }
 
+            // Zwischenpunkte, die der Browser seit dem letzten Ereignis
+            // zusammengefasst hat (Apple Pencil: 120-240 Hz, Bildwiederholung
+            // nur 60-120 Hz). Ohne sie wird der Strich bei schnellen Bögen eckig.
+            var punkte = this._punkteAusEreignis(e, rect);
+
             // Punkt-Radierer: Zeichne Kreis an jeder Position (kontinuierlich)
             if (this.currentTool === 'eraser-point') {
-                this.drawingCtx.beginPath();
-                this.drawingCtx.arc(x, y, this.lineWidth * 3, 0, Math.PI * 2);
                 this.drawingCtx.globalCompositeOperation = 'destination-out';
                 this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
-                this.drawingCtx.fill();
+                for (var r = 0; r < punkte.length; r++) {
+                    this.drawingCtx.beginPath();
+                    this.drawingCtx.arc(punkte[r].x, punkte[r].y, this.lineWidth * 3, 0, Math.PI * 2);
+                    this.drawingCtx.fill();
+                }
                 this.drawingCtx.globalCompositeOperation = 'source-over';
                 this.lastX = x;
                 this.lastY = y;
                 return;
             }
 
-            // Punkt zum aktuellen Strich hinzufügen
+            // Punkte zum aktuellen Strich hinzufügen und NUR das neue Stück
+            // zeichnen (#7149, E8) - siehe _segmentZeichnen().
             if (this.currentStroke) {
-                this.currentStroke.points.push({x: x, y: y});
+                var pts = this.currentStroke.points;
+                var von = pts.length ? pts[pts.length - 1] : {x: x, y: y};
+                for (var p = 0; p < punkte.length; p++) {
+                    pts.push(punkte[p]);
+                }
+                this._segmentZeichnen(this.currentStroke, von, punkte);
             }
-
-            // Canvas mit korrekter Ebenen-Reihenfolge neu zeichnen
-            // (Textmarker unten, normale Striche oben)
-            this.redrawAllStrokes();
 
             this.lastX = x;
             this.lastY = y;
+        },
+
+        /**
+         * Canvas-Koordinaten (CSS-Pixel, Zoom herausgerechnet) aller Punkte
+         * eines pointermove - inkl. getCoalescedEvents(), falls vorhanden.
+         * Gleiche Umrechnung wie onPointerDown/onPointerMove: rect ist die
+         * bereits transformierte (Zoom/Pan) Canvas-Box.
+         */
+        _punkteAusEreignis: function(e, rect) {
+            var liste = null;
+            if (typeof e.getCoalescedEvents === 'function') {
+                try {
+                    liste = e.getCoalescedEvents();
+                } catch (err) {
+                    liste = null;
+                }
+            }
+            if (!liste || !liste.length) {
+                liste = [e];
+            }
+            var punkte = [];
+            for (var i = 0; i < liste.length; i++) {
+                punkte.push({
+                    x: (liste[i].clientX - rect.left) / this.zoom,
+                    y: (liste[i].clientY - rect.top) / this.zoom
+                });
+            }
+            return punkte;
+        },
+
+        /**
+         * Inkrementelles Zeichnen (#7149, E8) - bitte nicht durch
+         * redrawAllStrokes() je pointermove ersetzen: das zeichnete bei jedem
+         * Ereignis ALLE Striche neu (O(n)) und machte das Schreiben auf dem
+         * iPad mit vielen Strichen zäh.
+         *
+         * Zeichnet nur das neue Stück (von -> neue Punkte) des laufenden
+         * Strichs mit denselben Linienparametern wie redrawAllStrokes().
+         * Kontext-Transformation (DPR-scale) ist dieselbe; Zoom/Pan wirken
+         * per CSS-Transform am Container und sind in den Punkten schon
+         * herausgerechnet.
+         *
+         * Stift: 'source-over' obenauf - während des Strichs liegt er damit
+         * auch über Text-Einträgen; das pointerup-Neuzeichnen stellt die
+         * Ebenen-Reihenfolge (Textmarker < Stift < Text) wieder her.
+         *
+         * Textmarker (Entscheidung AP-2.3): 'destination-over', also UNTER
+         * alles bereits Gezeichnete. Mit 'lighten' obenauf (wie im
+         * Neuzeichnen-Pass 1) würde der helle Marker darunterliegende
+         * Stiftstriche während des Zeichnens überdecken, weil er dort zuletzt
+         * käme. destination-over hält Stift- und Textstriche sichtbar; da der
+         * Marker deckend ist (getLighterHighlightColor: Alpha 1.0), sieht
+         * die Überlappung mit sich selbst gleich aus. Einziger Unterschied
+         * bis zum pointerup: Überlappt er einen ANDEREN Textmarker, liegt der
+         * neue darunter statt per lighten gemischt. Das pointerup-Neuzeichnen
+         * stellt das bisherige Endbild exakt her.
+         */
+        _segmentZeichnen: function(stroke, von, punkte) {
+            if (!this.drawingCtx || !punkte.length) return;
+            var ctx = this.drawingCtx;
+            ctx.lineWidth = stroke.width;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = stroke.color;
+            ctx.globalCompositeOperation = stroke.tool === 'highlighter' ? 'destination-over' : 'source-over';
+            ctx.beginPath();
+            ctx.moveTo(von.x, von.y);
+            for (var i = 0; i < punkte.length; i++) {
+                ctx.lineTo(punkte[i].x, punkte[i].y);
+            }
+            ctx.stroke();
+            ctx.globalCompositeOperation = 'source-over';
         },
 
         onPointerUp: function(e) {
@@ -1579,14 +1914,23 @@
                 this._pinchStartDist = null;
             }
 
-            if (this.isDrawing) {
+            // Zeigerverwaltung (#7149), Regel 1: nur der zeichnende Zeiger
+            // beendet den Strich - ein abhebender Handballen nicht.
+            if (this.isDrawing && e.pointerId === this.drawingPointerId) {
                 this.isDrawing = false;
+                this.drawingPointerId = null;
+                this.drawingPointerType = null;
                 this.drawingCtx.globalCompositeOperation = 'source-over';
 
                 // Aktuellen Strich zur Liste hinzufügen (außer bei Radierer)
                 if (this.currentStroke && this.currentTool !== 'eraser-stroke') {
                     this.strokes.push(this.currentStroke);
                     this.currentStroke = null;
+                    // #7149 (E8): während des Strichs wurde nur inkrementell
+                    // gezeichnet - jetzt EINMAL alles neu, damit Ebenen-
+                    // Reihenfolge und Endbild exakt dem bisherigen Verfahren
+                    // (redrawAllStrokes je pointermove) entsprechen.
+                    this.redrawAllStrokes();
                 }
             }
         },
