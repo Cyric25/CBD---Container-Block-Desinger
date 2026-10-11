@@ -7,8 +7,8 @@
     var origAdd = EventTarget.prototype.addEventListener;
     var origRemove = EventTarget.prototype.removeEventListener;
     function schluessel(ziel, typ) {
-        var name = ziel === window ? 'window' : (ziel === document ? 'document' :
-            (ziel === document.documentElement ? 'html' : (ziel === document.body ? 'body' : null)));
+        var name = ziel === window ? 'window' : (ziel === window.visualViewport ? 'visualViewport' : (ziel === document ? 'document' :
+            (ziel === document.documentElement ? 'html' : (ziel === document.body ? 'body' : null))));
         return name ? name + ':' + typ : null;
     }
     EventTarget.prototype.addEventListener = function(typ, fn, opt) {

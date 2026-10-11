@@ -1278,6 +1278,85 @@ html.cbd-board-offen .sidebar-toggle-btn {
 }
 
 /* =============================================
+   NIEDRIGE BILDSCHIRMHÖHE (#7149, AP-2.4)
+   iPad quer mit eingeblendeter Tastatur bzw. Split View: gemeldet 1141x253.
+   Vorher blieben 130 px Zeichenfläche (Kopfzeile 50 px + zweizeilige
+   Werkzeugleiste 74 px). Jetzt: Kopfzeile 32 px, Werkzeugleiste EINZEILIG
+   und waagrecht wischbar (pan-x - die Leiste ist selbst Scroll-Container,
+   daher greift ihr Wert trotz touch-action:none am Overlay).
+   Trefferflächen der Knöpfe mind. 32 px.
+   ============================================= */
+
+@media (max-height: 500px) {
+    .cbd-board-header {
+        height: 32px;
+        min-height: 32px;
+        padding: 0 8px;
+    }
+
+    .cbd-board-title {
+        font-size: 13px;
+        gap: 6px;
+    }
+
+    .cbd-board-title .dashicons {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+    }
+
+    .cbd-board-close {
+        width: 32px;
+        height: 32px;
+        font-size: 18px;
+        border-width: 1px;
+    }
+
+    .cbd-board-toolbar {
+        padding: 2px 4px;
+        gap: 4px;
+    }
+
+    .cbd-board-toolbar-inner {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        min-width: 0;          /* sonst wächst das Flex-Kind statt zu scrollen */
+        gap: 4px;
+        touch-action: pan-x;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    .cbd-board-toolbar-inner > *,
+    .cbd-board-grid-controls > *,
+    .cbd-board-opacity-control > * {
+        flex-shrink: 0;
+    }
+
+    .cbd-board-grid-controls,
+    .cbd-board-opacity-control {
+        flex-wrap: nowrap;
+        flex-shrink: 0;
+    }
+
+    .cbd-board-toolbar button {
+        min-width: 32px;
+        min-height: 32px;
+    }
+
+    .cbd-board-toolbar-toggle {
+        width: 32px;
+        height: 32px;
+    }
+
+    .cbd-board-content {
+        padding: 8px 12px;
+    }
+}
+
+/* =============================================
    ACCESSIBILITY
    ============================================= */
 

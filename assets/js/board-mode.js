@@ -42,6 +42,7 @@
         lastX: 0,
         lastY: 0,
         resizeObserver: null,
+        _viewportTimer: null, // Drossel für visualViewport-resize (#7149, AP-2.4)
         boundHandlers: {},
 
         // Alle aktuell aufliegenden Zeiger (nur noch Buchführung - die
@@ -1061,6 +1062,25 @@
                 });
                 this.resizeObserver.observe(this.backgroundCanvas.parentElement);
             }
+
+            // Sichtbarer Bereich (iPad: Tastatur, Split View, #7149 AP-2.4).
+            // Gedrosselt; zeichnet die Leinwände nur neu, wenn sich die Größe
+            // des Canvas-Containers wirklich geändert hat (visualViewport
+            // meldet auch reine Verschiebungen/Zoom).
+            if (window.visualViewport && typeof window.visualViewport.addEventListener === 'function') {
+                this.boundHandlers.viewportResize = function() {
+                    if (self._viewportTimer) return;
+                    self._viewportTimer = setTimeout(function() {
+                        self._viewportTimer = null;
+                        if (!self.overlay || !self.backgroundCanvas) return;
+                        var behaelter = self.backgroundCanvas.parentElement;
+                        if (behaelter.clientWidth !== self.cssWidth || behaelter.clientHeight !== self.cssHeight) {
+                            self.resizeAllCanvases();
+                        }
+                    }, 100);
+                };
+                window.visualViewport.addEventListener('resize', this.boundHandlers.viewportResize);
+            }
         },
 
         /**
@@ -1094,6 +1114,15 @@
             }
             if (this.overlay && this.boundHandlers.doppelklick) {
                 this.overlay.removeEventListener('dblclick', this.boundHandlers.doppelklick);
+            }
+
+            // visualViewport (#7149, AP-2.4)
+            if (this.boundHandlers.viewportResize && window.visualViewport) {
+                window.visualViewport.removeEventListener('resize', this.boundHandlers.viewportResize);
+            }
+            if (this._viewportTimer) {
+                clearTimeout(this._viewportTimer);
+                this._viewportTimer = null;
             }
 
             this.boundHandlers = {};
