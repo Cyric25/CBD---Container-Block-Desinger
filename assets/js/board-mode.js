@@ -252,15 +252,12 @@
             // createOverlayDOM() die Leiste fest mit aktivem Stift und
             // Schwarz baut. Wer rot aufhörte, schrieb in der Tafel eines
             // anderen Blocks rot weiter. Bitte nicht entfernen.
-            // Die je Werkzeug gemerkten Breiten bleiben bewusst erhalten
-            // (loadToolSettings, localStorage); updateToolUI() unten zeigt
-            // sie im Regler an.
+            // Seit 3.1.142 ebenso Breiten und Textmarker-Transparenz
+            // (_standardBreiten); updateToolUI() unten stellt die Regler.
             this.currentTool = 'pen';
             this.eraserMode = 'stroke';
             this.currentColor = '#000000';
-
-            // Tool-Einstellungen aus localStorage laden
-            this.loadToolSettings();
+            this._standardBreiten();
 
             // Multi-Seiten-State zurücksetzen
             this.currentPageIndex = 0;
@@ -302,8 +299,8 @@
             // Overlay-DOM erstellen
             this.createOverlayDOM(contentHtml);
 
-            // Regler auf die geltende Breite des Stifts setzen (die Leiste
-            // ist fest mit 3 px gebaut, gemerkt sein kann eine andere)
+            // Regler auf die geltende Breite setzen (Absicherung, falls die
+            // fest gebaute Leiste und die Standardwerte auseinanderlaufen)
             this.updateToolUI();
 
             // An Body anhaengen
@@ -1455,7 +1452,6 @@
 
         setHighlighterOpacity: function(opacity) {
             this.highlighterOpacity = opacity;
-            this.saveToolSettings();
         },
 
         /**
@@ -1470,43 +1466,29 @@
         },
 
         /**
-         * Lädt alle Tool-Einstellungen aus localStorage
+         * Breiten aller Werkzeuge und Textmarker-Transparenz auf Standard
+         * (seit 3.1.142, Rückmeldung 2026-10-12). Bis 3.1.141 wurden sie in
+         * localStorage['cbd-board-tool-settings'] gemerkt und beim Öffnen
+         * geladen; gewünscht ist aber bei jedem Öffnen die
+         * Standardeinstellung. Innerhalb einer Sitzung gilt die je Werkzeug
+         * gewählte Breite weiter (Felder, saveToolWidth). Der alte Schlüssel
+         * wird entfernt; die Ausschlusslisten der Notizzählung (oben und in
+         * personal-notes-manager.js) behalten ihn für Altbestände.
          */
-        loadToolSettings: function() {
+        _standardBreiten: function() {
+            this.penWidth = 3;
+            this.eraserStrokeWidth = 8;
+            this.eraserPointWidth = 15;
+            this.highlighterWidth = 20;
+            this.highlighterOpacity = 0.3;
             try {
-                var settings = localStorage.getItem('cbd-board-tool-settings');
-                if (settings) {
-                    settings = JSON.parse(settings);
-                    this.penWidth = settings.penWidth || 3;
-                    this.eraserStrokeWidth = settings.eraserStrokeWidth || 8;
-                    this.eraserPointWidth = settings.eraserPointWidth || 15;
-                    this.highlighterWidth = settings.highlighterWidth || 20;
-                    this.highlighterOpacity = settings.highlighterOpacity || 0.3;
-                }
+                localStorage.removeItem('cbd-board-tool-settings');
             } catch (e) {
-                console.error('[CBD Board] Fehler beim Laden der Tool-Einstellungen:', e);
+                // ohne Speicher weiter
             }
 
             // Setze lineWidth auf die Breite des aktuellen Tools
             this.loadToolWidth();
-        },
-
-        /**
-         * Speichert alle Tool-Einstellungen in localStorage
-         */
-        saveToolSettings: function() {
-            try {
-                var settings = {
-                    penWidth: this.penWidth,
-                    eraserStrokeWidth: this.eraserStrokeWidth,
-                    eraserPointWidth: this.eraserPointWidth,
-                    highlighterWidth: this.highlighterWidth,
-                    highlighterOpacity: this.highlighterOpacity
-                };
-                localStorage.setItem('cbd-board-tool-settings', JSON.stringify(settings));
-            } catch (e) {
-                console.error('[CBD Board] Fehler beim Speichern der Tool-Einstellungen:', e);
-            }
         },
 
         /**
@@ -1553,9 +1535,6 @@
                     this.highlighterWidth = this.lineWidth;
                     break;
             }
-
-            // Speichere alle Einstellungen
-            this.saveToolSettings();
         },
 
         /**
