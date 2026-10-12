@@ -457,6 +457,7 @@
         B.setTool('pen');
         B.setColor('#000000'); // Vorbedingung: currentColor überdauert das Öffnen
         strich(200, 40, 200, 300);
+        var seite1 = JSON.stringify(el());
         B.addPage();
         var f = [];
         if ((el() || [1]).length !== 0) f.push('neue Seite nicht leer');
@@ -464,12 +465,13 @@
         strich(100, 100, 150, 100);
         B.goToPage(0);
         if (stapel() !== 0) f.push('Undo-Stapel nach goToPage ' + stapel());
-        return ctx.warteAuf(bildGeladen, 3000).then(function() {
-            var l = el();
-            if (l.length !== 1 || l[0].typ !== 'bild') f.push('Seite 1: ' + l.map(function(e) { return e.typ; }).join(','));
-            if (!istDunkel(pixel(200, 150))) f.push('Seite 1 nicht gezeichnet');
-            return f.length ? { ok: false, detail: f.join('; ') } : true;
-        });
+        // AP-4.4 (Plan Schritt 5): Die Seite kommt aus dem Seitencache mit
+        // IHREN Elementen zurück (vorher übergangsweise als EIN Bild-Element,
+        // AP-4.3 Schritt 9). Geprüft wird jetzt: genau die Elemente von vorher.
+        var l = el();
+        if (JSON.stringify(l) !== seite1) f.push('Seite 1: ' + l.map(function(e) { return e.typ; }).join(','));
+        if (!istDunkel(pixel(200, 150))) f.push('Seite 1 nicht gezeichnet');
+        return Promise.resolve(f.length ? { ok: false, detail: f.join('; ') } : true);
     }
 
     // ------------------------------------------------------------------
@@ -508,6 +510,6 @@
             .then(function() { return pa('AP-4.3: wieder geöffnete Notiz ist EIN Bild-Element', wiederGeoeffnetEinBild); })
             .then(function() { return pa('AP-4.3: Strich vor dem Laden bleibt, Undo lässt Bild stehen', strichVorDemLadenBleibt); })
             .then(function() { return pa('AP-4.3: Punkt-Radierung im Bild bleibt nach Schließen/Öffnen', radierungImBildBleibt); })
-            .then(function() { return pa('AP-4.3: Seitenwechsel - Bild-Element, Undo-Stapel geleert', seitenwechselBildElement); });
+            .then(function() { return pa('AP-4.3/4.4: Seitenwechsel - Seite kommt mit ihren Elementen zurück, Undo-Stapel geleert', seitenwechselBildElement); });
     };
 })();

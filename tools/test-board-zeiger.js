@@ -1072,6 +1072,19 @@
         zeiger('pointerup', 3, 'pen', 200, 300);
         B.addPage();
         B.goToPage(0);
+        // AP-4.4: Ab Phase 4 kommt eine im Seitencache gehaltene Seite mit
+        // ihren Elementen zurück (pageCache {png, modell}), nicht mehr als
+        // Basisbild - Seite 1 muss dann genau ihren einen Strich haben. Die
+        // alte Schrift einer als PNG geladenen Seite prüft
+        // test-board-speichern.js ("alte PNG-Seite im Seitenwechsel"); dass
+        // die Seite als Elemente zurückkommt, prüft dort
+        // "Seitenwechsel behält Elemente".
+        if (mitModell() && striche().length > 0) {
+            if (striche().length !== 1) return { ok: false, detail: 'Striche nach Seitenwechsel: ' + striche().length + ' statt 1' };
+            markerQuer(150);
+            var pxM = pixel(200, 150);
+            return istDunkel(pxM) ? true : { ok: false, detail: 'Schrift nach Seitenwechsel überdeckt: rgba ' + rgbaText(pxM) };
+        }
         return warteAuf(function() { return basisGeladen(); }, 3000).then(function() {
             if (striche().length !== 0) return { ok: false, detail: 'Striche nach Seitenwechsel: ' + striche().length };
             markerQuer(150);
