@@ -4162,11 +4162,13 @@ dann Teil des Bild-Elements.
 | `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | 191 Prüfungen |
 | `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall | 113 Prüfungen |
 | `node tools/test-notizen-manager-js.js` | `personal-notes-manager.js` (Mini-DOM im `vm`) | 34 Prüfungen |
-| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **105 Prüfungen** (50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32) |
+| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **139 Prüfungen** (50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34, Stand Phase 5) |
 | `php tools/check-php74.php` | PHP-7.4-Kompatibilität | muss OK sein |
 
-Prüfseite: Viewport VOR dem Laden auf ~1366×768, Ergebnis in
-`window.__zusammenfassung` (erst nach `await window.__laufen()` vollständig).
+Prüfseite: Viewport VOR dem Laden auf ~1366×768, nach dem Laden ca. 10 s
+warten und `window.__zusammenfassung` direkt lesen. **`window.__laufen()`
+NICHT aufrufen** – es startet die Prüfungen ein zweites Mal im selben
+Dokument und liefert verfälschte Zahlen (Befund AP-4.doc).
 Cache-Falle: nach dem Kopieren geänderter Skripte `fetch(…, {cache:'reload'})`.
 Die Mutationsprobe des Moduls (Kopie per Umgebungsvariable
 `CBD_ELEMENTE_DATEI`) hat alle wesentlichen Mutationen erkannt.
@@ -4207,6 +4209,94 @@ Die Mutationsprobe des Moduls (Kopie per Umgebungsvariable
    schließen, neu laden, einzelnen Strich radieren; eine alte Tafel öffnen →
    als Ganzes da, Punkt-Radierer radiert hinein.
 5. Die Hotfix-Version 3.1.138 (Textmarker) ist in diesem ZIP enthalten.
+
+### Lasso-Werkzeug (Phase 5, 2026-10-12, Plugin 3.1.140)
+
+Ein eigenes Werkzeug in der Tafel-Leiste (`data-tool="lasso"`, Dashicon
+`dashicons-image-crop`, Titel „Auswählen (Lasso)") wählt Elemente per
+Freihand-Umrandung aus; die Auswahl lässt sich verschieben und löschen.
+Funktioniert in neuen UND wieder geöffneten Tafeln, weil es nur auf dem
+Elementmodell oben arbeitet. Speicherung ohne eigenen Weg: über
+`saveDrawing()` → `saveToServer()`/`saveToCache()` (PNG + Hülle, Phase 4).
+
+**Auswahlregel (E14, `CBDBoardElemente.waehleImLasso()`):** Ein Strich ist
+gewählt, wenn ≥ 50 % seiner Punkte im Lasso-Polygon liegen; Text und Bild,
+wenn der Mittelpunkt ihres Rahmens im Polygon liegt. Ein altes Tafelbild
+(EIN Bild-Element) wird also durch Umranden seiner Mitte gewählt. Antippen
+(weniger als drei Punkte) wählt nichts.
+
+**Auswahl-Ebene:** vierte Canvas `canvas.cbd-board-canvas-auswahl` über der
+Zeichenebene (`z-index:4`, `pointer-events:none`), gleiche
+Pixeldichte-Logik. Lassolinie und Auswahlrahmen (Vereinigung der Rahmen
++ 8 px, gestrichelt `[6,4]`, `--color-ui-surface`, Rückfall `#e24614`)
+landen nur dort – **nie im PNG**, das aus `drawingCanvas` entsteht.
+`zeichneModell()` fasst die Auswahl-Ebene nicht an. Darkmode: Bei weißer
+Tafel invertiert der Container per `filter:invert(1)`; die Auswahl-Ebene
+invertiert sich ein zweites Mal, damit Rahmen/Linie orange bleiben.
+
+**Auswahlleiste** `div.cbd-board-auswahl-leiste` mit „Löschen“ und „Auswahl
+aufheben“: letztes Kind des **Overlays**, nicht der Zeichenfläche (dort
+schluckte die touchstart-Sperre #7149 Fingerklicks, und sie würde
+mitgezoomt). Liegt über dem Rahmen, sonst darunter, sonst oben in der
+Fläche; ausgeblendet während Lasso und Ziehen.
+
+**Bedienung:**
+- Aufsetzen **innerhalb** des Auswahlrahmens zieht die Auswahl, außerhalb
+  beginnt ein neues Lasso.
+- Ziehen: `_ziehenBeginnen()` merkt einmal den Zustand (ein Undo-Schritt)
+  und eine Momentaufnahme `_ziehen.basis`; jeder Frame baut die Liste aus
+  `basis` + Gesamtverschiebung neu (`requestAnimationFrame`, 50-ms-Zeitgeber
+  als Rückfall für verborgene Fenster) – keine kumulierte Rundung. 0 px →
+  Undo-Eintrag wieder vom Stapel. Zweiter Finger/Pinch oder Stift
+  übernimmt → Ziehen verworfen (Elemente zurück, kein Undo-Rest).
+  `pointercancel` übernimmt die erreichte Lage (sichtbar, per Strg+Z
+  umkehrbar).
+- **Asynchrones Einfügen während des Ziehens (AP-5.fix1):** Geladene
+  Elemente (Server-Ladeantwort `_elementeUebernehmen()`, Bild-Rückfall
+  `bildElementHinzufuegen()`) laufen ausschließlich über
+  `_geladeneVornEinfuegen()`. Der Helfer fügt in Liste, alle Undo-Stände
+  UND `_ziehen.basis` ein, immer als neue Arrays (`concat`, nie `unshift` –
+  `basis` und `modell.elemente` sind vor dem ersten Frame dasselbe Array).
+  **Wer einen neuen asynchronen Einfügeweg baut, muss ihn darüber führen**,
+  sonst wirft der nächste Ziehframe das Geladene hinaus und das nächste
+  Speichern überschreibt die Tafel ohne es.
+- Löschen: Knopf oder `Entf`/Rücktaste – nicht, wenn Ziel oder
+  `document.activeElement` ein Eingabefeld ist (Textfeld des
+  Text-Werkzeugs, Regler). Ein Undo-Schritt.
+- **ESC:** mit Auswahl oder laufendem Lasso nur Auswahl aufheben, ohne
+  Auswahl schließt ESC die Tafel wie bisher.
+- Auswahl aufgehoben auch durch: neues Lasso, Werkzeugwechsel, Strg+Z
+  (immer), Seitenwechsel, „Zeichnung löschen“, Schließen. Läuft dabei ein
+  Ziehen, gilt die erreichte Lage. Beim Schließen setzt `destroy()` ein
+  aktives Lasso auf den Stift zurück.
+- Lasso und Ziehen liegen in `onPointerDown` **nach** Pinch,
+  Stift-Vorrang, Handballen-Erkennung und `button === 0`; die
+  Kontextmenü-Sperre (Phase 1) greift auch beim Lasso-Halten und auf der
+  Leiste.
+
+**Nutzerhinweise (Review AP-5.rev G3–G5):**
+1. Ist ein flächenfüllendes altes Tafelbild gewählt, deckt sein Rahmen die
+   ganze Fläche – jedes Aufsetzen zieht. Für ein neues Lasso zuerst ESC
+   bzw. „Auswahl aufheben“.
+2. Elemente dürfen über den Rand geschoben werden (kein Einrasten). Ein
+   ganz hinausgeschobenes und danach abgewähltes Element ist per Lasso
+   nicht mehr erreichbar – nur per Strg+Z oder „Zeichnung löschen“. Es wird
+   aber **nicht** still gelöscht, sondern bleibt in der gespeicherten
+   Elementliste (das PNG zeigt nur den sichtbaren Teil).
+3. Stift-Vorrang (#7149): Hat in der Sitzung einmal ein Stift aufgesetzt,
+   können Finger weder umranden noch ziehen (Handballen-Schutz); die Knöpfe
+   der Leisten bleiben per Finger bedienbar.
+
+**Nicht-Ziele (bewusst nicht eingebaut):** Skalieren, Drehen, Kopieren,
+Umfärben der Auswahl; kein Hover-Cursor über der Auswahl (nur `move`
+während des Ziehens).
+
+**Prüfungen:** `tools/test-board-lasso.js` (34 Prüfungen, in der Prüfseite
+nach `test-board-speichern.js` geladen). Die Prüfung „`zeichneModell()`
+verändert die Auswahl-Ebene nicht“ zählt seit AP-5.fix1 schreibende Aufrufe
+und vergleicht Pixel mit ±1 Toleranz (vorher flatterte sie wegen der
+GPU-Rücklesung). **Abnahme am echten Stift-/Touchgerät steht aus** – Finger
+und Stift sind nur synthetisch geprüft, Maus und Tastatur echt.
 
 ## Persönliche Notizen: automatische Sichtbarkeit auf Inhaltsverzeichnis-Seiten
 (Phase 2 von `PLAN-Tafelmodus-Text-und-Notizen-Restore.md`, abgeschlossen
