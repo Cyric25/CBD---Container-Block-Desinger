@@ -865,6 +865,78 @@ html.cbd-board-offen .sidebar-toggle-btn {
     cursor: cell;
 }
 
+/* =============================================
+   LASSO (Phase 5, AP-5.1, Architektur E14)
+   Auswahl-Ebene: vierte Canvas-Ebene ueber Zeichnung und Gitter, nimmt
+   keine Zeigerereignisse an (die bleiben am Zeichen-Canvas). Lassolinie und
+   Auswahlrahmen liegen nur hier und landen nie im gespeicherten PNG.
+   ============================================= */
+.cbd-board-canvas-auswahl {
+    z-index: 4;
+    pointer-events: none;
+}
+
+/* Darkmode-Inversion des Containers (AP-1.5, .cbd-board-inverted weiter
+   unten) hier wieder aufheben: Rahmen und Lasso behalten die Akzentfarbe
+   statt invertiert (blaeulich) zu erscheinen. */
+.cbd-board-canvas-container.cbd-board-inverted .cbd-board-canvas-auswahl {
+    filter: invert(1);
+}
+
+.cbd-board-canvas-drawing.cbd-board-lasso-aktiv {
+    cursor: crosshair;
+}
+
+/* Auswahlleiste ueber dem Auswahlrahmen (Lage setzt board-mode.js,
+   _auswahlLeisteAusrichten). Kind des Overlays, nicht des gezoomten
+   Containers. */
+.cbd-board-auswahl-leiste {
+    position: absolute;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    border: 1px solid var(--color-border, #dddddd);
+    border-radius: 8px;
+    background: var(--color-background, #ffffff);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    white-space: nowrap;
+}
+
+.cbd-board-auswahl-knopf {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--color-ui-surface, #e24614);
+    border-radius: 6px;
+    background: var(--color-background, #ffffff);
+    color: var(--color-text-primary, #333333);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.cbd-board-auswahl-knopf:hover,
+.cbd-board-auswahl-knopf:focus-visible {
+    background: var(--color-ui-surface-light, #f5ede9);
+    color: var(--color-text-primary, #333333);
+}
+
+.cbd-board-auswahl-knopf .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+}
+
+/* Loeschen: gleiche Flaeche wie "Auswahl aufheben", nur das Symbol in der
+   Akzentfarbe (Schrift bleibt --color-text-primary, in beiden Modi lesbar) */
+.cbd-board-auswahl-loeschen .dashicons {
+    color: var(--color-ui-surface, #e24614);
+}
+
 /* Board Color Picker Overlay (on canvas) */
 .cbd-board-color-picker-overlay {
     position: absolute;
@@ -1228,6 +1300,23 @@ html.cbd-board-offen .sidebar-toggle-btn {
    im Darkmode ueberhaupt gesetzt. */
 .cbd-board-canvas-container.cbd-board-inverted {
     filter: invert(1);
+}
+
+/* Auswahlleiste des Lassos (AP-5.1) */
+[data-theme="dark"] .cbd-board-auswahl-leiste {
+    background: var(--color-background-light, #1e1e1e);
+    border-color: var(--color-border, #444444);
+}
+
+[data-theme="dark"] .cbd-board-auswahl-knopf {
+    background: var(--color-background, #121212);
+    color: var(--color-text-primary, #e8e8e8);
+}
+
+[data-theme="dark"] .cbd-board-auswahl-knopf:hover,
+[data-theme="dark"] .cbd-board-auswahl-knopf:focus-visible {
+    background: var(--color-background-light, #2a2a2a);
+    color: var(--color-text-primary, #e8e8e8);
 }
 
 [data-theme="dark"] .cbd-board-text-input {

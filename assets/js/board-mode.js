@@ -85,6 +85,17 @@
         drawingCtx: null,
         canvasArea: null, // .cbd-board-canvas-area, Träger der Touch-Gestensperre (#7149)
 
+        // Lasso (Phase 5, AP-5.1, Architektur E14): vierte Canvas-Ebene ÜBER
+        // der Zeichenebene (pointer-events:none) - Lassolinie und
+        // Auswahlrahmen landen so nie im gespeicherten PNG (das entsteht aus
+        // drawingCanvas). Siehe "Lasso-Werkzeug" bei auswahlAufheben().
+        auswahlCanvas: null,
+        auswahlCtx: null,
+        auswahl: [],          // IDs der gewählten Elemente (Listenreihenfolge)
+        _lasso: null,         // Punkte [[x,y],…] der laufenden Lassolinie, sonst null
+        _auswahlLeiste: null, // div.cbd-board-auswahl-leiste (Teil des Overlays)
+        _auswahlFarbeWert: null,
+
         isDrawing: false,
         currentTool: 'pen',
         currentColor: '#000000',
@@ -260,6 +271,11 @@
             this._rahmenCache = new WeakMap();
             this._ladeNr++;
 
+            // Lasso (AP-5.1): keine Auswahl aus einer früheren Sitzung
+            this.auswahl = [];
+            this._lasso = null;
+            this._auswahlFarbeWert = null;
+
             // Zeigerverwaltung (#7149): Stift-Vorrang gilt je Tafelsitzung
             this.activePointers.clear();
             this.drawingPointerId = null;
@@ -383,6 +399,8 @@
             this.gridCtx = null;
             this.drawingCanvas = null;
             this.drawingCtx = null;
+            this.auswahlCanvas = null;
+            this.auswahlCtx = null;
             this.isDrawing = false;
             this.containerId = null;
             this.classId = null;
@@ -406,6 +424,16 @@
             this._radierLetzter = null;
             this._rahmenCache = null;
             this._idModell = null;
+
+            // Lasso (AP-5.1): Auswahl verwerfen. Die Werkzeugleiste öffnet
+            // immer mit aktivem Stift-Knopf (createOverlayDOM) - ein beim
+            // Schließen aktives Lasso liefe sonst unsichtbar weiter.
+            this.auswahl = [];
+            this._lasso = null;
+            this._auswahlLeiste = null;
+            if (this.currentTool === 'lasso') {
+                this.currentTool = 'pen';
+            }
 
             // Multi-Seiten-State zurücksetzen
             this.currentPageIndex = 0;
@@ -470,6 +498,8 @@
                             '<canvas class="cbd-board-canvas cbd-board-canvas-background"></canvas>' +
                             '<canvas class="cbd-board-canvas cbd-board-canvas-grid"></canvas>' +
                             '<canvas class="cbd-board-canvas cbd-board-canvas-drawing"></canvas>' +
+                            // Auswahl-Ebene (AP-5.1, E14): Lassolinie und Auswahlrahmen
+                            '<canvas class="cbd-board-canvas cbd-board-canvas-auswahl"></canvas>' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
@@ -496,6 +526,10 @@
                         '</button>' +
                         '<button class="cbd-board-tool" data-tool="text" title="Text einfügen">' +
                             '<span class="dashicons dashicons-text-page"></span>' +
+                        '</button>' +
+                        // Lasso (AP-5.1): Elemente per Freihand-Umrandung auswählen
+                        '<button class="cbd-board-tool" data-tool="lasso" title="Auswählen (Lasso)">' +
+                            '<span class="dashicons dashicons-image-crop"></span>' +
                         '</button>' +
                         '<span class="cbd-board-separator"></span>' +
                         // Farben
@@ -557,6 +591,17 @@
                     '</div>' +
                     // Toolbar ein-/ausblenden
                     '<button class="cbd-board-toolbar-toggle" title="Toolbar ausblenden">▲</button>' +
+                '</div>' +
+                // Auswahlleiste (AP-5.1): schwebt über dem Auswahlrahmen. Liegt
+                // bewusst NICHT im .cbd-board-canvas-area (dessen touchstart-
+                // Sperre #7149 unterdrückte sonst den Klick per Finger) und
+                // nicht im Canvas-Container (würde mitgezoomt).
+                // "Löschen": Funktion folgt in AP-5.2 (auswahlLoeschen()).
+                '<div class="cbd-board-auswahl-leiste" role="toolbar" aria-label="Auswahl" style="display: none;">' +
+                    '<button type="button" class="cbd-board-auswahl-knopf cbd-board-auswahl-loeschen" data-aktion="loeschen" title="Auswahl löschen">' +
+                        '<span class="dashicons dashicons-trash"></span> Löschen' +
+                    '</button>' +
+                    '<button type="button" class="cbd-board-auswahl-knopf" data-aktion="aufheben" title="Auswahl aufheben (Esc)">Auswahl aufheben</button>' +
                 '</div>';
 
             // Block-Inhalt einfuegen
@@ -570,6 +615,7 @@
             contentArea.style.fontSize = (this.fontSize / 100) + 'em';
 
             this.overlay = overlay;
+            this._auswahlLeiste = overlay.querySelector('.cbd-board-auswahl-leiste');
         },
 
         /**
@@ -580,10 +626,12 @@
             this.backgroundCanvas = canvases[0];
             this.gridCanvas = canvases[1];
             this.drawingCanvas = canvases[2];
+            this.auswahlCanvas = canvases[3]; // AP-5.1, über der Zeichenebene
 
             this.backgroundCtx = this.backgroundCanvas.getContext('2d');
             this.gridCtx = this.gridCanvas.getContext('2d');
             this.drawingCtx = this.drawingCanvas.getContext('2d');
+            this.auswahlCtx = this.auswahlCanvas.getContext('2d');
         },
 
         /**
@@ -605,7 +653,7 @@
             this.cssHeight = cssHeight;
 
             // Alle Canvas-Dimensionen auf physische Pixel setzen (CSS × DPR)
-            [this.backgroundCanvas, this.gridCanvas, this.drawingCanvas].forEach(function(canvas) {
+            [this.backgroundCanvas, this.gridCanvas, this.drawingCanvas, this.auswahlCanvas].forEach(function(canvas) {
                 canvas.width = cssWidth * dpr;
                 canvas.height = cssHeight * dpr;
                 canvas.style.width = cssWidth + 'px';
@@ -613,7 +661,7 @@
             });
 
             // Kontexte auf DPR skalieren – Zeichenkoordinaten bleiben in CSS-Pixeln
-            [this.backgroundCtx, this.gridCtx, this.drawingCtx].forEach(function(ctx) {
+            [this.backgroundCtx, this.gridCtx, this.drawingCtx, this.auswahlCtx].forEach(function(ctx) {
                 ctx.scale(dpr, dpr);
             });
 
@@ -630,6 +678,10 @@
             // unverändert: die Koordinaten stehen 1:1 wie früher die Pixel,
             // auch Bild-Elemente behalten ihre Größe (kein Strecken).
             this.zeichneModell();
+
+            // Auswahl-Ebene (AP-5.1): durch die Größenänderung geleert -
+            // Lassolinie/Rahmen neu zeichnen, Leiste neu ausrichten
+            this._auswahlZeichnen();
         },
 
         /**
@@ -1065,6 +1117,21 @@
                 });
             }
 
+            // Auswahlleiste (AP-5.1): ein Listener für beide Knöpfe. Hängt am
+            // Element im Overlay und verschwindet mit ihm (kein unbind nötig).
+            if (this._auswahlLeiste) {
+                this._auswahlLeiste.addEventListener('click', function(e) {
+                    var k = (e.target && e.target.closest) ? e.target.closest('[data-aktion]') : null;
+                    if (!k) return;
+                    var aktion = k.getAttribute('data-aktion');
+                    if (aktion === 'aufheben') {
+                        self.auswahlAufheben();
+                    } else if (aktion === 'loeschen' && typeof self.auswahlLoeschen === 'function') {
+                        self.auswahlLoeschen(); // folgt in AP-5.2
+                    }
+                });
+            }
+
             // Seiten-Navigation
             var pagePrevBtn = this.overlay.querySelector('.cbd-board-page-prev');
             if (pagePrevBtn) {
@@ -1322,6 +1389,12 @@
         // =============================================
 
         setTool: function(tool) {
+            // Lasso (AP-5.1): Wechsel zu einem anderen Werkzeug hebt die
+            // Auswahl auf (auch eine halb gezogene Lassolinie)
+            if (tool !== 'lasso') {
+                this.auswahlAufheben();
+            }
+
             this.currentTool = tool;
 
             // Set eraser mode
@@ -1337,6 +1410,7 @@
                 } else {
                     this.drawingCanvas.classList.remove('eraser-active');
                 }
+                this.drawingCanvas.classList.toggle('cbd-board-lasso-aktiv', tool === 'lasso');
             }
 
             // Lade die gespeicherte Breite für dieses Tool
@@ -1430,6 +1504,10 @@
                 case 'highlighter':
                     this.lineWidth = this.highlighterWidth;
                     break;
+                case 'lasso':
+                    // AP-5.1: Das Lasso hat keine Breite - lineWidth bleibt,
+                    // wie sie ist (Text-Werkzeug und Rückkehr unverändert)
+                    break;
                 default:
                     this.lineWidth = this.penWidth;
             }
@@ -1464,13 +1542,16 @@
         updateToolUI: function() {
             if (!this.overlay) return;
 
-            // Größen-Slider aktualisieren
+            // Größen-Slider aktualisieren (Lasso, AP-5.1: ausgeblendet)
+            var ohneBreite = this.currentTool === 'lasso';
             var widthInput = this.overlay.querySelector('.cbd-board-width');
             var widthDisplay = this.overlay.querySelector('.cbd-board-width-display');
             if (widthInput) {
                 widthInput.value = this.lineWidth;
+                widthInput.style.display = ohneBreite ? 'none' : '';
                 if (widthDisplay) {
                     widthDisplay.textContent = this.lineWidth + 'px';
+                    widthDisplay.style.display = ohneBreite ? 'none' : '';
                 }
             }
 
@@ -1502,6 +1583,7 @@
             // "Zeichnung löschen" ist rückgängig machbar (E12): Stand merken,
             // dann alle Elemente entfernen. Eine schon leere Tafel legt keinen
             // Undo-Schritt an.
+            this.auswahlAufheben(); // AP-5.1: gewählte Elemente gibt es nicht mehr
             if (this.modell) {
                 if (this.modell.elemente.length) {
                     this.merkeZustand();
@@ -1748,6 +1830,24 @@
             this.lastX = (e.clientX - rect.left) / this.zoom;
             this.lastY = (e.clientY - rect.top) / this.zoom;
 
+            // Lasso (AP-5.1): Handballen-, Pinch-, Stift-Vorrang- und
+            // Tastenregeln oben gelten wie beim Stift. Neue Lassolinie
+            // beginnen; eine bestehende Auswahl wird dabei aufgehoben.
+            // AP-5.2: Liegt der Punkt IN der Auswahl (auswahlRahmen()),
+            // beginnt hier stattdessen das Verschieben.
+            if (this.currentTool === 'lasso') {
+                this._lassoBeginnen(this.lastX, this.lastY);
+                this.isDrawing = true;
+                this.drawingPointerId = e.pointerId;
+                this.drawingPointerType = e.pointerType;
+                try {
+                    this.drawingCanvas.setPointerCapture(e.pointerId);
+                } catch (captureErr) {
+                    // ohne Pointer-Capture weiter (siehe unten)
+                }
+                return;
+            }
+
             // Text-Werkzeug: Eingabefeld an der Klickposition öffnen statt zu zeichnen
             if (this.currentTool === 'text') {
                 // AP-1.fix1 (Befund B1 aus AP-1.rev): Ohne preventDefault()
@@ -1828,6 +1928,11 @@
          */
         _strichVerwerfen: function() {
             var hatteStrich = !!this.currentStroke;
+            // Lasso (AP-5.1): laufende Lassolinie verwerfen, nichts wählen
+            if (this._lasso) {
+                this._lasso = null;
+                this._auswahlZeichnen();
+            }
             this.isDrawing = false;
             this.currentStroke = null;
             this.drawingPointerId = null;
@@ -1882,6 +1987,22 @@
             var rect = this.drawingCanvas.getBoundingClientRect();
             var x = (e.clientX - rect.left) / this.zoom;
             var y = (e.clientY - rect.top) / this.zoom;
+
+            // Lasso (AP-5.1): Punkte sammeln (inkl. zusammengefasster
+            // Zwischenpunkte) und die Linie auf der Auswahl-Ebene zeigen.
+            // Ohne _lasso (per ESC/Werkzeugwechsel verworfen) nichts tun.
+            if (this.currentTool === 'lasso') {
+                if (this._lasso) {
+                    var lp = this._punkteAusEreignis(e, rect);
+                    for (var li = 0; li < lp.length; li++) {
+                        this._lasso.push([lp[li].x, lp[li].y]);
+                    }
+                    this._auswahlZeichnen();
+                }
+                this.lastX = x;
+                this.lastY = y;
+                return;
+            }
 
             // Strich-Radierer: Prüfe kontinuierlich ob ein Strich getroffen wird
             // (nur am letzten Punkt wie bisher - jeder Test ist O(Punkte aller Striche))
@@ -2016,6 +2137,11 @@
                 this.drawingPointerId = null;
                 this.drawingPointerType = null;
                 this.drawingCtx.globalCompositeOperation = 'source-over';
+
+                // Lasso (AP-5.1): Polygon schließen und auswählen
+                if (this._lasso) {
+                    this._lassoAbschliessen();
+                }
 
                 // Aktuellen Strich als Element übernehmen (außer bei Radierer).
                 // Undo-Schritt (E12) erst hier: der Stand VOR dem Strich ist
@@ -2646,8 +2772,192 @@
             this.zeichneModell();
         },
 
+        // =============================================
+        // Lasso-Werkzeug (Phase 5, AP-5.1)
+        // =============================================
+        //
+        // Bedienung: Werkzeug 'lasso', Freihand-Umrandung ziehen, beim
+        // Abheben sind die umrandeten Elemente gewählt (Regel E14 in
+        // CBDBoardElemente.waehleImLasso(): Strich bei >= 50 % seiner Punkte
+        // im Polygon, Text/Bild beim Mittelpunkt des Rahmens).
+        //   this.auswahl  Array der gewählten Element-IDs (leer = keine)
+        //   this._lasso   Punkte [[x,y],…] der laufenden Linie (CSS-Pixel der
+        //                 Zeichenfläche, Zoom schon herausgerechnet) oder null
+        // Anzeige NUR auf der Auswahl-Ebene (auswahlCanvas) und in der
+        // DOM-Leiste - zeichneModell() fasst beide nicht an, das PNG entsteht
+        // aus drawingCanvas und enthält sie deshalb nie.
+        // Aufgehoben wird die Auswahl durch: neues Lasso, Werkzeugwechsel
+        // (setTool), ESC, Knopf "Auswahl aufheben", Rückgängig, Seitenwechsel
+        // (_seiteLeeren), "Zeichnung löschen", Schließen (destroy).
+
+        /** Auswahl und laufende Lassolinie verwerfen (Elemente bleiben). */
+        auswahlAufheben: function() {
+            this.auswahl = [];
+            this._lasso = null;
+            this._auswahlZeichnen();
+        },
+
+        /** Neue Lassolinie an (x, y) beginnen; hebt eine bestehende Auswahl auf. */
+        _lassoBeginnen: function(x, y) {
+            this.auswahl = [];
+            this._auswahlFarbeWert = null; // Theme-Farbe je Geste neu lesen (Darkmode-Wechsel)
+            this._lasso = [[x, y]];
+            this._auswahlZeichnen();
+        },
+
+        /**
+         * Lassolinie schließen und auswählen. Weniger als drei Punkte
+         * (Antippen) wählen nichts (waehleImLasso liefert dann []).
+         */
+        _lassoAbschliessen: function() {
+            var polygon = this._lasso;
+            this._lasso = null;
+            var ctx = this.drawingCtx;
+            var ids = (polygon && this.modell) ? elementeModul().waehleImLasso(this.modell, polygon, ctx ? function(text, px) {
+                ctx.font = px + 'px sans-serif';
+                return ctx.measureText(text).width;
+            } : null) : [];
+            this.auswahl = ids;
+            this._auswahlZeichnen();
+        },
+
+        /**
+         * Vereinigungsrahmen der Auswahl plus 8 px Rand, {x, y, b, h} in
+         * CSS-Pixeln der Zeichenfläche, oder null ohne Auswahl. Das ist der
+         * gezeichnete Rahmen und (AP-5.2) die Fläche, in der ein Zeiger das
+         * Verschieben beginnt.
+         */
+        auswahlRahmen: function() {
+            if (!this.modell || !this.auswahl || !this.auswahl.length) return null;
+            var wahl = {};
+            for (var w = 0; w < this.auswahl.length; w++) wahl[this.auswahl[w]] = true;
+            var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            var el = this.modell.elemente;
+            for (var i = 0; i < el.length; i++) {
+                if (!wahl.hasOwnProperty(el[i].id)) continue;
+                var r = this._rahmen(el[i]);
+                if (r.x < minX) minX = r.x;
+                if (r.y < minY) minY = r.y;
+                if (r.x + r.b > maxX) maxX = r.x + r.b;
+                if (r.y + r.h > maxY) maxY = r.y + r.h;
+            }
+            if (minX === Infinity) return null; // IDs nicht (mehr) im Modell
+            var rand = 8;
+            return { x: minX - rand, y: minY - rand, b: (maxX - minX) + 2 * rand, h: (maxY - minY) + 2 * rand };
+        },
+
+        /** Akzentfarbe (--color-ui-surface des Themes, Rückfall #e24614). */
+        _auswahlFarbe: function() {
+            if (this._auswahlFarbeWert) return this._auswahlFarbeWert;
+            var farbe = '';
+            try {
+                farbe = getComputedStyle(this.overlay || document.documentElement)
+                    .getPropertyValue('--color-ui-surface').replace(/^\s+|\s+$/g, '');
+            } catch (err) {
+                farbe = '';
+            }
+            this._auswahlFarbeWert = farbe || '#e24614';
+            return this._auswahlFarbeWert;
+        },
+
+        /**
+         * Auswahl-Ebene neu zeichnen: laufende Lassolinie ODER Auswahlrahmen,
+         * beide gestrichelt; danach die Leiste ausrichten. Die Linie wird je
+         * pointermove ganz neu gezeichnet (gestrichelt lässt sich nicht
+         * stückweise fortsetzen; ein Lasso hat wenige hundert Punkte).
+         */
+        _auswahlZeichnen: function() {
+            var c = this.auswahlCtx;
+            if (c && this.auswahlCanvas) {
+                c.clearRect(0, 0, this.auswahlCanvas.width, this.auswahlCanvas.height);
+                var lasso = this._lasso;
+                var rahmen = lasso ? null : this.auswahlRahmen();
+                if ((lasso && lasso.length > 1) || rahmen) {
+                    c.save();
+                    c.globalCompositeOperation = 'source-over';
+                    c.strokeStyle = this._auswahlFarbe();
+                    c.lineWidth = 2;
+                    c.lineCap = 'butt';
+                    c.lineJoin = 'round';
+                    c.setLineDash([6, 4]);
+                    c.beginPath();
+                    if (lasso) {
+                        c.moveTo(lasso[0][0], lasso[0][1]);
+                        for (var i = 1; i < lasso.length; i++) {
+                            c.lineTo(lasso[i][0], lasso[i][1]);
+                        }
+                    } else {
+                        // In die Fläche geklemmt, damit der Rahmen auch bei
+                        // einem flächenfüllenden Bild-Element (alte Tafel)
+                        // sichtbar bleibt
+                        var bw = this.cssWidth || 0, bh = this.cssHeight || 0;
+                        var x0 = Math.max(rahmen.x, 1), y0 = Math.max(rahmen.y, 1);
+                        var x1 = bw ? Math.min(rahmen.x + rahmen.b, bw - 1) : rahmen.x + rahmen.b;
+                        var y1 = bh ? Math.min(rahmen.y + rahmen.h, bh - 1) : rahmen.y + rahmen.h;
+                        if (x1 > x0 && y1 > y0) {
+                            c.rect(x0, y0, x1 - x0, y1 - y0);
+                        }
+                    }
+                    c.stroke();
+                    c.restore();
+                }
+            }
+            this._auswahlLeisteAusrichten();
+        },
+
+        /**
+         * Leiste über dem Auswahlrahmen einblenden (ohne Auswahl bzw. beim
+         * Lasso-Ziehen ausblenden). Die Leiste liegt im Overlay, nicht im
+         * gezoomten Container: Lage aus den Bildschirmrechtecken, umgerechnet
+         * in Overlay-Koordinaten (skala fängt die Einblend-Animation
+         * scale(0.98) ab). Oberhalb des Rahmens, sonst darunter, sonst oben
+         * in der Zeichenfläche; waagrecht in der Zeichenfläche gehalten.
+         */
+        _auswahlLeisteAusrichten: function() {
+            var leiste = this._auswahlLeiste;
+            if (!leiste) return;
+            var r = (!this._lasso && this.overlay && this.drawingCanvas && this.cssWidth && this.cssHeight)
+                ? this.auswahlRahmen() : null;
+            if (!r) {
+                leiste.style.display = 'none';
+                return;
+            }
+            leiste.style.display = 'flex';
+            var ov = this.overlay.getBoundingClientRect();
+            var skala = this.overlay.offsetWidth ? ov.width / this.overlay.offsetWidth : 1;
+            if (!skala) skala = 1;
+            var cv = this.drawingCanvas.getBoundingClientRect();
+            var fx = cv.width / this.cssWidth, fy = cv.height / this.cssHeight;
+            var bereich = this.overlay.querySelector('.cbd-board-canvas-area');
+            var ba = bereich ? bereich.getBoundingClientRect() : cv;
+            var lx = function(cx) { return (cx - ov.left) / skala; };
+            var ly = function(cy) { return (cy - ov.top) / skala; };
+            var links = lx(cv.left + r.x * fx);
+            var oben = ly(cv.top + r.y * fy);
+            var unten = ly(cv.top + (r.y + r.h) * fy);
+            var bL = lx(ba.left), bR = lx(ba.right), bO = ly(ba.top), bU = ly(ba.bottom);
+            var lb = leiste.offsetWidth, lh = leiste.offsetHeight, abstand = 6;
+            var top = oben - abstand - lh;
+            if (top < bO + 4) {
+                top = unten + abstand;
+                if (top + lh > bU - 4) top = bO + 4;
+            }
+            var left = Math.min(Math.max(links, bL + 4), bR - 4 - lb);
+            if (left < bL + 4) left = bL + 4;
+            leiste.style.left = Math.round(left) + 'px';
+            leiste.style.top = Math.round(top) + 'px';
+        },
+
         onKeyDown: function(e) {
             if (e.key === 'Escape') {
+                // Lasso (AP-5.1): Bei aktiver Auswahl oder laufender
+                // Lassolinie hebt ESC nur die Auswahl auf - die Tafel bleibt
+                // offen. Ohne Auswahl schließt ESC wie bisher.
+                if (this._lasso || (this.auswahl && this.auswahl.length)) {
+                    e.preventDefault();
+                    this.auswahlAufheben();
+                    return;
+                }
                 this.close();
             } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
                 e.preventDefault();
@@ -3272,6 +3582,7 @@
         /** Modell und Undo-Stapel beim Seitenwechsel neu anlegen, Ebene leeren. */
         _seiteLeeren: function() {
             this._ladeNr++; // laufende Server-Antworten gehören zur alten Seite
+            this.auswahlAufheben(); // AP-5.1: Auswahl gehört zur verlassenen Seite
             this.currentStroke = null;
             this._radierBilder = null;
             this._radierLetzter = null;
@@ -3304,6 +3615,9 @@
          * nichts.
          */
         undo: function() {
+            // AP-5.1: Strg+Z hebt eine Auswahl immer auf (auch bei leerem
+            // Stapel) - nach dem Zurücksetzen passten die IDs nicht mehr
+            this.auswahlAufheben();
             if (!this.modell || !this.undoStapel.length) return;
             this.modell.elemente = this.undoStapel.pop();
             this.zeichneModell();
@@ -3322,6 +3636,8 @@
             if (container) {
                 container.style.transform = 'translate(' + this.panX + 'px, ' + this.panY + 'px) scale(' + this.zoom + ')';
             }
+            // AP-5.1: Der Rahmen zoomt mit (Ebene im Container), die Leiste nicht
+            this._auswahlLeisteAusrichten();
         },
 
         /**
