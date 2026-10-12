@@ -484,16 +484,92 @@
         return ergebnis(f);
     }
 
+    /*
+     * AP-5.fix1 (aus AP-5.rev G1): Die Prüfung verglich früher nur zwei
+     * getImageData()-Lesungen pixelgenau; die GPU-Rücklesung weicht dabei
+     * gelegentlich um 1 Kanalwert ab, auch ohne jede Zeichenoperation
+     * dazwischen (Flattern). Jetzt zwei Netze:
+     *   1. Hauptaussage, deterministisch: Während zeichneModell() und
+     *      redrawAllStrokes() geht KEIN schreibender Aufruf an den Kontext
+     *      der Auswahl-Ebene (alle Methoden, die die Bitmap eines 2D-Canvas
+     *      verändern können) und ihre Breite/Höhe wird nicht gesetzt (das
+     *      leert die Bitmap). Andere Wege, die Pixel eines 2D-Canvas zu
+     *      ändern, gibt es nicht - die Aussage ist also mindestens so stark
+     *      wie der Pixelvergleich, und strenger: auch ein Löschen und
+     *      pixelgleiches Neuzeichnen zählt als Verletzung.
+     *   2. Zusätzlich Pixelvergleich mit Toleranz +/-1 je Kanal (nur
+     *      Rücklese-Rauschen; Lassolinie/Rahmen/Löschen ändern Alpha um bis
+     *      zu 255).
+     */
+    var AUSWAHL_SCHREIBEND = ['clearRect', 'fillRect', 'strokeRect', 'fill', 'stroke', 'drawImage',
+        'putImageData', 'fillText', 'strokeText', 'reset', 'drawFocusIfNeeded'];
+
+    /** Schreibende Aufrufe an Kontext/Canvas der Auswahl-Ebene mitzählen; liefert { aufrufe, ende() }. */
+    function auswahlEbeneBeobachten() {
+        var c = B.auswahlCtx, cv = B.auswahlCanvas;
+        var protokoll = { aufrufe: [] };
+        var zurueck = [];
+        AUSWAHL_SCHREIBEND.forEach(function(name) {
+            if (!c || typeof c[name] !== 'function') return;
+            var hatteEigene = Object.prototype.hasOwnProperty.call(c, name);
+            var vorher = c[name];
+            c[name] = function() {
+                protokoll.aufrufe.push(name);
+                return vorher.apply(this, arguments);
+            };
+            zurueck.push(function() { if (hatteEigene) c[name] = vorher; else delete c[name]; });
+        });
+        ['width', 'height'].forEach(function(name) {
+            if (!cv) return;
+            var d = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, name);
+            if (!d || !d.set) return;
+            Object.defineProperty(cv, name, {
+                configurable: true,
+                get: function() { return d.get.call(this); },
+                set: function(v) { protokoll.aufrufe.push(name + '='); d.set.call(this, v); }
+            });
+            zurueck.push(function() { delete cv[name]; });
+        });
+        protokoll.ende = function() { zurueck.forEach(function(fn) { fn(); }); };
+        return protokoll;
+    }
+
+    /** Größte Abweichung je Kanal zweier Bilddaten (Infinity bei anderer Länge). */
+    function groessteAbweichung(a, b) {
+        if (a.length !== b.length) return Infinity;
+        var m = 0;
+        for (var i = 0; i < a.length; i++) {
+            var d = a[i] - b[i];
+            if (d < 0) d = -d;
+            if (d > m) m = d;
+        }
+        return m;
+    }
+
     function zeichneModellLaesstAuswahl() {
         ctx.oeffnen();
         var f = [];
         regelZeichnung();
         lasso(LASSO_REGEL);
+        if (ebeneLeer(B.auswahlCanvas)) f.push('Vorbedingung: Rahmen sichtbar');
+        if (!B.auswahlCtx || typeof B.auswahlCtx.clearRect !== 'function') return { ok: false, detail: 'Testaufbau: kein Kontext der Auswahl-Ebene' };
         var vorher = ebenenDaten(B.auswahlCanvas);
-        B.zeichneModell();
-        B.redrawAllStrokes();
-        if (!gleicheDaten(vorher, ebenenDaten(B.auswahlCanvas))) f.push('zeichneModell() verändert die Auswahl-Ebene');
+        var beob = auswahlEbeneBeobachten();
+        try {
+            B.zeichneModell();
+            B.redrawAllStrokes();
+        } finally {
+            beob.ende();
+        }
+        if (beob.aufrufe.length) f.push('zeichneModell() verändert die Auswahl-Ebene (Aufrufe: ' + beob.aufrufe.join(', ') + ')');
+        var ab = groessteAbweichung(vorher, ebenenDaten(B.auswahlCanvas));
+        if (ab > 1) f.push('zeichneModell() verändert die Auswahl-Ebene (Pixel bis ' + ab + ' Kanalwerte)');
         if (!(B.auswahl && B.auswahl.length === 3)) f.push('Auswahl nach zeichneModell ' + sortiert(B.auswahl));
+        // Selbstprobe der Beobachtung: ein schreibender Aufruf wird erkannt
+        var probe = auswahlEbeneBeobachten();
+        try { B.auswahlCtx.clearRect(0, 0, 1, 1); } finally { probe.ende(); }
+        if (probe.aufrufe.join() !== 'clearRect') f.push('Testaufbau: Beobachtung erkennt clearRect nicht');
+        B._auswahlZeichnen(); // Rahmen nach der Selbstprobe wiederherstellen
         return ergebnis(f);
     }
 
@@ -825,14 +901,19 @@
         var alt = lagenNachId();
         // 9 Schritte zu je 0,3371 px: eine je Schritt auf 2 Stellen gerundete
         // oder aufsummierte Lage wiche messbar von alt + Gesamtverschiebung ab
-        var d = ziehe(120, 130, 120 + 9 * 0.3371, 130 + 9 * 0.2219, 9);
+        // AP-5.fix1 (aus AP-5.rev G2): synchron feuert kein Frame - ohne
+        // diesen Rückruf würde nur EINMAL (beim Abheben) angewandt, und eine
+        // schrittweise/kumulative Umsetzung fiele nicht auf. Daher nach
+        // jedem Schritt einen Frame anwenden, wie requestAnimationFrame es tut.
+        var jeSchrittFrame = { mitte: function() { frame(); } };
+        var d = ziehe(120, 130, 120 + 9 * 0.3371, 130 + 9 * 0.2219, 9, jeSchrittFrame);
         if (Math.abs(d.dx) < 1e-9 && Math.abs(d.dy) < 1e-9) return { ok: false, detail: 'Testaufbau: keine Verschiebung erzeugt' };
         verschobenUm(ids.a, alt, d.dx, d.dy, 1e-6, f, 'A');
         verschobenUm(ids.t, alt, d.dx, d.dy, 1e-6, f, 'Text');
         unveraendert(ids.d, alt, f, 'D');
         // zweites Ziehen baut auf der Endlage auf
         var alt2 = lagenNachId();
-        var d2 = ziehe(121, 131, 121 - 7 * 0.1234, 131 + 7 * 0.4321, 7);
+        var d2 = ziehe(121, 131, 121 - 7 * 0.1234, 131 + 7 * 0.4321, 7, jeSchrittFrame);
         verschobenUm(ids.b, alt2, d2.dx, d2.dy, 1e-6, f, 'B (zweites Ziehen)');
         return ergebnis(f);
     }
@@ -1114,6 +1195,154 @@
     }
 
     // ------------------------------------------------------------------
+    // Prüfungen AP-5.fix1 (aus AP-5.rev F1): Laden während des Ziehens
+    // ------------------------------------------------------------------
+    // Server-Laden ist asynchron: Die Antwort kann eintreffen, während eine
+    // Auswahl gezogen wird. Geladene Elemente dürfen dann weder vom nächsten
+    // Frame noch vom Abheben verworfen werden. Die Frames werden hier von
+    // Hand angewandt (B._ziehenAnwenden(B._ziehen)), damit die Prüfung ohne
+    // requestAnimationFrame/Zeitgeber deterministisch ist.
+
+    var GELADEN_TEXT = 'GELADEN fix1';
+
+    function geladenesModell() {
+        return {
+            v: 1,
+            breite: B.cssWidth,
+            hoehe: B.cssHeight,
+            elemente: [{ id: 'e1', typ: 'text', farbe: '#1565c0', breite: 3, text: GELADEN_TEXT, x: 420, y: 60 }]
+        };
+    }
+
+    function geladeneTexte() {
+        return el().filter(function(e) { return e.typ === 'text' && e.text === GELADEN_TEXT; });
+    }
+
+    function gespeicherteElemente() {
+        try { return localStorage.getItem(SCHLUESSEL + '-elemente') || ''; } catch (e) { return ''; }
+    }
+
+    /** Frame anwenden wie requestAnimationFrame es täte. */
+    function frame() {
+        if (!B._ziehen) throw new Error('Testaufbau: kein laufendes Ziehen');
+        B._ziehenAnwenden(B._ziehen);
+    }
+
+    function ladenWaehrendZiehenModell() {
+        ctx.oeffnen();
+        var f = [];
+        var ids = waehleRegel();
+        var alt = lagenNachId();
+        var undoVorher = B.undoStapel.length;
+        B.setTool('lasso');
+        z('pointerdown', 8, 'pen', 120, 130);
+        z('pointermove', 8, 'pen', 140, 140);
+        frame(); // erster Zwischenstand: Liste ist jetzt NICHT mehr die Momentaufnahme
+        B._elementeUebernehmen(geladenesModell());
+        if (geladeneTexte().length !== 1) f.push('direkt nach dem Laden ' + geladeneTexte().length + ' geladene Texte');
+        z('pointermove', 8, 'pen', 160, 150);
+        frame();
+        if (geladeneTexte().length !== 1) f.push('nächster Frame: ' + geladeneTexte().length + ' geladene Texte (verworfen)');
+        z('pointermove', 8, 'pen', 170, 160);
+        z('pointerup', 8, 'pen', 170, 160);
+        var g = geladeneTexte();
+        if (g.length !== 1) f.push('nach dem Abheben ' + g.length + ' geladene Texte');
+        else if (g[0].x !== 420 || g[0].y !== 60) f.push('geladener Text verschoben auf ' + g[0].x + '/' + g[0].y);
+        verschobenUm(ids.a, alt, 50, 30, 1e-6, f, 'A');
+        verschobenUm(ids.t, alt, 50, 30, 1e-6, f, 'Text (gewählt)');
+        unveraendert(ids.d, alt, f, 'D');
+        if (el().length !== 5) f.push('Elementzahl ' + el().length + ' statt 5');
+        if (B.undoStapel.length !== undoVorher + 1) f.push('Undo-Schritte ' + (B.undoStapel.length - undoVorher) + ' statt 1');
+        if (sortiert(B.auswahl) !== sortiert([ids.a, ids.b, ids.t])) f.push('Auswahl nach dem Ziehen ' + sortiert(B.auswahl));
+        if (!istDunkelBei(120 + 50, 100 + 30)) f.push('A an neuer Stelle nicht gezeichnet');
+        // gespeicherter Stand enthält das Geladene
+        B.saveDrawing();
+        if (gespeicherteElemente().indexOf(GELADEN_TEXT) === -1) f.push('geladener Text fehlt im gespeicherten Stand');
+        // Rückgängig nimmt nur das Ziehen zurück; Laden ist keine Nutzeraktion
+        B.undo();
+        if (geladeneTexte().length !== 1) f.push('nach Rückgängig ' + geladeneTexte().length + ' geladene Texte');
+        unveraendert(ids.a, alt, f, 'A nach Rückgängig');
+        return ergebnis(f);
+    }
+
+    function ladenWaehrendZiehenNullPx() {
+        ctx.oeffnen();
+        var f = [];
+        var ids = waehleRegel();
+        var alt = lagenNachId();
+        var undoVorher = B.undoStapel.length;
+        B.setTool('lasso');
+        z('pointerdown', 8, 'pen', 120, 130);
+        z('pointermove', 8, 'pen', 150, 150);
+        frame();
+        B._elementeUebernehmen(geladenesModell());
+        z('pointermove', 8, 'pen', 120, 130); // zurück an den Start
+        frame();
+        z('pointerup', 8, 'pen', 120, 130);
+        if (geladeneTexte().length !== 1) f.push('nach 0-px-Ziehen ' + geladeneTexte().length + ' geladene Texte');
+        unveraendert(ids.a, alt, f, 'A');
+        unveraendert(ids.d, alt, f, 'D');
+        if (el().length !== 5) f.push('Elementzahl ' + el().length + ' statt 5');
+        if (B.undoStapel.length !== undoVorher) f.push('0-px-Ziehen mit Laden: ' + (B.undoStapel.length - undoVorher) + ' Undo-Schritte statt 0');
+        // verworfenes Ziehen (zweiter Finger / Stift übernimmt: derselbe Weg
+        // _strichVerwerfen(), den onPointerDown dann nimmt) behält das
+        // Geladene ebenfalls
+        lasso(LASSO_REGEL);
+        var undo2 = B.undoStapel.length;
+        ziehe(120, 130, 160, 150, 2, { ohneAbheben: true });
+        if (!B._ziehen) f.push('Testaufbau: zweites Ziehen läuft nicht');
+        frame();
+        B._elementeUebernehmen(geladenesModell());
+        B._strichVerwerfen();
+        z('pointerup', 8, 'pen', 160, 150);
+        if (geladeneTexte().length !== 2) f.push('verworfenes Ziehen: ' + geladeneTexte().length + ' geladene Texte statt 2');
+        unveraendert(ids.a, alt, f, 'A nach verworfenem Ziehen');
+        if (B.undoStapel.length !== undo2) f.push('verworfenes Ziehen mit Laden: ' + (B.undoStapel.length - undo2) + ' Undo-Schritte');
+        return ergebnis(f);
+    }
+
+    function ladenWaehrendZiehenBild() {
+        var f = [];
+        var bild = ctx.basis && ctx.basis.schwarz;
+        if (!bild) return { ok: false, detail: 'kein Basisbild' };
+        // (a) Bild-Rückfall NACH einem angewandten Frame, (b) VOR dem ersten Frame
+        [true, false].forEach(function(nachFrame) {
+            var n = nachFrame ? 'nach Frame: ' : 'vor Frame: ';
+            ctx.oeffnen();
+            var ids = waehleRegel();
+            var alt = lagenNachId();
+            var undoVorher = B.undoStapel.length;
+            B.setTool('lasso');
+            z('pointerdown', 8, 'pen', 120, 130);
+            z('pointermove', 8, 'pen', 140, 140);
+            if (nachFrame) frame();
+            var be = B.bildElementHinzufuegen(bild.src, bild);
+            if (!be) { f.push(n + 'Bild-Element nicht angelegt'); ctx.schliessen(); return; }
+            z('pointermove', 8, 'pen', 160, 150);
+            frame();
+            z('pointerup', 8, 'pen', 160, 150);
+            var bilder = el().filter(function(e) { return e.typ === 'bild'; });
+            if (bilder.length !== 1) f.push(n + bilder.length + ' Bild-Elemente statt 1');
+            else {
+                if (bilder[0].id !== be.id) f.push(n + 'Bild-Element mit anderer ID');
+                if (bilder[0].x !== 0 || bilder[0].y !== 0) f.push(n + 'Bild-Element verschoben auf ' + bilder[0].x + '/' + bilder[0].y);
+                if (el()[0] !== bilder[0]) f.push(n + 'Bild-Element nicht vorn (ältester Inhalt)');
+            }
+            verschobenUm(ids.a, alt, 40, 20, 1e-6, f, n + 'A');
+            unveraendert(ids.d, alt, f, n + 'D');
+            if (el().length !== 5) f.push(n + 'Elementzahl ' + el().length + ' statt 5');
+            if (B.undoStapel.length !== undoVorher + 1) f.push(n + 'Undo-Schritte ' + (B.undoStapel.length - undoVorher) + ' statt 1');
+            B.saveDrawing();
+            if (gespeicherteElemente().indexOf('"typ":"bild"') === -1) f.push(n + 'Bild-Element fehlt im gespeicherten Stand');
+            B.undo();
+            if (el().filter(function(e) { return e.typ === 'bild'; }).length !== 1) f.push(n + 'Bild-Element nach Rückgängig weg');
+            unveraendert(ids.a, alt, f, n + 'A nach Rückgängig');
+            ctx.schliessen();
+        });
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
     // Prüfungen AP-5.2 (asynchron)
     // ------------------------------------------------------------------
     function zwischenstandImNaechstenFrame() {
@@ -1255,6 +1484,9 @@
         p('AP-5.2: Zoom 150 % - Verschiebung in Element-Koordinaten', zoomBeimZiehen);
         p('AP-5.2: Finger und Maus ziehen, zweiter Finger verwirft das Ziehen', fingerZiehenUndPinch);
         p('AP-5.2: lokal speichern + Wiederöffnen an neuer Stelle, gelöschtes fehlt, Randüberschreitung bleibt', lokalSpeichernUndWiederoeffnen);
+        p('AP-5.fix1: Laden (Elementliste) während des Ziehens - Geladenes bleibt, an Ort und Stelle, 1 Undo, gespeichert', ladenWaehrendZiehenModell);
+        p('AP-5.fix1: Laden während 0-px- bzw. verworfenem Ziehen - Geladenes bleibt, kein Undo-Rest', ladenWaehrendZiehenNullPx);
+        p('AP-5.fix1: Bild-Rückfall während des Ziehens (nach/vor Frame) - genau ein Bild, unverschoben, gespeichert', ladenWaehrendZiehenBild);
     };
 
     window.__zusatzTestsAsync = function(c) {
