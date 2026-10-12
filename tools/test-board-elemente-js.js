@@ -532,6 +532,15 @@ console.log('\nGruppe 7: radiereKreis');
 	}
 	pruefe('7.21 200 schraege Schnitte: kein Punkt im Kreis (' + schraegZaehler + ' Punkte)', schraegOk, detail);
 
+	// AP-4.fix1 (aus AP-4.rev G1): Stuetzpunkt knapp innerhalb des Kreises
+	// (0,95 r) muss entfernt werden - die Mutation `rInnen = r * 0.9`
+	// ueberlebte vorher alle Faelle.
+	const knapp = strich([[0, 0], [40.5, 0], [100, 0]]);
+	const rk = E.radiereKreis(knapp, 50, 0, 10, neueId);
+	pruefe('7.22 Stuetzpunkt bei 0,95 r wird entfernt, kein Punkt im Kreis', rk.length === 2 && rk.every(function (s) {
+		return s.punkte.every(function (p) { return abstand(p, 50, 0) >= 10; });
+	}), JSON.stringify(rk.map(function (s) { return s.punkte; })));
+
 	// Nicht-Strich-Elemente werden nicht angefasst
 	const text = kopie(MODELL.elemente[2]);
 	const rtx = E.radiereKreis(text, 40, 300, 50, neueId);

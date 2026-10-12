@@ -95,6 +95,9 @@ class Test_WPDB {
     public $zeile = null;           // gespeicherte Zeile (array) oder null
     public $schreibvorgaenge = array();
     public $abfragen = array();
+    // AP-4.fix1: Schreiben mit nicht-leerem elemente_data scheitert aus einem
+    // ANDEREN Grund als einer fehlenden Spalte (z. B. max_allowed_packet).
+    public $fehler_mit_elementen = false;
     private $args = array();
 
     public function prepare($sql, ...$args) {
@@ -142,6 +145,10 @@ class Test_WPDB {
         $this->schreibvorgaenge[] = array($art, $daten);
         if (!$this->spalte && array_key_exists('elemente_data', $daten)) {
             $this->last_error = "Unknown column 'elemente_data' in 'field list'";
+            return false;
+        }
+        if ($this->fehler_mit_elementen && isset($daten['elemente_data'])) {
+            $this->last_error = "Got a packet bigger than 'max_allowed_packet' bytes";
             return false;
         }
         $this->last_error = '';
@@ -461,6 +468,130 @@ $wpdb->zeile = null;
 cache_leeren();
 $antwort = laden();
 check('C7 keine Zeichnung: elemente_data = null', $antwort && $antwort['ok'] && null === $antwort['data']['elemente_data']);
+
+// =========================================================================
+echo "\nD: Obergrenze Punkte und Speicherspitze (AP-4.fix1, Befund F1)\n";
+// =========================================================================
+// AP-4.rev F1: pruefe_elemente_json() brauchte ~33 MB je MB Strich-JSON; ab
+// ~2-2,5 MB riss die Anfrage bei memory_limit 128M mit WordPress-Grundlast
+// ab - VOR dem Schreiben, also ohne PNG. Jetzt: billige Schätzung der
+// Punktzahl über die Zahl der '[' vor json_decode() (Bild-daten enthalten
+// kein '['), darüber nur das PNG.
+
+$max = defined('CBD_Classroom::ELEMENTE_MAX_PUNKTE') ? CBD_Classroom::ELEMENTE_MAX_PUNKTE : null;
+check('D1 Konstante CBD_Classroom::ELEMENTE_MAX_PUNKTE = 100000', 100000 === $max, $max);
+
+/**
+ * Strich-JSON mit $striche Strichen à $je Punkte (zufällige Koordinaten mit
+ * zwei Nachkommastellen wie serialisiere()). Anzahl '[' = 1 + striche*(1+je).
+ */
+function strich_json($striche, $je) {
+    mt_srand(7149);
+    $el = array();
+    for ($s = 0; $s < $striche; $s++) {
+        $p = array();
+        for ($i = 0; $i < $je; $i++) {
+            $p[] = array(mt_rand(0, 136600) / 100, mt_rand(0, 70000) / 100);
+        }
+        $el[] = array('id' => 'e' . ($s + 1), 'typ' => 'strich', 'werkzeug' => 'pen', 'farbe' => '#000000', 'breite' => 3, 'punkte' => $p);
+    }
+    return json_encode(array('v' => 1, 'breite' => 1366, 'hoehe' => 700, 'elemente' => $el));
+}
+
+/** Zusätzliche Speicherspitze (MB) eines Aufrufs; null, wenn nicht messbar. */
+function spitze_mb($fn, &$ergebnis) {
+    if (!function_exists('memory_reset_peak_usage')) {
+        $ergebnis = $fn();
+        return null;
+    }
+    gc_collect_cycles();
+    $basis = memory_get_usage();
+    memory_reset_peak_usage();
+    $ergebnis = $fn();
+    return (memory_get_peak_usage() - $basis) / 1048576;
+}
+
+// Genau an der Grenze: 500 Striche à 199 Punkte -> 1 + 500*200 = 100 001 '[' (zu viel),
+// 499 Striche à 199 Punkte + 1 Strich à 198 -> knapp darunter
+$unter = strich_json(500, 199);
+$unter = preg_replace('/,\[[0-9.]+,[0-9.]+\]\]\}\]\}$/', ']}]}', $unter); // letzten Punkt entfernen -> 100 000 '['
+check('D2 Testdaten: genau 100 000 \'[\'', 100000 === substr_count($unter, '['), substr_count($unter, '['));
+$r = pj(geslasht($unter));
+check('D3 genau an der Grenze (100 000 \'[\') -> akzeptiert', is_string($r), is_string($r) ? 'String' : $r);
+check('D4 an der Grenze: Ergebnis inhaltsgleich zur Eingabe', is_string($r) && json_decode($r, true) === json_decode($unter, true));
+unset($r);
+
+$ueber = strich_json(500, 199);
+check('D5 Testdaten: 100 001 \'[\'', 100001 === substr_count($ueber, '['), substr_count($ueber, '['));
+check('D6 eine Klammer über der Grenze -> false (nur PNG)', false === pj(geslasht($ueber)));
+
+// Speicherspitze knapp unter der Grenze. Ziel: mit WordPress-Grundlast
+// (gemessen in AP-4.fix1, Übergabenotiz) sicher unter memory_limit 128M.
+$roh = geslasht($unter);
+unset($unter, $ueber);
+$mb = spitze_mb(function () use ($roh) { return pj($roh); }, $r);
+check('D7 Speicherspitze an der Grenze <= 32 MB' . (null === $mb ? ' (nicht messbar, PHP < 8.2)' : sprintf(' (gemessen %.1f MB)', $mb)),
+    null === $mb || $mb <= 32, $mb);
+unset($r, $roh);
+
+// ~3 MB Strich-JSON (Befund F1: vorher ~101 MB Spitze, Fatal bei 128M)
+$drei = strich_json(940, 199);
+check('D8 Testdaten: >= 3 MB Strich-JSON', strlen($drei) >= 3000000, strlen($drei));
+$roh = geslasht($drei);
+unset($drei);
+$mb = spitze_mb(function () use ($roh) { return pj($roh); }, $r);
+check('D9 3 MB Strich-JSON -> false', false === $r, is_string($r) ? 'String' : $r);
+check('D10 3 MB Strich-JSON: Speicherspitze <= 8 MB (kein json_decode)' . (null === $mb ? ' (nicht messbar, PHP < 8.2)' : sprintf(' (gemessen %.1f MB)', $mb)),
+    null === $mb || $mb <= 8, $mb);
+
+// Über ajax_save_drawing(): PNG gespeichert, elemente_data NULL, gemeldet
+$wpdb->spalte = true;
+$wpdb->reparierbar = true;
+$wpdb->zeile = null;
+$antwort = speichern(array('elemente_data' => $roh));
+unset($roh);
+check('D11 Speichern mit 3 MB Strich-JSON: Erfolg, PNG geschrieben',
+    $antwort && $antwort['ok'] && $wpdb->zeile && $wpdb->zeile['drawing_data'] === 'data:image/png;base64,AAAA', $antwort);
+check('D12 ... elemente_data NULL und elemente_verworfen = true',
+    $wpdb->zeile && null === $wpdb->zeile['elemente_data'] && true === ($antwort['data']['elemente_verworfen'] ?? null));
+
+// Gleiche Grenze im Browser (board-mode.js sendet darüber gar keine Liste)
+$js = (string) @file_get_contents($plugin_dir . 'assets/js/board-mode.js');
+$js_max = preg_match('/var\s+ELEMENTE_MAX_PUNKTE\s*=\s*(\d+)\s*;/', $js, $m) ? (int) $m[1] : null;
+check('D13 board-mode.js: ELEMENTE_MAX_PUNKTE gleich der PHP-Konstante', null !== $max && $js_max === $max, $js_max);
+
+// =========================================================================
+echo "\nE: Schreibfehler mit Elementen -> PNG ohne Elemente (AP-4.fix1)\n";
+// =========================================================================
+
+// E1-E5: Zeile vorhanden (update), Schreiben mit Elementen scheitert (Paketgröße)
+$wpdb->spalte = true;
+$wpdb->reparierbar = true;
+$wpdb->fehler_mit_elementen = true;
+$wpdb->zeile = array('id' => 1, 'drawing_data' => 'data:image/png;base64,ALT', 'is_behandelt' => 0, 'elemente_data' => '{"alt":1}');
+CBD_Schema_Manager::$aufrufe = 0;
+$vorher = count($wpdb->schreibvorgaenge);
+$antwort = speichern(array('elemente_data' => geslasht($json)));
+$neu = array_slice($wpdb->schreibvorgaenge, $vorher);
+check('E1 update scheitert mit Elementen: PNG trotzdem geschrieben', $wpdb->zeile['drawing_data'] === 'data:image/png;base64,AAAA', $wpdb->zeile['drawing_data']);
+check('E2 ... zweiter Versuch mit elemente_data = NULL (alte Liste überschrieben)',
+    2 === count($neu) && array_key_exists('elemente_data', $neu[1][1]) && null === $neu[1][1]['elemente_data'] && null === $wpdb->zeile['elemente_data'], $neu);
+check('E3 ... Antwort Erfolg mit elemente_verworfen = true', $antwort && $antwort['ok'] && true === ($antwort['data']['elemente_verworfen'] ?? null), $antwort);
+check('E4 ... kein ensure_columns() (Fehler betrifft nicht die Spalte)', 0 === CBD_Schema_Manager::$aufrufe, CBD_Schema_Manager::$aufrufe);
+check('E5 ... do_action cbd_klassenmodus_geaendert weiterhin ausgelöst', in_array('cbd_klassenmodus_geaendert', $GLOBALS['test_actions'], true));
+
+// E6: neue Zeile (insert) scheitert mit Elementen
+$wpdb->zeile = null;
+$antwort = speichern(array('elemente_data' => geslasht($json)));
+check('E6 insert scheitert mit Elementen: Zeile mit PNG und elemente_data NULL',
+    $wpdb->zeile && $wpdb->zeile['drawing_data'] === 'data:image/png;base64,AAAA' && null === $wpdb->zeile['elemente_data']
+    && true === ($antwort['data']['elemente_verworfen'] ?? null), $wpdb->zeile);
+
+// E7: ohne Elemente (alter Client) kein zusätzlicher Versuch
+$vorher = count($wpdb->schreibvorgaenge);
+speichern(array());
+check('E7 alter Client: genau ein Schreibversuch', 1 === count($wpdb->schreibvorgaenge) - $vorher, count($wpdb->schreibvorgaenge) - $vorher);
+$wpdb->fehler_mit_elementen = false;
 
 echo "\nErgebnis: {$GLOBALS['oks']} OK, {$GLOBALS['fails']} FAIL\n";
 exit($GLOBALS['fails'] > 0 ? 1 : 0);

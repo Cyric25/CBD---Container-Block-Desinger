@@ -662,6 +662,81 @@
     }
 
     // ------------------------------------------------------------------
+    // AP-4.fix1 (AP-4.rev F1): Obergrenze der Punkte. Gezählt wird wie auf
+    // dem Server die Zahl der '[' in der serialisierten Liste (obere
+    // Schranke der Punktzahl, billig). Darüber sendet der Client gar keine
+    // Liste (spart Upload und Serverlast) und meldet "Nur als Bild
+    // gespeichert", auch wenn der Server einfach Erfolg meldet.
+    // ------------------------------------------------------------------
+    var MAX_PUNKTE = 100000; // = CBD_Classroom::ELEMENTE_MAX_PUNKTE
+
+    function klammern(text) {
+        var n = 0, i = -1;
+        while ((i = text.indexOf('[', i + 1)) !== -1) n++;
+        return n;
+    }
+
+    function strichMit(punkte, y) {
+        var p = [];
+        for (var i = 0; i < punkte; i++) p.push([10 + (i % 300), y]);
+        return { id: B.neueId(), typ: 'strich', werkzeug: 'pen', farbe: '#000000', breite: 3, punkte: p };
+    }
+
+    /** Elementliste auf genau `ziel` '[' in der Serialisierung auffüllen. */
+    function auffuellenAuf(ziel) {
+        var rest = ziel - klammern(erwarteteSerialisierung());
+        var liste = B.modell.elemente.slice();
+        while (rest > 0) {
+            // ein Strich = 1 + n Klammern; nie einen Rest von 1 übrig lassen
+            var n = rest - 1;
+            if (n > 199) { n = (rest - 200 === 1) ? 198 : 199; }
+            if (n < 1) { n = 1; }
+            liste.push(strichMit(n, 400));
+            rest -= (n + 1);
+        }
+        B.modell.elemente = liste;
+        return klammern(erwarteteSerialisierung());
+    }
+
+    function serverZuVielePunkte() {
+        serverModus(function() { return erfolg(); });
+        testzeichnung();
+        var zahl = auffuellenAuf(MAX_PUNKTE + 2000);
+        B.saveDrawing();
+        var a = anfrage('cbd_save_drawing');
+        if (!a) return { ok: false, detail: 'keine Speicheranfrage' };
+        var f = [];
+        if (zahl <= MAX_PUNKTE) f.push('Vorbedingung: nur ' + zahl + ' Klammern');
+        if (!a.drawing_data || a.drawing_data.indexOf('data:image/png') !== 0) f.push('drawing_data kein PNG');
+        if (a.elemente_data !== '') f.push('elemente_data gesendet (' + String(a.elemente_data).length + ' Zeichen)');
+        return ctx.warteAuf(function() { return status() === 'Nur als Bild gespeichert'; }, 2000).then(function() {
+            return f.length ? { ok: false, detail: f.join('; ') } : true;
+        }, function() {
+            f.push('Status "' + status() + '"');
+            return { ok: false, detail: f.join('; ') };
+        });
+    }
+
+    function serverGenauAnDerGrenze() {
+        serverModus(function() { return erfolg(); });
+        testzeichnung();
+        var zahl = auffuellenAuf(MAX_PUNKTE);
+        var soll = erwarteteSerialisierung();
+        B.saveDrawing();
+        var a = anfrage('cbd_save_drawing');
+        if (!a) return { ok: false, detail: 'keine Speicheranfrage' };
+        var f = [];
+        if (zahl !== MAX_PUNKTE) f.push('Vorbedingung: ' + zahl + ' Klammern');
+        if (a.elemente_data !== soll) f.push('elemente_data weicht ab (' + String(a.elemente_data).length + ' statt ' + soll.length + ' Zeichen)');
+        return ctx.warteAuf(function() { return status() === 'Gespeichert'; }, 2000).then(function() {
+            return f.length ? { ok: false, detail: f.join('; ') } : true;
+        }, function() {
+            f.push('Status "' + status() + '"');
+            return { ok: false, detail: f.join('; ') };
+        });
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     window.__zusatzTests = function(c) {
@@ -701,7 +776,9 @@
                 .then(function() { return pa('AP-4.4: alte PNG-Seite im Seitenwechsel -> Bild-Element', altePngSeiteImSeitenwechsel); })
                 .then(function() { return pa('AP-4.4: mehrseitig nach Schließen/Öffnen einzeln radierbar', mehrseitigSchliessenOeffnen); })
                 .then(function() { return pa('AP-4.4: Export enthält -elemente, Zählung ohne Begleitschlüssel', exportMitElementen); })
-                .then(function() { return pa('AP-4.4: Import zählt Notizen, entfernt veraltete -elemente', importZaehltUndRaeumtAuf); });
+                .then(function() { return pa('AP-4.4: Import zählt Notizen, entfernt veraltete -elemente', importZaehltUndRaeumtAuf); })
+                .then(function() { return pa('AP-4.fix1: Server - mehr als 100 000 Punkte: keine Liste senden, "Nur als Bild gespeichert"', mitServer(serverZuVielePunkte)); })
+                .then(function() { return pa('AP-4.fix1: Server - genau 100 000 Punkte: Liste wird gesendet', mitServer(serverGenauAnDerGrenze)); });
         });
     };
 })();
