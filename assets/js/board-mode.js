@@ -2920,11 +2920,12 @@
                     localStorage.removeItem(key + '-elemente');
                 } else {
                     // Reihenfolge: erst das PNG (maßgeblich, E7), dann die Elemente
-                    localStorage.setItem(key, this.drawingCanvas.toDataURL('image/png'));
+                    var png = this.drawingCanvas.toDataURL('image/png');
+                    localStorage.setItem(key, png);
                     if (this.boardColor) {
                         localStorage.setItem(key + '-bgcolor', this.boardColor);
                     }
-                    this._elementeLokalSpeichern(key);
+                    this._elementeLokalSpeichern(key, png);
                 }
             } catch (e) {
                 console.warn('[CBD Board Mode] Zeichnung konnte nicht gespeichert werden:', e.message);
@@ -2937,9 +2938,15 @@
          * Elementschlüssel wird entfernt (ein alter Stand darf das neue PNG
          * beim nächsten Öffnen nicht überdecken) und die Statusanzeige meldet
          * 4 s lang "Nur als Bild gespeichert".
+         *
+         * AP-4.fix2 (F2): Der Wert ist eine Hülle {"png":"<Abdruck des eben
+         * geschriebenen PNG>","modell":<Modell v1>} (CBDBoardElemente.verpacke).
+         * Überschreibt eine ältere Plugin-Version (Rückweg) nur das PNG, passt
+         * der Abdruck nicht mehr und loadFromCache() nimmt das PNG.
          */
-        _elementeLokalSpeichern: function(key) {
-            var text = this._elementeSerialisiert();
+        _elementeLokalSpeichern: function(key, png) {
+            var E = elementeModul();
+            var text = E ? E.verpacke(png, this._elementeSerialisiert()) : '';
             try {
                 if (!text) {
                     localStorage.removeItem(key + '-elemente');
@@ -3046,8 +3053,12 @@
                 }
 
                 // AP-4.4: zuerst die Elementliste (E9), gestreckt auf die
-                // aktuelle Fläche (E13)
-                var geladen = this._elementeLesen(localStorage.getItem(key + '-elemente'));
+                // aktuelle Fläche (E13). AP-4.fix2 (F2): nur, wenn der Abdruck
+                // in der Hülle zu diesem PNG passt - sonst ist die Liste
+                // veraltet (Rückweg auf eine ältere Version) oder stammt aus
+                // einem Stand ohne Abdruck, und das PNG gilt (E7).
+                var E = elementeModul();
+                var geladen = E ? this._elementeLesen(E.entpacke(localStorage.getItem(key + '-elemente'), dataUrl)) : null;
                 if (geladen) {
                     this._elementeUebernehmen(geladen);
                     return;

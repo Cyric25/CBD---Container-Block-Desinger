@@ -575,6 +575,62 @@
         return { v: VERSION, breite: breite, hoehe: hoehe, elemente: [] };
     }
 
+    // ---------------------------------------------------------------------
+    // Fingerabdruck des PNG neben dem Modell (AP-4.fix2, Befund F2 aus
+    // AP-4.rev). Eine aeltere Plugin-Version (Rueckweg) ueberschreibt nur das
+    // PNG und laesst die gespeicherte Elementliste stehen. Damit diese alte
+    // Liste das neuere PNG beim naechsten Oeffnen nicht ueberdeckt, wird sie
+    // lokal in einer Huelle abgelegt:
+    //     {"png":"<abdruck des PNG>","modell":<serialisiertes Modell v1>}
+    // Das Modell selbst bleibt unveraendert (Elementmodell v1). Passt der
+    // Abdruck nicht zum PNG, gilt das PNG (E7). Werte ohne Huelle (Stand vor
+    // AP-4.fix2) gelten ebenfalls als ungueltig. Der Server legt dieselbe
+    // Huelle mit md5 an (CBD_Classroom), prueft sie aber selbst und liefert
+    // dem Browser nur das Modell - abdruck() wird also nur lokal gebraucht.
+    // ---------------------------------------------------------------------
+
+    /**
+     * Abdruck eines Textes: "<Laenge>-<FNV-1a 32 Bit, 8 Hex>". Keine
+     * Kryptographie (es geht um "gleich oder geaendert"), synchron und ohne
+     * Abhaengigkeit (crypto.subtle ist asynchron und auf http nicht da).
+     * Gemessen (Chromium, AP-4.fix2): 3 MB ~50 ms, uebliche Tafel-PNGs
+     * (50-400 KB) wenige Millisekunden - einmal je Speichern/Oeffnen.
+     */
+    function abdruck(text) {
+        if (typeof text !== 'string') return null;
+        var h = 0x811c9dc5;
+        for (var i = 0; i < text.length; i++) {
+            h ^= text.charCodeAt(i);
+            // h * 16777619 (FNV-Primzahl = 2^24 + 2^8 + 0x93) modulo 2^32,
+            // ohne Math.imul (ES5): Summe der Verschiebungen bleibt < 2^35
+            h = (h + (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24)) >>> 0;
+        }
+        var hex = h.toString(16);
+        while (hex.length < 8) hex = '0' + hex;
+        return text.length + '-' + hex;
+    }
+
+    /** Huelle um einen serialisierten Modelltext; '' wenn eines fehlt. */
+    function verpacke(png, modellText) {
+        if (typeof png !== 'string' || png === '' || typeof modellText !== 'string' || modellText === '') return '';
+        return '{"png":"' + abdruck(png) + '","modell":' + modellText + '}';
+    }
+
+    /**
+     * Modelltext aus der Huelle, aber nur, wenn der Abdruck zum uebergebenen
+     * PNG passt; sonst null. Liest nur den festen Kopf (kein JSON.parse des
+     * ganzen Werts); der Modelltext wird danach wie bisher mit
+     * deserialisiere() geprueft.
+     */
+    function entpacke(text, png) {
+        if (typeof text !== 'string' || typeof png !== 'string' || png === '') return null;
+        var kopf = '{"png":"' + abdruck(png) + '","modell":';
+        // Das Modell ist ein JSON-Objekt: die Huelle endet also auf "}}" (ein
+        // abgeschnittener Wert faellt so schon hier auf, nicht erst beim Parsen)
+        if (text.length <= kopf.length + 2 || text.indexOf(kopf) !== 0 || text.slice(-2) !== '}}') return null;
+        return text.slice(kopf.length, -1);
+    }
+
     global.CBDBoardElemente = {
         VERSION: VERSION,
         pruefeModell: pruefeModell,
@@ -591,6 +647,9 @@
         deserialisiere: deserialisiere,
         hoechsteIdNummer: hoechsteIdNummer,
         leeresModell: leeresModell,
-        schriftPx: schriftPx
+        schriftPx: schriftPx,
+        abdruck: abdruck,
+        verpacke: verpacke,
+        entpacke: entpacke
     };
 })(window);

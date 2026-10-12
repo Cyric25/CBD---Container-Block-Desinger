@@ -760,6 +760,12 @@ class CBD_Classroom {
             $elemente = null;
             $elemente_verworfen = true;
         }
+        // Fingerabdruck des PNG neben die Liste legen (AP-4.fix2, Befund F2):
+        // Eine ältere Plugin-Version (Rückweg) schreibt nur drawing_data –
+        // ajax_load_drawing() erkennt die dann veraltete Liste am Abdruck.
+        if (is_string($elemente)) {
+            $elemente = self::elemente_huelle($drawing_data, $elemente);
+        }
 
         // Upsert: Insert or update drawing
         $existing = $wpdb->get_row($wpdb->prepare(
@@ -1010,6 +1016,52 @@ class CBD_Classroom {
     }
 
     /**
+     * Hülle um die bereinigte Elementliste (AP-4.fix2, Befund F2 aus AP-4.rev):
+     * {"png":"<md5 des gespeicherten drawing_data>","modell":<Liste>}.
+     *
+     * Grund: Beim Rückweg auf eine ältere Plugin-Version schreibt deren
+     * ajax_save_drawing() nur drawing_data und updated_at, elemente_data bleibt
+     * stehen. Ohne Abdruck lüde ein später wieder eingespieltes Phase-4-Plugin
+     * die VERALTETE Liste, und das nächste Speichern machte daraus auch das
+     * PNG für Schüler und PDF. Mit Abdruck erkennt ajax_load_drawing() die
+     * Abweichung und liefert null – der Browser nimmt dann das PNG als EIN
+     * Bild-Element (E10). Das Elementmodell v1 selbst bleibt unverändert; die
+     * Hülle wird per Zeichenkette gebaut und beim Laden nur am festen Kopf
+     * gelesen (kein json_decode der ganzen Liste – vgl. Speicherbedarf F1).
+     * Gegenstück lokal: CBDBoardElemente.verpacke()/entpacke() (gleiche Form,
+     * dort mit einem eigenen, synchronen Abdruck).
+     *
+     * @param string $png         Gespeichertes drawing_data (data-URL).
+     * @param string $modell_json Bereinigte Liste aus pruefe_elemente_json().
+     * @return string
+     */
+    private static function elemente_huelle($png, $modell_json) {
+        return '{"png":"' . md5((string) $png) . '","modell":' . $modell_json . '}';
+    }
+
+    /**
+     * Liste aus der Hülle, nur wenn ihr Abdruck zum aktuellen drawing_data
+     * passt (AP-4.fix2). Werte ohne Hülle (Teststände vor AP-4.fix2), kaputte
+     * Hüllen und eine Zeile ohne PNG liefern null.
+     *
+     * @param mixed $wert Spalte elemente_data.
+     * @param mixed $png  Spalte drawing_data.
+     * @return string|null
+     */
+    private static function elemente_aus_huelle($wert, $png) {
+        if (!is_string($wert) || !is_string($png) || '' === $png) {
+            return null;
+        }
+        $kopf = '{"png":"' . md5($png) . '","modell":';
+        if (strlen($wert) <= strlen($kopf) + 2
+            || 0 !== strncmp($wert, $kopf, strlen($kopf))
+            || '}}' !== substr($wert, -2)) {
+            return null;
+        }
+        return substr($wert, strlen($kopf), -1);
+    }
+
+    /**
      * Hat `cbd_drawings` die Spalte `elemente_data`? (Plan „Tafel-Lasso",
      * AP-4.2.) Auf einer Installation, deren run_updates()-Zweig noch nicht
      * gelaufen ist, würde ein SELECT mit der Spalte scheitern und das PNG
@@ -1069,8 +1121,12 @@ class CBD_Classroom {
             'drawing_data' => $drawing ? $drawing->drawing_data : null,
             'is_behandelt' => $drawing ? (bool) $drawing->is_behandelt : false,
             // String (JSON, Elementmodell v1) oder null; das JavaScript prüft
-            // ihn mit CBDBoardElemente.deserialisiere().
-            'elemente_data' => ($drawing && isset($drawing->elemente_data)) ? $drawing->elemente_data : null
+            // ihn mit CBDBoardElemente.deserialisiere(). Nur, wenn der
+            // Abdruck in der Hülle zum PNG passt (AP-4.fix2) – sonst gilt das
+            // PNG (E7); der Browser bekommt nie die Hülle, nur das Modell.
+            'elemente_data' => ($drawing && isset($drawing->elemente_data))
+                ? self::elemente_aus_huelle($drawing->elemente_data, $drawing->drawing_data)
+                : null
         ));
     }
 
