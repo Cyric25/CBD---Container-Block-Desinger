@@ -510,6 +510,28 @@ console.log('\nGruppe 7: radiereKreis');
 	pruefe('7.19 drei IDs paarweise verschieden', alleIds.length === 3 && alleIds[0] !== alleIds[1]
 		&& alleIds[1] !== alleIds[2] && alleIds[0] !== alleIds[2], alleIds.join(','));
 
+	// Schraege Segmente mit krummen Zahlen: der berechnete Randpunkt liegt
+	// wegen Gleitkomma-Rundung sonst gern um 1e-15 IM Kreis (Mutationsprobe:
+	// ohne das Hinausschieben ueberlebte die Mutation die Faelle 7.3-7.19).
+	let schraegOk = true;
+	let schraegZaehler = 0;
+	let detail = '';
+	for (let k = 0; k < 200; k++) {
+		const ax = (k * 37.17) % 97.3, ay = (k * 11.93) % 61.7;
+		const bx = 300 - (k * 23.41) % 89.9, by = 200 - (k * 7.77) % 53.1;
+		const mx = (ax + bx) / 2 + 0.123, my = (ay + by) / 2 - 0.071;
+		const r = 3.3 + (k % 17) * 1.37;
+		const teile = E.radiereKreis(strich([[ax, ay], [bx, by]]), mx, my, r, neueId);
+		if (teile.length !== 2) { schraegOk = false; detail = 'k=' + k + ' Teile=' + teile.length; break; }
+		teile.forEach(function (t) {
+			t.punkte.forEach(function (p) {
+				schraegZaehler++;
+				if (abstand(p, mx, my) < r) { schraegOk = false; detail = 'k=' + k + ' d-r=' + (abstand(p, mx, my) - r); }
+			});
+		});
+	}
+	pruefe('7.21 200 schraege Schnitte: kein Punkt im Kreis (' + schraegZaehler + ' Punkte)', schraegOk, detail);
+
 	// Nicht-Strich-Elemente werden nicht angefasst
 	const text = kopie(MODELL.elemente[2]);
 	const rtx = E.radiereKreis(text, 40, 300, 50, neueId);

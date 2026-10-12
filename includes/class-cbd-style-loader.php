@@ -209,10 +209,20 @@ class CBD_Style_Loader {
                 array('dashicons'),
                 CBD_VERSION
             );
+            // Reines Elementmodul (Tafel-Elementmodell v1, DOM-frei,
+            // window.CBDBoardElemente) - Plan "Tafel-Lasso", AP-4.1. Muss VOR
+            // board-mode.js laden, daher als Abhaengigkeit von cbd-board-mode.
+            wp_enqueue_script(
+                'cbd-board-elemente',
+                CBD_PLUGIN_URL . 'assets/js/board-elemente.js',
+                array(),
+                CBD_VERSION,
+                true
+            );
             wp_enqueue_script(
                 'cbd-board-mode',
                 CBD_PLUGIN_URL . 'assets/js/board-mode.js',
-                array(),
+                array('cbd-board-elemente'),
                 CBD_VERSION,
                 true
             );
