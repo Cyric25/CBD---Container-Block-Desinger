@@ -609,4 +609,58 @@ console.log('\nGruppe 9: serialisiere / deserialisiere');
 	gleich('9.16 Rundreise des Plan-Beispiels', E.deserialisiere(E.serialisiere(original)).modell, MODELL);
 })();
 
+// =========================================================================
+// Gruppe 10: Fingerabdruck des PNG neben dem Modell (AP-4.fix2, Befund F2)
+// =========================================================================
+// Eine aeltere Plugin-Version (Rueckweg) ueberschreibt das PNG, laesst den
+// Begleitschluessel -elemente aber stehen. Damit die alte Liste das neuere
+// PNG nicht ueberdeckt, liegt die Liste in einer Huelle
+//   {"png":"<abdruck des PNG>","modell":<serialisiertes Modell v1>}
+// Das Modell selbst bleibt unveraendert (Elementmodell v1).
+console.log('\nGruppe 10: Fingerabdruck (abdruck, verpacke, entpacke)');
+(function () {
+	['abdruck', 'verpacke', 'entpacke'].forEach(function (n) {
+		pruefe('10.0 Schnittstelle: ' + n + ' ist Funktion', typeof E[n] === 'function');
+	});
+	if (typeof E.abdruck !== 'function' || typeof E.verpacke !== 'function' || typeof E.entpacke !== 'function') {
+		return;
+	}
+
+	// FNV-1a 32 Bit (bekannte Pruefwerte) mit vorangestellter Laenge
+	gleich('10.1 abdruck("") = "0-811c9dc5"', E.abdruck(''), '0-811c9dc5');
+	gleich('10.2 abdruck("a") = "1-e40c292c"', E.abdruck('a'), '1-e40c292c');
+	gleich('10.3 abdruck("foobar") = "6-bf9cf968"', E.abdruck('foobar'), '6-bf9cf968');
+	pruefe('10.4 abdruck(PNG) hat die Form <Laenge>-<8 Hex>', /^[0-9]+-[0-9a-f]{8}$/.test(E.abdruck(BILD_DATEN)), E.abdruck(BILD_DATEN));
+	const anders = BILD_DATEN.slice(0, 40) + (BILD_DATEN.charAt(40) === 'A' ? 'B' : 'A') + BILD_DATEN.slice(41);
+	pruefe('10.5 ein geaendertes Zeichen gleicher Laenge -> anderer Abdruck', E.abdruck(anders) !== E.abdruck(BILD_DATEN));
+	gleich('10.6 abdruck ist deterministisch', E.abdruck(BILD_DATEN), E.abdruck(String(BILD_DATEN)));
+	// Lange Zeichenkette (ein PNG von mehreren MB): Laenge stimmt, Hash 8 Hex
+	let lang = '';
+	for (let i = 0; i < 2000; i++) lang += BILD_DATEN;
+	pruefe('10.7 langer Text: Laenge vorn korrekt', E.abdruck(lang).split('-')[0] === String(lang.length), E.abdruck(lang));
+	gleich('10.8 Nicht-Zeichenkette -> null', E.abdruck(null), null);
+
+	const modellText = E.serialisiere(MODELL);
+	const huelle = E.verpacke(BILD_DATEN, modellText);
+	gleich('10.9 verpacke: genaue Form {"png":"<abdruck>","modell":<text>}', huelle,
+		'{"png":"' + E.abdruck(BILD_DATEN) + '","modell":' + modellText + '}');
+	let h = null;
+	try { h = JSON.parse(huelle); } catch (e) { /* bleibt null */ }
+	pruefe('10.10 Huelle ist gueltiges JSON', h !== null && h.png === E.abdruck(BILD_DATEN));
+	gleich('10.11 Modell in der Huelle unveraendert (Elementmodell v1)', h && h.modell, JSON.parse(modellText));
+
+	gleich('10.12 entpacke mit passendem PNG -> Modelltext', E.entpacke(huelle, BILD_DATEN), modellText);
+	gleich('10.13 entpacke mit anderem PNG (Rueckweg) -> null', E.entpacke(huelle, anders), null);
+	gleich('10.14 entpacke ohne Huelle (Stand aus Phase-4-Tests) -> null', E.entpacke(modellText, BILD_DATEN), null);
+	gleich('10.15 entpacke(null) -> null', E.entpacke(null, BILD_DATEN), null);
+	gleich('10.16 entpacke ohne PNG -> null', E.entpacke(huelle, null), null);
+	gleich('10.17 Huelle abgeschnitten -> null', E.entpacke(huelle.slice(0, -1), BILD_DATEN), null);
+	gleich('10.18 fremder Text -> null', E.entpacke('alter Stand', BILD_DATEN), null);
+	gleich('10.19 verpacke ohne Modelltext -> ""', E.verpacke(BILD_DATEN, ''), '');
+	gleich('10.20 verpacke ohne PNG -> ""', E.verpacke('', modellText), '');
+	// Rundreise ueber deserialisiere
+	const rund = E.deserialisiere(E.entpacke(huelle, BILD_DATEN));
+	gleich('10.21 Rundreise verpacke -> entpacke -> deserialisiere', rund && rund.modell, JSON.parse(modellText));
+})();
+
 ende();

@@ -94,6 +94,22 @@
         return E.serialisiere({ v: 1, breite: B.cssWidth, hoehe: B.cssHeight, elemente: el() });
     }
 
+    /**
+     * AP-4.fix2: lokaler -elemente-Wert = Hülle {"png":"<abdruck des PNG>","modell":<Modell v1>}.
+     * huelle() baut sie unabhängig vom Modul (feste Form), lokalesModell()
+     * liest den Modelltext nur bei passendem Abdruck heraus.
+     */
+    function huelle(png, modellText) {
+        return '{"png":"' + (E.abdruck ? E.abdruck(png) : '?') + '","modell":' + modellText + '}';
+    }
+
+    function lokalesModell(wert, png) {
+        if (typeof wert !== 'string' || typeof png !== 'string' || !E.abdruck) return null;
+        var kopf = '{"png":"' + E.abdruck(png) + '","modell":';
+        if (wert.indexOf(kopf) !== 0 || wert.charAt(wert.length - 1) !== '}') return null;
+        return wert.slice(kopf.length, -1);
+    }
+
     function status() {
         var s = document.getElementById('cbd-board-save-status');
         return s ? s.textContent : null;
@@ -204,8 +220,10 @@
         if (!png || png.indexOf('data:image/png') !== 0) f.push('PNG fehlt');
         if (!wert) f.push('Schlüssel -elemente fehlt');
         else {
-            if (wert !== erwarteteSerialisierung()) f.push('Wert weicht von serialisiere(modell mit aktuellen Maßen) ab');
-            var m = E.deserialisiere(wert);
+            // AP-4.fix2: Liste in der Hülle {"png":"<abdruck des PNG>","modell":…}
+            var kopf = '{"png":"' + (E.abdruck ? E.abdruck(png) : '?') + '","modell":';
+            if (wert !== kopf + erwarteteSerialisierung() + '}') f.push('Wert weicht von Hülle(abdruck(PNG), serialisiere(modell mit aktuellen Maßen)) ab: ' + wert.slice(0, 40));
+            var m = E.deserialisiere(lokalesModell(wert, png));
             if (!m || m.verworfen !== 0) f.push('gespeicherter Wert ungültig');
             else if (m.modell.elemente.map(function(e) { return e.typ; }).join(',') !== 'strich,strich,strich,text') f.push('Typen ' + m.modell.elemente.map(function(e) { return e.typ; }).join(','));
         }
@@ -220,7 +238,7 @@
         B.modell.breite = B.cssWidth + 100;
         B.modell.hoehe = B.cssHeight + 50;
         B.saveDrawing();
-        var m = E.deserialisiere(lies(SCHLUESSEL + '-elemente'));
+        var m = E.deserialisiere(lokalesModell(lies(SCHLUESSEL + '-elemente'), lies(SCHLUESSEL)));
         if (!m) return { ok: false, detail: 'nichts gespeichert' };
         var soll = E.deserialisiere(E.serialisiere({ v: 1, breite: B.cssWidth, hoehe: B.cssHeight, elemente: [] })).modell;
         return (m.modell.breite === soll.breite && m.modell.hoehe === soll.hoehe) ? true :
@@ -286,7 +304,7 @@
     function lokalGestreckt() {
         ctx.oeffnen();
         setze(SCHLUESSEL, BILD.src);
-        setze(SCHLUESSEL + '-elemente', E.serialisiere(doppeltesModell()));
+        setze(SCHLUESSEL + '-elemente', huelle(BILD.src, E.serialisiere(doppeltesModell())));
         wiederOeffnen();
         var f = pruefeHalbiert();
         if (!istDunkel(pixel(150, 100))) f.push('gestreckter Strich nicht gezeichnet');
@@ -298,7 +316,7 @@
         var m = doppeltesModell();
         m.elemente.push({ id: 'e3', typ: 'kreis', x: 1, y: 1 });
         setze(SCHLUESSEL, BILD.src);
-        setze(SCHLUESSEL + '-elemente', JSON.stringify(m));
+        setze(SCHLUESSEL + '-elemente', huelle(BILD.src, JSON.stringify(m)));
         wiederOeffnen();
         return typen() === 'bild' ? true : { ok: false, detail: 'Elemente ' + typen() + ' (unvollständige Liste statt PNG)' };
     }
@@ -306,9 +324,38 @@
     function lokalUngueltigNimmtBild() {
         ctx.oeffnen();
         setze(SCHLUESSEL, BILD.src);
-        setze(SCHLUESSEL + '-elemente', '{"v":2,"elemente":[]}');
+        setze(SCHLUESSEL + '-elemente', huelle(BILD.src, '{"v":2,"elemente":[]}'));
         wiederOeffnen();
         return typen() === 'bild' ? true : { ok: false, detail: 'Elemente ' + typen() };
+    }
+
+    // ---- AP-4.fix2 (AP-4.rev F2): veraltete Liste nach einem Rückweg ----
+
+    /** Gültige Liste OHNE Hülle (Stand der Phase-4-Tests vor AP-4.fix2) -> PNG gilt. */
+    function lokalOhneHuelleNimmtBild() {
+        ctx.oeffnen();
+        setze(SCHLUESSEL, BILD.src);
+        setze(SCHLUESSEL + '-elemente', E.serialisiere(doppeltesModell()));
+        wiederOeffnen();
+        return typen() === 'bild' ? true : { ok: false, detail: 'Elemente ' + typen() + ' (Liste ohne Abdruck übernommen)' };
+    }
+
+    /** Die gespeicherte Hülle trägt den Abdruck genau des gespeicherten PNG. */
+    function lokalHuelleTraegtAbdruck() {
+        ctx.oeffnen();
+        testzeichnung();
+        B.addPage();
+        B.setTool('pen');
+        B.setColor('#000000');
+        strich(40, 300, 360, 300);
+        B.saveDrawing();
+        var f = [];
+        [SCHLUESSEL, SCHLUESSEL + ':p1'].forEach(function(k) {
+            var png = lies(k), wert = lies(k + '-elemente');
+            if (!png || !wert) { f.push(k + ': PNG oder -elemente fehlt'); return; }
+            if (!E.abdruck || wert.indexOf('{"png":"' + E.abdruck(png) + '","modell":{"v":1,') !== 0) f.push(k + ': Hülle/Abdruck falsch (' + wert.slice(0, 40) + ')');
+        });
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
     }
 
     function seitenwechselBehaeltElemente() {
@@ -537,6 +584,37 @@
         });
     }
 
+    /**
+     * AP-4.fix2: Rückweg auf eine ältere Plugin-Version. Diese überschreibt
+     * nur das PNG (cbd-board-<id>), der -elemente-Schlüssel bleibt stehen.
+     * Nach erneutem Einspielen gilt das neuere PNG (EIN Bild-Element) statt
+     * der veralteten Liste; das nächste Speichern schreibt eine frische Hülle.
+     */
+    function lokalRueckwegAltesPngGilt() {
+        ctx.oeffnen();
+        testzeichnung();
+        B.saveDrawing();
+        var alteListe = lies(SCHLUESSEL + '-elemente');
+        // ältere Version speichert eine inzwischen geänderte Tafel nur als PNG
+        setze(SCHLUESSEL, BILD.src);
+        wiederOeffnen();
+        var f = [];
+        if (!alteListe) f.push('Vorbedingung: keine Liste gespeichert');
+        if (typen() !== 'bild') f.push('nach Wiederöffnen ' + typen() + ' (veraltete Liste übernommen)');
+        return ctx.warteAuf(bildGeladen, 3000).then(function() {
+            if (!istDunkel(pixel(200, 150))) f.push('neueres PNG nicht gezeichnet');
+            B.setTool('pen');
+            B.setColor('#000000');
+            strich(40, 350, 360, 350);
+            B.saveDrawing();
+            var png = lies(SCHLUESSEL), wert = lies(SCHLUESSEL + '-elemente');
+            var m = E.deserialisiere(lokalesModell(wert, png));
+            if (!m) f.push('nach erneutem Speichern keine passende Hülle');
+            else if (m.modell.elemente.map(function(e) { return e.typ; }).join(',') !== 'bild,strich') f.push('neue Liste ' + m.modell.elemente.map(function(e) { return e.typ; }).join(','));
+            return f.length ? { ok: false, detail: f.join('; ') } : true;
+        });
+    }
+
     function altePngSeiteImSeitenwechsel() {
         ctx.oeffnen();
         setze(SCHLUESSEL + ':p1', BILD.src);
@@ -752,6 +830,8 @@
         p('AP-4.4: lokal - Elemente in kleinere Fläche gestreckt (E13)', lokalGestreckt);
         p('AP-4.4: lokal - verworfene Elemente -> PNG als Bild-Element', lokalVerworfenNimmtBild);
         p('AP-4.4: lokal - ungültige Elemente -> PNG als Bild-Element', lokalUngueltigNimmtBild);
+        p('AP-4.fix2: lokal - Liste ohne Hülle/Abdruck -> PNG als Bild-Element', lokalOhneHuelleNimmtBild);
+        p('AP-4.fix2: lokal - Hülle trägt den Abdruck des gespeicherten PNG (Seite 0 und :p1)', lokalHuelleTraegtAbdruck);
         p('AP-4.4: Seitenwechsel behält Elemente ({png, modell}), einzeln radierbar', seitenwechselBehaeltElemente);
         p('AP-4.4: Seitenwechsel - IDs nach Rückkehr eindeutig', seitenwechselNeueIdsEindeutig);
         p('AP-4.4: Zeichnung löschen entfernt auch -elemente', loeschenEntferntElemente);
@@ -774,6 +854,7 @@
                 .then(function() { return pa('AP-4.4: Server - späte Antwort nach Seitenwechsel verworfen', mitServer(serverSpaeteAntwortNachSeitenwechsel)); })
                 .then(function() { return pa('AP-4.4: Server - Strich vor der Antwort bleibt, IDs eindeutig', mitServer(serverStrichVorLadenBleibt)); })
                 .then(function() { return pa('AP-4.4: alte PNG-Seite im Seitenwechsel -> Bild-Element', altePngSeiteImSeitenwechsel); })
+                .then(function() { return pa('AP-4.fix2: lokal - Rückweg: neueres PNG gilt statt veralteter Liste, neue Hülle beim Speichern', lokalRueckwegAltesPngGilt); })
                 .then(function() { return pa('AP-4.4: mehrseitig nach Schließen/Öffnen einzeln radierbar', mehrseitigSchliessenOeffnen); })
                 .then(function() { return pa('AP-4.4: Export enthält -elemente, Zählung ohne Begleitschlüssel', exportMitElementen); })
                 .then(function() { return pa('AP-4.4: Import zählt Notizen, entfernt veraltete -elemente', importZaehltUndRaeumtAuf); })

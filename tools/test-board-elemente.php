@@ -224,6 +224,31 @@ $json = json_encode($modell, JSON_UNESCAPED_UNICODE);
 function mit_element($el) {
     return json_encode(array('v' => 1, 'breite' => 100, 'hoehe' => 100, 'elemente' => array($el)));
 }
+/**
+ * AP-4.fix2: Die Spalte elemente_data hält die Liste in einer Hülle
+ * {"png":"<md5 des gespeicherten drawing_data>","modell":<bereinigte JSON>}.
+ * Liefert das Modell (Array), wenn die Hülle stimmt und der Abdruck zum PNG
+ * passt; sonst eine Fehlerbeschreibung (String).
+ */
+function modell_aus_zeile($wert, $png) {
+    $h = json_decode((string) $wert, true);
+    if (!is_array($h) || !isset($h['png'], $h['modell']) || 2 !== count($h)) {
+        return 'keine Hülle: ' . substr((string) $wert, 0, 40);
+    }
+    if ($h['png'] !== md5((string) $png)) {
+        return 'Abdruck passt nicht zum PNG';
+    }
+    if (0 !== strpos((string) $wert, '{"png":"' . $h['png'] . '","modell":')) {
+        return 'Hülle nicht in der festen Form';
+    }
+    return $h['modell'];
+}
+
+/** Hülle so bauen, wie ajax_save_drawing() sie schreibt (für Ladeprüfungen). */
+function huelle($png, $modell_text) {
+    return '{"png":"' . md5($png) . '","modell":' . $modell_text . '}';
+}
+
 function anzahl($ergebnis) {
     if (!is_string($ergebnis)) {
         return $ergebnis;
@@ -359,7 +384,7 @@ $wpdb = $GLOBALS['wpdb'];
 $wpdb->zeile = null;
 $antwort = speichern(array('elemente_data' => geslasht($json)));
 check('B1 Antwort Erfolg', $antwort && $antwort['ok']);
-check('B2 insert enthält bereinigte JSON', $wpdb->zeile && json_decode((string) $wpdb->zeile['elemente_data'], true) === json_decode($json, true));
+check('B2 insert enthält bereinigte JSON (AP-4.fix2: in der Hülle mit Abdruck des PNG)', $wpdb->zeile && modell_aus_zeile($wpdb->zeile['elemente_data'], $wpdb->zeile['drawing_data']) === json_decode($json, true), $wpdb->zeile ? modell_aus_zeile($wpdb->zeile['elemente_data'], $wpdb->zeile['drawing_data']) : null);
 check('B3 Antwort ohne elemente_verworfen', $antwort && empty($antwort['data']['elemente_verworfen']));
 check('B4 message bleibt', $antwort && $antwort['data']['message'] === 'Zeichnung gespeichert.');
 check('B5 do_action cbd_klassenmodus_geaendert weiterhin ausgelöst', in_array('cbd_klassenmodus_geaendert', $GLOBALS['test_actions'], true));
@@ -390,7 +415,7 @@ CBD_Schema_Manager::$aufrufe = 0;
 $vorher = count($wpdb->schreibvorgaenge);
 $antwort = speichern(array('elemente_data' => geslasht($json)));
 check('B12 Spalte fehlt: ensure_columns() genau einmal', 1 === CBD_Schema_Manager::$aufrufe, CBD_Schema_Manager::$aufrufe);
-check('B13 Spalte fehlt: zweiter Versuch schreibt elemente_data', $wpdb->spalte && json_decode((string) $wpdb->zeile['elemente_data'], true) === json_decode($json, true));
+check('B13 Spalte fehlt: zweiter Versuch schreibt elemente_data (AP-4.fix2: in der Hülle)', $wpdb->spalte && modell_aus_zeile($wpdb->zeile['elemente_data'], $wpdb->zeile['drawing_data']) === json_decode($json, true));
 check('B14 Spalte fehlt: genau zwei Schreibversuche', 2 === count($wpdb->schreibvorgaenge) - $vorher);
 check('B15 Selbstheilung erfolgreich: kein elemente_verworfen', $antwort && empty($antwort['data']['elemente_verworfen']), $antwort);
 
@@ -435,10 +460,10 @@ function cache_leeren() {
 }
 
 $wpdb->spalte = true;
-$wpdb->zeile = array('id' => 1, 'drawing_data' => 'data:image/png;base64,BBBB', 'is_behandelt' => 1, 'elemente_data' => '{"v":1}');
+$wpdb->zeile = array('id' => 1, 'drawing_data' => 'data:image/png;base64,BBBB', 'is_behandelt' => 1, 'elemente_data' => huelle('data:image/png;base64,BBBB', '{"v":1}'));
 cache_leeren();
 $antwort = laden();
-check('C1 Laden liefert elemente_data', $antwort && $antwort['ok'] && $antwort['data']['elemente_data'] === '{"v":1}', $antwort);
+check('C1 Laden liefert elemente_data (AP-4.fix2: Inhalt der Hülle, Abdruck passt)', $antwort && $antwort['ok'] && $antwort['data']['elemente_data'] === '{"v":1}', $antwort);
 check('C2 Laden liefert drawing_data und is_behandelt wie bisher',
     $antwort && $antwort['data']['drawing_data'] === 'data:image/png;base64,BBBB' && true === $antwort['data']['is_behandelt']);
 
@@ -592,6 +617,76 @@ $vorher = count($wpdb->schreibvorgaenge);
 speichern(array());
 check('E7 alter Client: genau ein Schreibversuch', 1 === count($wpdb->schreibvorgaenge) - $vorher, count($wpdb->schreibvorgaenge) - $vorher);
 $wpdb->fehler_mit_elementen = false;
+
+// =========================================================================
+echo "\nF: Fingerabdruck des PNG – veraltete Liste nach einem Rückweg (AP-4.fix2, Befund F2)\n";
+// =========================================================================
+// Rückweg: Eine ältere Plugin-Version (z. B. 3.1.138) schreibt nur
+// drawing_data und updated_at; elemente_data bleibt stehen. Nach erneutem
+// Einspielen darf die alte Liste das neuere PNG nicht überdecken.
+
+$wpdb->spalte = true;
+$wpdb->reparierbar = true;
+$wpdb->zeile = null;
+cache_leeren();
+$png_neu = 'data:image/png;base64,TkVV';
+speichern(array('drawing_data' => $png_neu, 'elemente_data' => geslasht($json)));
+$roh_spalte = (string) $wpdb->zeile['elemente_data'];
+check('F1 Speichern legt Hülle {"png":md5(drawing_data),"modell":…} ab',
+    0 === strpos($roh_spalte, '{"png":"' . md5($png_neu) . '","modell":{') && '}' === substr($roh_spalte, -1), substr($roh_spalte, 0, 60));
+check('F2 Modell in der Hülle = bereinigte JSON (Elementmodell v1 unverändert)',
+    modell_aus_zeile($roh_spalte, $png_neu) === json_decode($json, true));
+
+$antwort = laden();
+check('F3 Laden: Abdruck passt -> elemente_data = bereinigte JSON OHNE Hülle',
+    $antwort && $antwort['ok'] && is_string($antwort['data']['elemente_data'])
+    && json_decode($antwort['data']['elemente_data'], true) === json_decode($json, true)
+    && 0 === strpos($antwort['data']['elemente_data'], '{"v":1,'), $antwort ? substr((string) $antwort['data']['elemente_data'], 0, 60) : null);
+
+// Ältere Plugin-Version überschreibt nur das PNG
+$wpdb->zeile['drawing_data'] = 'data:image/png;base64,QUxURVZFUlNJT04=';
+$antwort = laden();
+check('F4 Rückweg: PNG von älterer Version geändert -> elemente_data = null',
+    $antwort && $antwort['ok'] && null === $antwort['data']['elemente_data'], $antwort ? $antwort['data']['elemente_data'] : null);
+check('F5 ... drawing_data = das neuere PNG (wird Bild-Element)',
+    $antwort && $antwort['data']['drawing_data'] === 'data:image/png;base64,QUxURVZFUlNJT04=');
+
+// Neues Speichern nach dem Rückweg: frische Hülle, wieder ladbar
+speichern(array('drawing_data' => $png_neu, 'elemente_data' => geslasht($json)));
+$antwort = laden();
+check('F6 erneut gespeichert -> Liste wieder geladen',
+    $antwort && is_string($antwort['data']['elemente_data']) && json_decode($antwort['data']['elemente_data'], true) === json_decode($json, true));
+
+// Werte ohne Hülle (Phase-4-Teststände vor AP-4.fix2) gelten als ungültig
+$wpdb->zeile['elemente_data'] = $json;
+$antwort = laden();
+check('F7 Wert ohne Hülle -> null', $antwort && null === $antwort['data']['elemente_data'], $antwort ? substr((string) $antwort['data']['elemente_data'], 0, 40) : null);
+
+// Kaputte Hüllen
+foreach (array(
+    'abgeschnitten' => substr(huelle($png_neu, $json), 0, -1),
+    'Abdruck kein md5' => '{"png":"xyz","modell":' . $json . '}',
+    'Abdruck Großbuchstaben' => '{"png":"' . strtoupper(md5($png_neu)) . '","modell":' . $json . '}',
+    'Leerzeichen in der Hülle' => '{"png": "' . md5($png_neu) . '","modell":' . $json . '}',
+    'leer' => '',
+) as $fall => $wert) {
+    $wpdb->zeile['elemente_data'] = $wert;
+    $antwort = laden();
+    check("F8 Hülle $fall -> null", $antwort && null === $antwort['data']['elemente_data'], $antwort ? substr((string) $antwort['data']['elemente_data'], 0, 40) : null);
+}
+
+// Zeile ohne PNG (leere Tafel) mit Liste – darf nie Elemente liefern
+$wpdb->zeile['drawing_data'] = null;
+$wpdb->zeile['elemente_data'] = huelle('', $json);
+$antwort = laden();
+check('F9 drawing_data NULL -> elemente_data = null', $antwort && null === $antwort['data']['elemente_data']);
+
+// Nach Rückfall ohne Liste (AP-4.fix1) bleibt keine Hülle stehen
+$wpdb->zeile = null;
+$wpdb->fehler_mit_elementen = true;
+speichern(array('drawing_data' => $png_neu, 'elemente_data' => geslasht($json)));
+$wpdb->fehler_mit_elementen = false;
+check('F10 Schreibfehler-Rückfall: Spalte NULL, keine Hülle', $wpdb->zeile && null === $wpdb->zeile['elemente_data']);
 
 echo "\nErgebnis: {$GLOBALS['oks']} OK, {$GLOBALS['fails']} FAIL\n";
 exit($GLOBALS['fails'] > 0 ? 1 : 0);
