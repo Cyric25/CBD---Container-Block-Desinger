@@ -1,4 +1,4 @@
-/* Testlogik für tools/test-board-zeiger.html (#7149) */
+/* Testlogik für tools/test-board-zeiger.html (#7149; AP-4.0 Textmarker über Basisbild #7152) */
 (function() {
     'use strict';
 
@@ -761,7 +761,304 @@
         return xs === '100,110,120,130' ? true : { ok: false, detail: 'Punkte x=' + xs };
     }
 
+    // ------------------------------------------------------------------
+    // AP-4.0 (#7152): Textmarker über alter Schrift (Basisbild einer wieder
+    // geöffneten Tafel bzw. einer zurückgeholten Seite). Vor 3.1.138 lag der
+    // deckende Marker (lighten) ÜBER dem Basisbild und überdeckte dessen
+    // Schrift nach dem pointerup-Neuzeichnen.
+    // ------------------------------------------------------------------
+    var BASIS = {};          // vorab geladene Basisbilder: { schwarz, hellblau } (Image, complete)
+    var BASIS_URL = {};      // dieselben Bilder als data-URL (für den echten Ladeweg)
+    var HELLBLAU = [79, 195, 247]; // #4fc3f7 - helle "Kreide" auf dunkler Tafel
+
+    // Senkrechter Strich bei x=200 (y 40..300), transparenter Grund - wie das
+    // gespeicherte PNG der Zeichenebene (Tafelfarbe liegt auf eigener Ebene).
+    function basisbildUrl(farbe, b, h) {
+        var c = document.createElement('canvas');
+        c.width = b;
+        c.height = h;
+        var ctx = c.getContext('2d');
+        ctx.strokeStyle = farbe;
+        ctx.lineWidth = 8;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(200, 40);
+        ctx.lineTo(200, 300);
+        ctx.stroke();
+        return c.toDataURL('image/png');
+    }
+
+    function bildLaden(url) {
+        return new Promise(function(fertig, fehler) {
+            var img = new Image();
+            img.onload = function() { fertig(img); };
+            img.onerror = function() { fehler(new Error('Basisbild nicht ladbar')); };
+            img.src = url;
+        });
+    }
+
+    function basisbilderVorbereiten() {
+        oeffnen();
+        var b = Math.round(B.cssWidth || B.drawingCanvas.width);
+        var h = Math.round(B.cssHeight || B.drawingCanvas.height);
+        schliessen();
+        BASIS_URL.schwarz = basisbildUrl('#000000', b, h);
+        BASIS_URL.hellblau = basisbildUrl('#4fc3f7', b, h);
+        return Promise.all([bildLaden(BASIS_URL.schwarz), bildLaden(BASIS_URL.hellblau)]).then(function(bilder) {
+            BASIS.schwarz = bilder[0];
+            BASIS.hellblau = bilder[1];
+        });
+    }
+
+    function pixel(x, y) {
+        var dpr = B.dpr || 1;
+        return B.drawingCtx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+    }
+
+    function rgbaText(px) {
+        return Array.prototype.join.call(px, ',');
+    }
+
+    // Tafel öffnen und ein Basisbild setzen, wie es loadFromCache()/
+    // loadFromServer()/goToPage() nach dem onload hinterlassen
+    function oeffnenMitBasis(bild, tafelfarbe) {
+        oeffnen();
+        if (tafelfarbe) B.setBoardColor(tafelfarbe);
+        B.baseImageObj = bild;
+        B.redrawAllStrokes();
+    }
+
+    // Waagrechter Textmarker-Strich quer über den Basisbild-Strich (x=200)
+    function markerQuer(y, ohnePointerup) {
+        B.setTool('highlighter');
+        B.setColor('#ffff00');
+        zeiger('pointerdown', 3, 'pen', 100, y);
+        zeiger('pointermove', 3, 'pen', 300, y);
+        if (!ohnePointerup) zeiger('pointerup', 3, 'pen', 300, y);
+    }
+
+    function istDunkel(px) {
+        return px[3] > 200 && px[0] < 80 && px[1] < 80 && px[2] < 80;
+    }
+
+    function istHellblau(px) {
+        return px[3] > 200 && Math.abs(px[0] - HELLBLAU[0]) <= 30 &&
+            Math.abs(px[1] - HELLBLAU[1]) <= 30 && Math.abs(px[2] - HELLBLAU[2]) <= 30;
+    }
+
+    function markerWeissTafel() {
+        oeffnenMitBasis(BASIS.schwarz, '#ffffff');
+        if (!istDunkel(pixel(200, 150))) return { ok: false, detail: 'Basisbild nicht gezeichnet: ' + rgbaText(pixel(200, 150)) };
+        markerQuer(150);
+        var px = pixel(200, 150);
+        return istDunkel(px) ? true : { ok: false, detail: 'Schrift unter Textmarker überdeckt: rgba ' + rgbaText(px) };
+    }
+
+    function markerDunkleTafel() {
+        oeffnenMitBasis(BASIS.hellblau, '#1c1c1c');
+        if (!istHellblau(pixel(200, 150))) return { ok: false, detail: 'Basisbild nicht gezeichnet: ' + rgbaText(pixel(200, 150)) };
+        markerQuer(150);
+        var px = pixel(200, 150);
+        return istHellblau(px) ? true : { ok: false, detail: 'helle Schrift vom Textmarker verfälscht: rgba ' + rgbaText(px) + ' (erwartet ca. ' + HELLBLAU.join(',') + ',255)' };
+    }
+
+    function markerFreieBereicheSichtbar() {
+        oeffnenMitBasis(BASIS.schwarz, '#ffffff');
+        markerQuer(150);
+        var frei = pixel(150, 150), frei2 = pixel(260, 150);
+        var ausserhalb = pixel(200, 80); // Basisbild-Strich außerhalb des Markers
+        var f = [];
+        if (!(frei[3] === 255 && frei[0] > 200 && frei[1] > 200)) f.push('Marker bei 150/150: ' + rgbaText(frei));
+        if (!(frei2[3] === 255 && frei2[0] > 200 && frei2[1] > 200)) f.push('Marker bei 260/150: ' + rgbaText(frei2));
+        if (!istDunkel(ausserhalb)) f.push('Basisbild bei 200/80: ' + rgbaText(ausserhalb));
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    function sitzungsStiftUeberMarker() {
+        oeffnenMitBasis(BASIS.schwarz, '#ffffff');
+        B.setTool('pen');
+        B.setColor('#d00000');
+        zeiger('pointerdown', 3, 'pen', 250, 40);
+        zeiger('pointermove', 3, 'pen', 250, 300);
+        zeiger('pointerup', 3, 'pen', 250, 300);
+        markerQuer(150);
+        var px = pixel(250, 150);
+        var alt = pixel(200, 150);
+        var f = [];
+        if (!(px[3] > 200 && px[0] > 150 && px[1] < 80 && px[2] < 80)) f.push('Sitzungs-Stift bei 250/150: ' + rgbaText(px));
+        if (!istDunkel(alt)) f.push('Basisbild-Schrift bei 200/150: ' + rgbaText(alt));
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    function basisSichtbarWaehrendZiehen() {
+        oeffnenMitBasis(BASIS.schwarz, '#ffffff');
+        markerQuer(150, true);
+        var px = pixel(200, 150);
+        zeiger('pointerup', 3, 'pen', 300, 150);
+        return istDunkel(px) ? true : { ok: false, detail: 'während des Ziehens überdeckt: rgba ' + rgbaText(px) };
+    }
+
+    // Verfahren aus 3.1.137 (redrawAllStrokes vor #7152), unverändert
+    // übernommen - Referenz für "ohne Basisbild pixelgleich"
+    function neuzeichnen137() {
+        var ctx = B.drawingCtx;
+        ctx.clearRect(0, 0, B.drawingCanvas.width, B.drawingCanvas.height);
+        if (B.baseImageObj && B.baseImageObj.complete) {
+            ctx.drawImage(B.baseImageObj, 0, 0, B.cssWidth || B.drawingCanvas.width, B.cssHeight || B.drawingCanvas.height);
+        }
+        var alle = B.strokes.slice();
+        var i, j, s;
+        for (i = 0; i < alle.length; i++) {
+            s = alle[i];
+            if (s.tool !== 'highlighter' || s.points.length < 1) continue;
+            ctx.lineWidth = s.width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            ctx.strokeStyle = s.color;
+            ctx.globalCompositeOperation = 'lighten';
+            ctx.beginPath();
+            ctx.moveTo(s.points[0].x, s.points[0].y);
+            for (j = 1; j < s.points.length; j++) ctx.lineTo(s.points[j].x, s.points[j].y);
+            ctx.stroke();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+        for (i = 0; i < alle.length; i++) {
+            s = alle[i];
+            if (s.tool === 'highlighter' || s.tool === 'text' || s.points.length < 1) continue;
+            ctx.lineWidth = s.width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            ctx.strokeStyle = s.color;
+            ctx.beginPath();
+            ctx.moveTo(s.points[0].x, s.points[0].y);
+            for (j = 1; j < s.points.length; j++) ctx.lineTo(s.points[j].x, s.points[j].y);
+            ctx.stroke();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+        for (i = 0; i < alle.length; i++) {
+            s = alle[i];
+            if (s.tool !== 'text') continue;
+            var fs = Math.round(16 + s.width * 4);
+            ctx.font = fs + 'px sans-serif';
+            ctx.fillStyle = s.color;
+            ctx.textBaseline = 'top';
+            var zeilen = s.text.split('\n');
+            for (j = 0; j < zeilen.length; j++) ctx.fillText(zeilen[j], s.points[0].x, s.points[0].y + j * fs * 1.2);
+        }
+    }
+
+    function ohneBasisbildPixelgleich137() {
+        oeffnen();
+        B.setTool('pen');
+        B.setColor('#000000');
+        zeiger('pointerdown', 3, 'pen', 40, 120);
+        zeiger('pointermove', 3, 'pen', 360, 120);
+        zeiger('pointerup', 3, 'pen', 360, 120);
+        B.setTool('highlighter');
+        B.setColor('#ffff00');
+        zeiger('pointerdown', 3, 'pen', 40, 125);
+        zeiger('pointermove', 3, 'pen', 360, 130);
+        zeiger('pointerup', 3, 'pen', 360, 130);
+        B.setColor('#00ff00');
+        zeiger('pointerdown', 3, 'pen', 200, 60);
+        zeiger('pointermove', 3, 'pen', 210, 260);
+        zeiger('pointerup', 3, 'pen', 210, 260);
+        B.strokes.push({ tool: 'text', color: '#1565c0', width: 3, text: 'Na+ Cl-\nzweite', points: [{ x: 150, y: 110 }] });
+        B.setTool('pen');
+        B.setColor('#d00000');
+        zeiger('pointerdown', 3, 'pen', ZICKZACK[0][0], ZICKZACK[0][1]);
+        for (var i = 1; i < ZICKZACK.length; i++) zeiger('pointermove', 3, 'pen', ZICKZACK[i][0], ZICKZACK[i][1]);
+        zeiger('pointerup', 3, 'pen', ZICKZACK[ZICKZACK.length - 1][0], ZICKZACK[ZICKZACK.length - 1][1]);
+        if (B.baseImageObj) return { ok: false, detail: 'unerwartetes Basisbild' };
+        B.redrawAllStrokes();
+        var neu = bildDaten();
+        neuzeichnen137();
+        var alt = bildDaten();
+        // Toleranz 8 je Kanal wie pixelAbweichung() der AP-2.3-Prüfungen:
+        // Chromium rastert Text bei wiederholtem fillText nicht bitgenau
+        // gleich (gemessen ±1 an 19 Kanalwerten bei zweimal demselben
+        // redrawAllStrokes()) - das ist kein Unterschied der Verfahren.
+        var d = pixelAbweichung(neu, alt);
+        return d.anzahl === 0 ? true : { ok: false, detail: d.anzahl + ' Pixel abweichend (' + (d.anteil * 100).toFixed(3) + ' %)' };
+    }
+
+    // ---- asynchron: echte Ladewege (Image.onload) ----
+    function warteAuf(bedingung, ms) {
+        return new Promise(function(fertig, fehler) {
+            var start = Date.now();
+            (function runde() {
+                var ok = false;
+                try { ok = bedingung(); } catch (e) { ok = false; }
+                if (ok) return fertig();
+                if (Date.now() - start > ms) return fehler(new Error('Zeitüberschreitung (' + ms + ' ms)'));
+                setTimeout(runde, 10);
+            })();
+        });
+    }
+
+    function pruefeAsync(name, fn) {
+        return Promise.resolve().then(fn).then(function(r) {
+            var ok = r === true || (r && r.ok === true);
+            ergebnisse.push({ name: name, ok: ok, detail: (r && r.detail) ? r.detail : (ok ? '' : 'Bedingung nicht erfüllt') });
+        }, function(e) {
+            ergebnisse.push({ name: name, ok: false, detail: 'Ausnahme: ' + (e && e.message ? e.message : e) });
+        }).then(function() {
+            try { schliessen(); } catch (e2) {}
+        });
+    }
+
+    // Wieder geöffnete "Eigene Notiz": PNG im localStorage, open() -> loadFromCache()
+    function wiederGeoeffnet(urlName, tafelfarbe, pruefung) {
+        return function() {
+            if (B.overlay) B.destroy();
+            speicherLeeren();
+            try {
+                localStorage.setItem('cbd-board-' + CID, BASIS_URL[urlName]);
+                localStorage.setItem('cbd-board-' + CID + '-bgcolor', tafelfarbe);
+            } catch (e) {}
+            B.open(CID, '<p>Inhalt für den Test</p>', tafelfarbe);
+            return warteAuf(function() { return !!B.baseImageObj; }, 3000).then(function() {
+                if (B.boardColor !== tafelfarbe) return { ok: false, detail: 'Tafelfarbe ' + B.boardColor };
+                markerQuer(150);
+                var px = pixel(200, 150);
+                return pruefung(px) ? true : { ok: false, detail: 'Schrift der wieder geöffneten Tafel überdeckt: rgba ' + rgbaText(px) };
+            });
+        };
+    }
+
+    // Seite 1 beschreiben, Seite 2 anlegen, zurück: Seite 1 kommt als Basisbild
+    function nachSeitenwechsel() {
+        oeffnen();
+        B.setTool('pen');
+        B.setColor('#000000');
+        zeiger('pointerdown', 3, 'pen', 200, 40);
+        zeiger('pointermove', 3, 'pen', 200, 300);
+        zeiger('pointerup', 3, 'pen', 200, 300);
+        B.addPage();
+        B.goToPage(0);
+        return warteAuf(function() { return !!B.baseImageObj; }, 3000).then(function() {
+            if (B.strokes.length !== 0) return { ok: false, detail: 'Striche nach Seitenwechsel: ' + B.strokes.length };
+            markerQuer(150);
+            var px = pixel(200, 150);
+            return istDunkel(px) ? true : { ok: false, detail: 'Schrift nach Seitenwechsel überdeckt: rgba ' + rgbaText(px) };
+        });
+    }
+
+    function laufenAp40Async() {
+        return Promise.resolve()
+            .then(function() { return pruefeAsync('AP-4.0: wieder geöffnete Tafel (weiß) - Textmarker lässt Schrift sichtbar', wiederGeoeffnet('schwarz', '#ffffff', istDunkel)); })
+            .then(function() { return pruefeAsync('AP-4.0: wieder geöffnete Tafel (schwarz) - Textmarker lässt helle Schrift sichtbar', wiederGeoeffnet('hellblau', '#1c1c1c', istHellblau)); })
+            .then(function() { return pruefeAsync('AP-4.0: wieder geöffnete Tafel (grün) - Textmarker lässt helle Schrift sichtbar', wiederGeoeffnet('hellblau', '#1a472a', istHellblau)); })
+            .then(function() { return pruefeAsync('AP-4.0: nach Seitenwechsel - Textmarker lässt Schrift sichtbar', nachSeitenwechsel); });
+    }
+
     function laufen() {
+        return basisbilderVorbereiten().then(function() {
+            laufenSync();
+            return laufenAp40Async();
+        }).then(ausgeben, function(e) {
+            ergebnisse.push({ name: 'Prüfseite: Vorbereitung/Ablauf', ok: false, detail: 'Ausnahme: ' + (e && e.message ? e.message : e) });
+            ausgeben();
+        });
+    }
+
+    function laufenSync() {
         pruefe('A: Ballen (klein) liegt auf, dann Stift', szenarioA(10));
         pruefe('A: Ballen (groß) liegt auf, dann Stift', szenarioA(40));
         pruefe('B: Stift zeichnet, Ballen (klein) setzt auf + bewegt', szenarioB(10));
@@ -807,11 +1104,22 @@
         pruefe('AP-2.3: Zoom/Pan - Segmente an richtiger Stelle', zoomPanSegmente);
         pruefe('AP-2.3: getCoalescedEvents-Punkte übernommen', coalescedPunkte);
 
+        // AP-4.0 (#7152) - synchron mit vorab geladenem Basisbild; die echten
+        // Ladewege (loadFromCache, goToPage) folgen asynchron in laufenAp40Async()
+        pruefe('AP-4.0: weiße Tafel - Textmarker über Basisbild lässt Schrift dunkel', markerWeissTafel);
+        pruefe('AP-4.0: schwarze Tafel - Textmarker über Basisbild lässt helle Schrift unverändert', markerDunkleTafel);
+        pruefe('AP-4.0: Textmarker in freien Bereichen sichtbar (mit Basisbild)', markerFreieBereicheSichtbar);
+        pruefe('AP-4.0: Sitzungs-Stift bleibt über dem Textmarker', sitzungsStiftUeberMarker);
+        pruefe('AP-4.0: Basisbild-Schrift während des Markierens sichtbar', basisSichtbarWaehrendZiehen);
+        pruefe('AP-4.0: ohne Basisbild Endbild pixelgleich zu 3.1.137', ohneBasisbildPixelgleich137);
+
         // Zusatztests späterer APs hängen sich hier ein
         if (typeof window.__zusatzTests === 'function') {
             window.__zusatzTests({ B: B, pruefe: pruefe, zeiger: zeiger, oeffnen: oeffnen, schliessen: schliessen, ergebnisse: ergebnisse });
         }
+    }
 
+    function ausgeben() {
         var tbody = document.querySelector('#ergebnis tbody');
         var ok = 0;
         ergebnisse.forEach(function(r) {
