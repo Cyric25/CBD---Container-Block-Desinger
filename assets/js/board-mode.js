@@ -1886,6 +1886,10 @@
          * bis zum pointerup: Überlappt er einen ANDEREN Textmarker, liegt der
          * neue darunter statt per lighten gemischt. Das pointerup-Neuzeichnen
          * stellt das bisherige Endbild exakt her.
+         *
+         * Seit #7152 liegt der Marker auch im Neuzeichnen UNTER dem Basis-Bild
+         * (redrawAllStrokes: Textmarker -> Basis-Bild -> Stift -> Text), so dass
+         * Zwischenstand und Endbild über alter Schrift übereinstimmen.
          */
         _segmentZeichnen: function(stroke, von, punkte) {
             if (!this.drawingCtx || !punkte.length) return;
@@ -2007,23 +2011,31 @@
             // Canvas löschen
             this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
 
-            // Basis-Bild wiederherstellen (geladene Zeichnung, dient als Undo-Basis)
-            // drawImage verwendet CSS-Koordinaten → korrekt nach Canvas-Resize
-            if (this.baseImageObj && this.baseImageObj.complete) {
-                var bw = this.cssWidth || this.drawingCanvas.width;
-                var bh = this.cssHeight || this.drawingCanvas.height;
-                this.drawingCtx.drawImage(this.baseImageObj, 0, 0, bw, bh);
-            }
-
             // Sammle alle Striche (abgeschlossen + aktuell in Bearbeitung)
             var allStrokes = this.strokes.slice(); // Kopie der abgeschlossenen Striche
             if (this.currentStroke && this.currentStroke.points.length > 0) {
                 allStrokes.push(this.currentStroke); // Füge aktuellen Strich hinzu
             }
 
-            // Zwei-Pass-Rendering: Erst Textmarkierer (unten), dann normale Striche (oben)
+            // Zeichenreihenfolge (#7152) - bitte nicht umstellen:
+            //   Pass 1 Textmarker -> Basis-Bild -> Pass 2 Stift -> Pass 3 Text
+            // Das Basis-Bild (PNG einer wieder geöffneten Tafel bzw. einer per
+            // goToPage() zurückgeholten Seite) kam früher ZUERST. Der deckende
+            // helle Marker (getLighterHighlightColor: Alpha 1.0) ersetzte dann
+            // per 'lighten' jede dunklere Stelle des Bildes - also genau die
+            // alte Schrift, die man nachträglich markieren wollte (Meldung
+            // #7152). Das PNG der Zeichenebene hat transparenten Grund (die
+            // Tafelfarbe liegt auf eigener Ebene), deshalb scheint ein Marker
+            // UNTER dem Bild überall dort durch, wo das Bild leer ist, und
+            // liegt unter dessen Schrift - bei heller wie dunkler Tafelfarbe.
+            // Passt zum inkrementellen Zeichnen ('destination-over' in
+            // _segmentZeichnen), das den Marker ebenfalls unter Bild und
+            // Striche legt. Ohne Basis-Bild ist das Ergebnis pixelgleich zur
+            // früheren Reihenfolge. Hinweis für das Elementmodell (AP-4.3):
+            // Textmarker -> Bild-Elemente -> Striche -> Texte.
 
-            // Pass 1: Textmarkierer zeichnen (untere Ebene)
+            // Pass 1: Textmarkierer zeichnen (unterste Ebene, auch unter dem Basis-Bild)
+
             for (var i = 0; i < allStrokes.length; i++) {
                 var stroke = allStrokes[i];
                 if (stroke.tool !== 'highlighter') continue; // Nur Textmarkierer
@@ -2046,8 +2058,18 @@
                 this.drawingCtx.stroke();
             }
 
-            // Pass 2: Normale Striche zeichnen (obere Ebene)
             this.drawingCtx.globalCompositeOperation = 'source-over';
+
+            // Basis-Bild wiederherstellen (geladene Zeichnung, dient als Undo-Basis)
+            // ÜBER den Textmarkern, unter den Strichen der Sitzung (#7152, s. o.).
+            // drawImage verwendet CSS-Koordinaten → korrekt nach Canvas-Resize
+            if (this.baseImageObj && this.baseImageObj.complete) {
+                var bw = this.cssWidth || this.drawingCanvas.width;
+                var bh = this.cssHeight || this.drawingCanvas.height;
+                this.drawingCtx.drawImage(this.baseImageObj, 0, 0, bw, bh);
+            }
+
+            // Pass 2: Normale Striche zeichnen (obere Ebene)
 
             for (var i = 0; i < allStrokes.length; i++) {
                 var stroke = allStrokes[i];
