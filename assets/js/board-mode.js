@@ -2604,12 +2604,34 @@
                 b: this.cssWidth || this.drawingCanvas.width,
                 h: this.cssHeight || this.drawingCanvas.height
             };
-            this.modell.elemente.unshift(el);
-            for (var i = 0; i < this.undoStapel.length; i++) {
-                this.undoStapel[i].unshift(el);
-            }
+            this._geladeneVornEinfuegen([el]);
             this.zeichneModell();
             return el;
+        },
+
+        /**
+         * Geladene Elemente (Server-/Cache-Antwort) VORN einfügen: in die
+         * aktuelle Liste, in alle Undo-Stände (Laden ist keine Nutzeraktion)
+         * und - AP-5.fix1 (AP-5.rev F1) - bei laufendem Verschieben auch in
+         * die Momentaufnahme this._ziehen.basis; sonst baute der nächste
+         * Frame bzw. das Abheben die Liste ohne sie neu, und das nächste
+         * Speichern überschriebe die Tafel ohne den geladenen Inhalt.
+         * Immer NEUE Arrays (concat), nie unshift: basis und
+         * this.modell.elemente sind vor dem ersten Frame dasselbe Array, ein
+         * unshift landete dort doppelt. Wird ein Undo-Stand ersetzt, der der
+         * Undo-Eintrag des Ziehens ist, zieht z.undoEintrag mit (der
+         * Identitätsvergleich in _ziehenBeenden() nimmt ihn bei 0 px bzw.
+         * Verwerfen wieder vom Stapel).
+         */
+        _geladeneVornEinfuegen: function(vorn) {
+            var z = this._ziehen;
+            this.modell.elemente = vorn.concat(this.modell.elemente);
+            for (var i = 0; i < this.undoStapel.length; i++) {
+                var neu = vorn.concat(this.undoStapel[i]);
+                if (z && this.undoStapel[i] === z.undoEintrag) z.undoEintrag = neu;
+                this.undoStapel[i] = neu;
+            }
+            if (z) z.basis = vorn.concat(z.basis);
         },
 
         /** true, wenn alle Bild-Elemente des Modells zeichenbereit sind. */
@@ -2893,7 +2915,11 @@
                 y0: y,
                 dx: 0,
                 dy: 0,
-                basis: this.modell.elemente,   // wird nie verändert (verschiebe() baut neu)
+                // Momentaufnahme; wird nie verändert (verschiebe() baut neu),
+                // nur ERSETZT: Jedes asynchrone Einfügen während des Ziehens
+                // (Server-Ladeantwort, Bild-Rückfall) muss auch basis pflegen
+                // - über _geladeneVornEinfuegen() (AP-5.fix1, AP-5.rev F1)
+                basis: this.modell.elemente,
                 ids: this.auswahl.slice(),
                 undoEintrag: this.undoStapel[this.undoStapel.length - 1],
                 frame: null
@@ -3569,7 +3595,7 @@
          */
         _elementeUebernehmen: function(geladen) {
             if (!this.modell) return;
-            if (!this.modell.elemente.length && !this.undoStapel.length && !this.currentStroke) {
+            if (!this.modell.elemente.length && !this.undoStapel.length && !this.currentStroke && !this._ziehen) {
                 this.modell = geladen;
                 this.zeichneModell();
                 return;
@@ -3580,10 +3606,7 @@
                 k.id = self.neueId();
                 return k;
             });
-            this.modell.elemente = vorn.concat(this.modell.elemente);
-            for (var i = 0; i < this.undoStapel.length; i++) {
-                this.undoStapel[i] = vorn.concat(this.undoStapel[i]);
-            }
+            this._geladeneVornEinfuegen(vorn); // pflegt auch _ziehen.basis (AP-5.fix1)
             this.zeichneModell();
         },
 
