@@ -887,6 +887,11 @@ html.cbd-board-offen .sidebar-toggle-btn {
     cursor: crosshair;
 }
 
+/* AP-5.2: waehrend die Auswahl gezogen wird */
+.cbd-board-canvas-drawing.cbd-board-lasso-aktiv.cbd-board-ziehen-aktiv {
+    cursor: move;
+}
+
 /* Auswahlleiste ueber dem Auswahlrahmen (Lage setzt board-mode.js,
    _auswahlLeisteAusrichten). Kind des Overlays, nicht des gezoomten
    Containers. */

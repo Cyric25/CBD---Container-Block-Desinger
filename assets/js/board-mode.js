@@ -95,6 +95,9 @@
         _lasso: null,         // Punkte [[x,y],…] der laufenden Lassolinie, sonst null
         _auswahlLeiste: null, // div.cbd-board-auswahl-leiste (Teil des Overlays)
         _auswahlFarbeWert: null,
+        // AP-5.2: laufendes Verschieben der Auswahl (siehe _ziehenBeginnen),
+        // sonst null
+        _ziehen: null,
 
         isDrawing: false,
         currentTool: 'pen',
@@ -275,6 +278,7 @@
             this.auswahl = [];
             this._lasso = null;
             this._auswahlFarbeWert = null;
+            this._ziehen = null;
 
             // Zeigerverwaltung (#7149): Stift-Vorrang gilt je Tafelsitzung
             this.activePointers.clear();
@@ -431,6 +435,7 @@
             this.auswahl = [];
             this._lasso = null;
             this._auswahlLeiste = null;
+            this._ziehen = null; // AP-5.2: ein noch offener Frame-Rückruf prüft das
             if (this.currentTool === 'lasso') {
                 this.currentTool = 'pen';
             }
@@ -596,7 +601,7 @@
                 // bewusst NICHT im .cbd-board-canvas-area (dessen touchstart-
                 // Sperre #7149 unterdrückte sonst den Klick per Finger) und
                 // nicht im Canvas-Container (würde mitgezoomt).
-                // "Löschen": Funktion folgt in AP-5.2 (auswahlLoeschen()).
+                // "Löschen": auswahlLoeschen() (AP-5.2).
                 '<div class="cbd-board-auswahl-leiste" role="toolbar" aria-label="Auswahl" style="display: none;">' +
                     '<button type="button" class="cbd-board-auswahl-knopf cbd-board-auswahl-loeschen" data-aktion="loeschen" title="Auswahl löschen">' +
                         '<span class="dashicons dashicons-trash"></span> Löschen' +
@@ -1127,7 +1132,7 @@
                     if (aktion === 'aufheben') {
                         self.auswahlAufheben();
                     } else if (aktion === 'loeschen' && typeof self.auswahlLoeschen === 'function') {
-                        self.auswahlLoeschen(); // folgt in AP-5.2
+                        self.auswahlLoeschen(); // AP-5.2
                     }
                 });
             }
@@ -1833,10 +1838,14 @@
             // Lasso (AP-5.1): Handballen-, Pinch-, Stift-Vorrang- und
             // Tastenregeln oben gelten wie beim Stift. Neue Lassolinie
             // beginnen; eine bestehende Auswahl wird dabei aufgehoben.
-            // AP-5.2: Liegt der Punkt IN der Auswahl (auswahlRahmen()),
-            // beginnt hier stattdessen das Verschieben.
+            // AP-5.2: Liegt der Punkt IN der Auswahl (auswahlRahmen(), also
+            // Vereinigungsrahmen + 8 px), beginnt stattdessen das Verschieben.
             if (this.currentTool === 'lasso') {
-                this._lassoBeginnen(this.lastX, this.lastY);
+                if (this._imAuswahlRahmen(this.lastX, this.lastY)) {
+                    this._ziehenBeginnen(this.lastX, this.lastY);
+                } else {
+                    this._lassoBeginnen(this.lastX, this.lastY);
+                }
                 this.isDrawing = true;
                 this.drawingPointerId = e.pointerId;
                 this.drawingPointerType = e.pointerType;
@@ -1933,6 +1942,12 @@
                 this._lasso = null;
                 this._auswahlZeichnen();
             }
+            // AP-5.2: laufendes Verschieben verwerfen (zweiter Finger = Zoom,
+            // Stift übernimmt den Finger) - Elemente zurück an den Start,
+            // Undo-Schritt wieder weg, Auswahl bleibt
+            if (this._ziehen) {
+                this._ziehenBeenden(false);
+            }
             this.isDrawing = false;
             this.currentStroke = null;
             this.drawingPointerId = null;
@@ -1992,7 +2007,11 @@
             // Zwischenpunkte) und die Linie auf der Auswahl-Ebene zeigen.
             // Ohne _lasso (per ESC/Werkzeugwechsel verworfen) nichts tun.
             if (this.currentTool === 'lasso') {
-                if (this._lasso) {
+                // AP-5.2: Verschieben - Gesamtverschiebung seit dem Start,
+                // angewandt im nächsten Frame (_ziehenVormerken)
+                if (this._ziehen) {
+                    this._ziehenVormerken(x, y);
+                } else if (this._lasso) {
                     var lp = this._punkteAusEreignis(e, rect);
                     for (var li = 0; li < lp.length; li++) {
                         this._lasso.push([lp[li].x, lp[li].y]);
@@ -2141,6 +2160,12 @@
                 // Lasso (AP-5.1): Polygon schließen und auswählen
                 if (this._lasso) {
                     this._lassoAbschliessen();
+                }
+
+                // AP-5.2: Verschieben abschließen (Endlage übernehmen; 0 px
+                // nimmt den Undo-Schritt wieder weg)
+                if (this._ziehen) {
+                    this._ziehenBeenden(true);
                 }
 
                 // Aktuellen Strich als Element übernehmen (außer bei Radierer).
@@ -2788,10 +2813,20 @@
         // aus drawingCanvas und enthält sie deshalb nie.
         // Aufgehoben wird die Auswahl durch: neues Lasso, Werkzeugwechsel
         // (setTool), ESC, Knopf "Auswahl aufheben", Rückgängig, Seitenwechsel
-        // (_seiteLeeren), "Zeichnung löschen", Schließen (destroy).
+        // (_seiteLeeren), "Zeichnung löschen", Schließen (destroy) und
+        // (AP-5.2) Löschen der Auswahl. Verschieben/Löschen: Abschnitt unten.
 
-        /** Auswahl und laufende Lassolinie verwerfen (Elemente bleiben). */
+        /**
+         * Auswahl und laufende Lassolinie verwerfen (Elemente bleiben). Ein
+         * laufendes Verschieben (AP-5.2) wird dabei mit der erreichten Lage
+         * abgeschlossen - so speichert ein Seitenwechsel/Schließen mitten im
+         * Ziehen, was zu sehen ist, und Strg+Z beim Ziehen nimmt genau dieses
+         * Verschieben zurück.
+         */
         auswahlAufheben: function() {
+            if (this._ziehen) {
+                this._ziehenBeenden(true);
+            }
             this.auswahl = [];
             this._lasso = null;
             this._auswahlZeichnen();
@@ -2819,6 +2854,148 @@
             } : null) : [];
             this.auswahl = ids;
             this._auswahlZeichnen();
+        },
+
+        // ---------------------------------------------
+        // Verschieben und Löschen der Auswahl (AP-5.2)
+        // ---------------------------------------------
+        //
+        // Verschieben: Ein Zeiger, der mit dem Lasso-Werkzeug INNERHALB von
+        // auswahlRahmen() (Vereinigungsrahmen + 8 px) aufsetzt, zieht die
+        // Auswahl, statt ein neues Lasso zu beginnen. Beim Aufsetzen EIN
+        // Undo-Schritt (merkeZustand) und eine Momentaufnahme der
+        // Elementliste (this._ziehen.basis). Jeder Zwischenstand entsteht aus
+        // dieser Momentaufnahme + verschiebe() mit der GESAMTEN Verschiebung
+        // seit dem Start - bitte nicht auf schrittweises Verschieben des
+        // jeweils letzten Stands umstellen: das summierte Rundungs- und
+        // Gleitkommafehler auf (Plan AP-5.2 Schritt 2: "nicht kumulativ
+        // runden"; gerundet wird nur beim Speichern, Elementmodell v1).
+        // Zwischenstände werden per requestAnimationFrame gebündelt
+        // (höchstens ein Neuzeichnen je Frame); das Abheben übernimmt die
+        // Endlage sofort. 0 px Gesamtverschiebung -> Undo-Schritt wieder weg.
+        // Grenzen: kein Einrasten; über den Rand geschobene Elemente bleiben
+        // im Modell (auch ganz außerhalb liegende - kein stilles Löschen),
+        // das PNG zeigt nur den sichtbaren Teil. Liegt die Auswahl ganz
+        // außerhalb, lässt sie sich noch löschen (Entf, Knopf) oder per
+        // Strg+Z zurückholen, aber nicht mehr greifen.
+
+        /** Liegt (x, y) (CSS-Pixel der Zeichenfläche) im Auswahlrahmen? */
+        _imAuswahlRahmen: function(x, y) {
+            var r = this.auswahlRahmen();
+            return !!r && x >= r.x && x <= r.x + r.b && y >= r.y && y <= r.y + r.h;
+        },
+
+        /** Verschieben an (x, y) beginnen: Undo-Schritt, Momentaufnahme, Leiste weg. */
+        _ziehenBeginnen: function(x, y) {
+            this.merkeZustand();
+            this._ziehen = {
+                x0: x,
+                y0: y,
+                dx: 0,
+                dy: 0,
+                basis: this.modell.elemente,   // wird nie verändert (verschiebe() baut neu)
+                ids: this.auswahl.slice(),
+                undoEintrag: this.undoStapel[this.undoStapel.length - 1],
+                frame: null
+            };
+            if (this.drawingCanvas) {
+                this.drawingCanvas.classList.add('cbd-board-ziehen-aktiv');
+            }
+            this._auswahlLeisteAusrichten(); // blendet die Leiste aus
+        },
+
+        /** Neue Zeigerlage merken, im nächsten Frame anwenden. */
+        _ziehenVormerken: function(x, y) {
+            var z = this._ziehen;
+            if (!z) return;
+            z.dx = x - z.x0;
+            z.dy = y - z.y0;
+            if (z.frame !== null) return;
+            var self = this;
+            // requestAnimationFrame bündelt auf einen Schritt je Frame. Ein
+            // Zeitgeber (50 ms) springt ein, falls der Browser keine Frames
+            // liefert (verborgener Tab/Bereich, gedrosselte Bildwiederholung) -
+            // wer zuerst kommt, wendet an und hebt den anderen auf.
+            var fertig = function() {
+                if (z.frame === null) return;
+                if (typeof window.cancelAnimationFrame === 'function' && z.frame.raf !== null) {
+                    window.cancelAnimationFrame(z.frame.raf);
+                }
+                clearTimeout(z.frame.zeit);
+                z.frame = null;
+                if (self._ziehen === z) self._ziehenAnwenden(z);
+            };
+            z.frame = {
+                raf: typeof window.requestAnimationFrame === 'function' ? window.requestAnimationFrame(fertig) : null,
+                zeit: setTimeout(fertig, 50)
+            };
+        },
+
+        /** Modell = Momentaufnahme + Gesamtverschiebung; neu zeichnen, Rahmen folgt. */
+        _ziehenAnwenden: function(z) {
+            if (!this.modell) return;
+            var m = elementeModul().verschiebe({
+                v: this.modell.v, breite: this.modell.breite, hoehe: this.modell.hoehe,
+                elemente: z.basis
+            }, z.ids, z.dx, z.dy);
+            this.modell.elemente = m.elemente;
+            this.zeichneModell();
+            this._auswahlZeichnen();
+        },
+
+        /**
+         * Verschieben beenden. uebernehmen=true: Endlage übernehmen (Abheben,
+         * Aufheben der Auswahl); false: verwerfen (Pinch, Stift übernimmt) -
+         * Elemente zurück an den Start. Ohne Gesamtverschiebung oder beim
+         * Verwerfen verschwindet der Undo-Schritt des Aufsetzens wieder.
+         */
+        _ziehenBeenden: function(uebernehmen) {
+            var z = this._ziehen;
+            if (!z) return;
+            this._ziehen = null;
+            if (z.frame !== null) {
+                if (z.frame.raf !== null && typeof window.cancelAnimationFrame === 'function') {
+                    window.cancelAnimationFrame(z.frame.raf);
+                }
+                clearTimeout(z.frame.zeit);
+                z.frame = null;
+            }
+            if (this.drawingCanvas) {
+                this.drawingCanvas.classList.remove('cbd-board-ziehen-aktiv');
+            }
+            if (!this.modell) return;
+            if (uebernehmen && (z.dx !== 0 || z.dy !== 0)) {
+                this._ziehenAnwenden(z);
+                return;
+            }
+            this.modell.elemente = z.basis;
+            var st = this.undoStapel;
+            if (st.length && st[st.length - 1] === z.undoEintrag) {
+                st.pop();
+            }
+            this.zeichneModell();
+            this._auswahlZeichnen();
+        },
+
+        /**
+         * Gewählte Elemente löschen (Knopf "Löschen", Entf/Rücktaste): EIN
+         * Undo-Schritt, danach ist die Auswahl aufgehoben. Ohne Auswahl bzw.
+         * wenn keine gewählte ID mehr im Modell steht: nichts (kein
+         * Undo-Schritt). Liefert true, wenn etwas gelöscht wurde.
+         */
+        auswahlLoeschen: function() {
+            if (!this.modell || !this.auswahl || !this.auswahl.length) return false;
+            if (this._ziehen) this._ziehenBeenden(true);
+            var neu = elementeModul().entferne(this.modell, this.auswahl).elemente;
+            if (neu.length === this.modell.elemente.length) {
+                this.auswahlAufheben();
+                return false;
+            }
+            this.merkeZustand();
+            this.modell.elemente = neu;
+            this.auswahlAufheben();
+            this.zeichneModell();
+            return true;
         },
 
         /**
@@ -2916,7 +3093,8 @@
         _auswahlLeisteAusrichten: function() {
             var leiste = this._auswahlLeiste;
             if (!leiste) return;
-            var r = (!this._lasso && this.overlay && this.drawingCanvas && this.cssWidth && this.cssHeight)
+            // AP-5.2: auch während des Verschiebens ausgeblendet
+            var r = (!this._lasso && !this._ziehen && this.overlay && this.drawingCanvas && this.cssWidth && this.cssHeight)
                 ? this.auswahlRahmen() : null;
             if (!r) {
                 leiste.style.display = 'none';
@@ -2962,6 +3140,18 @@
             } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
                 e.preventDefault();
                 this.undo();
+            } else if ((e.key === 'Delete' || e.key === 'Backspace') &&
+                       this.auswahl && this.auswahl.length) {
+                // AP-5.2: Entf/Rücktaste löschen die Auswahl - aber nie aus
+                // einem Eingabefeld heraus (Textfeld des Text-Werkzeugs,
+                // Regler): dort löschen sie Zeichen. Das Textfeld reicht seine
+                // Tasten ohnehin nicht durch (stopPropagation in
+                // openTextInput); geprüft werden Ziel UND Fokus.
+                if (this._istEingabefeld(e.target) || this._istEingabefeld(document.activeElement)) {
+                    return;
+                }
+                e.preventDefault(); // Rücktaste: keine Browser-Navigation
+                this.auswahlLoeschen();
             }
         },
 
