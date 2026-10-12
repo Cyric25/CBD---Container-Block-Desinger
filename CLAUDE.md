@@ -3870,6 +3870,28 @@ helle Marker beim Ziehen die Stiftstriche darunter (im Neuzeichnen liegt
 er UNTER den Stiftstrichen). Einzige Abweichung bis zum Abheben: über
 einem anderen Textmarker liegt der neue darunter statt per `lighten`
 gemischt. Eigene Ebene oder O(n)-Neuzeichnen waren die Alternativen.
+**Zeichenreihenfolge in `redrawAllStrokes()` (#7152, Hotfix 3.1.138) –
+bitte nicht umstellen:** Textmarker (Pass 1, `lighten` untereinander)
+→ Basisbild `baseImageObj` (`source-over`) → Stift (Pass 2) → Text
+(Pass 3). Vorher lag das Basisbild (PNG einer wieder geöffneten Tafel
+bzw. zurückgeholten Seite) UNTER dem Marker; der deckende, helle Marker
+ersetzte per `lighten` jede dunklere Stelle und löschte so die alte
+Schrift beim nächsten Neuzeichnen (`pointerup`). Das Basisbild-PNG hat
+transparenten Grund (Tafelfarbe liegt auf eigener Ebene), der Marker
+scheint also überall durch, wo das Bild leer ist, und liegt unter dessen
+Schrift – bei heller wie dunkler Tafel. Das inkrementelle
+`destination-over` hat den Marker schon immer unter das Basisbild gelegt;
+Zwischenstand und Endbild stimmen jetzt überein. Ohne Basisbild ist der
+Ablauf Zeile für Zeile der alte. **Hinweis für AP-4.3 (Elementmodell):**
+Die Reihenfolge lautet Textmarker → Bild-Elemente → Striche → Texte, NICHT
+Bild-Elemente zuerst – sonst kehrt #7152 zurück. **Bekannte Folge (G2):**
+Ein im Basisbild bereits eingebrannter (deckender) alter Textmarker liegt
+jetzt ÜBER einem neuen Marker an derselben Stelle statt per `lighten`
+gemischt (gemessen gelb alt über grün neu → 255,255,201); die Schrift
+bleibt in jedem Fall sichtbar. Das Problem verschwindet für neue Tafeln,
+sobald Marker Elemente sind (Phase 4, AP-4.3). Der Punkt-Radierer
+(#7152 Teil 2: Gelöschtes kehrt zurück) ist bewusst unberührt und wird in
+Phase 4 vektoriell gelöst.
 
 **Niedrige Bildschirmhöhe (AP-2.4).** `@media (max-height: 500px)` in
 `board-mode.css` (Abschnitt „NIEDRIGE BILDSCHIRMHÖHE", nach dem
@@ -3895,7 +3917,20 @@ Positivliste ohne `tools/`).**
   Inline-Skripte blockiert. Spielt per synthetischen `PointerEvent`s die
   Szenarien A–E, Stift-Vorrang je Öffnen, Rechts-/Mittelklick, Gestensperre,
   FABs, Listener-Lebenszyklus (3× Öffnen/Schließen: 0 Rest-Listener) und
-  die Zeitmessung samt Pixelvergleich ab (40 Prüfungen). Aufruf:
+  die Zeitmessung samt Pixelvergleich ab (seit #7152 **50 Prüfungen**, davon
+  10 zur Zeichenreihenfolge Textmarker/Basisbild; 4 davon asynchron über
+  die echten Ladewege `loadFromCache` und `addPage`+`goToPage`). Das Ergebnis
+  in `window.__zusammenfassung` steht deshalb erst NACH Abschluss der
+  asynchronen Prüfungen (`window.__laufen()` liefert ein Promise).
+  **Viewport VOR dem Laden fixieren (~1366×768):** ein Größenwechsel während
+  des Laufs streckt das Basisbild (grüne Tafel rot), und die Prüfung
+  „AP-2.3: Stift – Zwischenstand ≤ 1 %" hängt von der Fenstergröße ab (im
+  schmalen Bereich rot, auch mit 3.1.137). Die Prüfung „ohne Basisbild
+  pixelgleich zu 3.1.137" nutzt Toleranz 8 je Kanal, weil Chromium den
+  Canvas nach mehreren `getImageData`-Rücklesungen von GPU- auf
+  Software-Rasterung umstellt (nicht wegen `fillText` an sich); nach
+  Aufwärmen sind neues Verfahren und Kopie von 3.1.137 bei Toleranz 0
+  exakt 0 Pixel verschieden – die Toleranz verdeckt nichts. Aufruf:
   `http://fos.localhost:8080/wp-content/plugins/container-block-designer/tools/test-board-zeiger.html`
   (Dateien dorthin kopieren). Ergebnis in `window.__zusammenfassung` und
   `window.__ergebnisse`. **Cache-Falle:** nach dem Kopieren von
