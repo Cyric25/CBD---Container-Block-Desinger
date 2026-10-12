@@ -54,6 +54,21 @@
 
     var NUR_BILD_TEXT = 'Nur als Bild gespeichert'; // E9 / AP-4.2: Elemente nicht gespeichert
 
+    // Obergrenze der Punkte einer an den Server gesendeten Elementliste
+    // (AP-4.fix1, Befund F1). Gezählt wird wie auf dem Server die Zahl der
+    // '[' im serialisierten Text (obere Schranke der Punktzahl). Darüber
+    // sendet saveToServer() gar keine Liste - der Server verwürfe sie ohnehin
+    // (CBD_Classroom::ELEMENTE_MAX_PUNKTE, gleicher Wert, nur gemeinsam
+    // ändern; der Harnisch tools/test-board-elemente.php vergleicht beide).
+    var ELEMENTE_MAX_PUNKTE = 100000;
+
+    /** Zahl der '[' in einem Text (ohne Zwischen-Array, auch bei MB-Strings billig). */
+    function klammerZahl(text) {
+        var n = 0, i = -1;
+        while ((i = text.indexOf('[', i + 1)) !== -1) n++;
+        return n;
+    }
+
     window.CBDBoardMode = {
 
         // State
@@ -2799,7 +2814,15 @@
             // AP-4.4: Elementliste zusätzlich zum PNG (leere Tafel: '' ->
             // Server setzt elemente_data auf NULL). Das PNG bleibt die
             // maßgebliche Darstellung für Schüler, Puls und PDF (E7).
-            formData.append('elemente_data', isBlank ? '' : this._elementeSerialisiert());
+            // AP-4.fix1 (F1): Über ELEMENTE_MAX_PUNKTE gar keine Liste senden
+            // (spart Upload und Serverlast); '' setzt die Spalte auf NULL,
+            // gemeldet wird "Nur als Bild gespeichert".
+            var elementeText = isBlank ? '' : this._elementeSerialisiert();
+            var elementeZuGross = elementeText !== '' && klammerZahl(elementeText) > ELEMENTE_MAX_PUNKTE;
+            if (elementeZuGross) {
+                elementeText = '';
+            }
+            formData.append('elemente_data', elementeText);
 
             fetch(this.ajaxUrl, {
                 method: 'POST',
@@ -2810,8 +2833,10 @@
                 self.isSaving = false;
                 if (data.success) {
                     // elemente_verworfen (AP-4.2): Liste zu groß/unlesbar oder
-                    // Spalte fehlt - gespeichert wurde nur das PNG
-                    self._setSaveStatus((data.data && data.data.elemente_verworfen === true) ? NUR_BILD_TEXT : 'Gespeichert');
+                    // Spalte fehlt - gespeichert wurde nur das PNG; ebenso,
+                    // wenn der Browser die Liste gar nicht erst gesendet hat
+                    // (AP-4.fix1)
+                    self._setSaveStatus((elementeZuGross || (data.data && data.data.elemente_verworfen === true)) ? NUR_BILD_TEXT : 'Gespeichert');
 
                     // Klassen-Zuordnung als Begleitschlüssel merken (für den PDF-Export).
                     // Bewusst AUCH bei leerem Canvas (isBlank) gesetzt: Der Export soll

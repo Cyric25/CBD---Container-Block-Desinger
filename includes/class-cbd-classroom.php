@@ -55,6 +55,24 @@ class CBD_Classroom {
     const ELEMENTE_MAX_BYTES = 8000000;
 
     /**
+     * Obergrenze für die Punkte der Elementliste einer Tafel (AP-4.fix1,
+     * Befund F1 aus AP-4.rev). Gemessen wird VOR json_decode() billig die Zahl
+     * der '[' im Text – eine obere Schranke der Punktzahl (je Punkt eines,
+     * dazu eines je Strich und eines für die Liste; Bild-`daten` sind Base64
+     * und enthalten keines). Darüber wird nur das PNG gespeichert.
+     *
+     * Grund: json_decode() legt je Punkt ein eigenes PHP-Array an (~260 Byte).
+     * Ohne Grenze brauchte die Prüfung ~33 MB je MB Strich-JSON; ab ~2–2,5 MB
+     * riss die Anfrage bei memory_limit 128M samt WordPress-Grundlast mit
+     * einem Fatal ab – VOR dem Schreiben, also auch ohne PNG. An der Grenze
+     * liegt die Spitze jetzt bei ~26 MB (Harnisch tools/test-board-elemente.php,
+     * Abschnitt D; Messung mit WordPress in der Übergabenotiz AP-4.fix1).
+     * Gleicher Wert in assets/js/board-mode.js (ELEMENTE_MAX_PUNKTE): Der
+     * Browser sendet darüber gar keine Liste. Bitte nur gemeinsam ändern.
+     */
+    const ELEMENTE_MAX_PUNKTE = 100000;
+
+    /**
      * Option key for enabling/disabling the classroom system
      */
     const OPTION_ENABLED = 'cbd_classroom_enabled';
@@ -788,11 +806,22 @@ class CBD_Classroom {
 
             if (false === $ergebnis && false !== stripos((string) $wpdb->last_error, 'elemente_data')) {
                 unset($daten['elemente_data']);
-                $schreibe($daten);
+                $ergebnis = $schreibe($daten);
                 if (null !== $elemente) {
                     $elemente_verworfen = true;
                 }
             }
+        }
+
+        // Rückfall bei JEDEM anderen Schreibfehler mit Elementliste
+        // (AP-4.fix1, Befund F1 – z. B. max_allowed_packet, weil PNG und Liste
+        // in EINER Anweisung stehen): einmal ohne Liste wiederholen. Das PNG
+        // hat Vorrang (E7). elemente_data wird dabei auf NULL gesetzt, damit
+        // keine ältere Liste neben dem neuen PNG stehen bleibt.
+        if (false === $ergebnis && isset($daten['elemente_data'])) {
+            $daten['elemente_data'] = null;
+            $schreibe($daten);
+            $elemente_verworfen = true;
         }
 
         // Pulsdatei der Klasse erneuern (Vorhaben „Schneller Klassenpuls“, AP-1.5).
@@ -840,7 +869,13 @@ class CBD_Classroom {
             return false;
         }
 
+        // AP-4.fix1 (F1): zu viele Punkte -> gar nicht erst dekodieren.
+        if (substr_count($text, '[') > self::ELEMENTE_MAX_PUNKTE) {
+            return false;
+        }
+
         $daten = json_decode($text, true);
+        unset($text);
         if (!is_array($daten)
             || !array_key_exists('v', $daten) || 1 !== $daten['v']
             || !isset($daten['elemente']) || !is_array($daten['elemente'])) {
@@ -857,10 +892,19 @@ class CBD_Classroom {
         $farb_muster = '/^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}|rgba?\(\s*[0-9.]+\s*,\s*[0-9.]+\s*,\s*[0-9.]+\s*(,\s*[0-9.]+\s*)?\))$/';
         $praefix = 'data:image/png;base64,';
 
-        $bereinigt = array();
+        // Speicher sparen (AP-4.fix1, F1): Elemente einzeln abarbeiten, das
+        // dekodierte Original sofort freigeben und jedes bereinigte Element
+        // gleich als JSON-Text ablegen. So liegt nie die dekodierte UND die
+        // bereinigte Liste gleichzeitig als PHP-Arrays im Speicher (halbiert
+        // die Spitze). Ergebnis byte-gleich zu wp_json_encode() des Ganzen.
+        $teile = array();
         $ids = array();
+        $liste = $daten['elemente'];
+        unset($daten);
 
-        foreach ($daten['elemente'] as $el) {
+        foreach (array_keys($liste) as $schluessel) {
+            $el = $liste[$schluessel];
+            unset($liste[$schluessel]);
             if (!is_array($el)) {
                 continue;
             }
@@ -898,7 +942,7 @@ class CBD_Classroom {
                 if (null === $punkte) {
                     continue;
                 }
-                $bereinigt[] = array('id' => $id, 'typ' => 'strich', 'werkzeug' => $werkzeug,
+                $sauber = array('id' => $id, 'typ' => 'strich', 'werkzeug' => $werkzeug,
                     'farbe' => $farbe, 'breite' => $b, 'punkte' => $punkte);
             } elseif ('text' === $typ) {
                 $farbe = $el['farbe'] ?? null;
@@ -910,7 +954,7 @@ class CBD_Classroom {
                     || null === $b || $b <= 0 || null === $x || null === $y || !is_string($inhalt)) {
                     continue;
                 }
-                $bereinigt[] = array('id' => $id, 'typ' => 'text', 'farbe' => $farbe, 'breite' => $b,
+                $sauber = array('id' => $id, 'typ' => 'text', 'farbe' => $farbe, 'breite' => $b,
                     'text' => mb_substr($inhalt, 0, 5000, 'UTF-8'), 'x' => $x, 'y' => $y);
             } elseif ('bild' === $typ) {
                 $bild = $el['daten'] ?? null;
@@ -923,20 +967,31 @@ class CBD_Classroom {
                     || null === $x || null === $y || null === $b || null === $h || $b <= 0 || $h <= 0) {
                     continue;
                 }
-                $bereinigt[] = array('id' => $id, 'typ' => 'bild', 'daten' => $bild,
+                $sauber = array('id' => $id, 'typ' => 'bild', 'daten' => $bild,
                     'x' => $x, 'y' => $y, 'b' => $b, 'h' => $h);
             } else {
                 continue; // unbekannter typ: nur dieses Element verwerfen
             }
+            $teil = wp_json_encode($sauber);
+            if (!is_string($teil)) {
+                return false;
+            }
+            $teile[] = $teil;
             $ids[$id] = true;
+            unset($el, $sauber, $punkte, $punkte_roh, $teil);
         }
 
-        if (empty($bereinigt)) {
+        if (empty($teile)) {
             return null;
         }
 
-        $json = wp_json_encode(array('v' => 1, 'breite' => $breite, 'hoehe' => $hoehe, 'elemente' => $bereinigt));
-        return is_string($json) ? $json : false;
+        // Kopf wie bisher über wp_json_encode() (gleiche Zahlendarstellung),
+        // die leere Liste "[]}" am Ende durch die Elemente ersetzt.
+        $kopf = wp_json_encode(array('v' => 1, 'breite' => $breite, 'hoehe' => $hoehe, 'elemente' => array()));
+        if (!is_string($kopf)) {
+            return false;
+        }
+        return substr($kopf, 0, -2) . implode(',', $teile) . ']}';
     }
 
     /**
