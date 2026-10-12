@@ -455,6 +455,7 @@
     function seitenwechselBildElement() {
         ctx.oeffnen();
         B.setTool('pen');
+        B.setColor('#000000'); // Vorbedingung: currentColor überdauert das Öffnen
         strich(200, 40, 200, 300);
         B.addPage();
         var f = [];
