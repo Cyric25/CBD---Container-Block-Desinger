@@ -3917,8 +3917,9 @@ Positivliste ohne `tools/`).**
   Inline-Skripte blockiert. Spielt per synthetischen `PointerEvent`s die
   Szenarien A–E, Stift-Vorrang je Öffnen, Rechts-/Mittelklick, Gestensperre,
   FABs, Listener-Lebenszyklus (3× Öffnen/Schließen: 0 Rest-Listener) und
-  die Zeitmessung samt Pixelvergleich ab (seit #7152 **50 Prüfungen**, davon
-  10 zur Zeichenreihenfolge Textmarker/Basisbild; 4 davon asynchron über
+  die Zeitmessung samt Pixelvergleich ab (seit #7152 **50 eigene Prüfungen**,
+  seit Phase 4 insgesamt **105**, s. Abschnitt „Tafel-Elemente: Elementmodell
+  v1“; von den 50 sind 10 zur Zeichenreihenfolge Textmarker/Basisbild; 4 davon asynchron über
   die echten Ladewege `loadFromCache` und `addPage`+`goToPage`). Das Ergebnis
   in `window.__zusammenfassung` steht deshalb erst NACH Abschluss der
   asynchronen Prüfungen (`window.__laufen()` liefert ein Promise).
@@ -3953,10 +3954,10 @@ Positivliste ohne `tools/`).**
 1. `img.onload` in `loadFromCache()`/`goToPage()` greift nach `destroy()`
    auf `drawingCtx === null` zu (TypeError in der Konsole, wenn die Tafel
    vor dem Laden des Hintergrundbilds geschlossen wird; vorbestehend).
-2. Der Punkt-Radierer radiert nur Pixel; das nächste `redrawAllStrokes()`
-   (Strichbeginn, Rückgängig, Strichende) baut aus `baseImageObj + strokes`
-   neu und holt radierte Stellen zurück (vorbestehend, Kandidat für den
-   Elementmodell-Plan).
+2. _Erledigt in Phase 4 (3.1.139):_ Der Punkt-Radierer ist seit dem
+   Elementmodell vektoriell und die Radierung bleibt (Abschnitt „Tafel-
+   Elemente: Elementmodell v1“). Früher radierte er nur Pixel, und das
+   nächste `redrawAllStrokes()` holte radierte Stellen zurück.
 3. Das O(n)-Neuzeichnen beim `pointerdown` (einmal je Strich) blieb
    (G7): Bei vielen Strichen kostet jeder Strichbeginn ~27 ms (Desktop),
    auf älteren iPads mehr; der Strichanfang erscheint verzögert, Punkte
@@ -3978,6 +3979,234 @@ Import-Map für `@wordpress/interactivity`. Der Knopf „Tafel-Modus" öffnet
 dort deshalb gar nicht. Getestet wurde über den direkten Aufruf
 `CBDBoardMode.open(containerId, html, '#ffffff', options)` – derselbe
 Aufruf wie in `interactivity-fallback.js`.
+
+## Tafel-Elemente: Elementmodell v1 (#7152, `PLAN-Rueckmeldungen-Klassenmodus-und-Tafel-Lasso.md`, Phase 4, 2026-10-12, Plugin 3.1.139)
+
+Die Tafel (`board-mode.js`) hält Gezeichnetes nicht mehr als Pixel plus
+`strokes[]`, sondern als **Liste von Elementen** (Striche, Textmarker-Striche,
+Texte, Bild-Elemente). Eine wieder geöffnete Tafel ist deshalb Element für
+Element bearbeitbar; der Punkt-Radierer ist vektoriell. Das Lasso (Phase 5)
+baut auf diesem Modell auf.
+
+### Das Format (Version 1)
+
+Verbindlich im Plan, Abschnitt 4 „Elementmodell v1": `{"v":1,"breite":…,
+"hoehe":…,"elemente":[…]}`. Elementtypen `strich` (`werkzeug` `pen` oder
+`highlighter`, `farbe`, `breite`, `punkte [[x,y],…]`), `text` (`text`, `x`,
+`y`, `farbe`, `breite` = Stiftbreite; Schrift `Math.round(16 + breite*4)` px,
+Zeilenhöhe 1,2, `textBaseline 'top'`) und `bild` (`daten` = PNG-data-URL, `x`,
+`y`, `b`, `h`). Koordinaten in CSS-Pixeln der Zeichenfläche, auf zwei
+Nachkommastellen gerundet; IDs `e<Zahl>`. Unbekannte Felder fallen beim Prüfen
+weg, ein ungültiges Element verwirft nur sich selbst.
+
+**Das PNG bleibt die maßgebliche Darstellung (E7).** Schüleransicht,
+Live-Aktualisierung (Klassenpuls), Blockanzeige und PDF-Export lesen
+ausschließlich das PNG (`drawing_data` bzw. `localStorage['cbd-board-<id>']`)
+und wissen nichts von Elementen. Bei jedem Speichern entsteht das PNG aus den
+Elementen neu; die Elementliste ist eine ZUSÄTZLICHE Bearbeitungsquelle. Im
+Abschnitt „PDF-Export: Tafelbilder und eigene Notizen" gilt weiter: der Export
+liest nur das PNG, nie `-elemente`/`elemente_data`.
+
+### Module und Dateien
+
+- `assets/js/board-elemente.js` – reines, DOM-freies Modul
+  `window.CBDBoardElemente` (Prüfen, Umwandeln, Rahmen, Lasso-Test, Verschieben,
+  Radieren, Skalieren, Serialisieren, `abdruck`/`verpacke`/`entpacke`). Lädt
+  vor `board-mode.js` (`class-cbd-style-loader.php`). **Kein Zugriff auf
+  Dokument, `localStorage` oder Canvas – auch nicht in Kommentaren**, der
+  Harnisch prüft den Quelltext darauf.
+- `assets/js/board-mode.js` – Zustand `this.modell`, `this.undoStapel`,
+  `zeichneModell()` (Alias `redrawAllStrokes()`), Speichern/Laden.
+- `includes/class-cbd-classroom.php` – `pruefe_elemente_json()`,
+  `elemente_huelle()`, `elemente_aus_huelle()`, `ajax_save_drawing()`,
+  `ajax_load_drawing()`.
+- `assets/js/personal-notes-manager.js` – Export/Import/Löschen/Zählung.
+
+### Speicherorte
+
+| Weg | Wo | Was |
+|---|---|---|
+| Klassen-Tafel (Server) | Spalte `{prefix}cbd_drawings.elemente_data` (`longtext NULL`) | Hülle (s. u.); nur von `ajax_save_drawing()` geschrieben, nur von `ajax_load_drawing()` gelesen (Lehrer: Nonce + `cbd_edit_blocks` + `can_access_class()`). Alle anderen Abfragen der Tabelle nennen ihre Spalten ausdrücklich – Schüler- und PDF-Pfade bekommen **nie** Elemente. |
+| Eigene Notizen (lokal) | `localStorage['<PNG-Schlüssel>-elemente']`, also `cbd-board-<id>-elemente` bzw. `cbd-board-<id>:pN-elemente` | Hülle; Begleitschlüssel wie `-bgcolor`/`-classid`. |
+| Mehrseitig, im Speicher | `pageCache[i] = {png, modell}` | Eigene Kopie der Liste je Seite, Undo-Stapel je Seite leer. |
+
+**Speicherhülle (AP-4.fix2):** Gespeichert wird `{"png":"<Abdruck des PNG>",
+"modell":<Modell v1>}`. Server: `md5(drawing_data)`; lokal:
+`CBDBoardElemente.abdruck()` = `<Länge>-<FNV-1a 32 Bit, 8 Hex>` (synchron,
+ES5 ohne `Math.imul`; `crypto.subtle` ist asynchron und auf `http://` nicht
+verfügbar; ~50 ms für ein 3-MB-PNG). **Zweck:** Eine ältere Plugin-Version
+(Rollback auf 3.1.138) schreibt nur das PNG und lässt die Liste stehen. Nach
+erneutem Einspielen passt der Abdruck nicht mehr zum PNG → die Liste gilt als
+veraltet, das aktuelle PNG wird als Bild-Element geladen (E10), das nächste
+Speichern legt eine frische Hülle an. Werte ohne Hülle (Phase-4-Testbestände)
+und kaputte Hüllen gelten genauso als ungültig. Der Server schickt dem
+Browser nur das nackte Modell (Prüfung von Kopf und Ende per `strncmp`, ohne
+die Liste zu dekodieren). md5/FNV sind „gleich oder geändert", keine
+Fälschungssicherung.
+
+### Alte Tafeln: ein Bild-Element (E10)
+
+PNG ohne passende Elementliste wird beim Laden EIN Element `bild` (0/0, volle
+Fläche). Es ist als Ganzes verschieb-/löschbar (Phase 5); der **Punkt-Radierer
+radiert in seinem Bitmap** (Offscreen-Canvas in Quellauflösung,
+`destination-out`, beim Abheben neues Element mit `toDataURL`), der
+**Strich-Radierer ignoriert Bild-Elemente** (er löschte sonst mit einer
+Berührung die ganze alte Tafel). Zeichenreihenfolge in `zeichneModell()`
+(**bitte nicht umstellen, #7152**): Textmarker → Bild-Elemente → Stift → Text.
+
+### Radierer, Undo, Streckung
+
+- **Punkt-Radierer (E11) ist vektoriell:** `radiereKreis` schneidet aus
+  Strichen die Teile im Radierkreis heraus (Segment-Kreis-Schnitt) und teilt
+  den Strich in mehrere Striche; Radius `r + breite/2`, Zwischenpunkte im
+  Abstand `r/2`; Texte, deren Rahmen den Mittelpunkt enthält, werden
+  gelöscht. Behebt den Altfehler „Punkt-Radierung kehrt nach Rückgängig oder
+  Strich-Radieren zurück".
+- **Strich-Radierer misst zum Linienzug** (`_abstandZumLinienzug`), nicht nur
+  zu den Stützpunkten – sonst sind lange Segmente in der Mitte nicht
+  treffbar.
+- **Undo als Momentaufnahme (E12):** `merkeZustand()` legt vor jeder
+  verändernden Geste eine flache Kopie der Elementliste auf einen Stapel
+  (`UNDO_MAX` 50; Elemente selbst werden nie verändert). Strich/Textmarker
+  werden beim ÜBERNEHMEN in `onPointerUp` gemerkt, Radiergesten erst beim
+  ersten Treffer (`_merkeEinmal`).
+- **Streckung (E13):** Beim Laden werden Elemente auf die aktuelle
+  Zeichenfläche gestreckt (x mit `cssWidth/breite`, y mit
+  `cssHeight/hoehe`; Strichbreite und Schrift mit dem Mittel beider
+  Faktoren). Gespeichert wird mit den AKTUELLEN `cssWidth/cssHeight` – wer in
+  einem schmalen Fenster speichert, rundet die ganze Tafel auf diese Größe.
+
+### Größen und Grenzen (Betrieb!)
+
+- **Serverseitig:** `CBD_Classroom::ELEMENTE_MAX_BYTES` = 8 000 000 (Größe
+  nach `wp_unslash`) und `ELEMENTE_MAX_PUNKTE` = 100 000 (vorab geschätzt mit
+  `substr_count($text, '[')`, billig, vor `json_decode`). Darüber:
+  `pruefe_elemente_json()` liefert `false` → es wird NUR das PNG gespeichert,
+  `elemente_data` bleibt/wird NULL, die Antwort trägt `elemente_verworfen:
+  true`, der Client zeigt „Nur als Bild gespeichert". Das PNG hat immer
+  Vorrang (E7): Scheitert das Schreiben aus IRGENDEINEM Grund (z. B.
+  `max_allowed_packet`) mit Liste, wird einmal mit `elemente_data = NULL`
+  wiederholt (nicht weglassen, sonst bliebe eine ältere Liste neben dem neuen
+  PNG stehen).
+- **Speicherbedarf (F1):** Die Prüfung brauchte ursprünglich ~33 MB je MB
+  Strich-JSON; sie arbeitet jetzt Element für Element (Spitze an der
+  100 000-Punkte-Grenze ~26 MB, darüber ~4 MB). Gemessen auf der
+  Testinstallation (echte `admin-ajax.php`, 128M festgehalten): vorher 4 MB
+  Strich-JSON → Fatal und PNG verloren, nachher bis 7,8 MB ≤ 38 MB Spitze.
+  **`memory_limit` der Testinstallation ist effektiv 256M:** UpdraftPlus
+  hebt es beim Laden von `admin-ajax.php` auf `WP_MAX_MEMORY_LIMIT` an. Auf
+  der Produktion im KAS nachsehen, ob das gleich ist; die Grenzen sind für
+  128M ausgelegt.
+- **Client (nur Server-Weg):** `board-mode.js` hat dieselbe Konstante
+  `ELEMENTE_MAX_PUNKTE` (Helfer `klammerZahl()`); darüber wird `''` gesendet
+  (spart Upload und Serverlast). Der Harnisch prüft, dass JS- und
+  PHP-Konstante gleich sind – nur gemeinsam ändern. Lokal begrenzt die Quota,
+  keine Punktgrenze.
+- **Lokal (F3, E9):** Der `localStorage` hat ~5 MB je Herkunft, geteilt mit
+  der ganzen Website. Ein wieder geöffnetes altes PNG steckt als
+  Bild-Element ein zweites Mal in `-elemente` (bis zu doppelter Bedarf).
+  `saveToCache()` schreibt das PNG über `_pngLokalSchreiben()`: scheitert
+  `setItem`, werden zuerst die `-elemente`-Schlüssel ANDERER Notizen/Seiten
+  entfernt (entbehrlich, das PNG ist maßgeblich), dann ggf. die eigene alte
+  Liste, jeweils mit erneutem Versuch. PNGs anderer Notizen werden nie
+  angetastet. Scheitert alles, bleibt der alte Stand unverändert und die
+  Statusanzeige meldet **„Nicht gespeichert – Speicher voll"**. Scheitert nur
+  der Elementschlüssel: PNG bleibt, Status „Nur als Bild gespeichert". **Die
+  Meldung ist beim Speichern über `close()` praktisch unsichtbar** (das Overlay
+  verschwindet nach 200 ms); sichtbar ist sie beim Seitenwechsel innerhalb der
+  Tafel. Ein dauerhafter Hinweis (Toast) wäre ein eigenes Folge-AP.
+
+### Spalte `elemente_data`: Anlage und Selbstheilung (R5)
+
+Dreifach abgesichert, weil dbDelta bei diesem Projekt keine Spalten
+nachträgt: (1) `CBD_Schema_Manager::get_required_columns()` +
+`ensure_columns()`; (2) `run_updates()` in `container-block-designer.php`
+ruft `ensure_columns()` für `from_version < '3.1.139'` – bewusst 3.1.139 (=
+die Phase-4-Version, weil 3.1.138 der Hotfix #7152 ist; eine zu HOHE Schwelle
+schadet nicht, eine zu niedrige ließe die Spalte fehlen; AP-4.doc hat sie
+gegen die ZIP-Version geprüft); (3) `ajax_save_drawing()` heilt eine fehlende
+Spalte selbst (erkennt „Unknown column 'elemente_data'" in `$wpdb->last_error`,
+ruft `ensure_columns()` einmal und wiederholt; gelingt das nicht: nur PNG +
+`elemente_verworfen`). „Container Designer → Datenbank reparieren" meldet die
+Spalte ebenfalls. **Selbstheilung am echten MariaDB belegt (AP-4.doc):** Spalte
+gedroppt, Option `cbd_plugin_version` auf 3.1.139 gelassen, als Lehrperson
+gespeichert → Spalte wieder da, Antwort ohne `elemente_verworfen`.
+
+### Export, Import, Zählung (`personal-notes-manager.js`, `board-mode.js`)
+
+Der Präfixfilter `cbd-board-` erfasst `-elemente` automatisch (Export enthält
+ihn, „Alle löschen" löscht ihn). **Gezählt** („N Notizen") werden nur Notizen:
+ohne `-elemente`, `-bgcolor`, `-classid` und `cbd-board-pagecount-`
+(`istNotizSchluessel()` bzw. `istTafelSchluessel()`, gleiche Regel in beiden
+Dateien). Importiert eine ältere Exportdatei eine Notiz OHNE `-elemente`,
+wird ein lokal vorhandener `-elemente`-Schlüssel derselben Notiz entfernt –
+sonst überdeckte die alte Liste das importierte PNG. Die Hülle wird beim
+Export/Import als undurchsichtiger Wert mitgenommen.
+
+### Rollback (präzisiert nach AP-4.fix2)
+
+Rückweg = altes Plugin-ZIP (3.1.138) einspielen. Die Spalte `elemente_data`
+und lokale `-elemente`-Schlüssel dürfen stehen bleiben; **ein Rückbau ist
+nicht nötig und auch keine SQL-Anweisung.** Die alte Version schreibt nur das
+PNG; wird Phase 4 später erneut eingespielt, erkennt der Abdruck die
+veralteten Listen, das neuere PNG gilt (als Bild-Element), Zeichnungen aus der
+Zwischenzeit gehen nicht verloren. Ein Byte für Byte unverändert wieder
+gespeichertes PNG behält seine Liste (sie passt ja). Verloren ginge nur die
+Einzelbearbeitbarkeit der in der Zwischenzeit gezeichneten Striche – sie sind
+dann Teil des Bild-Elements.
+
+### Prüfharnische (nicht im ZIP – `tools/` fehlt in der Positivliste)
+
+| Aufruf | Prüft | Stand |
+|---|---|---|
+| `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | 191 Prüfungen |
+| `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall | 113 Prüfungen |
+| `node tools/test-notizen-manager-js.js` | `personal-notes-manager.js` (Mini-DOM im `vm`) | 34 Prüfungen |
+| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **105 Prüfungen** (50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32) |
+| `php tools/check-php74.php` | PHP-7.4-Kompatibilität | muss OK sein |
+
+Prüfseite: Viewport VOR dem Laden auf ~1366×768, Ergebnis in
+`window.__zusammenfassung` (erst nach `await window.__laufen()` vollständig).
+Cache-Falle: nach dem Kopieren geänderter Skripte `fetch(…, {cache:'reload'})`.
+Die Mutationsprobe des Moduls (Kopie per Umgebungsvariable
+`CBD_ELEMENTE_DATEI`) hat alle wesentlichen Mutationen erkannt.
+
+### Bekannte, bewusst offene Punkte (Review AP-4.rev)
+
+1. **G2 Textkürzung:** JS kürzt Texte nach UTF-16-Einheiten, PHP nach
+   Codepoints; ein bei 5000 halbiertes Surrogatpaar (Emoji an der Grenze)
+   lässt `json_decode` scheitern → ganze Liste `elemente_verworfen`, PNG
+   bleibt. Nur bei Texten über 5000 Zeichen.
+2. **G3 (vorbestehend, nicht Phase 4):** `removeFromCache()` nutzt immer
+   `'cbd-board-' + containerId` ohne Seitensuffix und ohne `stableContainerId`
+   – „Zeichnung löschen" auf Seite N trifft den Schlüssel von Seite 0.
+   Folge-AP außerhalb dieses Plans.
+3. **G5(b):** `saveToServer()` bricht bei `isSaving` still ab (vorbestehend);
+   schnelles Blättern oder `close()` direkt nach einem Seitenwechsel kann das
+   Speichern der verlassenen Seite überspringen. Folge-AP (Warteschlange
+   statt Verwerfen).
+4. **fix1(a):** `ajax_save_drawing()` meldet seit jeher Erfolg, auch wenn das
+   Schreiben des PNG selbst scheitert (Rückgabe wird am Ende nicht geprüft).
+5. Texte mit vielen `[` zählen bei der Punkt-Grenze mit (überzählt nur;
+   schlimmstenfalls „Nur als Bild gespeichert").
+6. Bild-Element, dessen Bild beim Speichern noch nicht geladen ist, fehlt im
+   PNG (Altverhalten); Rundung auf die Fläche beim Speichern ist gewollt.
+7. Nur mit synthetischen Ereignissen und Maus geprüft – **Abnahme am echten
+   Stift-/Touchgerät (Smartboard, iPad) steht aus.**
+
+### Betreiber-Hinweise vor dem Live-Upload (Plugin 3.1.139)
+
+1. **Datenbanksicherung im KAS** (mindestens `<prefix>cbd_drawings`); die
+   Änderung ist additiv und nullbar (R11).
+2. **ZIP der laufenden Version aufbewahren** (`container-block-designer-v3.1.138.zip`).
+3. **`memory_limit` und `max_allowed_packet` der Produktion** im KAS nachsehen
+   und notieren (die Grenzen oben sind für 128M ausgelegt; die Testinstallation
+   läuft durch UpdraftPlus mit 256M).
+4. Nach dem Upload **eine beliebige Seite aufrufen** (legt die Spalte an über
+   `run_updates()`), dann Kurzabnahme am echten Gerät: Klassen-Tafel zeichnen,
+   schließen, neu laden, einzelnen Strich radieren; eine alte Tafel öffnen →
+   als Ganzes da, Punkt-Radierer radiert hinein.
+5. Die Hotfix-Version 3.1.138 (Textmarker) ist in diesem ZIP enthalten.
 
 ## Persönliche Notizen: automatische Sichtbarkeit auf Inhaltsverzeichnis-Seiten
 (Phase 2 von `PLAN-Tafelmodus-Text-und-Notizen-Restore.md`, abgeschlossen
@@ -4258,6 +4487,12 @@ bevor AP-2.2 abgeschlossen wurde) — derselbe Grund, aus dem der bestehende
 `bgcolor`-Schlüssel bereits synchron erfasst wird.
 
 ### Datenweg beim Export
+
+**Seit Phase 4 (Elementmodell): der Export liest nur das PNG.** Weder
+`pdf-server-side.js` noch `ajax_get_page_drawings()` kennen die Elementliste
+(`elemente_data` bzw. `localStorage[…-elemente]`); beide Quellen liefern
+weiterhin ausschließlich `drawing_data` bzw. den exakten PNG-Schlüssel
+(`cbd-board-<stableId>`, `…:pN`), `-classid` und `pagecount`.
 
 1. `assets/js/floating-pdf-button.js` (AP-2.4): Checkbox
    `.cbd-pdf-drawings-check` im Export-Dialog, Default angehakt. Ihr Wert
