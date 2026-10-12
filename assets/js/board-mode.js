@@ -53,6 +53,8 @@
     }
 
     var NUR_BILD_TEXT = 'Nur als Bild gespeichert'; // E9 / AP-4.2: Elemente nicht gespeichert
+    // AP-4.fix3 (F3): lokal ist trotz Aufräumen kein Platz für das PNG
+    var SPEICHER_VOLL_TEXT = 'Nicht gespeichert – Speicher voll';
 
     // Obergrenze der Punkte einer an den Server gesendeten Elementliste
     // (AP-4.fix1, Befund F1). Gezählt wird wie auf dem Server die Zahl der
@@ -2921,15 +2923,67 @@
                 } else {
                     // Reihenfolge: erst das PNG (maßgeblich, E7), dann die Elemente
                     var png = this.drawingCanvas.toDataURL('image/png');
-                    localStorage.setItem(key, png);
+                    if (!this._pngLokalSchreiben(key, png)) {
+                        // Endgültig kein Platz (AP-4.fix3): sichtbar melden,
+                        // der bisherige Stand unter `key` bleibt unverändert.
+                        this._setSaveStatus(SPEICHER_VOLL_TEXT);
+                        return;
+                    }
                     if (this.boardColor) {
-                        localStorage.setItem(key + '-bgcolor', this.boardColor);
+                        try {
+                            localStorage.setItem(key + '-bgcolor', this.boardColor);
+                        } catch (eFarbe) { /* Tafelfarbe ist entbehrlich */ }
                     }
                     this._elementeLokalSpeichern(key, png);
                 }
             } catch (e) {
                 console.warn('[CBD Board Mode] Zeichnung konnte nicht gespeichert werden:', e.message);
             }
+        },
+
+        /**
+         * PNG lokal schreiben; ist der Speicher voll, zuerst Platz schaffen
+         * (AP-4.fix3, Befund F3 aus AP-4.rev). Die -elemente-Schlüssel sind
+         * entbehrlich - das PNG ist maßgeblich (E7), eine Notiz ohne Liste
+         * öffnet als EIN Bild-Element (E10) -, belegen aber bis zum Doppelten
+         * des Platzes (ein Bild-Element trägt das alte PNG ein zweites Mal).
+         * Reihenfolge: 1. Listen ANDERER Notizen/Seiten entfernen, erneut
+         * versuchen; 2. die eigene (alte) Liste entfernen, erneut versuchen.
+         * Nie werden PNGs anderer Notizen angetastet.
+         *
+         * @return {boolean} true = PNG geschrieben
+         */
+        _pngLokalSchreiben: function(key, png) {
+            try {
+                localStorage.setItem(key, png);
+                return true;
+            } catch (e) { /* Platz schaffen, s. u. */ }
+
+            var eigen = key + '-elemente';
+            var fremde = [];
+            try {
+                for (var i = 0; i < localStorage.length; i++) {
+                    var k = localStorage.key(i);
+                    if (istTafelSchluessel(k) && k !== eigen && k.length > 9 && k.slice(-9) === '-elemente') {
+                        fremde.push(k);
+                    }
+                }
+            } catch (eListe) { /* Speicher nicht lesbar */ }
+
+            var stufen = [fremde, [eigen]];
+            for (var s = 0; s < stufen.length; s++) {
+                if (!stufen[s].length) continue;
+                for (var j = 0; j < stufen[s].length; j++) {
+                    try { localStorage.removeItem(stufen[s][j]); } catch (eWeg) { /* weiter */ }
+                }
+                console.warn('[CBD Board Mode] Speicher voll - Elementlisten entfernt (Notizen bleiben als Bild erhalten):', stufen[s].length);
+                try {
+                    localStorage.setItem(key, png);
+                    return true;
+                } catch (eNochmal) { /* nächste Stufe */ }
+            }
+            console.warn('[CBD Board Mode] Zeichnung konnte nicht gespeichert werden: Speicher voll');
+            return false;
         },
 
         /**
