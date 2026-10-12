@@ -99,6 +99,7 @@ class CBD_Schema_Manager {
             page_id bigint(20) unsigned NOT NULL,
             container_id varchar(200) NOT NULL,
             drawing_data longtext DEFAULT NULL,
+            elemente_data longtext DEFAULT NULL,
             is_behandelt tinyint(1) DEFAULT 0,
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -175,6 +176,17 @@ class CBD_Schema_Manager {
                 // Identität. Es wird nicht gespeichert, WELCHER Schüler gefragt
                 // hat (Anonymitätszusage des Vorhabens).
                 'ist_schueler_frage' => "tinyint(1) DEFAULT 0",
+            ),
+            $wpdb->prefix . 'cbd_drawings' => array(
+                // Vorhaben „Tafel-Lasso" (PLAN-Rueckmeldungen-Klassenmodus-und-
+                // Tafel-Lasso.md, AP-4.2, Architektur E8): Elementliste der
+                // Tafel (Elementmodell v1, JSON) als zusätzliche
+                // Bearbeitungsquelle neben dem PNG in `drawing_data`. NULL =
+                // keine Elemente (alte Tafel, alter Client, leere Tafel).
+                // NUR die Lehrer-Endpunkte ajax_save_drawing()/
+                // ajax_load_drawing() lesen und schreiben diese Spalte;
+                // Schüler-, Puls- und PDF-Pfade lesen weiterhin nur das PNG.
+                'elemente_data' => "longtext DEFAULT NULL",
             ),
         );
     }

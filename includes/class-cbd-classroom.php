@@ -41,6 +41,20 @@ class CBD_Classroom {
     private static $instance = null;
 
     /**
+     * Zwischenspeicher: Hat `cbd_drawings` die Spalte `elemente_data`?
+     * null = noch nicht geprüft. Siehe drawings_hat_elemente_spalte().
+     *
+     * @var bool|null
+     */
+    private static $elemente_spalte_vorhanden = null;
+
+    /**
+     * Obergrenze für die Elementliste einer Tafel in Bytes (Plan „Tafel-Lasso",
+     * Risiko R6). Darüber wird nur das PNG gespeichert.
+     */
+    const ELEMENTE_MAX_BYTES = 8000000;
+
+    /**
      * Option key for enabling/disabling the classroom system
      */
     const OPTION_ENABLED = 'cbd_classroom_enabled';
@@ -714,6 +728,21 @@ class CBD_Classroom {
             wp_send_json_error(array('message' => 'Klasse nicht gefunden.'));
         }
 
+        // Elementliste der Tafel (Plan „Tafel-Lasso", AP-4.2, Architektur E8):
+        // zusätzliche Bearbeitungsquelle neben dem PNG. Fehlt das Feld (alter
+        // Client), wird die Spalte auf NULL gesetzt. Ein leerer Canvas hat nie
+        // Elemente. Ungültig oder zu groß -> nur das PNG speichern und das
+        // dem Client melden (`elemente_verworfen`).
+        $elemente_verworfen = false;
+        $elemente = $this->pruefe_elemente_json($_POST['elemente_data'] ?? '');
+        if (null === $drawing_data) {
+            $elemente = null;
+        }
+        if (false === $elemente) {
+            $elemente = null;
+            $elemente_verworfen = true;
+        }
+
         // Upsert: Insert or update drawing
         $existing = $wpdb->get_row($wpdb->prepare(
             "SELECT id FROM $table WHERE class_id = %d AND page_id = %d AND container_id = %s",
@@ -721,24 +750,228 @@ class CBD_Classroom {
         ));
 
         if ($existing) {
-            $wpdb->update($table, array(
+            $daten = array(
                 'drawing_data' => $drawing_data,
+                'elemente_data' => $elemente,
                 'updated_at' => current_time('mysql')
-            ), array('id' => $existing->id));
+            );
+            $schreibe = function ($d) use ($wpdb, $table, $existing) {
+                return $wpdb->update($table, $d, array('id' => $existing->id));
+            };
         } else {
-            $wpdb->insert($table, array(
+            $daten = array(
                 'class_id' => $class_id,
                 'teacher_id' => get_current_user_id(),
                 'page_id' => $page_id,
                 'container_id' => $container_id,
-                'drawing_data' => $drawing_data
-            ));
+                'drawing_data' => $drawing_data,
+                'elemente_data' => $elemente
+            );
+            $schreibe = function ($d) use ($wpdb, $table) {
+                return $wpdb->insert($table, $d);
+            };
+        }
+
+        $ergebnis = $schreibe($daten);
+
+        // Selbstheilung (Risiko R5): Fehlt die Spalte elemente_data auf dieser
+        // Installation (run_updates()-Zweig noch nicht gelaufen), EINMAL
+        // ensure_columns() und wiederholen. Scheitert es erneut, ohne die
+        // Spalte speichern - das PNG geht nie verloren, Verhalten wie vor
+        // AP-4.2.
+        if (false === $ergebnis && false !== stripos((string) $wpdb->last_error, 'elemente_data')) {
+            if (class_exists('CBD_Schema_Manager') && method_exists('CBD_Schema_Manager', 'ensure_columns')) {
+                CBD_Schema_Manager::ensure_columns();
+            }
+            self::$elemente_spalte_vorhanden = null;
+            $ergebnis = $schreibe($daten);
+
+            if (false === $ergebnis && false !== stripos((string) $wpdb->last_error, 'elemente_data')) {
+                unset($daten['elemente_data']);
+                $schreibe($daten);
+                if (null !== $elemente) {
+                    $elemente_verworfen = true;
+                }
+            }
         }
 
         // Pulsdatei der Klasse erneuern (Vorhaben „Schneller Klassenpuls“, AP-1.5).
         do_action('cbd_klassenmodus_geaendert', (int) $class_id);
 
-        wp_send_json_success(array('message' => 'Zeichnung gespeichert.'));
+        $antwort = array('message' => 'Zeichnung gespeichert.');
+        if ($elemente_verworfen) {
+            $antwort['elemente_verworfen'] = true;
+        }
+        wp_send_json_success($antwort);
+    }
+
+    /**
+     * Elementliste einer Tafel aus `$_POST['elemente_data']` prüfen und
+     * bereinigen (Plan „Tafel-Lasso", AP-4.2; Format: Plan, Abschnitt 4
+     * „Elementmodell v1"; Gegenstück im Browser:
+     * `CBDBoardElemente.pruefeModell()` in assets/js/board-elemente.js).
+     *
+     * Rückgabe:
+     *   - null   kein Wert, leere Elementliste oder kein gültiges Element
+     *            übrig -> Spalte auf NULL
+     *   - false  unlesbar (kein Text, zu groß, kein JSON-Objekt, v != 1,
+     *            Maße ungültig, elemente kein Array)
+     *   - string bereinigte JSON (nur erlaubte Schlüssel, ungültige Elemente
+     *            und doppelte IDs verworfen, Text auf 5000 Zeichen gekürzt)
+     *
+     * wp_unslash() MUSS vor json_decode() stehen (Risiko R7): WordPress
+     * slasht alle $_POST-Werte, jedes Anführungszeichen der JSON käme als \"
+     * an und json_decode() schlüge fehl. Harnisch: tools/test-board-elemente.php.
+     *
+     * @param mixed $roh Rohwert aus $_POST.
+     * @return string|null|false
+     */
+    private function pruefe_elemente_json($roh) {
+        if (null === $roh || '' === $roh) {
+            return null;
+        }
+        if (!is_string($roh)) {
+            return false;
+        }
+
+        $text = wp_unslash($roh);
+
+        if (strlen($text) > self::ELEMENTE_MAX_BYTES) {
+            return false;
+        }
+
+        $daten = json_decode($text, true);
+        if (!is_array($daten)
+            || !array_key_exists('v', $daten) || 1 !== $daten['v']
+            || !isset($daten['elemente']) || !is_array($daten['elemente'])) {
+            return false;
+        }
+
+        $breite = self::elemente_zahl($daten['breite'] ?? null);
+        $hoehe = self::elemente_zahl($daten['hoehe'] ?? null);
+        if (null === $breite || null === $hoehe || $breite <= 0 || $hoehe <= 0) {
+            return false;
+        }
+
+        // Gleiche Regel wie FARB_MUSTER in board-elemente.js.
+        $farb_muster = '/^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}|rgba?\(\s*[0-9.]+\s*,\s*[0-9.]+\s*,\s*[0-9.]+\s*(,\s*[0-9.]+\s*)?\))$/';
+        $praefix = 'data:image/png;base64,';
+
+        $bereinigt = array();
+        $ids = array();
+
+        foreach ($daten['elemente'] as $el) {
+            if (!is_array($el)) {
+                continue;
+            }
+            $id = $el['id'] ?? null;
+            if (!is_string($id) || !preg_match('/^e[0-9]+$/', $id) || isset($ids[$id])) {
+                continue;
+            }
+            $typ = $el['typ'] ?? null;
+
+            if ('strich' === $typ) {
+                $werkzeug = $el['werkzeug'] ?? null;
+                $farbe = $el['farbe'] ?? null;
+                $b = self::elemente_zahl($el['breite'] ?? null);
+                $punkte_roh = $el['punkte'] ?? null;
+                if (('pen' !== $werkzeug && 'highlighter' !== $werkzeug)
+                    || !is_string($farbe) || !preg_match($farb_muster, $farbe)
+                    || null === $b || $b <= 0
+                    || !is_array($punkte_roh) || count($punkte_roh) < 1 || count($punkte_roh) > 20000) {
+                    continue;
+                }
+                $punkte = array();
+                foreach ($punkte_roh as $p) {
+                    if (!is_array($p) || 2 !== count($p) || !array_key_exists(0, $p) || !array_key_exists(1, $p)) {
+                        $punkte = null;
+                        break;
+                    }
+                    $px = self::elemente_zahl($p[0]);
+                    $py = self::elemente_zahl($p[1]);
+                    if (null === $px || null === $py) {
+                        $punkte = null;
+                        break;
+                    }
+                    $punkte[] = array($px, $py);
+                }
+                if (null === $punkte) {
+                    continue;
+                }
+                $bereinigt[] = array('id' => $id, 'typ' => 'strich', 'werkzeug' => $werkzeug,
+                    'farbe' => $farbe, 'breite' => $b, 'punkte' => $punkte);
+            } elseif ('text' === $typ) {
+                $farbe = $el['farbe'] ?? null;
+                $b = self::elemente_zahl($el['breite'] ?? null);
+                $x = self::elemente_zahl($el['x'] ?? null);
+                $y = self::elemente_zahl($el['y'] ?? null);
+                $inhalt = $el['text'] ?? null;
+                if (!is_string($farbe) || !preg_match($farb_muster, $farbe)
+                    || null === $b || $b <= 0 || null === $x || null === $y || !is_string($inhalt)) {
+                    continue;
+                }
+                $bereinigt[] = array('id' => $id, 'typ' => 'text', 'farbe' => $farbe, 'breite' => $b,
+                    'text' => mb_substr($inhalt, 0, 5000, 'UTF-8'), 'x' => $x, 'y' => $y);
+            } elseif ('bild' === $typ) {
+                $bild = $el['daten'] ?? null;
+                $x = self::elemente_zahl($el['x'] ?? null);
+                $y = self::elemente_zahl($el['y'] ?? null);
+                $b = self::elemente_zahl($el['b'] ?? null);
+                $h = self::elemente_zahl($el['h'] ?? null);
+                if (!is_string($bild) || 0 !== strpos($bild, $praefix)
+                    || !preg_match('/^[A-Za-z0-9+\/=]*$/', substr($bild, strlen($praefix)))
+                    || null === $x || null === $y || null === $b || null === $h || $b <= 0 || $h <= 0) {
+                    continue;
+                }
+                $bereinigt[] = array('id' => $id, 'typ' => 'bild', 'daten' => $bild,
+                    'x' => $x, 'y' => $y, 'b' => $b, 'h' => $h);
+            } else {
+                continue; // unbekannter typ: nur dieses Element verwerfen
+            }
+            $ids[$id] = true;
+        }
+
+        if (empty($bereinigt)) {
+            return null;
+        }
+
+        $json = wp_json_encode(array('v' => 1, 'breite' => $breite, 'hoehe' => $hoehe, 'elemente' => $bereinigt));
+        return is_string($json) ? $json : false;
+    }
+
+    /**
+     * Zahl aus der Elementliste: is_numeric + endlich, sonst null. Numerische
+     * Zeichenketten werden zu int/float (Ausgabe als JSON-Zahl).
+     *
+     * @param mixed $wert
+     * @return int|float|null
+     */
+    private static function elemente_zahl($wert) {
+        if (is_bool($wert) || !is_numeric($wert)) {
+            return null;
+        }
+        $zahl = 0 + $wert;
+        return is_finite((float) $zahl) ? $zahl : null;
+    }
+
+    /**
+     * Hat `cbd_drawings` die Spalte `elemente_data`? (Plan „Tafel-Lasso",
+     * AP-4.2.) Auf einer Installation, deren run_updates()-Zweig noch nicht
+     * gelaufen ist, würde ein SELECT mit der Spalte scheitern und das PNG
+     * mitreißen. Einmal je Anfrage geprüft (statischer Zwischenspeicher).
+     *
+     * @return bool
+     */
+    private static function drawings_hat_elemente_spalte() {
+        if (null === self::$elemente_spalte_vorhanden) {
+            global $wpdb;
+            $spalte = $wpdb->get_var($wpdb->prepare(
+                "SHOW COLUMNS FROM `" . esc_sql(CBD_TABLE_DRAWINGS) . "` LIKE %s",
+                'elemente_data'
+            ));
+            self::$elemente_spalte_vorhanden = !empty($spalte);
+        }
+        return self::$elemente_spalte_vorhanden;
     }
 
     /**
@@ -765,14 +998,24 @@ class CBD_Classroom {
             wp_send_json_error(array('message' => 'Klasse nicht gefunden.'));
         }
 
+        // elemente_data (Plan „Tafel-Lasso", AP-4.2) nur abfragen, wenn die
+        // Spalte existiert - auf einer noch nicht aktualisierten DB liefe das
+        // SELECT sonst ins Leere und die Tafel käme leer an.
+        $spalten = self::drawings_hat_elemente_spalte()
+            ? 'drawing_data, elemente_data, is_behandelt'
+            : 'drawing_data, is_behandelt';
+
         $drawing = $wpdb->get_row($wpdb->prepare(
-            "SELECT drawing_data, is_behandelt FROM " . CBD_TABLE_DRAWINGS . " WHERE class_id = %d AND page_id = %d AND container_id = %s",
+            "SELECT " . $spalten . " FROM " . CBD_TABLE_DRAWINGS . " WHERE class_id = %d AND page_id = %d AND container_id = %s",
             $class_id, $page_id, $container_id
         ));
 
         wp_send_json_success(array(
             'drawing_data' => $drawing ? $drawing->drawing_data : null,
-            'is_behandelt' => $drawing ? (bool) $drawing->is_behandelt : false
+            'is_behandelt' => $drawing ? (bool) $drawing->is_behandelt : false,
+            // String (JSON, Elementmodell v1) oder null; das JavaScript prüft
+            // ihn mit CBDBoardElemente.deserialisiere().
+            'elemente_data' => ($drawing && isset($drawing->elemente_data)) ? $drawing->elemente_data : null
         ));
     }
 
