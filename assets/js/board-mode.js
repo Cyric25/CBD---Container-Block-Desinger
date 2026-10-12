@@ -20,6 +20,40 @@
         return window.CBDBoardElemente;
     }
 
+    // Eigene Notizen im localStorage (AP-4.4, Schritt 7): Alle Schlüssel mit
+    // dem Präfix 'cbd-board-' gehören zu den Tafeln und werden exportiert,
+    // importiert und mit "Alle Notizen löschen" entfernt - außer den
+    // Werkzeug-Einstellungen. GEZÄHLT ("N Notizen") werden aber nur die
+    // PNG-Schlüssel selbst, nicht die Begleitschlüssel (-elemente seit
+    // Phase 4, -bgcolor, -classid) und nicht die Seitenzahl
+    // ('cbd-board-pagecount-'). Gleiche Regel in personal-notes-manager.js.
+    var NOTIZ_BEGLEITSUFFIXE = ['-elemente', '-bgcolor', '-classid'];
+
+    function istTafelSchluessel(k) {
+        return typeof k === 'string' && k.indexOf('cbd-board-') === 0 &&
+            k !== 'cbd-board-tool-settings' && k !== 'cbd-board-font-size';
+    }
+
+    function istNotizSchluessel(k) {
+        if (!istTafelSchluessel(k) || k.indexOf('cbd-board-pagecount-') === 0) return false;
+        for (var i = 0; i < NOTIZ_BEGLEITSUFFIXE.length; i++) {
+            var s = NOTIZ_BEGLEITSUFFIXE[i];
+            if (k.length > s.length && k.slice(-s.length) === s) return false;
+        }
+        return true;
+    }
+
+    /** Flache Kopie eines Elements (Punkte-Arrays werden geteilt, nie verändert). */
+    function elementKopie(el) {
+        var k = {};
+        for (var p in el) {
+            if (Object.prototype.hasOwnProperty.call(el, p)) k[p] = el[p];
+        }
+        return k;
+    }
+
+    var NUR_BILD_TEXT = 'Nur als Bild gespeichert'; // E9 / AP-4.2: Elemente nicht gespeichert
+
     window.CBDBoardMode = {
 
         // State
@@ -86,6 +120,8 @@
         _radierGeaendert: false,
         _gesteGemerkt: false, // Radiergeste hat ihren Undo-Schritt schon angelegt
         _rahmenCache: null,   // WeakMap Element -> Rahmen (Elemente sind unveraenderlich)
+        _ladeNr: 0,           // AP-4.4: zaehlt Oeffnen/Seitenwechsel hoch; eine Server-Antwort
+                              // mit veralteter Nummer gehoert zu einer anderen Seite/Sitzung
 
         // Grid state: 'off', 'horizontal', 'vertical'
         gridMode: 'off',
@@ -109,7 +145,7 @@
         // Multi-Seiten-State
         currentPageIndex: 0,
         totalPages: 1,
-        pageCache: {},   // { pageIndex: dataUrl } ('' = Seite war leer)
+        pageCache: {},   // { pageIndex: {png, modell} } ('' = Seite war leer; AP-4.4)
 
         // Zoom & Pan
         zoom: 1.0,
@@ -205,6 +241,7 @@
             this._radierBilder = null;
             this._radierLetzter = null;
             this._rahmenCache = new WeakMap();
+            this._ladeNr++;
 
             // Zeigerverwaltung (#7149): Stift-Vorrang gilt je Tafelsitzung
             this.activePointers.clear();
@@ -2645,6 +2682,11 @@
             var classIdKey = 'cbd-board-' + (pageContainerId || this.stableContainerId) + '-classid';
             var classIdWert = String(this.classId);
 
+            // AP-4.4: Antwort nur übernehmen, wenn inzwischen weder die Seite
+            // gewechselt noch die Tafel geschlossen/neu geöffnet wurde - sonst
+            // landete die Zeichnung der alten Seite auf der neuen.
+            var ladeNr = this._ladeNr;
+
             var formData = new FormData();
             formData.append('action', 'cbd_load_drawing');
             formData.append('nonce', this.nonce);
@@ -2658,6 +2700,9 @@
             })
             .then(function(response) { return response.json(); })
             .then(function(data) {
+                if (!self.overlay || self._ladeNr !== ladeNr) {
+                    return; // veraltete Antwort (Seitenwechsel, Schließen)
+                }
                 if (data.success && data.data.drawing_data) {
                     // Gespeicherte Hintergrundfarbe wiederherstellen (browser-spezifisch)
                     try {
@@ -2673,8 +2718,18 @@
                         localStorage.setItem(classIdKey, classIdWert);
                     } catch (e) { /* Ignorieren, wie beim bestehenden bgcolor-Begleitschlüssel */ }
 
-                    // Übergangsweise (AP-4.3, bis AP-4.4 die Elementliste lädt):
-                    // das PNG wird EIN Bild-Element (E10) statt Basis-Bild
+                    // AP-4.4: Elementliste bevorzugt (String oder null, AP-4.2);
+                    // gestreckt auf die aktuelle Fläche (E13)
+                    var geladen = self._elementeLesen(data.data.elemente_data);
+                    if (geladen) {
+                        self._elementeUebernehmen(geladen);
+                        self._setSaveStatus('Geladen');
+                        setTimeout(function() { self._setSaveStatus(''); }, 2000);
+                        return;
+                    }
+
+                    // Rückfall (alte Tafel ohne Elemente, ungültige Liste):
+                    // das PNG wird EIN Bild-Element (E10)
                     var img = new Image();
                     img.onload = function() {
                         if (self.modell) self.zeichneModell();
@@ -2741,6 +2796,10 @@
             formData.append('page_id', this.pageId);
             formData.append('container_id', pageContainerId || this.stableContainerId);
             formData.append('drawing_data', dataUrl);
+            // AP-4.4: Elementliste zusätzlich zum PNG (leere Tafel: '' ->
+            // Server setzt elemente_data auf NULL). Das PNG bleibt die
+            // maßgebliche Darstellung für Schüler, Puls und PDF (E7).
+            formData.append('elemente_data', isBlank ? '' : this._elementeSerialisiert());
 
             fetch(this.ajaxUrl, {
                 method: 'POST',
@@ -2750,7 +2809,9 @@
             .then(function(data) {
                 self.isSaving = false;
                 if (data.success) {
-                    self._setSaveStatus('Gespeichert');
+                    // elemente_verworfen (AP-4.2): Liste zu groß/unlesbar oder
+                    // Spalte fehlt - gespeichert wurde nur das PNG
+                    self._setSaveStatus((data.data && data.data.elemente_verworfen === true) ? NUR_BILD_TEXT : 'Gespeichert');
 
                     // Klassen-Zuordnung als Begleitschlüssel merken (für den PDF-Export).
                     // Bewusst AUCH bei leerem Canvas (isBlank) gesetzt: Der Export soll
@@ -2831,15 +2892,113 @@
                 if (isBlank) {
                     localStorage.removeItem(key);
                     localStorage.removeItem(key + '-bgcolor');
+                    localStorage.removeItem(key + '-elemente');
                 } else {
+                    // Reihenfolge: erst das PNG (maßgeblich, E7), dann die Elemente
                     localStorage.setItem(key, this.drawingCanvas.toDataURL('image/png'));
                     if (this.boardColor) {
                         localStorage.setItem(key + '-bgcolor', this.boardColor);
                     }
+                    this._elementeLokalSpeichern(key);
                 }
             } catch (e) {
                 console.warn('[CBD Board Mode] Zeichnung konnte nicht gespeichert werden:', e.message);
             }
+        },
+
+        /**
+         * Begleitschlüssel <PNG-Schlüssel>-elemente schreiben (E9, AP-4.4).
+         * Scheitert setItem (Quota), bleibt das schon geschriebene PNG, der
+         * Elementschlüssel wird entfernt (ein alter Stand darf das neue PNG
+         * beim nächsten Öffnen nicht überdecken) und die Statusanzeige meldet
+         * 4 s lang "Nur als Bild gespeichert".
+         */
+        _elementeLokalSpeichern: function(key) {
+            var text = this._elementeSerialisiert();
+            try {
+                if (!text) {
+                    localStorage.removeItem(key + '-elemente');
+                    return;
+                }
+                localStorage.setItem(key + '-elemente', text);
+            } catch (e) {
+                try { localStorage.removeItem(key + '-elemente'); } catch (e2) { /* Ignorieren */ }
+                console.warn('[CBD Board Mode] Elemente nicht gespeichert, nur das Bild:', e && e.message);
+                var self = this;
+                this._setSaveStatus(NUR_BILD_TEXT);
+                setTimeout(function() {
+                    var s = document.getElementById('cbd-board-save-status');
+                    if (s && s.textContent === NUR_BILD_TEXT) self._setSaveStatus('');
+                }, 4000);
+            }
+        },
+
+        /**
+         * Elementmodell mit den AKTUELLEN CSS-Maßen der Zeichenfläche als
+         * JSON (AP-4.4). Das Modell behält die Maße vom Öffnen (Koordinaten
+         * bleiben bei einer Größenänderung 1:1), gespeichert wird aber, wie
+         * groß die Fläche jetzt ist - daran streckt das nächste Laden (E13).
+         * Leeres Modell oder Fehler -> '' (dann gilt nur das PNG).
+         */
+        _elementeSerialisiert: function() {
+            if (!this.modell || !this.modell.elemente.length || !elementeModul()) return '';
+            try {
+                return elementeModul().serialisiere({
+                    v: this.modell.v,
+                    breite: this.cssWidth || this.modell.breite,
+                    hoehe: this.cssHeight || this.modell.hoehe,
+                    elemente: this.modell.elemente
+                });
+            } catch (e) {
+                console.warn('[CBD Board Mode] Elemente nicht serialisierbar:', e && e.message);
+                return '';
+            }
+        },
+
+        /**
+         * Gespeicherte Elementliste (Server-Feld elemente_data bzw. lokaler
+         * -elemente-Schlüssel) prüfen und auf die aktuelle Fläche strecken
+         * (E13). null, wenn nichts Brauchbares da ist - dann lädt der
+         * Aufrufer das PNG als EIN Bild-Element (E10). Auch wenn die Prüfung
+         * einzelne Elemente verworfen hat, gilt das PNG: Es ist maßgeblich
+         * (E7) und vollständig, die Liste wäre es nicht.
+         */
+        _elementeLesen: function(text) {
+            var E = elementeModul();
+            if (!E || typeof text !== 'string' || text === '') return null;
+            var geprueft = E.deserialisiere(text);
+            if (!geprueft || geprueft.verworfen > 0 || !geprueft.modell.elemente.length) return null;
+            return E.skaliere(geprueft.modell, this.cssWidth || geprueft.modell.breite,
+                this.cssHeight || geprueft.modell.hoehe);
+        },
+
+        /**
+         * Geladenes Modell übernehmen. Normalfall: Es ersetzt das leere Modell
+         * (neueId() gleicht den Zähler selbst ab), Undo-Stapel bleibt leer.
+         * Wurde schon gezeichnet, bevor die Antwort kam (Server-Laden ist
+         * asynchron), kommen die geladenen Elemente VOR die Sitzungs-Elemente
+         * und - weil Laden keine Nutzeraktion ist - auch in alle Undo-Stände
+         * (wie bildElementHinzufuegen()); sie bekommen neue IDs, damit sie
+         * nicht mit den Sitzungs-IDs kollidieren.
+         */
+        _elementeUebernehmen: function(geladen) {
+            if (!this.modell) return;
+            if (!this.modell.elemente.length && !this.undoStapel.length && !this.currentStroke) {
+                this.modell = geladen;
+                this.zeichneModell();
+                return;
+            }
+            var self = this;
+            var vorn = geladen.elemente.map(function(el) {
+                var k = elementKopie(el);
+                k.id = self.neueId();
+                return k;
+            });
+            this.modell.elemente = vorn.concat(this.modell.elemente);
+            for (var i = 0; i < this.undoStapel.length; i++) {
+                this.undoStapel[i] = vorn.concat(this.undoStapel[i]);
+            }
+            this.zeichneModell();
         },
 
         loadFromCache: function(cacheKey) {
@@ -2855,13 +3014,23 @@
                 }
 
                 if (!dataUrl) {
-                    // Kein gespeicherter Stand
+                    // Kein gespeicherter Stand. Ein -elemente-Schlüssel ohne
+                    // PNG ist verwaist (z. B. von einer älteren Plugin-Version
+                    // als leer gespeichert) und wird bewusst nicht geladen.
                     return;
                 }
 
-                // Übergangsweise (AP-4.3, bis AP-4.4 die Elementliste lädt):
-                // das PNG wird EIN Bild-Element (E10) statt Basis-Bild; es wird
-                // sofort eingefügt und nach dem Laden gezeichnet.
+                // AP-4.4: zuerst die Elementliste (E9), gestreckt auf die
+                // aktuelle Fläche (E13)
+                var geladen = this._elementeLesen(localStorage.getItem(key + '-elemente'));
+                if (geladen) {
+                    this._elementeUebernehmen(geladen);
+                    return;
+                }
+
+                // Rückfall (ältere Notiz ohne Elemente, ungültige Liste): das
+                // PNG wird EIN Bild-Element (E10); es wird sofort eingefügt und
+                // nach dem Laden gezeichnet.
                 this.bildElementHinzufuegen(dataUrl);
             } catch (e) {
                 console.warn('[CBD Board Mode] Zeichnung konnte nicht geladen werden:', e.message);
@@ -2875,6 +3044,7 @@
                 var key = 'cbd-board-' + this.containerId;
                 localStorage.removeItem(key);
                 localStorage.removeItem(key + '-bgcolor');
+                localStorage.removeItem(key + '-elemente'); // AP-4.4
             } catch (e) {
                 // Ignorieren
             }
@@ -2915,8 +3085,8 @@
             if (index < 0 || index >= this.totalPages) return;
             if (index === this.currentPageIndex) return;
 
-            // Aktuelle Zeichnung in In-Memory-Cache sichern (leere Seite: '')
-            this.pageCache[this.currentPageIndex] = this._seitenPng();
+            // Aktuelle Seite in den In-Memory-Cache: {png, modell} (leere Seite: '')
+            this.pageCache[this.currentPageIndex] = this._seiteSichern();
 
             // Aktuelle Seite asynchron auf Server/Cache speichern
             var fromPageContainerId = this.getPageContainerId(this.currentPageIndex);
@@ -2934,12 +3104,19 @@
             // wirkt nur innerhalb einer Seite)
             this._seiteLeeren();
 
-            // Neue Seite aus Cache oder Server laden - übergangsweise (AP-4.3,
-            // bis AP-4.4 die Elemente je Seite hält) als EIN Bild-Element
+            // Neue Seite aus dem Seitencache (mit ihren Elementen, AP-4.4) oder
+            // - noch nicht besucht - von Server/localStorage laden (Modell oder
+            // PNG als Bild-Element)
             if (this.pageCache[index] !== undefined && this.pageCache[index] !== null) {
                 var cached = this.pageCache[index];
-                if (cached) {
-                    this.bildElementHinzufuegen(cached);
+                if (cached && cached.modell) {
+                    this.modell = {
+                        v: cached.modell.v,
+                        breite: cached.modell.breite,
+                        hoehe: cached.modell.hoehe,
+                        elemente: cached.modell.elemente.slice()
+                    };
+                    this.zeichneModell();
                 }
             } else {
                 this.loadDrawing();
@@ -2950,8 +3127,8 @@
          * Neue leere Seite hinzufügen
          */
         addPage: function() {
-            // Aktuelle Seite speichern (leere Seite: '')
-            this.pageCache[this.currentPageIndex] = this._seitenPng();
+            // Aktuelle Seite sichern: {png, modell} (leere Seite: '')
+            this.pageCache[this.currentPageIndex] = this._seiteSichern();
             var fromPageContainerId = this.getPageContainerId(this.currentPageIndex);
             if (this.classId && this.ajaxUrl) {
                 this.saveToServer(fromPageContainerId);
@@ -2982,8 +3159,29 @@
             return this.drawingCanvas.toDataURL('image/png');
         },
 
+        /**
+         * Eintrag des Seitencaches (AP-4.4): {png, modell} - das Modell mit
+         * einer eigenen Elementliste (Elemente selbst sind unveränderlich),
+         * damit die Seite beim Zurückkehren Element für Element bearbeitbar
+         * bleibt. Leere Seite -> ''.
+         */
+        _seiteSichern: function() {
+            var png = this._seitenPng();
+            if (!png) return '';
+            return {
+                png: png,
+                modell: {
+                    v: this.modell.v,
+                    breite: this.modell.breite,
+                    hoehe: this.modell.hoehe,
+                    elemente: this.modell.elemente.slice()
+                }
+            };
+        },
+
         /** Modell und Undo-Stapel beim Seitenwechsel neu anlegen, Ebene leeren. */
         _seiteLeeren: function() {
+            this._ladeNr++; // laufende Server-Antworten gehören zur alten Seite
             this.currentStroke = null;
             this._radierBilder = null;
             this._radierLetzter = null;
@@ -3213,14 +3411,16 @@
         downloadPersonalNotes: function() {
             try {
                 // Alle CBD-Board Daten aus localStorage sammeln
+                // Exportiert werden alle Tafel-Schlüssel (auch -elemente, AP-4.4),
+                // gezählt nur die Notizen selbst (istNotizSchluessel)
                 var exportData = {};
                 var count = 0;
 
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
-                    if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
+                    if (istTafelSchluessel(key)) {
                         exportData[key] = localStorage.getItem(key);
-                        count++;
+                        if (istNotizSchluessel(key)) count++;
                     }
                 }
 
@@ -3277,9 +3477,9 @@
 
                         // Validierung: Ist es ein Objekt mit cbd-board Keys?
                         var keys = Object.keys(importData);
-                        var validKeys = keys.filter(function(k) {
-                            return k.startsWith('cbd-board-') && k !== 'cbd-board-tool-settings' && k !== 'cbd-board-font-size';
-                        });
+                        var validKeys = keys.filter(istTafelSchluessel);
+                        // Gezählt werden nur Notizen, keine Begleitschlüssel (AP-4.4)
+                        var noteCount = validKeys.filter(istNotizSchluessel).length;
 
                         if (validKeys.length === 0) {
                             alert('Die Datei enthält keine gültigen CBD-Notizen.');
@@ -3289,8 +3489,7 @@
                         // Prüfen, ob bereits Daten vorhanden sind
                         var existingCount = 0;
                         for (var i = 0; i < localStorage.length; i++) {
-                            var key = localStorage.key(i);
-                            if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
+                            if (istNotizSchluessel(localStorage.key(i))) {
                                 existingCount++;
                             }
                         }
@@ -3298,7 +3497,7 @@
                         // Bestätigung wenn Daten vorhanden
                         if (existingCount > 0) {
                             var confirmMsg = 'Es sind bereits ' + existingCount + ' persönliche Notiz(en) vorhanden.\n\n' +
-                                'Beim Import werden ' + validKeys.length + ' Notiz(en) hochgeladen.\n' +
+                                'Beim Import werden ' + noteCount + ' Notiz(en) hochgeladen.\n' +
                                 'Bestehende Notizen mit denselben IDs werden überschrieben.\n\n' +
                                 'Möchten Sie fortfahren?';
 
@@ -3311,7 +3510,16 @@
                         var imported = 0;
                         validKeys.forEach(function(key) {
                             localStorage.setItem(key, importData[key]);
-                            imported++;
+                            if (istNotizSchluessel(key)) {
+                                imported++;
+                                // Ältere Exportdatei ohne Elemente (AP-4.4): ein
+                                // lokaler -elemente-Stand derselben Notiz ist
+                                // veraltet und würde das importierte PNG beim
+                                // Öffnen überdecken -> entfernen.
+                                if (!Object.prototype.hasOwnProperty.call(importData, key + '-elemente')) {
+                                    localStorage.removeItem(key + '-elemente');
+                                }
+                            }
                         });
 
                         // Bestätigung
@@ -3322,7 +3530,10 @@
                         alert(successMsg + '\n\nDie Notizen sind jetzt verfügbar.');
 
                         // Wenn wir gerade die aktuelle Zeichnung importiert haben, neu laden
-                        if (importData['cbd-board-' + self.containerId]) {
+                        // (die importierte Fassung ersetzt die angezeigte Seite - sonst
+                        // kämen ihre Elemente zu den angezeigten dazu)
+                        if (importData['cbd-board-' + self.containerId] && self.overlay && self.modell) {
+                            self._seiteLeeren();
                             self.loadDrawing();
                         }
 
@@ -3343,13 +3554,15 @@
          */
         deleteAllPersonalNotes: function() {
             try {
-                // Zähle vorhandene Notizen (tool-settings ausschließen!)
+                // Zähle vorhandene Notizen (tool-settings ausschließen!). Gelöscht
+                // werden alle Tafel-Schlüssel inkl. -elemente, gezählt nur die
+                // Notizen selbst (AP-4.4)
                 var count = 0;
                 var keysToDelete = [];
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
-                    if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
-                        count++;
+                    if (istTafelSchluessel(key)) {
+                        if (istNotizSchluessel(key)) count++;
                         keysToDelete.push(key);
                     }
                 }
