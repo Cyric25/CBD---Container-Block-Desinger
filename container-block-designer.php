@@ -512,6 +512,27 @@ class ContainerBlockDesigner {
                 CBD_Schema_Manager::ensure_columns();
             }
         }
+
+        // Updates für Version 3.1.139 - Spalte cbd_drawings.elemente_data
+        // (Vorhaben „Tafel-Lasso", PLAN-Rueckmeldungen-Klassenmodus-und-Tafel-
+        // Lasso.md, AP-4.2): Elementliste der Tafel neben dem PNG.
+        //
+        // Gleicher Weg wie der 3.1.113-Zweig oben (dbDelta trägt bei den
+        // `CREATE TABLE IF NOT EXISTS`-Strings keine Spalten nach). ZIELVERSION
+        // BEWUSST 3.1.139, nicht 3.1.138: 3.1.138 ist für den Hotfix #7152
+        // (Phase 4a) vergeben, der vor Phase 4 ausgeliefert wird. Eine
+        // Installation, die schon auf 3.1.138 steht, muss diesen Zweig beim
+        // Update auf Phase 4 noch durchlaufen. AP-4.doc prüft, dass die
+        // Schwelle der ZIP-Version von Phase 4 entspricht (eine zu HOHE
+        // Schwelle schadet nicht, ensure_columns() ist idempotent; eine zu
+        // NIEDRIGE lässt die Spalte fehlen). Zusätzlich heilt
+        // CBD_Classroom::ajax_save_drawing() eine fehlende Spalte selbst.
+        if (version_compare($from_version, '3.1.139', '<')) {
+            if (class_exists('CBD_Schema_Manager')
+                && method_exists('CBD_Schema_Manager', 'ensure_columns')) {
+                CBD_Schema_Manager::ensure_columns();
+            }
+        }
     }
     
     /**

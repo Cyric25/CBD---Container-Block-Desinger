@@ -10,6 +10,67 @@
 (function() {
     'use strict';
 
+    // Elementmodell v1 (PLAN-Rueckmeldungen-Klassenmodus-und-Tafel-Lasso.md,
+    // Phase 4, AP-4.3): Geometrie und Datenformat liegen im DOM-freien Modul
+    // assets/js/board-elemente.js (window.CBDBoardElemente, per
+    // Abhaengigkeit 'cbd-board-elemente' VOR dieser Datei geladen).
+    var UNDO_MAX = 50; // Architektur E12: hoechstens 50 Rueckgaengig-Schritte
+
+    function elementeModul() {
+        return window.CBDBoardElemente;
+    }
+
+    // Eigene Notizen im localStorage (AP-4.4, Schritt 7): Alle Schlüssel mit
+    // dem Präfix 'cbd-board-' gehören zu den Tafeln und werden exportiert,
+    // importiert und mit "Alle Notizen löschen" entfernt - außer den
+    // Werkzeug-Einstellungen. GEZÄHLT ("N Notizen") werden aber nur die
+    // PNG-Schlüssel selbst, nicht die Begleitschlüssel (-elemente seit
+    // Phase 4, -bgcolor, -classid) und nicht die Seitenzahl
+    // ('cbd-board-pagecount-'). Gleiche Regel in personal-notes-manager.js.
+    var NOTIZ_BEGLEITSUFFIXE = ['-elemente', '-bgcolor', '-classid'];
+
+    function istTafelSchluessel(k) {
+        return typeof k === 'string' && k.indexOf('cbd-board-') === 0 &&
+            k !== 'cbd-board-tool-settings' && k !== 'cbd-board-font-size';
+    }
+
+    function istNotizSchluessel(k) {
+        if (!istTafelSchluessel(k) || k.indexOf('cbd-board-pagecount-') === 0) return false;
+        for (var i = 0; i < NOTIZ_BEGLEITSUFFIXE.length; i++) {
+            var s = NOTIZ_BEGLEITSUFFIXE[i];
+            if (k.length > s.length && k.slice(-s.length) === s) return false;
+        }
+        return true;
+    }
+
+    /** Flache Kopie eines Elements (Punkte-Arrays werden geteilt, nie verändert). */
+    function elementKopie(el) {
+        var k = {};
+        for (var p in el) {
+            if (Object.prototype.hasOwnProperty.call(el, p)) k[p] = el[p];
+        }
+        return k;
+    }
+
+    var NUR_BILD_TEXT = 'Nur als Bild gespeichert'; // E9 / AP-4.2: Elemente nicht gespeichert
+    // AP-4.fix3 (F3): lokal ist trotz Aufräumen kein Platz für das PNG
+    var SPEICHER_VOLL_TEXT = 'Nicht gespeichert – Speicher voll';
+
+    // Obergrenze der Punkte einer an den Server gesendeten Elementliste
+    // (AP-4.fix1, Befund F1). Gezählt wird wie auf dem Server die Zahl der
+    // '[' im serialisierten Text (obere Schranke der Punktzahl). Darüber
+    // sendet saveToServer() gar keine Liste - der Server verwürfe sie ohnehin
+    // (CBD_Classroom::ELEMENTE_MAX_PUNKTE, gleicher Wert, nur gemeinsam
+    // ändern; der Harnisch tools/test-board-elemente.php vergleicht beide).
+    var ELEMENTE_MAX_PUNKTE = 100000;
+
+    /** Zahl der '[' in einem Text (ohne Zwischen-Array, auch bei MB-Strings billig). */
+    function klammerZahl(text) {
+        var n = 0, i = -1;
+        while ((i = text.indexOf('[', i + 1)) !== -1) n++;
+        return n;
+    }
+
     window.CBDBoardMode = {
 
         // State
@@ -55,9 +116,29 @@
         drawingPointerType: null,  // dessen pointerType ('pen' | 'touch' | 'mouse')
         stiftGesehen: false,       // Stift-Vorrang: true ab dem ersten pointerType 'pen' dieser Tafelsitzung
 
-        // Stroke-based drawing: Store all strokes for stroke-eraser
-        strokes: [],
+        // Elementmodell v1 (Phase 4, AP-4.3) - ersetzt das fruehere
+        // this.strokes + this.baseImageObj. Alles, was auf der Zeichenebene
+        // steht, ist ein Element in this.modell.elemente (Strich, Text, Bild);
+        // zeichneModell() baut die Ebene daraus neu auf.
+        //   - Elemente werden NIE an Ort und Stelle veraendert, nur ersetzt
+        //     (der Undo-Stapel haelt flache Kopien der Elementliste, Bild-
+        //     Elemente tragen grosse daten-Strings - siehe merkeZustand()).
+        //   - currentStroke ist der "Strich in Arbeit" im bisherigen Format
+        //     {tool, color, width, points:[{x,y}]} und wird erst in
+        //     onPointerUp per CBDBoardElemente.ausStrokes() zum Element.
+        modell: null,
+        undoStapel: [],
         currentStroke: null,
+        _idZaehler: 1,
+        _idModell: null,      // Modell, gegen das _idZaehler zuletzt abgeglichen wurde
+        _bildQuellen: null,   // Map daten-String -> Image|Canvas (Bild-Elemente)
+        _radierBilder: null,  // { elementId: Canvas } waehrend einer Punkt-Radiergeste
+        _radierLetzter: null, // letzte Radierposition (Zwischenpunkte bei schnellen Bewegungen)
+        _radierGeaendert: false,
+        _gesteGemerkt: false, // Radiergeste hat ihren Undo-Schritt schon angelegt
+        _rahmenCache: null,   // WeakMap Element -> Rahmen (Elemente sind unveraenderlich)
+        _ladeNr: 0,           // AP-4.4: zaehlt Oeffnen/Seitenwechsel hoch; eine Server-Antwort
+                              // mit veralteter Nummer gehoert zu einer anderen Seite/Sitzung
 
         // Grid state: 'off', 'horizontal', 'vertical'
         gridMode: 'off',
@@ -81,7 +162,7 @@
         // Multi-Seiten-State
         currentPageIndex: 0,
         totalPages: 1,
-        pageCache: {},   // { pageIndex: dataUrl }
+        pageCache: {},   // { pageIndex: {png, modell} } ('' = Seite war leer; AP-4.4)
 
         // Zoom & Pan
         zoom: 1.0,
@@ -94,9 +175,6 @@
         _pinchStartPanY: 0,
         _pinchMidX: 0,
         _pinchMidY: 0,
-
-        // Undo
-        baseImageObj: null,      // Geladenes Bild als Image-Objekt (drawImage – resize-sicher)
 
         // Preset board colors (for background)
         boardPresetColors: [
@@ -168,7 +246,19 @@
             this.panY = 0;
             this._pinchPointers = {};
             this._pinchStartDist = null;
-            this.baseImageObj = null;
+
+            // Elementmodell (AP-4.3): wird nach dem ersten Groessen-Abgleich
+            // mit den CSS-Massen der Zeichenflaeche angelegt (siehe unten)
+            this.modell = null;
+            this.undoStapel = [];
+            this.currentStroke = null;
+            this._idZaehler = 1;
+            this._idModell = null;
+            this._bildQuellen = new Map();
+            this._radierBilder = null;
+            this._radierLetzter = null;
+            this._rahmenCache = new WeakMap();
+            this._ladeNr++;
 
             // Zeigerverwaltung (#7149): Stift-Vorrang gilt je Tafelsitzung
             this.activePointers.clear();
@@ -203,6 +293,9 @@
             this.initCanvases();
             this.resizeAllCanvases();
 
+            // Leeres Modell in der Groesse der Zeichenflaeche (CSS-Pixel)
+            this.modell = this._leeresModell();
+
             // Seitenanzahl aus localStorage laden und UI aufbauen
             this.initPages();
 
@@ -235,11 +328,7 @@
             // Klassen-Modus: prüfen ob aktuelle Seite leer ist
             var snapCurrentPageBlank = false;
             if (!isLocal && this.drawingCtx && this.totalPages === 1) {
-                var pixels = this.drawingCtx.getImageData(0, 0, this.drawingCanvas.width, this.drawingCanvas.height).data;
-                snapCurrentPageBlank = true;
-                for (var i = 3; i < pixels.length; i += 4) {
-                    if (pixels[i] > 0) { snapCurrentPageBlank = false; break; }
-                }
+                snapCurrentPageBlank = this._istLeer();
             }
 
             // Closing-Animation
@@ -308,9 +397,15 @@
             this.drawingPointerType = null;
             this.stiftGesehen = false;
 
-            // Stroke-basiertes Radieren: Striche löschen
-            this.strokes = [];
+            // Elementmodell (AP-4.3) verwerfen
+            this.modell = null;
+            this.undoStapel = [];
             this.currentStroke = null;
+            this._bildQuellen = null;
+            this._radierBilder = null;
+            this._radierLetzter = null;
+            this._rahmenCache = null;
+            this._idModell = null;
 
             // Multi-Seiten-State zurücksetzen
             this.currentPageIndex = 0;
@@ -323,7 +418,6 @@
             this.panY = 0;
             this._pinchPointers = {};
             this._pinchStartDist = null;
-            this.baseImageObj = null;
         },
 
         /**
@@ -510,16 +604,6 @@
             this.cssWidth = cssWidth;
             this.cssHeight = cssHeight;
 
-            // Zeichnung vom Drawing Canvas sichern (physische Pixel, vor dem Resize)
-            var imageData = null;
-            if (this.drawingCanvas.width > 0 && this.drawingCanvas.height > 0) {
-                try {
-                    imageData = this.drawingCtx.getImageData(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
-                } catch (e) {
-                    // Canvas war leer
-                }
-            }
-
             // Alle Canvas-Dimensionen auf physische Pixel setzen (CSS × DPR)
             [this.backgroundCanvas, this.gridCanvas, this.drawingCanvas].forEach(function(canvas) {
                 canvas.width = cssWidth * dpr;
@@ -541,11 +625,11 @@
                 this.redrawGrid();
             }
 
-            // Zeichnung wiederherstellen (putImageData arbeitet in physischen Pixeln,
-            // umgeht den Transform – daher korrekt nach dem scale())
-            if (imageData) {
-                this.drawingCtx.putImageData(imageData, 0, 0);
-            }
+            // Zeichnung aus dem Elementmodell neu aufbauen (AP-4.3, statt
+            // getImageData/putImageData). modell.breite/hoehe bleiben bewusst
+            // unverändert: die Koordinaten stehen 1:1 wie früher die Pixel,
+            // auch Bild-Elemente behalten ihre Größe (kein Strecken).
+            this.zeichneModell();
         },
 
         /**
@@ -1415,14 +1499,18 @@
         clearCanvas: function() {
             if (!this.drawingCtx || !this.drawingCanvas) return;
 
-            this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
-
-            // Striche löschen (für Strich-basiertes Radieren)
-            this.strokes = [];
+            // "Zeichnung löschen" ist rückgängig machbar (E12): Stand merken,
+            // dann alle Elemente entfernen. Eine schon leere Tafel legt keinen
+            // Undo-Schritt an.
+            if (this.modell) {
+                if (this.modell.elemente.length) {
+                    this.merkeZustand();
+                }
+                this.modell.elemente = [];
+            }
             this.currentStroke = null;
-
-            // Basis-Bild löschen (Undo-Basis zurücksetzen)
-            this.baseImageObj = null;
+            this.zeichneModell();
+            this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
 
             // Aus localStorage entfernen
             this.removeFromCache();
@@ -1430,7 +1518,7 @@
 
         /**
          * Text-Werkzeug: Eingabefeld an der Klickposition öffnen.
-         * Übernommener Text wird als strokes-Eintrag abgelegt (siehe commit()
+         * Übernommener Text wird als Text-Element abgelegt (siehe commit()
          * unten) und dadurch automatisch gespeichert/rückgängig machbar.
          */
         openTextInput: function(clientX, clientY) {
@@ -1476,19 +1564,23 @@
                 cleanup();
                 if (!text) return;
 
-                // Als regulaeren strokes-Eintrag ablegen (analog zum
-                // bestehenden 'highlighter'-Sonderfall) - macht Undo,
-                // Speichern und Seitenwechsel automatisch korrekt, weil
-                // redrawAllStrokes() ausschliesslich aus baseImageObj +
-                // strokes neu aufbaut (siehe dortiger Pass 3).
-                self.strokes.push({
+                // Tafel inzwischen geschlossen: nichts mehr ablegen
+                if (!self.modell) return;
+
+                // Als Text-Element ablegen (AP-4.3) - macht Undo, Speichern
+                // und Seitenwechsel automatisch korrekt, weil zeichneModell()
+                // ausschliesslich aus dem Modell neu aufbaut (dortiger Pass 4).
+                var element = self._elementAusStroke({
                     tool: 'text',
                     text: text,
                     color: self.currentColor,
                     width: self.lineWidth,
                     points: [{x: canvasX, y: canvasY}]
                 });
-                self.redrawAllStrokes();
+                if (!element) return;
+                self.merkeZustand();
+                self.modell.elemente.push(element);
+                self.zeichneModell();
             }
 
             function cancel() {
@@ -1673,20 +1765,17 @@
                 return; // kein Zeichen-Strich beginnen
             }
 
-            // Punkt-Radierer: Kontinuierlich radieren (wie normaler Radierer)
+            // Punkt-Radierer (vektoriell, E11): Radiergeste beginnen und den
+            // ersten Punkt radieren
             if (this.currentTool === 'eraser-point') {
-                // Ersten Punkt radieren
-                this.drawingCtx.beginPath();
-                this.drawingCtx.arc(this.lastX, this.lastY, this.lineWidth * 3, 0, Math.PI * 2);
-                this.drawingCtx.globalCompositeOperation = 'destination-out';
-                this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
-                this.drawingCtx.fill();
-                this.drawingCtx.globalCompositeOperation = 'source-over';
+                this._radierGesteBeginnen(this.lastX, this.lastY);
+                this._punktRadieren([{x: this.lastX, y: this.lastY}]);
                 // KEIN return - isDrawing wird aktiviert für kontinuierliches Radieren
             }
 
             // Strich-Radierer: Prüfe ob ein Strich getroffen wurde
             if (this.currentTool === 'eraser-stroke') {
+                this._gesteGemerkt = false; // neue Geste: höchstens EIN Undo-Schritt
                 var deletedAny = this.eraseStrokeAtPoint(this.lastX, this.lastY);
                 if (deletedAny) {
                     return; // Strich wurde gelöscht, kein isDrawing nötig
@@ -1715,7 +1804,7 @@
             // Canvas mit korrekter Ebenen-Reihenfolge neu zeichnen
             // (Textmarker unten, normale Striche oben)
             if (this.currentTool !== 'eraser-point' && this.currentTool !== 'eraser-stroke') {
-                this.redrawAllStrokes();
+                this.zeichneModell();
             }
 
             // Pointer capture - wirft u. a. bei synthetischen Zeigern ohne
@@ -1730,8 +1819,12 @@
         },
 
         /**
-         * Laufenden Strich/Radiervorgang verwerfen, ohne ihn in strokes zu
-         * übernehmen (Zeigerverwaltung #7149, Regeln 3 und 4).
+         * Laufenden Strich/Radiervorgang verwerfen, ohne ihn ins Modell zu
+         * übernehmen (Zeigerverwaltung #7149, Regeln 3 und 4). Ein Strich legt
+         * erst beim Übernehmen (onPointerUp) seinen Undo-Schritt an - ein
+         * verworfener Strich hinterlässt also keinen leeren Undo-Schritt.
+         * Eine schon erfolgte Punkt-Radierung bleibt (wie früher die
+         * Pixel-Radierung) und wird abgeschlossen.
          */
         _strichVerwerfen: function() {
             var hatteStrich = !!this.currentStroke;
@@ -1741,8 +1834,10 @@
             this.drawingPointerType = null;
             if (this.drawingCtx) {
                 this.drawingCtx.globalCompositeOperation = 'source-over';
-                if (hatteStrich) {
-                    this.redrawAllStrokes(); // Teilstrich wieder von der Fläche nehmen
+                if (this._radierBilder) {
+                    this._radierGesteAbschliessen();
+                } else if (hatteStrich) {
+                    this.zeichneModell(); // Teilstrich wieder von der Fläche nehmen
                 }
             }
         },
@@ -1802,16 +1897,10 @@
             // nur 60-120 Hz). Ohne sie wird der Strich bei schnellen Bögen eckig.
             var punkte = this._punkteAusEreignis(e, rect);
 
-            // Punkt-Radierer: Zeichne Kreis an jeder Position (kontinuierlich)
+            // Punkt-Radierer (vektoriell, E11): an jeder Position radieren,
+            // bei schnellen Bewegungen mit Zwischenpunkten (sonst Lücken)
             if (this.currentTool === 'eraser-point') {
-                this.drawingCtx.globalCompositeOperation = 'destination-out';
-                this.drawingCtx.fillStyle = 'rgba(0,0,0,1)';
-                for (var r = 0; r < punkte.length; r++) {
-                    this.drawingCtx.beginPath();
-                    this.drawingCtx.arc(punkte[r].x, punkte[r].y, this.lineWidth * 3, 0, Math.PI * 2);
-                    this.drawingCtx.fill();
-                }
-                this.drawingCtx.globalCompositeOperation = 'source-over';
+                this._punktRadieren(this._radierZwischenpunkte(punkte));
                 this.lastX = x;
                 this.lastY = y;
                 return;
@@ -1889,7 +1978,9 @@
          *
          * Seit #7152 liegt der Marker auch im Neuzeichnen UNTER dem Basis-Bild
          * (redrawAllStrokes: Textmarker -> Basis-Bild -> Stift -> Text), so dass
-         * Zwischenstand und Endbild über alter Schrift übereinstimmen.
+         * Zwischenstand und Endbild über alter Schrift übereinstimmen. Seit
+         * AP-4.3 (Elementmodell) heißt das Neuzeichnen zeichneModell() und die
+         * Basis-Bilder sind Bild-Elemente - Reihenfolge unverändert.
          */
         _segmentZeichnen: function(stroke, von, punkte) {
             if (!this.drawingCtx || !punkte.length) return;
@@ -1926,192 +2017,633 @@
                 this.drawingPointerType = null;
                 this.drawingCtx.globalCompositeOperation = 'source-over';
 
-                // Aktuellen Strich zur Liste hinzufügen (außer bei Radierer)
+                // Aktuellen Strich als Element übernehmen (außer bei Radierer).
+                // Undo-Schritt (E12) erst hier: der Stand VOR dem Strich ist
+                // genau der jetzige Modellstand (der Strich lebt bis hierher
+                // nur in currentStroke), und ein verworfener Strich legt so
+                // keinen leeren Schritt an.
                 if (this.currentStroke && this.currentTool !== 'eraser-stroke') {
-                    this.strokes.push(this.currentStroke);
+                    var element = this.modell ? this._elementAusStroke(this.currentStroke) : null;
                     this.currentStroke = null;
+                    if (element) {
+                        this.merkeZustand();
+                        this.modell.elemente.push(element);
+                    }
                     // #7149 (E8): während des Strichs wurde nur inkrementell
                     // gezeichnet - jetzt EINMAL alles neu, damit Ebenen-
                     // Reihenfolge und Endbild exakt dem bisherigen Verfahren
                     // (redrawAllStrokes je pointermove) entsprechen.
-                    this.redrawAllStrokes();
+                    this.zeichneModell();
+                }
+
+                // Punkt-Radiergeste abschließen (Bild-Elemente übernehmen,
+                // exakt neu zeichnen)
+                if (this._radierBilder) {
+                    this._radierGesteAbschliessen();
                 }
             }
         },
 
         /**
-         * Strich-Radierer: Prüft ob ein Strich an Position (x,y) ist und löscht ihn
+         * Strich-Radierer: Prüft ob ein Element an Position (x,y) ist und löscht es.
+         * Striche per Punktabstand, Texte über ihren Rahmen (wie bisher),
+         * Bild-Elemente NIE (E10: sonst löschte eine Berührung die ganze alte
+         * Tafel). Höchstens ein Element je Aufruf; der erste Treffer einer
+         * Geste legt den Undo-Schritt an (_merkeEinmal).
          */
         eraseStrokeAtPoint: function(x, y) {
+            if (!this.modell) return false;
             var eraserRadius = this.lineWidth * 2; // Größerer Radius für einfacheres Treffen
-            var deletedAny = false;
+            var elemente = this.modell.elemente;
+            var treffer = -1;
 
-            // Durch alle Striche iterieren (rückwärts für sicheres Löschen)
-            for (var i = this.strokes.length - 1; i >= 0; i--) {
-                var stroke = this.strokes[i];
+            // Durch alle Elemente iterieren (rückwärts: oberstes zuerst)
+            for (var i = elemente.length - 1; i >= 0 && treffer < 0; i--) {
+                var el = elemente[i];
 
-                // Text-Einträge haben nur einen Anker-Punkt (Einfügeposition),
+                if (el.typ === 'bild') continue; // E10: Strich-Radierer ignoriert Bilder
+
+                // Text-Elemente haben nur einen Anker-Punkt (Einfügeposition),
                 // nicht den tatsächlich gerenderten Textbereich - ein reiner
                 // Punkt-Abstands-Test würde den Radierer nur nahe der linken
                 // oberen Ecke treffen lassen (AP-1.rev, Befund B3). Deshalb
                 // hier stattdessen ein Rechtecktest über die tatsächliche
-                // Ausdehnung des gerenderten Texts.
-                if (stroke.tool === 'text') {
-                    var fontSizePxErase = Math.round(16 + stroke.width * 4);
-                    this.drawingCtx.font = fontSizePxErase + 'px sans-serif';
-                    var textLinesErase = stroke.text.split('\n');
-                    var maxLineWidth = 0;
-                    for (var tl = 0; tl < textLinesErase.length; tl++) {
-                        var lineWidthPx = this.drawingCtx.measureText(textLinesErase[tl]).width;
-                        if (lineWidthPx > maxLineWidth) maxLineWidth = lineWidthPx;
+                // Ausdehnung des gerenderten Texts (rahmen() mit Messfunktion).
+                if (el.typ === 'text') {
+                    var r = this._rahmen(el);
+                    if (x >= r.x - eraserRadius && x <= r.x + r.b + eraserRadius &&
+                        y >= r.y - eraserRadius && y <= r.y + r.h + eraserRadius) {
+                        treffer = i;
                     }
-                    var boxLeft = stroke.points[0].x - eraserRadius;
-                    var boxTop = stroke.points[0].y - eraserRadius;
-                    var boxRight = stroke.points[0].x + maxLineWidth + eraserRadius;
-                    var boxBottom = stroke.points[0].y + textLinesErase.length * fontSizePxErase * 1.2 + eraserRadius;
-
-                    if (x >= boxLeft && x <= boxRight && y >= boxTop && y <= boxBottom) {
-                        this.strokes.splice(i, 1);
-                        deletedAny = true;
-                    }
-
-                    if (deletedAny) break;
                     continue;
                 }
 
-                // Prüfe ob Radierer einen Punkt des Strichs berührt
-                for (var j = 0; j < stroke.points.length; j++) {
-                    var point = stroke.points[j];
-                    var dx = point.x - x;
-                    var dy = point.y - y;
-                    var distance = Math.sqrt(dx * dx + dy * dy);
-
-                    if (distance < eraserRadius + stroke.width) {
-                        // Strich getroffen! Entfernen
-                        this.strokes.splice(i, 1);
-                        deletedAny = true;
-                        break;
-                    }
+                // Prüfe ob Radierer den Linienzug des Strichs berührt. Abstand
+                // zum SEGMENT, nicht nur zu den Stützpunkten (bis 3.1.138):
+                // schnell gezogene Linien und die Teilstücke des Punkt-
+                // Radierers haben lange Segmente ohne Zwischenpunkte, die
+                // sonst in der Mitte nicht zu treffen wären. Schwelle wie
+                // bisher: Radierradius + Strichbreite.
+                if (this._abstandZumLinienzug(x, y, el.punkte) < eraserRadius + el.breite) {
+                    treffer = i; // Strich getroffen
                 }
-
-                if (deletedAny) break; // Nur einen Strich pro Frame löschen
             }
 
-            if (deletedAny) {
-                this.redrawAllStrokes();
-            }
+            if (treffer < 0) return false;
 
-            return deletedAny;
+            this._merkeEinmal();
+            this.modell.elemente.splice(treffer, 1);
+            this.zeichneModell();
+            return true;
+        },
+
+        // =============================================
+        // Punkt-Radierer, vektoriell (Architektur E11)
+        // =============================================
+
+        /**
+         * Beginn einer Punkt-Radiergeste (pointerdown). Der Undo-Schritt wird
+         * erst beim ersten tatsächlichen Treffer angelegt (_merkeEinmal) -
+         * eine Geste ins Leere hinterlässt keinen leeren Schritt.
+         */
+        _radierGesteBeginnen: function(x, y) {
+            this._gesteGemerkt = false;
+            this._radierBilder = {};
+            this._radierLetzter = {x: x, y: y};
+            this._radierGeaendert = false;
         },
 
         /**
-         * Canvas neu zeichnen mit allen gespeicherten Strichen
+         * Zwischenpunkte von der letzten Radierposition zu den neuen Punkten
+         * im Abstand von höchstens r/2 (r = Radierradius). Ohne sie bleiben bei
+         * schnellen Bewegungen Striche zwischen zwei Ereignissen stehen.
+         * r/2 statt r: Kreise im Abstand r überdecken nur einen Streifen der
+         * halben Breite r*0,87, bei r/2 sind es r*0,97.
          */
-        redrawAllStrokes: function() {
-            // Canvas löschen
-            this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
-
-            // Sammle alle Striche (abgeschlossen + aktuell in Bearbeitung)
-            var allStrokes = this.strokes.slice(); // Kopie der abgeschlossenen Striche
-            if (this.currentStroke && this.currentStroke.points.length > 0) {
-                allStrokes.push(this.currentStroke); // Füge aktuellen Strich hinzu
+        _radierZwischenpunkte: function(punkte) {
+            var r = this.lineWidth * 3;
+            var schritt = Math.max(1, r / 2);
+            var liste = [];
+            var von = this._radierLetzter || punkte[0];
+            for (var i = 0; i < punkte.length; i++) {
+                var p = punkte[i];
+                var dx = p.x - von.x;
+                var dy = p.y - von.y;
+                var n = Math.ceil(Math.sqrt(dx * dx + dy * dy) / schritt);
+                for (var k = 1; k <= n; k++) {
+                    liste.push({x: von.x + dx * k / n, y: von.y + dy * k / n});
+                }
+                von = p;
             }
+            this._radierLetzter = {x: von.x, y: von.y};
+            return liste;
+        },
+
+        /**
+         * Radiert an allen übergebenen Punkten (Kreis mit r = lineWidth * 3):
+         * - Strich-Elemente: CBDBoardElemente.radiereKreis() schneidet den
+         *   Teil heraus, Striche zerfallen in Teilstriche mit neuen IDs. Der
+         *   Kreis wird um die halbe Strichbreite erweitert, weil radiereKreis
+         *   nur die Mittellinie kennt - so endet die runde Kappe des Reststücks
+         *   genau am Radierkreis (wie früher die Pixel-Radierung).
+         * - Text-Elemente, deren Rahmen den Punkt enthält, werden gelöscht.
+         * - Bild-Elemente, deren Rahmen den Kreis schneidet: Kreis im
+         *   Offscreen-Canvas des Bildes ausradieren (destination-out); das
+         *   Element bekommt seine neuen daten erst beim Abschluss der Geste.
+         * Danach wird nur das Nötige gezeichnet: ohne Text in der Nähe genügt
+         * ein destination-out-Kreis auf der Zeichenebene (billig, wie früher),
+         * sonst wird alles neu gezeichnet. Exakt neu gezeichnet wird ohnehin
+         * beim Abschluss der Geste.
+         */
+        _punktRadieren: function(punkte) {
+            if (!this.modell || !punkte.length) return;
+            var E = elementeModul();
+            var self = this;
+            var r = this.lineWidth * 3;
+            var neueId = function() { return self.neueId(); };
+            var alt = this.modell.elemente;
+            var neu = [];
+            var geaendert = false;
+            var bildGeaendert = false;
+            var textWeg = false;
+            var i, k, p;
+
+            for (i = 0; i < alt.length; i++) {
+                var el = alt[i];
+
+                if (el.typ === 'strich') {
+                    var rand = r + el.breite / 2;
+                    var rb = this._rahmen(el);
+                    var teile = [el];
+                    for (k = 0; k < punkte.length && teile.length; k++) {
+                        p = punkte[k];
+                        // schneller Ausschluss über den Rahmen des Originals
+                        if (!this._kreisSchneidetRahmen(p.x, p.y, rand, rb)) continue;
+                        var naechste = [];
+                        for (var t = 0; t < teile.length; t++) {
+                            var stuecke = E.radiereKreis(teile[t], p.x, p.y, rand, neueId);
+                            for (var s = 0; s < stuecke.length; s++) naechste.push(stuecke[s]);
+                        }
+                        teile = naechste;
+                    }
+                    if (teile.length !== 1 || teile[0] !== el) geaendert = true;
+                    for (k = 0; k < teile.length; k++) neu.push(teile[k]);
+                    continue;
+                }
+
+                if (el.typ === 'text') {
+                    var rt = this._rahmen(el);
+                    var weg = false;
+                    for (k = 0; k < punkte.length; k++) {
+                        p = punkte[k];
+                        if (p.x >= rt.x && p.x <= rt.x + rt.b && p.y >= rt.y && p.y <= rt.y + rt.h) {
+                            weg = true;
+                            break;
+                        }
+                    }
+                    if (weg) {
+                        geaendert = true;
+                        textWeg = true;
+                    } else {
+                        neu.push(el);
+                    }
+                    continue;
+                }
+
+                if (el.typ === 'bild') {
+                    for (k = 0; k < punkte.length; k++) {
+                        p = punkte[k];
+                        if (this._kreisSchneidetRahmen(p.x, p.y, r, el) && this._bildRadieren(el, p.x, p.y, r)) {
+                            bildGeaendert = true;
+                        }
+                    }
+                }
+                neu.push(el);
+            }
+
+            if (!geaendert && !bildGeaendert) return;
+
+            this._merkeEinmal(); // Stand VOR der Änderung (alt ist unverändert)
+            if (geaendert) {
+                this.modell.elemente = neu;
+            }
+            this._radierGeaendert = true;
+
+            if (textWeg || this._textInKreisNaehe(punkte, r)) {
+                this.zeichneModell();
+                return;
+            }
+            var ctx = this.drawingCtx;
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.fillStyle = 'rgba(0,0,0,1)';
+            for (k = 0; k < punkte.length; k++) {
+                ctx.beginPath();
+                ctx.arc(punkte[k].x, punkte[k].y, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalCompositeOperation = 'source-over';
+        },
+
+        /**
+         * Kreis im Offscreen-Canvas eines Bild-Elements ausradieren. Der
+         * Canvas hat die Auflösung der Bildquelle (bei HiDPI das Vielfache
+         * der CSS-Maße b×h), damit das Bild durch das Radieren nicht
+         * unscharf wird; die Position wird umgerechnet. Liefert false, wenn
+         * die Bildquelle noch nicht geladen ist.
+         */
+        _bildRadieren: function(el, x, y, r) {
+            var c = this._radierBilder ? this._radierBilder[el.id] : null;
+            if (!c) {
+                var quelle = this._bildQuelle(el);
+                if (!quelle || !this._radierBilder) return false;
+                var bw = quelle.naturalWidth || quelle.width;
+                var bh = quelle.naturalHeight || quelle.height;
+                if (!bw || !bh) return false;
+                c = document.createElement('canvas');
+                c.width = bw;
+                c.height = bh;
+                c.getContext('2d').drawImage(quelle, 0, 0);
+                this._radierBilder[el.id] = c;
+            }
+            var g = c.getContext('2d');
+            g.save();
+            g.scale(c.width / el.b, c.height / el.h);
+            g.globalCompositeOperation = 'destination-out';
+            g.fillStyle = 'rgba(0,0,0,1)';
+            g.beginPath();
+            g.arc(x - el.x, y - el.y, r, 0, Math.PI * 2);
+            g.fill();
+            g.restore();
+            return true;
+        },
+
+        /**
+         * Ende einer Punkt-Radiergeste: radierte Bild-Elemente durch NEUE
+         * Element-Objekte mit neuen daten ersetzen (das alte Objekt bleibt für
+         * Rückgängig unverändert im Undo-Stapel), dann exakt neu zeichnen.
+         */
+        _radierGesteAbschliessen: function() {
+            var bilder = this._radierBilder;
+            this._radierBilder = null;
+            this._radierLetzter = null;
+            if (!this.modell || !bilder) return;
+            var ids = Object.keys(bilder);
+            if (ids.length) {
+                var elemente = this.modell.elemente;
+                for (var i = 0; i < elemente.length; i++) {
+                    var el = elemente[i];
+                    if (el.typ !== 'bild' || !bilder.hasOwnProperty(el.id)) continue;
+                    var canvas = bilder[el.id];
+                    var daten = canvas.toDataURL('image/png');
+                    this._bildQuellen.set(daten, canvas);
+                    elemente[i] = {id: el.id, typ: 'bild', daten: daten, x: el.x, y: el.y, b: el.b, h: el.h};
+                }
+            }
+            if (this._radierGeaendert) {
+                this.zeichneModell();
+            }
+            this._radierGeaendert = false;
+        },
+
+        /** Kleinster Abstand des Punkts (x,y) zum Linienzug punkte [[x,y],…]. */
+        _abstandZumLinienzug: function(x, y, punkte) {
+            var min = Infinity;
+            for (var i = 0; i < punkte.length; i++) {
+                var ax = punkte[i][0], ay = punkte[i][1];
+                var bx = i + 1 < punkte.length ? punkte[i + 1][0] : ax;
+                var by = i + 1 < punkte.length ? punkte[i + 1][1] : ay;
+                var dx = bx - ax, dy = by - ay;
+                var l2 = dx * dx + dy * dy;
+                var t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0;
+                var ex = ax + t * dx - x, ey = ay + t * dy - y;
+                var d = Math.sqrt(ex * ex + ey * ey);
+                if (d < min) min = d;
+            }
+            return min;
+        },
+
+        _kreisSchneidetRahmen: function(cx, cy, r, rb) {
+            var nx = Math.max(rb.x, Math.min(cx, rb.x + rb.b));
+            var ny = Math.max(rb.y, Math.min(cy, rb.y + rb.h));
+            var dx = cx - nx;
+            var dy = cy - ny;
+            return dx * dx + dy * dy < r * r;
+        },
+
+        _textInKreisNaehe: function(punkte, r) {
+            var elemente = this.modell.elemente;
+            for (var i = 0; i < elemente.length; i++) {
+                if (elemente[i].typ !== 'text') continue;
+                var rb = this._rahmen(elemente[i]);
+                for (var k = 0; k < punkte.length; k++) {
+                    if (this._kreisSchneidetRahmen(punkte[k].x, punkte[k].y, r, rb)) return true;
+                }
+            }
+            return false;
+        },
+
+        // =============================================
+        // Elementmodell (AP-4.3): Zustand, IDs, Undo, Bilder
+        // =============================================
+
+        /** Leeres Modell in der aktuellen Größe der Zeichenfläche (CSS-Pixel). */
+        _leeresModell: function() {
+            var b = this.cssWidth || (this.drawingCanvas ? this.drawingCanvas.width : 0) || 1;
+            var h = this.cssHeight || (this.drawingCanvas ? this.drawingCanvas.height : 0) || 1;
+            return elementeModul().leeresModell(b, h);
+        },
+
+        /**
+         * Neue, im Modell eindeutige Element-ID 'e<n>'. Der Zähler läuft nur
+         * vorwärts (auch über Rückgängig hinweg). Wird this.modell durch ein
+         * anderes Objekt ersetzt (z. B. geladenes Modell, AP-4.4), zieht er
+         * einmal per hoechsteIdNummer() nach - nicht bei jedem Aufruf, das
+         * wäre beim Radieren O(Elemente) je neuem Teilstrich.
+         */
+        neueId: function() {
+            if (this.modell && this._idModell !== this.modell) {
+                var hoechste = elementeModul().hoechsteIdNummer(this.modell);
+                if (this._idZaehler <= hoechste) this._idZaehler = hoechste + 1;
+                this._idModell = this.modell;
+            }
+            return 'e' + (this._idZaehler++);
+        },
+
+        /** Strich/Text im bisherigen strokes-Format -> Element (oder null). */
+        _elementAusStroke: function(stroke) {
+            var self = this;
+            var m = elementeModul().ausStrokes([stroke], this.modell.breite, this.modell.hoehe,
+                function() { return self.neueId(); });
+            return m.elemente.length ? m.elemente[0] : null;
+        },
+
+        /** Rahmen eines Elements; Textbreite mit der Zeichenebene gemessen. */
+        _rahmen: function(el) {
+            var cache = this._rahmenCache;
+            if (cache) {
+                var r = cache.get(el);
+                if (r) return r;
+            }
+            var ctx = this.drawingCtx;
+            var rb = elementeModul().rahmen(el, ctx ? function(text, px) {
+                ctx.font = px + 'px sans-serif';
+                return ctx.measureText(text).width;
+            } : null);
+            if (cache) cache.set(el, rb);
+            return rb;
+        },
+
+        /**
+         * Undo (E12): flache Kopie der Elementliste auf den Stapel (max. 50).
+         * Flach reicht, weil Elemente nie verändert, nur ersetzt werden -
+         * eine tiefe Kopie würde die großen daten-Strings der Bild-Elemente
+         * bei jedem Schritt verdoppeln.
+         */
+        merkeZustand: function() {
+            if (!this.modell) return;
+            this.undoStapel.push(this.modell.elemente.slice());
+            while (this.undoStapel.length > UNDO_MAX) {
+                this.undoStapel.shift();
+            }
+            this._bildQuellenAufraeumen();
+        },
+
+        /** Höchstens ein Undo-Schritt je Radiergeste. */
+        _merkeEinmal: function() {
+            if (this._gesteGemerkt) return;
+            this._gesteGemerkt = true;
+            this.merkeZustand();
+        },
+
+        /**
+         * Leer = keine Elemente ODER keine sichtbaren Pixel (bisherige
+         * Prüfung über den Alphakanal bleibt, AP-4.3 Schritt 8).
+         */
+        _istLeer: function() {
+            if (!this.modell || this.modell.elemente.length === 0) return true;
+            var pixels = this.drawingCtx.getImageData(0, 0, this.drawingCanvas.width, this.drawingCanvas.height).data;
+            for (var i = 3; i < pixels.length; i += 4) {
+                if (pixels[i] > 0) return false;
+            }
+            return true;
+        },
+
+        /**
+         * PNG (data-URL) als EIN Bild-Element einfügen (E10): x 0, y 0,
+         * b × h = aktuelle CSS-Maße der Zeichenfläche. Es kommt an den Anfang
+         * der Liste (ältester Inhalt) und - weil Laden keine Nutzeraktion ist -
+         * auch in alle schon vorhandenen Undo-Stände; sonst nähme ein vor dem
+         * Laden begonnener Strich beim Rückgängigmachen das Bild mit.
+         * quelle (optional): bereits erzeugtes Image/Canvas für diese daten;
+         * ohne quelle wird ein Image angelegt und nach dem Laden neu gezeichnet.
+         */
+        bildElementHinzufuegen: function(daten, quelle) {
+            if (!this.modell || typeof daten !== 'string' || !daten) return null;
+            if (quelle) {
+                this._bildQuellen.set(daten, quelle);
+            } else if (!this._bildQuellen.has(daten)) {
+                this._bildLaden(daten);
+            }
+            var el = {
+                id: this.neueId(),
+                typ: 'bild',
+                daten: daten,
+                x: 0,
+                y: 0,
+                b: this.cssWidth || this.drawingCanvas.width,
+                h: this.cssHeight || this.drawingCanvas.height
+            };
+            this.modell.elemente.unshift(el);
+            for (var i = 0; i < this.undoStapel.length; i++) {
+                this.undoStapel[i].unshift(el);
+            }
+            this.zeichneModell();
+            return el;
+        },
+
+        /** true, wenn alle Bild-Elemente des Modells zeichenbereit sind. */
+        bildElementeGeladen: function() {
+            if (!this.modell) return false;
+            var el = this.modell.elemente;
+            for (var i = 0; i < el.length; i++) {
+                if (el[i].typ === 'bild' && !this._bildQuelle(el[i])) return false;
+            }
+            return true;
+        },
+
+        _bildLaden: function(daten) {
+            var self = this;
+            var quellen = this._bildQuellen;
+            var img = new Image();
+            img.onload = function() {
+                // nur, wenn die Tafel noch dieselbe Sitzung ist
+                if (self._bildQuellen === quellen && self.modell) {
+                    self.zeichneModell();
+                }
+            };
+            quellen.set(daten, img);
+            img.src = daten;
+            return img;
+        },
+
+        /** Zeichenbereite Quelle (Image/Canvas) eines Bild-Elements oder null. */
+        _bildQuelle: function(el) {
+            if (this._radierBilder && this._radierBilder[el.id]) {
+                return this._radierBilder[el.id];
+            }
+            if (!this._bildQuellen) return null;
+            var q = this._bildQuellen.get(el.daten);
+            if (!q) {
+                q = this._bildLaden(el.daten);
+            }
+            if (typeof q.getContext === 'function') return q; // Canvas
+            return (q.complete && q.naturalWidth > 0) ? q : null;
+        },
+
+        /**
+         * Bildquellen, die weder das Modell noch ein Undo-Stand mehr
+         * braucht, freigeben (erst ab 30 Einträgen - Radier-Gesten auf
+         * Bildern erzeugen je eine neue Quelle).
+         */
+        _bildQuellenAufraeumen: function() {
+            var quellen = this._bildQuellen;
+            if (!quellen || quellen.size <= 30) return;
+            var gebraucht = new Set();
+            var listen = [this.modell.elemente].concat(this.undoStapel);
+            for (var i = 0; i < listen.length; i++) {
+                for (var j = 0; j < listen[i].length; j++) {
+                    if (listen[i][j].typ === 'bild') gebraucht.add(listen[i][j].daten);
+                }
+            }
+            quellen.forEach(function(wert, daten) {
+                if (!gebraucht.has(daten)) quellen.delete(daten);
+            });
+        },
+
+        // =============================================
+        // Zeichnen
+        // =============================================
+
+        /** Linienzug eines Strich-Elements (punkte [[x,y],…]) zeichnen. */
+        _elementLinie: function(ctx, punkte, breite, farbe) {
+            if (punkte.length < 1) return;
+            ctx.lineWidth = breite;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = farbe;
+            ctx.beginPath();
+            ctx.moveTo(punkte[0][0], punkte[0][1]);
+            for (var j = 1; j < punkte.length; j++) {
+                ctx.lineTo(punkte[j][0], punkte[j][1]);
+            }
+            ctx.stroke();
+        },
+
+        /** Linienzug des laufenden Strichs (points [{x,y},…]) zeichnen. */
+        _laufendeLinie: function(ctx, stroke) {
+            if (stroke.points.length < 1) return;
+            ctx.lineWidth = stroke.width;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = stroke.color;
+            ctx.beginPath();
+            ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+            for (var j = 1; j < stroke.points.length; j++) {
+                ctx.lineTo(stroke.points[j].x, stroke.points[j].y);
+            }
+            ctx.stroke();
+        },
+
+        /**
+         * Zeichenebene vollständig aus dem Elementmodell aufbauen (früher
+         * redrawAllStrokes(), Alias unten). Der laufende Strich
+         * (currentStroke) wird jeweils am Ende seines Durchgangs mitgezeichnet.
+         */
+        zeichneModell: function() {
+            if (!this.drawingCtx || !this.drawingCanvas || !this.modell) return;
+            var ctx = this.drawingCtx;
+            var elemente = this.modell.elemente;
+            var laufend = (this.currentStroke && this.currentStroke.points.length > 0) ? this.currentStroke : null;
+            var i, el;
+
+            // Canvas löschen
+            ctx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
 
             // Zeichenreihenfolge (#7152) - bitte nicht umstellen:
-            //   Pass 1 Textmarker -> Basis-Bild -> Pass 2 Stift -> Pass 3 Text
-            // Das Basis-Bild (PNG einer wieder geöffneten Tafel bzw. einer per
-            // goToPage() zurückgeholten Seite) kam früher ZUERST. Der deckende
-            // helle Marker (getLighterHighlightColor: Alpha 1.0) ersetzte dann
-            // per 'lighten' jede dunklere Stelle des Bildes - also genau die
-            // alte Schrift, die man nachträglich markieren wollte (Meldung
-            // #7152). Das PNG der Zeichenebene hat transparenten Grund (die
-            // Tafelfarbe liegt auf eigener Ebene), deshalb scheint ein Marker
-            // UNTER dem Bild überall dort durch, wo das Bild leer ist, und
-            // liegt unter dessen Schrift - bei heller wie dunkler Tafelfarbe.
-            // Passt zum inkrementellen Zeichnen ('destination-over' in
-            // _segmentZeichnen), das den Marker ebenfalls unter Bild und
-            // Striche legt. Ohne Basis-Bild ist das Ergebnis pixelgleich zur
-            // früheren Reihenfolge. Hinweis für das Elementmodell (AP-4.3):
-            // Textmarker -> Bild-Elemente -> Striche -> Texte.
+            //   Pass 1 Textmarker -> Pass 2 Bild-Elemente -> Pass 3 Stift -> Pass 4 Text
+            // Bild-Elemente (PNG einer wieder geöffneten Tafel bzw. einer per
+            // goToPage() zurückgeholten Seite, früher "Basis-Bild") NICHT
+            // zuerst: Der deckende helle Marker (getLighterHighlightColor:
+            // Alpha 1.0) ersetzte sonst per 'lighten' jede dunklere Stelle des
+            // Bildes - also genau die alte Schrift, die man nachträglich
+            // markieren wollte (Meldung #7152). Das PNG der Zeichenebene hat
+            // transparenten Grund (die Tafelfarbe liegt auf eigener Ebene),
+            // deshalb scheint ein Marker UNTER dem Bild überall dort durch, wo
+            // das Bild leer ist, und liegt unter dessen Schrift - bei heller
+            // wie dunkler Tafelfarbe. Passt zum inkrementellen Zeichnen
+            // ('destination-over' in _segmentZeichnen). Ohne Bild-Elemente ist
+            // das Ergebnis pixelgleich zur früheren Reihenfolge.
 
-            // Pass 1: Textmarkierer zeichnen (unterste Ebene, auch unter dem Basis-Bild)
-
-            for (var i = 0; i < allStrokes.length; i++) {
-                var stroke = allStrokes[i];
-                if (stroke.tool !== 'highlighter') continue; // Nur Textmarkierer
-                if (stroke.points.length < 1) continue;
-
-                this.drawingCtx.lineWidth = stroke.width;
-                this.drawingCtx.lineCap = 'round';
-                this.drawingCtx.lineJoin = 'round';
-                this.drawingCtx.strokeStyle = stroke.color;
-                this.drawingCtx.globalCompositeOperation = 'lighten';
-
-                // Strich zeichnen
-                this.drawingCtx.beginPath();
-                this.drawingCtx.moveTo(stroke.points[0].x, stroke.points[0].y);
-
-                for (var j = 1; j < stroke.points.length; j++) {
-                    this.drawingCtx.lineTo(stroke.points[j].x, stroke.points[j].y);
+            // Pass 1: Textmarker (unterste Ebene, auch unter den Bild-Elementen)
+            ctx.globalCompositeOperation = 'lighten';
+            for (i = 0; i < elemente.length; i++) {
+                el = elemente[i];
+                if (el.typ === 'strich' && el.werkzeug === 'highlighter') {
+                    this._elementLinie(ctx, el.punkte, el.breite, el.farbe);
                 }
+            }
+            if (laufend && laufend.tool === 'highlighter') {
+                this._laufendeLinie(ctx, laufend);
+            }
+            ctx.globalCompositeOperation = 'source-over';
 
-                this.drawingCtx.stroke();
+            // Pass 2: Bild-Elemente in Listenreihenfolge, ÜBER den Textmarkern,
+            // unter den Strichen (#7152, s. o.)
+            for (i = 0; i < elemente.length; i++) {
+                el = elemente[i];
+                if (el.typ !== 'bild') continue;
+                var quelle = this._bildQuelle(el);
+                if (quelle) {
+                    ctx.drawImage(quelle, el.x, el.y, el.b, el.h);
+                }
             }
 
-            this.drawingCtx.globalCompositeOperation = 'source-over';
-
-            // Basis-Bild wiederherstellen (geladene Zeichnung, dient als Undo-Basis)
-            // ÜBER den Textmarkern, unter den Strichen der Sitzung (#7152, s. o.).
-            // drawImage verwendet CSS-Koordinaten → korrekt nach Canvas-Resize
-            if (this.baseImageObj && this.baseImageObj.complete) {
-                var bw = this.cssWidth || this.drawingCanvas.width;
-                var bh = this.cssHeight || this.drawingCanvas.height;
-                this.drawingCtx.drawImage(this.baseImageObj, 0, 0, bw, bh);
-            }
-
-            // Pass 2: Normale Striche zeichnen (obere Ebene)
-
-            for (var i = 0; i < allStrokes.length; i++) {
-                var stroke = allStrokes[i];
-                if (stroke.tool === 'highlighter' || stroke.tool === 'text') continue; // Überspringen (Textmarker schon gezeichnet, Text folgt in Pass 3)
-                if (stroke.points.length < 1) continue;
-
-                this.drawingCtx.lineWidth = stroke.width;
-                this.drawingCtx.lineCap = 'round';
-                this.drawingCtx.lineJoin = 'round';
-                this.drawingCtx.strokeStyle = stroke.color;
-
-                // Strich zeichnen
-                this.drawingCtx.beginPath();
-                this.drawingCtx.moveTo(stroke.points[0].x, stroke.points[0].y);
-
-                for (var j = 1; j < stroke.points.length; j++) {
-                    this.drawingCtx.lineTo(stroke.points[j].x, stroke.points[j].y);
+            // Pass 3: Stift (obere Ebene)
+            for (i = 0; i < elemente.length; i++) {
+                el = elemente[i];
+                if (el.typ === 'strich' && el.werkzeug !== 'highlighter') {
+                    this._elementLinie(ctx, el.punkte, el.breite, el.farbe);
                 }
-
-                this.drawingCtx.stroke();
+            }
+            if (laufend && laufend.tool !== 'highlighter' && laufend.tool !== 'text') {
+                this._laufendeLinie(ctx, laufend);
             }
 
             // Composite Operation zurücksetzen
-            this.drawingCtx.globalCompositeOperation = 'source-over';
+            ctx.globalCompositeOperation = 'source-over';
 
-            // Pass 3: Text-Einträge zeichnen (oberste Ebene)
-            for (var k = 0; k < allStrokes.length; k++) {
-                var textStroke = allStrokes[k];
-                if (textStroke.tool !== 'text') continue;
-                var fontSizePx = Math.round(16 + textStroke.width * 4);
-                this.drawingCtx.font = fontSizePx + 'px sans-serif';
-                this.drawingCtx.fillStyle = textStroke.color;
-                this.drawingCtx.textBaseline = 'top';
-                var textLines = textStroke.text.split('\n');
+            // Pass 4: Text-Elemente (oberste Ebene). Schrift wie im
+            // Elementmodell v1: Math.round(16 + breite * 4) px, Zeilenhöhe 1,2.
+            for (i = 0; i < elemente.length; i++) {
+                el = elemente[i];
+                if (el.typ !== 'text') continue;
+                var fontSizePx = Math.round(16 + el.breite * 4);
+                ctx.font = fontSizePx + 'px sans-serif';
+                ctx.fillStyle = el.farbe;
+                ctx.textBaseline = 'top';
+                var textLines = el.text.split('\n');
                 for (var li = 0; li < textLines.length; li++) {
-                    this.drawingCtx.fillText(
-                        textLines[li],
-                        textStroke.points[0].x,
-                        textStroke.points[0].y + li * fontSizePx * 1.2
-                    );
+                    ctx.fillText(textLines[li], el.x, el.y + li * fontSizePx * 1.2);
                 }
             }
+        },
+
+        /**
+         * Früherer Name von zeichneModell() - bleibt als Alias (Prüfseite
+         * tools/test-board-zeiger.html vergleicht damit das Neuzeichnen).
+         */
+        redrawAllStrokes: function() {
+            this.zeichneModell();
         },
 
         onKeyDown: function(e) {
@@ -2167,6 +2699,11 @@
             var classIdKey = 'cbd-board-' + (pageContainerId || this.stableContainerId) + '-classid';
             var classIdWert = String(this.classId);
 
+            // AP-4.4: Antwort nur übernehmen, wenn inzwischen weder die Seite
+            // gewechselt noch die Tafel geschlossen/neu geöffnet wurde - sonst
+            // landete die Zeichnung der alten Seite auf der neuen.
+            var ladeNr = this._ladeNr;
+
             var formData = new FormData();
             formData.append('action', 'cbd_load_drawing');
             formData.append('nonce', this.nonce);
@@ -2180,6 +2717,9 @@
             })
             .then(function(response) { return response.json(); })
             .then(function(data) {
+                if (!self.overlay || self._ladeNr !== ladeNr) {
+                    return; // veraltete Antwort (Seitenwechsel, Schließen)
+                }
                 if (data.success && data.data.drawing_data) {
                     // Gespeicherte Hintergrundfarbe wiederherstellen (browser-spezifisch)
                     try {
@@ -2195,16 +2735,26 @@
                         localStorage.setItem(classIdKey, classIdWert);
                     } catch (e) { /* Ignorieren, wie beim bestehenden bgcolor-Begleitschlüssel */ }
 
+                    // AP-4.4: Elementliste bevorzugt (String oder null, AP-4.2);
+                    // gestreckt auf die aktuelle Fläche (E13)
+                    var geladen = self._elementeLesen(data.data.elemente_data);
+                    if (geladen) {
+                        self._elementeUebernehmen(geladen);
+                        self._setSaveStatus('Geladen');
+                        setTimeout(function() { self._setSaveStatus(''); }, 2000);
+                        return;
+                    }
+
+                    // Rückfall (alte Tafel ohne Elemente, ungültige Liste):
+                    // das PNG wird EIN Bild-Element (E10)
                     var img = new Image();
                     img.onload = function() {
-                        self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
-                        self.drawingCtx.drawImage(img, 0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
-                        // Basis-Bild für Undo als Image-Objekt speichern (resize-sicher)
-                        self.baseImageObj = img;
+                        if (self.modell) self.zeichneModell();
                         self._setSaveStatus('Geladen');
                         setTimeout(function() { self._setSaveStatus(''); }, 2000);
                     };
                     img.src = data.data.drawing_data;
+                    self.bildElementHinzufuegen(data.data.drawing_data, img);
                 } else {
                     // Keine Zeichnung auf Server → leerer Canvas (kein Cache-Fallback!)
                     self._setSaveStatus('');
@@ -2233,12 +2783,9 @@
 
             var self = this;
 
-            // Leeren Canvas erkennen: alle Pixel transparent -> keine Zeichnung vorhanden
-            var pixels = this.drawingCtx.getImageData(0, 0, this.drawingCanvas.width, this.drawingCanvas.height).data;
-            var isBlank = true;
-            for (var i = 3; i < pixels.length; i += 4) {
-                if (pixels[i] > 0) { isBlank = false; break; }
-            }
+            // Leeren Canvas erkennen: keine Elemente oder alle Pixel transparent
+            // -> keine Zeichnung vorhanden (AP-4.3, _istLeer)
+            var isBlank = this._istLeer();
             var dataUrl = isBlank ? '' : this.drawingCanvas.toDataURL('image/png');
 
             // Hintergrundfarbe lokal speichern (browser-spezifische Präferenz)
@@ -2266,6 +2813,18 @@
             formData.append('page_id', this.pageId);
             formData.append('container_id', pageContainerId || this.stableContainerId);
             formData.append('drawing_data', dataUrl);
+            // AP-4.4: Elementliste zusätzlich zum PNG (leere Tafel: '' ->
+            // Server setzt elemente_data auf NULL). Das PNG bleibt die
+            // maßgebliche Darstellung für Schüler, Puls und PDF (E7).
+            // AP-4.fix1 (F1): Über ELEMENTE_MAX_PUNKTE gar keine Liste senden
+            // (spart Upload und Serverlast); '' setzt die Spalte auf NULL,
+            // gemeldet wird "Nur als Bild gespeichert".
+            var elementeText = isBlank ? '' : this._elementeSerialisiert();
+            var elementeZuGross = elementeText !== '' && klammerZahl(elementeText) > ELEMENTE_MAX_PUNKTE;
+            if (elementeZuGross) {
+                elementeText = '';
+            }
+            formData.append('elemente_data', elementeText);
 
             fetch(this.ajaxUrl, {
                 method: 'POST',
@@ -2275,7 +2834,11 @@
             .then(function(data) {
                 self.isSaving = false;
                 if (data.success) {
-                    self._setSaveStatus('Gespeichert');
+                    // elemente_verworfen (AP-4.2): Liste zu groß/unlesbar oder
+                    // Spalte fehlt - gespeichert wurde nur das PNG; ebenso,
+                    // wenn der Browser die Liste gar nicht erst gesendet hat
+                    // (AP-4.fix1)
+                    self._setSaveStatus((elementeZuGross || (data.data && data.data.elemente_verworfen === true)) ? NUR_BILD_TEXT : 'Gespeichert');
 
                     // Klassen-Zuordnung als Begleitschlüssel merken (für den PDF-Export).
                     // Bewusst AUCH bei leerem Canvas (isBlank) gesetzt: Der Export soll
@@ -2349,25 +2912,179 @@
             try {
                 var key = cacheKey || ('cbd-board-' + this.containerId);
 
-                // Leeren Canvas erkennen: alle Pixel transparent
-                var pixels = this.drawingCtx.getImageData(0, 0, this.drawingCanvas.width, this.drawingCanvas.height).data;
-                var isBlank = true;
-                for (var i = 3; i < pixels.length; i += 4) {
-                    if (pixels[i] > 0) { isBlank = false; break; }
-                }
+                // Leeren Canvas erkennen: keine Elemente oder alle Pixel
+                // transparent (AP-4.3, _istLeer)
+                var isBlank = this._istLeer();
 
                 if (isBlank) {
                     localStorage.removeItem(key);
                     localStorage.removeItem(key + '-bgcolor');
+                    localStorage.removeItem(key + '-elemente');
                 } else {
-                    localStorage.setItem(key, this.drawingCanvas.toDataURL('image/png'));
-                    if (this.boardColor) {
-                        localStorage.setItem(key + '-bgcolor', this.boardColor);
+                    // Reihenfolge: erst das PNG (maßgeblich, E7), dann die Elemente
+                    var png = this.drawingCanvas.toDataURL('image/png');
+                    if (!this._pngLokalSchreiben(key, png)) {
+                        // Endgültig kein Platz (AP-4.fix3): sichtbar melden,
+                        // der bisherige Stand unter `key` bleibt unverändert.
+                        this._setSaveStatus(SPEICHER_VOLL_TEXT);
+                        return;
                     }
+                    if (this.boardColor) {
+                        try {
+                            localStorage.setItem(key + '-bgcolor', this.boardColor);
+                        } catch (eFarbe) { /* Tafelfarbe ist entbehrlich */ }
+                    }
+                    this._elementeLokalSpeichern(key, png);
                 }
             } catch (e) {
                 console.warn('[CBD Board Mode] Zeichnung konnte nicht gespeichert werden:', e.message);
             }
+        },
+
+        /**
+         * PNG lokal schreiben; ist der Speicher voll, zuerst Platz schaffen
+         * (AP-4.fix3, Befund F3 aus AP-4.rev). Die -elemente-Schlüssel sind
+         * entbehrlich - das PNG ist maßgeblich (E7), eine Notiz ohne Liste
+         * öffnet als EIN Bild-Element (E10) -, belegen aber bis zum Doppelten
+         * des Platzes (ein Bild-Element trägt das alte PNG ein zweites Mal).
+         * Reihenfolge: 1. Listen ANDERER Notizen/Seiten entfernen, erneut
+         * versuchen; 2. die eigene (alte) Liste entfernen, erneut versuchen.
+         * Nie werden PNGs anderer Notizen angetastet.
+         *
+         * @return {boolean} true = PNG geschrieben
+         */
+        _pngLokalSchreiben: function(key, png) {
+            try {
+                localStorage.setItem(key, png);
+                return true;
+            } catch (e) { /* Platz schaffen, s. u. */ }
+
+            var eigen = key + '-elemente';
+            var fremde = [];
+            try {
+                for (var i = 0; i < localStorage.length; i++) {
+                    var k = localStorage.key(i);
+                    if (istTafelSchluessel(k) && k !== eigen && k.length > 9 && k.slice(-9) === '-elemente') {
+                        fremde.push(k);
+                    }
+                }
+            } catch (eListe) { /* Speicher nicht lesbar */ }
+
+            var stufen = [fremde, [eigen]];
+            for (var s = 0; s < stufen.length; s++) {
+                if (!stufen[s].length) continue;
+                for (var j = 0; j < stufen[s].length; j++) {
+                    try { localStorage.removeItem(stufen[s][j]); } catch (eWeg) { /* weiter */ }
+                }
+                console.warn('[CBD Board Mode] Speicher voll - Elementlisten entfernt (Notizen bleiben als Bild erhalten):', stufen[s].length);
+                try {
+                    localStorage.setItem(key, png);
+                    return true;
+                } catch (eNochmal) { /* nächste Stufe */ }
+            }
+            console.warn('[CBD Board Mode] Zeichnung konnte nicht gespeichert werden: Speicher voll');
+            return false;
+        },
+
+        /**
+         * Begleitschlüssel <PNG-Schlüssel>-elemente schreiben (E9, AP-4.4).
+         * Scheitert setItem (Quota), bleibt das schon geschriebene PNG, der
+         * Elementschlüssel wird entfernt (ein alter Stand darf das neue PNG
+         * beim nächsten Öffnen nicht überdecken) und die Statusanzeige meldet
+         * 4 s lang "Nur als Bild gespeichert".
+         *
+         * AP-4.fix2 (F2): Der Wert ist eine Hülle {"png":"<Abdruck des eben
+         * geschriebenen PNG>","modell":<Modell v1>} (CBDBoardElemente.verpacke).
+         * Überschreibt eine ältere Plugin-Version (Rückweg) nur das PNG, passt
+         * der Abdruck nicht mehr und loadFromCache() nimmt das PNG.
+         */
+        _elementeLokalSpeichern: function(key, png) {
+            var E = elementeModul();
+            var text = E ? E.verpacke(png, this._elementeSerialisiert()) : '';
+            try {
+                if (!text) {
+                    localStorage.removeItem(key + '-elemente');
+                    return;
+                }
+                localStorage.setItem(key + '-elemente', text);
+            } catch (e) {
+                try { localStorage.removeItem(key + '-elemente'); } catch (e2) { /* Ignorieren */ }
+                console.warn('[CBD Board Mode] Elemente nicht gespeichert, nur das Bild:', e && e.message);
+                var self = this;
+                this._setSaveStatus(NUR_BILD_TEXT);
+                setTimeout(function() {
+                    var s = document.getElementById('cbd-board-save-status');
+                    if (s && s.textContent === NUR_BILD_TEXT) self._setSaveStatus('');
+                }, 4000);
+            }
+        },
+
+        /**
+         * Elementmodell mit den AKTUELLEN CSS-Maßen der Zeichenfläche als
+         * JSON (AP-4.4). Das Modell behält die Maße vom Öffnen (Koordinaten
+         * bleiben bei einer Größenänderung 1:1), gespeichert wird aber, wie
+         * groß die Fläche jetzt ist - daran streckt das nächste Laden (E13).
+         * Leeres Modell oder Fehler -> '' (dann gilt nur das PNG).
+         */
+        _elementeSerialisiert: function() {
+            if (!this.modell || !this.modell.elemente.length || !elementeModul()) return '';
+            try {
+                return elementeModul().serialisiere({
+                    v: this.modell.v,
+                    breite: this.cssWidth || this.modell.breite,
+                    hoehe: this.cssHeight || this.modell.hoehe,
+                    elemente: this.modell.elemente
+                });
+            } catch (e) {
+                console.warn('[CBD Board Mode] Elemente nicht serialisierbar:', e && e.message);
+                return '';
+            }
+        },
+
+        /**
+         * Gespeicherte Elementliste (Server-Feld elemente_data bzw. lokaler
+         * -elemente-Schlüssel) prüfen und auf die aktuelle Fläche strecken
+         * (E13). null, wenn nichts Brauchbares da ist - dann lädt der
+         * Aufrufer das PNG als EIN Bild-Element (E10). Auch wenn die Prüfung
+         * einzelne Elemente verworfen hat, gilt das PNG: Es ist maßgeblich
+         * (E7) und vollständig, die Liste wäre es nicht.
+         */
+        _elementeLesen: function(text) {
+            var E = elementeModul();
+            if (!E || typeof text !== 'string' || text === '') return null;
+            var geprueft = E.deserialisiere(text);
+            if (!geprueft || geprueft.verworfen > 0 || !geprueft.modell.elemente.length) return null;
+            return E.skaliere(geprueft.modell, this.cssWidth || geprueft.modell.breite,
+                this.cssHeight || geprueft.modell.hoehe);
+        },
+
+        /**
+         * Geladenes Modell übernehmen. Normalfall: Es ersetzt das leere Modell
+         * (neueId() gleicht den Zähler selbst ab), Undo-Stapel bleibt leer.
+         * Wurde schon gezeichnet, bevor die Antwort kam (Server-Laden ist
+         * asynchron), kommen die geladenen Elemente VOR die Sitzungs-Elemente
+         * und - weil Laden keine Nutzeraktion ist - auch in alle Undo-Stände
+         * (wie bildElementHinzufuegen()); sie bekommen neue IDs, damit sie
+         * nicht mit den Sitzungs-IDs kollidieren.
+         */
+        _elementeUebernehmen: function(geladen) {
+            if (!this.modell) return;
+            if (!this.modell.elemente.length && !this.undoStapel.length && !this.currentStroke) {
+                this.modell = geladen;
+                this.zeichneModell();
+                return;
+            }
+            var self = this;
+            var vorn = geladen.elemente.map(function(el) {
+                var k = elementKopie(el);
+                k.id = self.neueId();
+                return k;
+            });
+            this.modell.elemente = vorn.concat(this.modell.elemente);
+            for (var i = 0; i < this.undoStapel.length; i++) {
+                this.undoStapel[i] = vorn.concat(this.undoStapel[i]);
+            }
+            this.zeichneModell();
         },
 
         loadFromCache: function(cacheKey) {
@@ -2383,19 +3100,28 @@
                 }
 
                 if (!dataUrl) {
-                    // Kein gespeicherter Stand
+                    // Kein gespeicherter Stand. Ein -elemente-Schlüssel ohne
+                    // PNG ist verwaist (z. B. von einer älteren Plugin-Version
+                    // als leer gespeichert) und wird bewusst nicht geladen.
                     return;
                 }
 
-                var self = this;
-                var img = new Image();
-                img.onload = function() {
-                    self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
-                    self.drawingCtx.drawImage(img, 0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
-                    // Basis-Bild für Undo als Image-Objekt speichern (resize-sicher)
-                    self.baseImageObj = img;
-                };
-                img.src = dataUrl;
+                // AP-4.4: zuerst die Elementliste (E9), gestreckt auf die
+                // aktuelle Fläche (E13). AP-4.fix2 (F2): nur, wenn der Abdruck
+                // in der Hülle zu diesem PNG passt - sonst ist die Liste
+                // veraltet (Rückweg auf eine ältere Version) oder stammt aus
+                // einem Stand ohne Abdruck, und das PNG gilt (E7).
+                var E = elementeModul();
+                var geladen = E ? this._elementeLesen(E.entpacke(localStorage.getItem(key + '-elemente'), dataUrl)) : null;
+                if (geladen) {
+                    this._elementeUebernehmen(geladen);
+                    return;
+                }
+
+                // Rückfall (ältere Notiz ohne Elemente, ungültige Liste): das
+                // PNG wird EIN Bild-Element (E10); es wird sofort eingefügt und
+                // nach dem Laden gezeichnet.
+                this.bildElementHinzufuegen(dataUrl);
             } catch (e) {
                 console.warn('[CBD Board Mode] Zeichnung konnte nicht geladen werden:', e.message);
             }
@@ -2408,6 +3134,7 @@
                 var key = 'cbd-board-' + this.containerId;
                 localStorage.removeItem(key);
                 localStorage.removeItem(key + '-bgcolor');
+                localStorage.removeItem(key + '-elemente'); // AP-4.4
             } catch (e) {
                 // Ignorieren
             }
@@ -2448,10 +3175,8 @@
             if (index < 0 || index >= this.totalPages) return;
             if (index === this.currentPageIndex) return;
 
-            var self = this;
-
-            // Aktuelle Zeichnung in In-Memory-Cache sichern
-            this.pageCache[this.currentPageIndex] = this.drawingCanvas.toDataURL('image/png');
+            // Aktuelle Seite in den In-Memory-Cache: {png, modell} (leere Seite: '')
+            this.pageCache[this.currentPageIndex] = this._seiteSichern();
 
             // Aktuelle Seite asynchron auf Server/Cache speichern
             var fromPageContainerId = this.getPageContainerId(this.currentPageIndex);
@@ -2465,23 +3190,23 @@
             this.currentPageIndex = index;
             this.updatePageNavUI();
 
-            // Canvas und Striche leeren
-            this.drawingCtx.clearRect(0, 0, this.cssWidth || this.drawingCanvas.width, this.cssHeight || this.drawingCanvas.height);
-            this.strokes = [];
-            this.baseImageObj = null;
+            // Modell der neuen Seite: leer, Undo-Stapel geleert (Rückgängig
+            // wirkt nur innerhalb einer Seite)
+            this._seiteLeeren();
 
-            // Neue Seite aus Cache oder Server laden
+            // Neue Seite aus dem Seitencache (mit ihren Elementen, AP-4.4) oder
+            // - noch nicht besucht - von Server/localStorage laden (Modell oder
+            // PNG als Bild-Element)
             if (this.pageCache[index] !== undefined && this.pageCache[index] !== null) {
                 var cached = this.pageCache[index];
-                if (cached) {
-                    var img = new Image();
-                    img.onload = function() {
-                        self.drawingCtx.clearRect(0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
-                        self.drawingCtx.drawImage(img, 0, 0, self.cssWidth || self.drawingCanvas.width, self.cssHeight || self.drawingCanvas.height);
-                        // Basis-Bild für Undo speichern
-                        self.baseImageObj = img;
+                if (cached && cached.modell) {
+                    this.modell = {
+                        v: cached.modell.v,
+                        breite: cached.modell.breite,
+                        hoehe: cached.modell.hoehe,
+                        elemente: cached.modell.elemente.slice()
                     };
-                    img.src = cached;
+                    this.zeichneModell();
                 }
             } else {
                 this.loadDrawing();
@@ -2492,8 +3217,8 @@
          * Neue leere Seite hinzufügen
          */
         addPage: function() {
-            // Aktuelle Seite speichern
-            this.pageCache[this.currentPageIndex] = this.drawingCanvas.toDataURL('image/png');
+            // Aktuelle Seite sichern: {png, modell} (leere Seite: '')
+            this.pageCache[this.currentPageIndex] = this._seiteSichern();
             var fromPageContainerId = this.getPageContainerId(this.currentPageIndex);
             if (this.classId && this.ajaxUrl) {
                 this.saveToServer(fromPageContainerId);
@@ -2509,10 +3234,50 @@
             // Zur neuen Seite wechseln (leer)
             this.currentPageIndex = this.totalPages - 1;
             this.pageCache[this.currentPageIndex] = null; // Explizit als leer markieren
-            this.drawingCtx.clearRect(0, 0, this.cssWidth || this.drawingCanvas.width, this.cssHeight || this.drawingCanvas.height);
-            this.strokes = [];
-            this.baseImageObj = null;
+            this._seiteLeeren();
             this.updatePageNavUI();
+        },
+
+        /**
+         * PNG der aktuellen Seite für den Seiten-Cache; eine Seite ohne
+         * Elemente liefert '' (nichts zurückzuholen - früher ein leeres PNG,
+         * das beim Zurückkehren als Basis-Bild bzw. jetzt als unsichtbares
+         * Bild-Element geladen worden wäre).
+         */
+        _seitenPng: function() {
+            if (!this.modell || this.modell.elemente.length === 0) return '';
+            return this.drawingCanvas.toDataURL('image/png');
+        },
+
+        /**
+         * Eintrag des Seitencaches (AP-4.4): {png, modell} - das Modell mit
+         * einer eigenen Elementliste (Elemente selbst sind unveränderlich),
+         * damit die Seite beim Zurückkehren Element für Element bearbeitbar
+         * bleibt. Leere Seite -> ''.
+         */
+        _seiteSichern: function() {
+            var png = this._seitenPng();
+            if (!png) return '';
+            return {
+                png: png,
+                modell: {
+                    v: this.modell.v,
+                    breite: this.modell.breite,
+                    hoehe: this.modell.hoehe,
+                    elemente: this.modell.elemente.slice()
+                }
+            };
+        },
+
+        /** Modell und Undo-Stapel beim Seitenwechsel neu anlegen, Ebene leeren. */
+        _seiteLeeren: function() {
+            this._ladeNr++; // laufende Server-Antworten gehören zur alten Seite
+            this.currentStroke = null;
+            this._radierBilder = null;
+            this._radierLetzter = null;
+            this.undoStapel = [];
+            this.modell = this._leeresModell();
+            this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
         },
 
         /**
@@ -2533,16 +3298,15 @@
         // =============================================
 
         /**
-         * Letzten Strich rückgängig machen (Strg+Z)
+         * Letzten Schritt rückgängig machen (Strg+Z, E12): stellt den Stand
+         * vor dem letzten Strich, Text, Radiervorgang oder "Zeichnung löschen"
+         * wieder her (Momentaufnahme aus merkeZustand()). Leerer Stapel ->
+         * nichts.
          */
         undo: function() {
-            if (this.strokes.length > 0) {
-                this.strokes.pop();
-                this.redrawAllStrokes();
-            } else if (this.baseImageObj) {
-                // Keine neuen Striche – Basis-Bild durch redrawAllStrokes neu zeichnen
-                this.redrawAllStrokes();
-            }
+            if (!this.modell || !this.undoStapel.length) return;
+            this.modell.elemente = this.undoStapel.pop();
+            this.zeichneModell();
         },
 
         // =============================================
@@ -2737,14 +3501,16 @@
         downloadPersonalNotes: function() {
             try {
                 // Alle CBD-Board Daten aus localStorage sammeln
+                // Exportiert werden alle Tafel-Schlüssel (auch -elemente, AP-4.4),
+                // gezählt nur die Notizen selbst (istNotizSchluessel)
                 var exportData = {};
                 var count = 0;
 
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
-                    if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
+                    if (istTafelSchluessel(key)) {
                         exportData[key] = localStorage.getItem(key);
-                        count++;
+                        if (istNotizSchluessel(key)) count++;
                     }
                 }
 
@@ -2801,9 +3567,9 @@
 
                         // Validierung: Ist es ein Objekt mit cbd-board Keys?
                         var keys = Object.keys(importData);
-                        var validKeys = keys.filter(function(k) {
-                            return k.startsWith('cbd-board-') && k !== 'cbd-board-tool-settings' && k !== 'cbd-board-font-size';
-                        });
+                        var validKeys = keys.filter(istTafelSchluessel);
+                        // Gezählt werden nur Notizen, keine Begleitschlüssel (AP-4.4)
+                        var noteCount = validKeys.filter(istNotizSchluessel).length;
 
                         if (validKeys.length === 0) {
                             alert('Die Datei enthält keine gültigen CBD-Notizen.');
@@ -2813,8 +3579,7 @@
                         // Prüfen, ob bereits Daten vorhanden sind
                         var existingCount = 0;
                         for (var i = 0; i < localStorage.length; i++) {
-                            var key = localStorage.key(i);
-                            if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
+                            if (istNotizSchluessel(localStorage.key(i))) {
                                 existingCount++;
                             }
                         }
@@ -2822,7 +3587,7 @@
                         // Bestätigung wenn Daten vorhanden
                         if (existingCount > 0) {
                             var confirmMsg = 'Es sind bereits ' + existingCount + ' persönliche Notiz(en) vorhanden.\n\n' +
-                                'Beim Import werden ' + validKeys.length + ' Notiz(en) hochgeladen.\n' +
+                                'Beim Import werden ' + noteCount + ' Notiz(en) hochgeladen.\n' +
                                 'Bestehende Notizen mit denselben IDs werden überschrieben.\n\n' +
                                 'Möchten Sie fortfahren?';
 
@@ -2835,7 +3600,16 @@
                         var imported = 0;
                         validKeys.forEach(function(key) {
                             localStorage.setItem(key, importData[key]);
-                            imported++;
+                            if (istNotizSchluessel(key)) {
+                                imported++;
+                                // Ältere Exportdatei ohne Elemente (AP-4.4): ein
+                                // lokaler -elemente-Stand derselben Notiz ist
+                                // veraltet und würde das importierte PNG beim
+                                // Öffnen überdecken -> entfernen.
+                                if (!Object.prototype.hasOwnProperty.call(importData, key + '-elemente')) {
+                                    localStorage.removeItem(key + '-elemente');
+                                }
+                            }
                         });
 
                         // Bestätigung
@@ -2846,7 +3620,10 @@
                         alert(successMsg + '\n\nDie Notizen sind jetzt verfügbar.');
 
                         // Wenn wir gerade die aktuelle Zeichnung importiert haben, neu laden
-                        if (importData['cbd-board-' + self.containerId]) {
+                        // (die importierte Fassung ersetzt die angezeigte Seite - sonst
+                        // kämen ihre Elemente zu den angezeigten dazu)
+                        if (importData['cbd-board-' + self.containerId] && self.overlay && self.modell) {
+                            self._seiteLeeren();
                             self.loadDrawing();
                         }
 
@@ -2867,13 +3644,15 @@
          */
         deleteAllPersonalNotes: function() {
             try {
-                // Zähle vorhandene Notizen (tool-settings ausschließen!)
+                // Zähle vorhandene Notizen (tool-settings ausschließen!). Gelöscht
+                // werden alle Tafel-Schlüssel inkl. -elemente, gezählt nur die
+                // Notizen selbst (AP-4.4)
                 var count = 0;
                 var keysToDelete = [];
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
-                    if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
-                        count++;
+                    if (istTafelSchluessel(key)) {
+                        if (istNotizSchluessel(key)) count++;
                         keysToDelete.push(key);
                     }
                 }
@@ -2912,7 +3691,10 @@
                 // Canvas leeren (falls gerade eine Zeichnung angezeigt wird)
                 if (this.drawingCtx) {
                     this.drawingCtx.clearRect(0, 0, this.drawingCanvas.width, this.drawingCanvas.height);
-                    this.strokes = [];
+                    if (this.modell) {
+                        this.modell.elemente = [];
+                        this.undoStapel = [];
+                    }
                 }
 
                 // Erfolgsbestätigung

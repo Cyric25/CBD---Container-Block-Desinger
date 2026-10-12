@@ -7,6 +7,46 @@
     var ergebnisse = [];
     window.__ergebnisse = ergebnisse;
 
+    // AP-4.3 (Phase 4): board-mode.js hält den Zeichenstand ab Phase 4 in
+    // this.modell (Elementmodell v1) statt in this.strokes + this.baseImageObj.
+    // Diese Weichen lesen/setzen den Stand in BEIDEN Fassungen gleichwertig,
+    // damit jede Prüfung dieselbe Aussage behält ("Striche" = Stift-,
+    // Textmarker- und Text-Einträge im bisherigen Format, ohne Bild-Elemente;
+    // "Basisbild" = geladenes PNG bzw. Bild-Element). Nicht lockern.
+    function mitModell() {
+        return 'modell' in B;
+    }
+    function striche() {
+        if (mitModell()) return B.modell ? window.CBDBoardElemente.zuStrokes(B.modell) : [];
+        return B.strokes;
+    }
+    function stricheSetzen(liste) {
+        if (mitModell()) {
+            B.modell = window.CBDBoardElemente.ausStrokes(liste, B.modell.breite, B.modell.hoehe, function() { return B.neueId(); });
+        } else {
+            B.strokes = liste;
+        }
+    }
+    function strichAnhaengen(eintrag) {
+        if (mitModell()) {
+            B.modell.elemente.push(window.CBDBoardElemente.ausStrokes([eintrag], B.modell.breite, B.modell.hoehe, function() { return B.neueId(); }).elemente[0]);
+        } else {
+            B.strokes.push(eintrag);
+        }
+    }
+    function basisSetzen(bild) {
+        if (mitModell()) B.bildElementHinzufuegen(bild.src, bild);
+        else B.baseImageObj = bild;
+    }
+    function basisVorhanden() {
+        if (mitModell()) return !!(B.modell && B.modell.elemente.some(function(e) { return e.typ === 'bild'; }));
+        return !!B.baseImageObj;
+    }
+    function basisGeladen() {
+        if (mitModell()) return basisVorhanden() && B.bildElementeGeladen();
+        return !!B.baseImageObj;
+    }
+
     function speicherLeeren() {
         try {
             var weg = [];
@@ -98,7 +138,7 @@
             zeiger('pointermove', 3, 'pen', 230, 115);
             zeiger('pointerup', 3, 'pen', 230, 115);
             zeiger('pointerup', 2, 'touch', 66, 312, { width: ballenBreite, height: ballenBreite });
-            var s = B.strokes;
+            var s = striche();
             if (s.length !== 1) return { ok: false, detail: 'erwartet 1 Strich, gefunden ' + s.length + (s.length ? ' (' + s.map(punkteText).join(' | ') + ')' : '') };
             if (s[0].points.length !== 4) return { ok: false, detail: 'erwartet 4 Stiftpunkte, gefunden ' + s[0].points.length + ': ' + punkteText(s[0]) };
             if (!alleImBereich(s[0].points, 190, 240, 90, 125)) return { ok: false, detail: 'Fremdpunkte im Strich: ' + punkteText(s[0]) };
@@ -123,7 +163,7 @@
             var zoomWaehrend = B.zoom;
             zeiger('pointerup', 3, 'pen', 240, 100);
             zeiger('pointerup', 2, 'touch', 100, 340, { width: ballenBreite, height: ballenBreite });
-            var s = B.strokes;
+            var s = striche();
             if (zoomWaehrend !== 1) return { ok: false, detail: 'Zoom geändert: ' + zoomWaehrend };
             if (s.length !== 1) return { ok: false, detail: 'erwartet 1 Strich, gefunden ' + s.length };
             if (s[0].points.length !== 5) return { ok: false, detail: 'erwartet 5 Stiftpunkte, gefunden ' + s[0].points.length + ': ' + punkteText(s[0]) };
@@ -152,7 +192,7 @@
             zeiger('pointermove', 3, 'pen', 230, 100);
             var laeuft = B.isDrawing;
             zeiger('pointerup', 3, 'pen', 230, 100);
-            var s = B.strokes;
+            var s = striche();
             if (!laeuft) return { ok: false, detail: 'Strich nach Abheben des Ballens beendet' };
             if (s.length !== 1) return { ok: false, detail: 'erwartet 1 Strich, gefunden ' + s.length };
             if (s[0].points.length !== 4) return { ok: false, detail: 'erwartet 4 Punkte, gefunden ' + s[0].points.length + ': ' + punkteText(s[0]) };
@@ -168,13 +208,13 @@
         zeiger('pointerdown', 3, 'pen', 200, 100);
         zeiger('pointermove', 3, 'pen', 220, 100);
         zeiger('pointerup', 3, 'pen', 220, 100);
-        if (B.strokes.length !== 1) return { ok: false, detail: 'Stiftstrich fehlt' };
+        if (striche().length !== 1) return { ok: false, detail: 'Stiftstrich fehlt' };
         // Ein Finger
         zeiger('pointerdown', 10, 'touch', 100, 200);
         zeiger('pointermove', 10, 'touch', 150, 200);
         zeiger('pointermove', 10, 'touch', 200, 200);
         zeiger('pointerup', 10, 'touch', 200, 200);
-        if (B.strokes.length !== 1) return { ok: false, detail: 'Finger hat nach Stiftstrich gezeichnet (' + B.strokes.length + ' Striche)' };
+        if (striche().length !== 1) return { ok: false, detail: 'Finger hat nach Stiftstrich gezeichnet (' + striche().length + ' Striche)' };
         if (B.currentStroke) return { ok: false, detail: 'currentStroke durch Finger gesetzt' };
         // Zwei Finger
         zeiger('pointerdown', 11, 'touch', 100, 200);
@@ -184,7 +224,7 @@
         zeiger('pointerup', 12, 'touch', 300, 200, { isPrimary: false });
         zeiger('pointerup', 11, 'touch', 100, 200);
         if (Math.abs(z - 2) > 0.01) return { ok: false, detail: 'Zoom erwartet 2, ist ' + z };
-        if (B.strokes.length !== 1) return { ok: false, detail: 'Pinch hat Strich erzeugt' };
+        if (striche().length !== 1) return { ok: false, detail: 'Pinch hat Strich erzeugt' };
         return true;
     }
 
@@ -197,8 +237,8 @@
         zeiger('pointermove', 10, 'touch', 150, 200);
         zeiger('pointermove', 10, 'touch', 200, 200);
         zeiger('pointerup', 10, 'touch', 200, 200);
-        if (B.strokes.length !== 1) return { ok: false, detail: 'Finger-Strich fehlt (' + B.strokes.length + ')' };
-        if (B.strokes[0].points.length !== 3) return { ok: false, detail: 'Finger-Strich hat ' + B.strokes[0].points.length + ' Punkte' };
+        if (striche().length !== 1) return { ok: false, detail: 'Finger-Strich fehlt (' + striche().length + ')' };
+        if (striche()[0].points.length !== 3) return { ok: false, detail: 'Finger-Strich hat ' + striche()[0].points.length + ' Punkte' };
         zeiger('pointerdown', 11, 'touch', 100, 200);
         zeiger('pointerdown', 12, 'touch', 200, 200, { isPrimary: false });
         zeiger('pointermove', 12, 'touch', 300, 200, { isPrimary: false });
@@ -206,7 +246,7 @@
         zeiger('pointerup', 12, 'touch', 300, 200, { isPrimary: false });
         zeiger('pointerup', 11, 'touch', 100, 200);
         if (Math.abs(z - 2) > 0.01) return { ok: false, detail: 'Zoom erwartet 2, ist ' + z };
-        if (B.strokes.length !== 1) return { ok: false, detail: 'Pinch hat Strich erzeugt (' + B.strokes.length + ')' };
+        if (striche().length !== 1) return { ok: false, detail: 'Pinch hat Strich erzeugt (' + striche().length + ')' };
         if (B.currentStroke) return { ok: false, detail: 'abgebrochener Finger-Strich hängt als currentStroke' };
         return true;
     }
@@ -221,7 +261,7 @@
         zeiger('pointerdown', 10, 'touch', 100, 200);
         zeiger('pointermove', 10, 'touch', 150, 200);
         zeiger('pointerup', 10, 'touch', 150, 200);
-        return B.strokes.length === 1 ? true : { ok: false, detail: 'Finger zeichnet nach erneutem Öffnen nicht (' + B.strokes.length + ')' };
+        return striche().length === 1 ? true : { ok: false, detail: 'Finger zeichnet nach erneutem Öffnen nicht (' + striche().length + ')' };
     }
 
     // Finger-Strich wird verworfen, wenn der Stift dazukommt
@@ -235,7 +275,7 @@
         zeiger('pointerup', 10, 'touch', 140, 200);
         zeiger('pointermove', 3, 'pen', 320, 100);
         zeiger('pointerup', 3, 'pen', 320, 100);
-        var s = B.strokes;
+        var s = striche();
         if (s.length !== 1) return { ok: false, detail: 'erwartet 1 Strich, gefunden ' + s.length };
         if (!alleImBereich(s[0].points, 295, 325, 95, 105) || s[0].points.length !== 3) return { ok: false, detail: punkteText(s[0]) };
         return true;
@@ -245,12 +285,12 @@
         oeffnen();
         zeiger('pointerdown', 1, 'mouse', 100, 100, { button: 2, buttons: 2 });
         zeiger('pointerup', 1, 'mouse', 100, 100, { button: 2, buttons: 0 });
-        if (B.strokes.length !== 0) return { ok: false, detail: 'Rechtsklick hat ' + B.strokes.length + ' Strich(e) erzeugt' };
+        if (striche().length !== 0) return { ok: false, detail: 'Rechtsklick hat ' + striche().length + ' Strich(e) erzeugt' };
         if (B.isDrawing) return { ok: false, detail: 'isDrawing nach Rechtsklick' };
         // Mittelklick ebenso
         zeiger('pointerdown', 1, 'mouse', 100, 100, { button: 1, buttons: 4 });
         zeiger('pointerup', 1, 'mouse', 100, 100, { button: 1, buttons: 0 });
-        return B.strokes.length === 0 ? true : { ok: false, detail: 'Mittelklick zeichnet' };
+        return striche().length === 0 ? true : { ok: false, detail: 'Mittelklick zeichnet' };
     }
 
     // ------------------------------------------------------------------
@@ -262,7 +302,7 @@
         zeiger('pointermove', 1, 'mouse', 150, 120);
         zeiger('pointermove', 1, 'mouse', 200, 140);
         zeiger('pointerup', 1, 'mouse', 200, 140);
-        var s = B.strokes;
+        var s = striche();
         if (s.length !== 1 || s[0].points.length !== 3 || s[0].tool !== 'pen') return { ok: false, detail: JSON.stringify(s) };
         // Pixel gesetzt?
         var dpr = B.dpr || 1;
@@ -277,7 +317,7 @@
         zeiger('pointerdown', 1, 'mouse', 100, 100);
         zeiger('pointermove', 1, 'mouse', 150, 120);
         zeiger('pointerleave', 1, 'mouse', 150, 120, { buttons: 1 });
-        return (!B.isDrawing && B.strokes.length === 1) ? true : { ok: false, detail: 'isDrawing=' + B.isDrawing + ', Striche=' + B.strokes.length };
+        return (!B.isDrawing && striche().length === 1) ? true : { ok: false, detail: 'isDrawing=' + B.isDrawing + ', Striche=' + striche().length };
     }
 
     function textmarker() {
@@ -286,7 +326,7 @@
         zeiger('pointerdown', 3, 'pen', 100, 100);
         zeiger('pointermove', 3, 'pen', 200, 100);
         zeiger('pointerup', 3, 'pen', 200, 100);
-        var s = B.strokes;
+        var s = striche();
         return (s.length === 1 && s[0].tool === 'highlighter' && s[0].points.length === 2) ? true : { ok: false, detail: JSON.stringify(s) };
     }
 
@@ -302,7 +342,7 @@
         zeiger('pointerdown', 3, 'pen', 50, 200);
         zeiger('pointermove', 3, 'pen', 100, 300);
         zeiger('pointerup', 3, 'pen', 100, 300);
-        var s = B.strokes;
+        var s = striche();
         return (s.length === 1 && s[0].points[0].y === 100) ? true : { ok: false, detail: s.length + ' Striche' };
     }
 
@@ -319,7 +359,7 @@
         var dpr = B.dpr || 1;
         var px = B.drawingCtx.getImageData(Math.round(152 * dpr), Math.round(100 * dpr), 1, 1).data;
         if (!waehrend) return { ok: false, detail: 'Punkt-Radierer radiert nicht kontinuierlich' };
-        if (B.strokes.length !== 1) return { ok: false, detail: 'Punkt-Radierer hat Strichliste verändert' };
+        if (striche().length !== 1) return { ok: false, detail: 'Punkt-Radierer hat Strichliste verändert' };
         return px[3] === 0 ? true : { ok: false, detail: 'Pixel bei 152/100 nicht radiert (alpha ' + px[3] + ')' };
     }
 
@@ -333,7 +373,7 @@
         zeiger('pointerdown', 10, 'touch', 100, 100);
         zeiger('pointermove', 10, 'touch', 200, 100);
         zeiger('pointerup', 10, 'touch', 200, 100);
-        return B.strokes.length === 1 ? true : { ok: false, detail: 'Finger hat nach Stift radiert' };
+        return striche().length === 1 ? true : { ok: false, detail: 'Finger hat nach Stift radiert' };
     }
 
     function textWerkzeug() {
@@ -344,7 +384,7 @@
         if (!feld) return { ok: false, detail: 'kein Textfeld geöffnet' };
         feld.value = 'Hallo';
         feld.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-        var s = B.strokes;
+        var s = striche();
         return (s.length === 1 && s[0].tool === 'text' && s[0].text === 'Hallo') ? true : { ok: false, detail: JSON.stringify(s) };
     }
 
@@ -360,7 +400,7 @@
         var dpr = B.dpr || 1;
         var weg = B.drawingCtx.getImageData(Math.round(125 * dpr), Math.round(200 * dpr), 1, 1).data[3];
         var da = B.drawingCtx.getImageData(Math.round(125 * dpr), Math.round(100 * dpr), 1, 1).data[3];
-        return (B.strokes.length === 1 && weg === 0 && da > 0) ? true : { ok: false, detail: 'Striche ' + B.strokes.length + ', alpha weg=' + weg + ', da=' + da };
+        return (striche().length === 1 && weg === 0 && da > 0) ? true : { ok: false, detail: 'Striche ' + striche().length + ', alpha weg=' + weg + ', da=' + da };
     }
 
     function mehrseitig() {
@@ -369,11 +409,11 @@
         zeiger('pointermove', 1, 'mouse', 150, 100);
         zeiger('pointerup', 1, 'mouse', 150, 100);
         B.addPage();
-        if (B.currentPageIndex !== 1 || B.strokes.length !== 0) return { ok: false, detail: 'addPage: Seite ' + B.currentPageIndex + ', Striche ' + B.strokes.length };
+        if (B.currentPageIndex !== 1 || striche().length !== 0) return { ok: false, detail: 'addPage: Seite ' + B.currentPageIndex + ', Striche ' + striche().length };
         zeiger('pointerdown', 3, 'pen', 100, 200);
         zeiger('pointermove', 3, 'pen', 150, 200);
         zeiger('pointerup', 3, 'pen', 150, 200);
-        if (B.strokes.length !== 1) return { ok: false, detail: 'Zeichnen auf Seite 2' };
+        if (striche().length !== 1) return { ok: false, detail: 'Zeichnen auf Seite 2' };
         B.goToPage(0);
         var gespeichert = null;
         try { gespeichert = localStorage.getItem('cbd-board-' + CID + ':p1'); } catch (e) {}
@@ -619,7 +659,7 @@
             for (var i = 1; i < ZICKZACK.length; i++) zeiger('pointermove', 3, 'pen', ZICKZACK[i][0], ZICKZACK[i][1]);
             zeiger('pointerup', 3, 'pen', ZICKZACK[ZICKZACK.length - 1][0], ZICKZACK[ZICKZACK.length - 1][1]);
             var neu = bildDaten();
-            if (B.strokes.length !== 3) return { ok: false, detail: B.strokes.length + ' Striche' };
+            if (striche().length !== 3) return { ok: false, detail: striche().length + ' Striche' };
             B.redrawAllStrokes(); // bisheriges Verfahren: alles aus strokes
             var alt = bildDaten();
             var d = pixelAbweichung(neu, alt);
@@ -679,7 +719,7 @@
             for (var p = 0; p < 20; p++) pts.push({ x: (s * 7 + p * 3) % 380, y: (s * 13 + p * 5) % 300 });
             viele.push({ tool: s % 10 === 0 ? 'highlighter' : 'pen', color: s % 10 === 0 ? 'rgba(255,255,180,1.0)' : '#000000', width: 3, points: pts });
         }
-        B.strokes = viele;
+        stricheSetzen(viele);
         B.redrawAllStrokes();
         zeiger('pointerdown', 3, 'pen', 20, 20);
         var n = 200, t0 = performance.now();
@@ -702,7 +742,7 @@
             for (var p = 0; p < 20; p++) pts.push({ x: (s * 7 + p * 3) % 380, y: (s * 13 + p * 5) % 300 });
             viele.push({ tool: 'pen', color: '#000000', width: 3, points: pts });
         }
-        B.strokes = viele;
+        stricheSetzen(viele);
         B.redrawAllStrokes();
         B.setTool('highlighter');
         zeiger('pointerdown', 3, 'pen', 20, 20);
@@ -729,7 +769,7 @@
         var waehrend = B.drawingCtx.getImageData(Math.round(175 * dpr), Math.round(80 * dpr), 1, 1).data[3];
         var daneben = B.drawingCtx.getImageData(Math.round(175 * dpr), Math.round(160 * dpr), 1, 1).data[3];
         zeiger('pointerup', 3, 'pen', 400, 160);
-        var p = B.strokes[0] ? B.strokes[0].points : [];
+        var p = striche()[0] ? striche()[0].points : [];
         B.resetZoom();
         if (!(p.length === 3 && Math.abs(p[0].x - 100) < 0.01 && Math.abs(p[2].x - 200) < 0.01 && Math.abs(p[0].y - 80) < 0.01)) return { ok: false, detail: 'Punkte ' + JSON.stringify(p) };
         return (waehrend > 0 && daneben === 0) ? true : { ok: false, detail: 'Segment-Pixel alpha=' + waehrend + ', daneben=' + daneben };
@@ -756,7 +796,7 @@
         }
         B.drawingCanvas.dispatchEvent(ev);
         zeiger('pointerup', 3, 'pen', 130, 100);
-        var p = B.strokes[0] ? B.strokes[0].points : [];
+        var p = striche()[0] ? striche()[0].points : [];
         var xs = p.map(function(q) { return Math.round(q.x); }).join(',');
         return xs === '100,110,120,130' ? true : { ok: false, detail: 'Punkte x=' + xs };
     }
@@ -824,7 +864,7 @@
     function oeffnenMitBasis(bild, tafelfarbe) {
         oeffnen();
         if (tafelfarbe) B.setBoardColor(tafelfarbe);
-        B.baseImageObj = bild;
+        basisSetzen(bild);
         B.redrawAllStrokes();
     }
 
@@ -906,7 +946,7 @@
         if (B.baseImageObj && B.baseImageObj.complete) {
             ctx.drawImage(B.baseImageObj, 0, 0, B.cssWidth || B.drawingCanvas.width, B.cssHeight || B.drawingCanvas.height);
         }
-        var alle = B.strokes.slice();
+        var alle = striche().slice();
         var i, j, s;
         for (i = 0; i < alle.length; i++) {
             s = alle[i];
@@ -959,13 +999,13 @@
         zeiger('pointerdown', 3, 'pen', 200, 60);
         zeiger('pointermove', 3, 'pen', 210, 260);
         zeiger('pointerup', 3, 'pen', 210, 260);
-        B.strokes.push({ tool: 'text', color: '#1565c0', width: 3, text: 'Na+ Cl-\nzweite', points: [{ x: 150, y: 110 }] });
+        strichAnhaengen({ tool: 'text', color: '#1565c0', width: 3, text: 'Na+ Cl-\nzweite', points: [{ x: 150, y: 110 }] });
         B.setTool('pen');
         B.setColor('#d00000');
         zeiger('pointerdown', 3, 'pen', ZICKZACK[0][0], ZICKZACK[0][1]);
         for (var i = 1; i < ZICKZACK.length; i++) zeiger('pointermove', 3, 'pen', ZICKZACK[i][0], ZICKZACK[i][1]);
         zeiger('pointerup', 3, 'pen', ZICKZACK[ZICKZACK.length - 1][0], ZICKZACK[ZICKZACK.length - 1][1]);
-        if (B.baseImageObj) return { ok: false, detail: 'unerwartetes Basisbild' };
+        if (basisVorhanden()) return { ok: false, detail: 'unerwartetes Basisbild' };
         B.redrawAllStrokes();
         var neu = bildDaten();
         neuzeichnen137();
@@ -1013,7 +1053,7 @@
                 localStorage.setItem('cbd-board-' + CID + '-bgcolor', tafelfarbe);
             } catch (e) {}
             B.open(CID, '<p>Inhalt für den Test</p>', tafelfarbe);
-            return warteAuf(function() { return !!B.baseImageObj; }, 3000).then(function() {
+            return warteAuf(function() { return basisGeladen(); }, 3000).then(function() {
                 if (B.boardColor !== tafelfarbe) return { ok: false, detail: 'Tafelfarbe ' + B.boardColor };
                 markerQuer(150);
                 var px = pixel(200, 150);
@@ -1032,8 +1072,21 @@
         zeiger('pointerup', 3, 'pen', 200, 300);
         B.addPage();
         B.goToPage(0);
-        return warteAuf(function() { return !!B.baseImageObj; }, 3000).then(function() {
-            if (B.strokes.length !== 0) return { ok: false, detail: 'Striche nach Seitenwechsel: ' + B.strokes.length };
+        // AP-4.4: Ab Phase 4 kommt eine im Seitencache gehaltene Seite mit
+        // ihren Elementen zurück (pageCache {png, modell}), nicht mehr als
+        // Basisbild - Seite 1 muss dann genau ihren einen Strich haben. Die
+        // alte Schrift einer als PNG geladenen Seite prüft
+        // test-board-speichern.js ("alte PNG-Seite im Seitenwechsel"); dass
+        // die Seite als Elemente zurückkommt, prüft dort
+        // "Seitenwechsel behält Elemente".
+        if (mitModell() && striche().length > 0) {
+            if (striche().length !== 1) return { ok: false, detail: 'Striche nach Seitenwechsel: ' + striche().length + ' statt 1' };
+            markerQuer(150);
+            var pxM = pixel(200, 150);
+            return istDunkel(pxM) ? true : { ok: false, detail: 'Schrift nach Seitenwechsel überdeckt: rgba ' + rgbaText(pxM) };
+        }
+        return warteAuf(function() { return basisGeladen(); }, 3000).then(function() {
+            if (striche().length !== 0) return { ok: false, detail: 'Striche nach Seitenwechsel: ' + striche().length };
             markerQuer(150);
             var px = pixel(200, 150);
             return istDunkel(px) ? true : { ok: false, detail: 'Schrift nach Seitenwechsel überdeckt: rgba ' + rgbaText(px) };
@@ -1052,6 +1105,13 @@
         return basisbilderVorbereiten().then(function() {
             laufenSync();
             return laufenAp40Async();
+        }).then(function() {
+            // Asynchrone Zusatztests späterer APs (z. B. tools/test-board-modell.js, AP-4.3)
+            if (typeof window.__zusatzTestsAsync === 'function') {
+                return window.__zusatzTestsAsync({ B: B, pruefe: pruefe, pruefeAsync: pruefeAsync, warteAuf: warteAuf,
+                    zeiger: zeiger, oeffnen: oeffnen, schliessen: schliessen, speicherLeeren: speicherLeeren,
+                    basis: BASIS, ergebnisse: ergebnisse });
+            }
         }).then(ausgeben, function(e) {
             ergebnisse.push({ name: 'Prüfseite: Vorbereitung/Ablauf', ok: false, detail: 'Ausnahme: ' + (e && e.message ? e.message : e) });
             ausgeben();
@@ -1115,7 +1175,8 @@
 
         // Zusatztests späterer APs hängen sich hier ein
         if (typeof window.__zusatzTests === 'function') {
-            window.__zusatzTests({ B: B, pruefe: pruefe, zeiger: zeiger, oeffnen: oeffnen, schliessen: schliessen, ergebnisse: ergebnisse });
+            window.__zusatzTests({ B: B, pruefe: pruefe, zeiger: zeiger, oeffnen: oeffnen, schliessen: schliessen, ergebnisse: ergebnisse,
+                speicherLeeren: speicherLeeren, basis: BASIS });
         }
     }
 

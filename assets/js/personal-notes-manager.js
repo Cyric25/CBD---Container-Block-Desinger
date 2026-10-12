@@ -8,6 +8,36 @@
 (function() {
     'use strict';
 
+    // Tafel-Schlüssel im localStorage (PLAN-Rueckmeldungen-Klassenmodus-und-
+    // Tafel-Lasso.md, AP-4.4): Exportiert, importiert und gelöscht werden
+    // alle Schlüssel mit dem Präfix 'cbd-board-' außer den Werkzeug-
+    // Einstellungen - also auch die Begleitschlüssel (-elemente seit Phase 4,
+    // -bgcolor, -classid, 'cbd-board-pagecount-'). GEZÄHLT ("N Notizen")
+    // werden nur die Notizen selbst. Gleiche Regel in board-mode.js.
+    var BEGLEITSUFFIXE = ['-elemente', '-bgcolor', '-classid'];
+
+    function istTafelSchluessel(k) {
+        return typeof k === 'string' && k.indexOf('cbd-board-') === 0 &&
+            k !== 'cbd-board-tool-settings' && k !== 'cbd-board-font-size';
+    }
+
+    function istNotizSchluessel(k) {
+        if (!istTafelSchluessel(k) || k.indexOf('cbd-board-pagecount-') === 0) return false;
+        for (var i = 0; i < BEGLEITSUFFIXE.length; i++) {
+            var s = BEGLEITSUFFIXE[i];
+            if (k.length > s.length && k.slice(-s.length) === s) return false;
+        }
+        return true;
+    }
+
+    function anzahlNotizen() {
+        var count = 0;
+        for (var i = 0; i < localStorage.length; i++) {
+            if (istNotizSchluessel(localStorage.key(i))) count++;
+        }
+        return count;
+    }
+
     var PersonalNotesManager = {
         /**
          * Initialisierung
@@ -120,13 +150,7 @@
             var infoDiv = document.querySelector('.cbd-notes-info');
             if (!infoDiv) return;
 
-            var count = 0;
-            for (var i = 0; i < localStorage.length; i++) {
-                var key = localStorage.key(i);
-                if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
-                    count++;
-                }
-            }
+            var count = anzahlNotizen();
 
             if (count === 0) {
                 infoDiv.innerHTML = '<small>Keine Notizen gespeichert</small>';
@@ -151,9 +175,9 @@
 
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
-                    if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
+                    if (istTafelSchluessel(key)) {
                         exportData.notes[key] = localStorage.getItem(key);
-                        count++;
+                        if (istNotizSchluessel(key)) count++;
                     }
                 }
 
@@ -200,19 +224,20 @@
         deleteAllNotes: function() {
             try {
                 var keysToDelete = [];
+                var count = 0;
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
-                    if (key && key.startsWith('cbd-board-') && key !== 'cbd-board-tool-settings' && key !== 'cbd-board-font-size') {
+                    if (istTafelSchluessel(key)) {
                         keysToDelete.push(key);
+                        if (istNotizSchluessel(key)) count++;
                     }
                 }
 
-                if (keysToDelete.length === 0) {
+                if (count === 0) {
                     alert('Keine persönlichen Notizen vorhanden.');
                     return;
                 }
 
-                var count = keysToDelete.length;
                 var msg = count === 1
                     ? 'Es wird 1 persönliche Notiz UNWIDERRUFLICH gelöscht.\n\nFortfahren?'
                     : 'Es werden ' + count + ' persönliche Notizen UNWIDERRUFLICH gelöscht.\n\nFortfahren?';
@@ -262,30 +287,26 @@
                         var validKeys = keys.filter(function(k) {
                             return k.startsWith('cbd-board-');
                         });
+                        // Gezählt werden nur Notizen, keine Begleitschlüssel (AP-4.4)
+                        var noteCount = validKeys.filter(istNotizSchluessel).length;
 
                         if (validKeys.length === 0) {
                             alert('Die Datei enthält keine gültigen Notizen.\n\nStellen Sie sicher, dass Sie eine exportierte Notizen-Datei verwenden.');
                             return;
                         }
 
-                        // Prüfen, ob bereits Daten vorhanden sind
-                        var existingCount = 0;
-                        for (var i = 0; i < localStorage.length; i++) {
-                            var key = localStorage.key(i);
-                            if (key && key.startsWith('cbd-board-')) {
-                                existingCount++;
-                            }
-                        }
+                        // Prüfen, ob bereits Notizen vorhanden sind
+                        var existingCount = anzahlNotizen();
 
                         // Bestätigung
                         var confirmMsg = '';
                         if (existingCount > 0) {
                             confirmMsg = '⚠️ WARNUNG: Es sind bereits ' + existingCount + ' Notiz(en) auf diesem Gerät gespeichert.\n\n' +
-                                'Beim Import werden ' + validKeys.length + ' Notiz(en) importiert.\n' +
+                                'Beim Import werden ' + noteCount + ' Notiz(en) importiert.\n' +
                                 'Bestehende Notizen mit denselben IDs werden ÜBERSCHRIEBEN.\n\n' +
                                 'Möchten Sie fortfahren und die vorhandenen Notizen überschreiben?';
                         } else {
-                            confirmMsg = validKeys.length + ' Notiz(en) werden importiert.\n\nMöchten Sie fortfahren?';
+                            confirmMsg = noteCount + ' Notiz(en) werden importiert.\n\nMöchten Sie fortfahren?';
                         }
 
                         if (!confirm(confirmMsg)) {
@@ -296,7 +317,16 @@
                         var imported = 0;
                         validKeys.forEach(function(key) {
                             localStorage.setItem(key, notes[key]);
-                            imported++;
+                            if (istNotizSchluessel(key)) {
+                                imported++;
+                                // Ältere Exportdatei ohne Elemente (AP-4.4): ein
+                                // lokaler -elemente-Stand derselben Notiz ist
+                                // veraltet und würde das importierte PNG beim
+                                // Öffnen der Tafel überdecken -> entfernen.
+                                if (!Object.prototype.hasOwnProperty.call(notes, key + '-elemente')) {
+                                    localStorage.removeItem(key + '-elemente');
+                                }
+                            }
                         });
 
                         // Menü schließen
