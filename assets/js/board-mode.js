@@ -246,6 +246,19 @@
          * Internes Oeffnen des Overlays
          */
         _openOverlay: function(contentHtml) {
+            // Standardeinstellung bei jedem Öffnen (Rückmeldung 2026-10-12):
+            // CBDBoardMode ist EIN Objekt je Seite - ohne diesen Rücksetzer
+            // überlebten Werkzeug und Stiftfarbe das Schließen, während
+            // createOverlayDOM() die Leiste fest mit aktivem Stift und
+            // Schwarz baut. Wer rot aufhörte, schrieb in der Tafel eines
+            // anderen Blocks rot weiter. Bitte nicht entfernen.
+            // Die je Werkzeug gemerkten Breiten bleiben bewusst erhalten
+            // (loadToolSettings, localStorage); updateToolUI() unten zeigt
+            // sie im Regler an.
+            this.currentTool = 'pen';
+            this.eraserMode = 'stroke';
+            this.currentColor = '#000000';
+
             // Tool-Einstellungen aus localStorage laden
             this.loadToolSettings();
 
@@ -288,6 +301,10 @@
 
             // Overlay-DOM erstellen
             this.createOverlayDOM(contentHtml);
+
+            // Regler auf die geltende Breite des Stifts setzen (die Leiste
+            // ist fest mit 3 px gebaut, gemerkt sein kann eine andere)
+            this.updateToolUI();
 
             // An Body anhaengen
             document.body.appendChild(this.overlay);

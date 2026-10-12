@@ -4162,7 +4162,7 @@ dann Teil des Bild-Elements.
 | `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | 191 Prüfungen |
 | `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall | 113 Prüfungen |
 | `node tools/test-notizen-manager-js.js` | `personal-notes-manager.js` (Mini-DOM im `vm`) | 34 Prüfungen |
-| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **139 Prüfungen** (50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34, Stand Phase 5) |
+| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **142 Prüfungen** (50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 3, Stand 3.1.141) |
 | `php tools/check-php74.php` | PHP-7.4-Kompatibilität | muss OK sein |
 
 Prüfseite: Viewport VOR dem Laden auf ~1366×768, nach dem Laden ca. 10 s
@@ -4297,6 +4297,27 @@ verändert die Auswahl-Ebene nicht“ zählt seit AP-5.fix1 schreibende Aufrufe
 und vergleicht Pixel mit ±1 Toleranz (vorher flatterte sie wegen der
 GPU-Rücklesung). **Abnahme am echten Stift-/Touchgerät steht aus** – Finger
 und Stift sind nur synthetisch geprüft, Maus und Tastatur echt.
+
+### Standardeinstellung beim Öffnen (Hotfix 3.1.141, Rückmeldung 2026-10-12)
+
+**Jedes Öffnen der Tafel beginnt mit Stift und Schwarz.** `CBDBoardMode` ist
+EIN Objekt je Seite; `currentTool` und `currentColor` überlebten deshalb das
+Schließen, während `createOverlayDOM()` die Leiste fest mit aktivem
+Stift-Knopf und schwarzem Farbfeld baut. Wer mit Rot aufhörte und die Tafel
+eines anderen Blocks öffnete, schrieb rot weiter (bzw. mit dem Textmarker,
+wenn der zuletzt aktiv war), obwohl die Leiste Stift und Schwarz zeigte.
+
+`_openOverlay()` setzt deshalb vor `loadToolSettings()` `currentTool =
+'pen'`, `eraserMode = 'stroke'`, `currentColor = '#000000'` und ruft nach
+`createOverlayDOM()` `updateToolUI()` auf. **Bewusst erhalten bleiben die je
+Werkzeug gemerkten Breiten** (`localStorage['cbd-board-tool-settings']`):
+Neu ist nur, dass der Breitenregler sie beim Öffnen auch anzeigt — vorher
+stand er fest auf 3 px, gezeichnet wurde mit der gemerkten Breite.
+
+**Falle für künftige Prüfungen:** Der Prüfseiten-Helfer `ctx.oeffnen()` ruft
+nach `B.open()` zusätzlich `setTool('pen')` auf und hätte genau diesen Fehler
+verdeckt. `tools/test-board-standard.js` öffnet deshalb direkt über
+`B.open()`.
 
 ## Persönliche Notizen: automatische Sichtbarkeit auf Inhaltsverzeichnis-Seiten
 (Phase 2 von `PLAN-Tafelmodus-Text-und-Notizen-Restore.md`, abgeschlossen
