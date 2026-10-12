@@ -329,6 +329,99 @@
         return typen() === 'bild' ? true : { ok: false, detail: 'Elemente ' + typen() };
     }
 
+    // ---- AP-4.fix3 (AP-4.rev F3): Speicher voll - PNG vor Elementlisten retten ----
+    var VOLL_TEXT = 'Nicht gespeichert – Speicher voll';
+
+    function quotaFehler() {
+        var fehler = new Error('Quota (nachgestellt)');
+        fehler.name = 'QuotaExceededError';
+        return fehler;
+    }
+
+    function elementeSchluesselAusser(eigen) {
+        var liste = [];
+        for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf('cbd-board-') === 0 && k.slice(-9) === '-elemente' && k !== eigen) liste.push(k);
+        }
+        return liste;
+    }
+
+    /** Storage.prototype.setItem ersetzen, solange fn läuft. */
+    function mitSetItem(ersatz, fn) {
+        var echt = Storage.prototype.setItem;
+        Storage.prototype.setItem = function(k, v) { return ersatz.call(this, echt, k, v); };
+        try {
+            return fn();
+        } finally {
+            Storage.prototype.setItem = echt;
+        }
+    }
+
+    /** Fremde -elemente belegen den Platz: Schreiben wirft, solange es sie gibt. */
+    function lokalVollFremdeElementeWeichen() {
+        ctx.oeffnen();
+        setze('cbd-board-fremd-A', 'data:image/png;base64,QQ==');
+        setze('cbd-board-fremd-A-elemente', '{"png":"x","modell":{}}');
+        setze('cbd-board-fremd-B:p1-elemente', '{"png":"y","modell":{}}');
+        setze(SCHLUESSEL, 'data:image/png;base64,QUxU');
+        testzeichnung();
+        var eigen = SCHLUESSEL + '-elemente';
+        mitSetItem(function(echt, k, v) {
+            if (elementeSchluesselAusser(eigen).length > 0) throw quotaFehler();
+            return echt.call(this, k, v);
+        }, function() { B.saveDrawing(); });
+        var f = [];
+        var png = lies(SCHLUESSEL);
+        if (!png || png.indexOf('data:image/png') !== 0 || png === 'data:image/png;base64,QUxU') f.push('PNG nicht gespeichert');
+        if (lies('cbd-board-fremd-A-elemente') !== null || lies('cbd-board-fremd-B:p1-elemente') !== null) f.push('fremde -elemente nicht entfernt');
+        if (lies('cbd-board-fremd-A') !== 'data:image/png;base64,QQ==') f.push('fremdes PNG angetastet');
+        if (png && !lokalesModell(lies(eigen), png)) f.push('eigene Elemente danach nicht gespeichert');
+        if (status() === VOLL_TEXT) f.push('Status meldet "Speicher voll", obwohl gespeichert');
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    /** Reicht das nicht, weicht als Zweites die eigene alte Liste. */
+    function lokalVollEigeneElementeWeichen() {
+        ctx.oeffnen();
+        var eigen = SCHLUESSEL + '-elemente';
+        setze(SCHLUESSEL, 'data:image/png;base64,QUxU');
+        setze(eigen, '{"png":"alt","modell":{}}');
+        testzeichnung();
+        mitSetItem(function(echt, k, v) {
+            if (k === SCHLUESSEL && lies(eigen) !== null) throw quotaFehler();
+            return echt.call(this, k, v);
+        }, function() { B.saveDrawing(); });
+        var f = [];
+        var png = lies(SCHLUESSEL);
+        if (!png || png === 'data:image/png;base64,QUxU') f.push('PNG nicht gespeichert');
+        else if (!lokalesModell(lies(eigen), png)) f.push('neue Hülle fehlt (' + String(lies(eigen)).slice(0, 30) + ')');
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    /** Endgültig voll: sichtbare Meldung, alter Stand bleibt unverändert. */
+    function lokalVollEndgueltig() {
+        ctx.oeffnen();
+        setze(SCHLUESSEL, 'data:image/png;base64,QUxU');
+        testzeichnung();
+        var meldungen = [];
+        var echtWarn = console.warn;
+        console.warn = function() { meldungen.push(Array.prototype.join.call(arguments, ' ')); };
+        try {
+            mitSetItem(function(echt, k, v) {
+                if (k === SCHLUESSEL) throw quotaFehler();
+                return echt.call(this, k, v);
+            }, function() { B.saveDrawing(); });
+        } finally {
+            console.warn = echtWarn;
+        }
+        var f = [];
+        if (status() !== VOLL_TEXT) f.push('Status "' + status() + '"');
+        if (lies(SCHLUESSEL) !== 'data:image/png;base64,QUxU') f.push('alter Stand verändert');
+        if (lies(SCHLUESSEL + '-elemente') !== null) f.push('-elemente ohne passendes PNG geschrieben');
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
     // ---- AP-4.fix2 (AP-4.rev F2): veraltete Liste nach einem Rückweg ----
 
     /** Gültige Liste OHNE Hülle (Stand der Phase-4-Tests vor AP-4.fix2) -> PNG gilt. */
@@ -832,6 +925,9 @@
         p('AP-4.4: lokal - ungültige Elemente -> PNG als Bild-Element', lokalUngueltigNimmtBild);
         p('AP-4.fix2: lokal - Liste ohne Hülle/Abdruck -> PNG als Bild-Element', lokalOhneHuelleNimmtBild);
         p('AP-4.fix2: lokal - Hülle trägt den Abdruck des gespeicherten PNG (Seite 0 und :p1)', lokalHuelleTraegtAbdruck);
+        p('AP-4.fix3: lokal - Speicher voll: fremde -elemente weichen, PNG gespeichert', lokalVollFremdeElementeWeichen);
+        p('AP-4.fix3: lokal - Speicher voll: danach weicht die eigene alte Liste', lokalVollEigeneElementeWeichen);
+        p('AP-4.fix3: lokal - endgültig voll: "Nicht gespeichert – Speicher voll", alter Stand bleibt', lokalVollEndgueltig);
         p('AP-4.4: Seitenwechsel behält Elemente ({png, modell}), einzeln radierbar', seitenwechselBehaeltElemente);
         p('AP-4.4: Seitenwechsel - IDs nach Rückkehr eindeutig', seitenwechselNeueIdsEindeutig);
         p('AP-4.4: Zeichnung löschen entfernt auch -elemente', loeschenEntferntElemente);
