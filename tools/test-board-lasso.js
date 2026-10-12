@@ -17,6 +17,13 @@
  *   - Zoom 150 %: Auswahl und Anzeige stimmen mit den Elementen überein
  *   - Kontextmenü-Sperre beim Lasso-Halten, Finger/Handballen/Pinch
  *
+ * AP-5.2 (Verschieben, Löschen, Rückgängig, Speichern), Abschnitt unten:
+ *   Ziehen im Auswahlrahmen verschiebt nur Gewähltes (aus der Momentaufnahme,
+ *   nicht kumulativ gerundet, Zoom herausgerechnet), 0 px ohne Undo-Eintrag,
+ *   Löschen per Knopf und Entf/Rücktaste (nicht aus Eingabefeldern), Undo je
+ *   einzeln, Bild-Element, Finger/Maus/Pinch, lokal und Server speichern +
+ *   Wiederöffnen an neuer Stelle, Zwischenstand vor dem Abheben.
+ *
  * Verträge, auf die sich diese Prüfungen stützen (Plan AP-5.1):
  *   B.auswahl           Array der gewählten Element-IDs
  *   B.auswahlCanvas     die vierte Ebene (canvas.cbd-board-canvas-auswahl)
@@ -663,6 +670,556 @@
         });
     }
 
+    // ==================================================================
+    // AP-5.2: Verschieben, Löschen, Rückgängig, Speichern
+    // ==================================================================
+    //
+    // Verträge (Plan AP-5.2, Übergabenotiz AP-5.1):
+    //   - Zeiger setzt mit Werkzeug 'lasso' INNERHALB des Auswahlrahmens
+    //     (+ 8 px) auf -> Verschieben statt neuem Lasso; die Auswahl bleibt.
+    //   - Verschiebung = Momentaufnahme beim Aufsetzen + verschiebe() mit der
+    //     GESAMTEN Verschiebung seit dem Start (nicht kumulativ gerundet).
+    //   - genau EIN Undo-Schritt je Ziehen; 0 px -> kein Undo-Schritt.
+    //   - Leiste während des Ziehens ausgeblendet, Cursor 'move'.
+    //   - B.auswahlLoeschen() / Knopf "Löschen" / Entf / Rücktaste entfernen
+    //     die Auswahl (ein Undo-Schritt), Auswahl danach aufgehoben.
+    //   - Entf/Rücktaste mit Fokus in input/textarea löschen NICHT.
+    //   - Der Zwischenstand darf per requestAnimationFrame gebündelt werden;
+    //     spätestens beim Abheben steht das Modell an der Endlage.
+
+    /** Kopie der Lage eines Elements (Punkte bzw. x/y/b/h). */
+    function lage(e) {
+        if (!e) return null;
+        if (e.typ === 'strich') return { typ: e.typ, punkte: e.punkte.map(function(p) { return [p[0], p[1]]; }) };
+        return { typ: e.typ, x: e.x, y: e.y, b: e.b, h: e.h };
+    }
+
+    function lagenNachId() {
+        var o = {};
+        el().forEach(function(e) { o[e.id] = lage(e); });
+        return o;
+    }
+
+    function finde(id) {
+        var l = el();
+        for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
+        return null;
+    }
+
+    /** Ist Element id um (dx, dy) gegenüber alt verschoben (Toleranz tol)? */
+    function verschobenUm(id, alt, dx, dy, tol, f, name) {
+        var e = finde(id);
+        if (!e) { f.push((name || id) + ' fehlt'); return; }
+        var a = alt[id];
+        var ab = 0;
+        if (e.typ === 'strich') {
+            if (e.punkte.length !== a.punkte.length) { f.push((name || id) + ': Punktzahl geändert'); return; }
+            for (var i = 0; i < e.punkte.length; i++) {
+                ab = Math.max(ab, Math.abs(e.punkte[i][0] - (a.punkte[i][0] + dx)), Math.abs(e.punkte[i][1] - (a.punkte[i][1] + dy)));
+            }
+        } else {
+            ab = Math.max(Math.abs(e.x - (a.x + dx)), Math.abs(e.y - (a.y + dy)));
+            if (e.typ === 'bild' && (e.b !== a.b || e.h !== a.h)) f.push((name || id) + ': Größe geändert');
+        }
+        if (ab > tol) f.push((name || id) + ': Abweichung ' + ab.toFixed(6) + ' px von (' + dx.toFixed(4) + ', ' + dy.toFixed(4) + ')');
+    }
+
+    function unveraendert(id, alt, f, name) {
+        verschobenUm(id, alt, 0, 0, 0, f, name);
+    }
+
+    /**
+     * Ziehen mit dem Lasso-Werkzeug von (x0,y0) nach (x1,y1) in n Schritten
+     * (Element-Koordinaten). optionen wie lasso(); optionen.mitte(i) nach dem
+     * i-ten pointermove. Liefert { dx, dy } = tatsächliche Verschiebung aus
+     * den ausgelösten Ereignissen (Zoom herausgerechnet).
+     */
+    function ziehe(x0, y0, x1, y1, n, optionen) {
+        optionen = optionen || {};
+        var art = optionen.art || 'pen', id = optionen.id || 8, extra = optionen.extra;
+        n = n || 5;
+        if (B.currentTool !== 'lasso') B.setTool('lasso');
+        var start = z('pointerdown', id, art, x0, y0, extra);
+        var letzt = start;
+        for (var i = 1; i <= n; i++) {
+            letzt = z('pointermove', id, art, x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, extra);
+            if (optionen.mitte) optionen.mitte(i);
+        }
+        if (!optionen.ohneAbheben) z('pointerup', id, art, x1, y1, extra);
+        var f = B.zoom || 1;
+        return { dx: (letzt.clientX - start.clientX) / f, dy: (letzt.clientY - start.clientY) / f };
+    }
+
+    function waehleRegel() {
+        var ids = regelZeichnung();
+        lasso(LASSO_REGEL);
+        if (sortiert(B.auswahl) !== sortiert([ids.a, ids.b, ids.t])) throw new Error('Vorbedingung: Auswahl ' + sortiert(B.auswahl));
+        return ids;
+    }
+
+    function cursorVon(c) {
+        return getComputedStyle(c).cursor;
+    }
+
+    function istDunkelBei(x, y) {
+        var dpr = B.dpr || 1;
+        var d = B.drawingCtx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data;
+        return d[3] > 128 && d[0] < 100 && d[1] < 100 && d[2] < 100;
+    }
+
+    function leerBei(x, y) {
+        var dpr = B.dpr || 1;
+        return B.drawingCtx.getImageData(Math.round(x * dpr), Math.round(y * dpr), 1, 1).data[3] === 0;
+    }
+
+    // ------------------------------------------------------------------
+    // Prüfungen AP-5.2 (synchron)
+    // ------------------------------------------------------------------
+    function ziehenVerschiebtNurGewaehlte() {
+        ctx.oeffnen();
+        var f = [];
+        var ids = waehleRegel();
+        var alt = lagenNachId();
+        var boxVorher = pixelBox(B.auswahlCanvas);
+        var undoVorher = B.undoStapel.length;
+        var leisteWaehrend = true, cursorWaehrend = '';
+        // Aufsetzen mitten im Rahmen (zwischen A und B), 50/30 px ziehen
+        var d = ziehe(120, 130, 170, 160, 6, {
+            mitte: function(i) {
+                if (i === 3) {
+                    leisteWaehrend = sichtbar(leiste());
+                    cursorWaehrend = cursorVon(B.drawingCanvas);
+                }
+            }
+        });
+        if (Math.abs(d.dx - 50) > 1 || Math.abs(d.dy - 30) > 1) f.push('Testaufbau: Verschiebung ' + d.dx + '/' + d.dy);
+        verschobenUm(ids.a, alt, d.dx, d.dy, 1e-6, f, 'A');
+        verschobenUm(ids.b, alt, d.dx, d.dy, 1e-6, f, 'B');
+        verschobenUm(ids.t, alt, d.dx, d.dy, 1e-6, f, 'Text');
+        unveraendert(ids.d, alt, f, 'D (nicht gewählt)');
+        if (el().length !== 4) f.push('Elementzahl ' + el().length);
+        if (sortiert(B.auswahl) !== sortiert([ids.a, ids.b, ids.t])) f.push('Auswahl nach dem Ziehen ' + sortiert(B.auswahl));
+        if (B.undoStapel.length !== undoVorher + 1) f.push('Undo-Schritte ' + (B.undoStapel.length - undoVorher) + ' statt 1');
+        if (leisteWaehrend) f.push('Leiste während des Ziehens sichtbar');
+        if (cursorWaehrend !== 'move') f.push('Cursor während des Ziehens ' + cursorWaehrend);
+        if (!sichtbar(leiste())) f.push('Leiste nach dem Ziehen nicht sichtbar');
+        if (cursorVon(B.drawingCanvas) !== 'crosshair') f.push('Cursor nach dem Ziehen ' + cursorVon(B.drawingCanvas));
+        // Rahmen folgt
+        var box = pixelBox(B.auswahlCanvas);
+        if (!box || !boxVorher) f.push('kein Rahmen');
+        else if (Math.abs((box.x - boxVorher.x) - d.dx) > 1.5 || Math.abs((box.y - boxVorher.y) - d.dy) > 1.5) {
+            f.push('Rahmen verschoben um ' + (box.x - boxVorher.x).toFixed(1) + '/' + (box.y - boxVorher.y).toFixed(1));
+        }
+        rahmenPasst(box, vereinigung([ids.a, ids.b, ids.t]), f);
+        // Zeichenebene: A an neuer Stelle, alte Stelle leer, D unverändert
+        if (!istDunkelBei(120 + d.dx, 100 + d.dy)) f.push('A an neuer Stelle nicht gezeichnet');
+        if (!leerBei(120, 100)) f.push('alte Stelle von A nicht leer');
+        if (!istDunkelBei(500, 280)) f.push('D nicht mehr gezeichnet');
+        return ergebnis(f);
+    }
+
+    function ziehenNichtKumulativGerundet() {
+        ctx.oeffnen();
+        var f = [];
+        var ids = waehleRegel();
+        var alt = lagenNachId();
+        // 9 Schritte zu je 0,3371 px: eine je Schritt auf 2 Stellen gerundete
+        // oder aufsummierte Lage wiche messbar von alt + Gesamtverschiebung ab
+        var d = ziehe(120, 130, 120 + 9 * 0.3371, 130 + 9 * 0.2219, 9);
+        if (Math.abs(d.dx) < 1e-9 && Math.abs(d.dy) < 1e-9) return { ok: false, detail: 'Testaufbau: keine Verschiebung erzeugt' };
+        verschobenUm(ids.a, alt, d.dx, d.dy, 1e-6, f, 'A');
+        verschobenUm(ids.t, alt, d.dx, d.dy, 1e-6, f, 'Text');
+        unveraendert(ids.d, alt, f, 'D');
+        // zweites Ziehen baut auf der Endlage auf
+        var alt2 = lagenNachId();
+        var d2 = ziehe(121, 131, 121 - 7 * 0.1234, 131 + 7 * 0.4321, 7);
+        verschobenUm(ids.b, alt2, d2.dx, d2.dy, 1e-6, f, 'B (zweites Ziehen)');
+        return ergebnis(f);
+    }
+
+    function nullVerschiebungOhneUndo() {
+        ctx.oeffnen();
+        var f = [];
+        var ids = waehleRegel();
+        var vorher = JSON.stringify(el());
+        var undoVorher = B.undoStapel.length;
+        // hin und zurück
+        B.setTool('lasso');
+        z('pointerdown', 8, 'pen', 120, 130);
+        z('pointermove', 8, 'pen', 160, 150);
+        z('pointermove', 8, 'pen', 140, 140);
+        z('pointermove', 8, 'pen', 120, 130);
+        z('pointerup', 8, 'pen', 120, 130);
+        if (B.undoStapel.length !== undoVorher) f.push('hin und zurück: ' + (B.undoStapel.length - undoVorher) + ' Undo-Schritte');
+        if (JSON.stringify(el()) !== vorher) f.push('hin und zurück: Modell verändert');
+        if (sortiert(B.auswahl) !== sortiert([ids.a, ids.b, ids.t])) f.push('hin und zurück: Auswahl ' + sortiert(B.auswahl));
+        // reines Antippen im Rahmen: Auswahl bleibt, kein neues Lasso, kein Undo
+        z('pointerdown', 8, 'pen', 120, 130);
+        z('pointerup', 8, 'pen', 120, 130);
+        if (B.undoStapel.length !== undoVorher) f.push('Antippen: Undo-Schritt');
+        if (sortiert(B.auswahl) !== sortiert([ids.a, ids.b, ids.t])) f.push('Antippen im Rahmen hebt Auswahl auf: ' + sortiert(B.auswahl));
+        if (!sichtbar(leiste())) f.push('Leiste nach Antippen nicht sichtbar');
+        // Aufsetzen AUSSERHALB des Rahmens beginnt weiterhin ein neues Lasso
+        lasso(rechteck(400, 60, 600, 200));
+        if (B.auswahl.length !== 0) f.push('Lasso außerhalb wählt ' + sortiert(B.auswahl));
+        if (JSON.stringify(el()) !== vorher) f.push('Lasso außerhalb verändert das Modell');
+        return ergebnis(f);
+    }
+
+    function loeschenPerKnopf() {
+        ctx.oeffnen();
+        var f = [];
+        var ids = waehleRegel();
+        var alt = lagenNachId();
+        var undoVorher = B.undoStapel.length;
+        if (typeof B.auswahlLoeschen !== 'function') f.push('B.auswahlLoeschen fehlt');
+        var k = knopf('Löschen');
+        if (!k) return { ok: false, detail: 'Knopf "Löschen" fehlt' };
+        k.click();
+        if (sortiert(idsVon()) !== ids.d) f.push('nach Löschen ' + sortiert(idsVon()) + ' statt ' + ids.d);
+        unveraendert(ids.d, alt, f, 'D');
+        if (B.auswahl.length !== 0) f.push('Auswahl nach Löschen ' + sortiert(B.auswahl));
+        if (!ebeneLeer(B.auswahlCanvas)) f.push('Rahmen bleibt');
+        if (sichtbar(leiste())) f.push('Leiste bleibt');
+        if (B.undoStapel.length !== undoVorher + 1) f.push('Undo-Schritte ' + (B.undoStapel.length - undoVorher) + ' statt 1');
+        if (!leerBei(120, 100)) f.push('A noch gezeichnet');
+        if (!istDunkelBei(500, 280)) f.push('D nicht mehr gezeichnet');
+        if (!B.overlay) f.push('Tafel geschlossen');
+        // ohne Auswahl tut der Aufruf nichts
+        B.auswahlLoeschen && B.auswahlLoeschen();
+        if (B.undoStapel.length !== undoVorher + 1) f.push('Löschen ohne Auswahl legt Undo-Schritt an');
+        if (el().length !== 1) f.push('Löschen ohne Auswahl entfernt ' + (1 - el().length));
+        return ergebnis(f);
+    }
+
+    function loeschenPerTaste() {
+        var f = [];
+        ['Delete', 'Backspace'].forEach(function(key) {
+            ctx.oeffnen();
+            var ids = waehleRegel();
+            var undoVorher = B.undoStapel.length;
+            var ev = taste(key);
+            if (sortiert(idsVon()) !== ids.d) f.push(key + ': nach Taste ' + sortiert(idsVon()));
+            if (B.auswahl.length !== 0) f.push(key + ': Auswahl bleibt');
+            if (B.undoStapel.length !== undoVorher + 1) f.push(key + ': Undo-Schritte ' + (B.undoStapel.length - undoVorher));
+            if (!ev.defaultPrevented) f.push(key + ': Standardaktion nicht verhindert');
+            if (!B.overlay || B.overlay.classList.contains('cbd-board-closing')) f.push(key + ': Tafel geschlossen');
+            // ohne Auswahl: nichts löschen, kein Undo-Schritt
+            var ev2 = taste(key);
+            if (el().length !== 1) f.push(key + ' ohne Auswahl löscht');
+            if (B.undoStapel.length !== undoVorher + 1) f.push(key + ' ohne Auswahl: Undo-Schritt');
+            if (ev2.defaultPrevented) f.push(key + ' ohne Auswahl: Standardaktion verhindert');
+            ctx.schliessen();
+        });
+        return ergebnis(f);
+    }
+
+    function entfImTextfeldLoeschtNichtAuswahl() {
+        ctx.oeffnen();
+        var f = [];
+        var ids = regelZeichnung();
+        // Textfeld des Text-Werkzeugs offen (hängt an document.body)
+        B.setTool('text');
+        z('pointerdown', 1, 'mouse', 400, 60);
+        var feld = document.querySelector('.cbd-board-text-input');
+        if (!feld) return { ok: false, detail: 'kein Textfeld' };
+        feld.value = 'abc';
+        // Auswahl bei offenem Feld (programmatischer Werkzeugwechsel ohne blur)
+        B.setTool('lasso');
+        lasso(LASSO_REGEL);
+        var gewaehlt = sortiert(B.auswahl);
+        if (gewaehlt !== sortiert([ids.a, ids.b, ids.t])) f.push('Vorbedingung: Auswahl ' + gewaehlt);
+        feld.focus();
+        var undoVorher = B.undoStapel.length;
+        ['Delete', 'Backspace'].forEach(function(key) {
+            // Taste im Textfeld selbst
+            var ev = new KeyboardEvent('keydown', { key: key, bubbles: true, cancelable: true });
+            feld.dispatchEvent(ev);
+            if (ev.defaultPrevented) f.push(key + ' im Textfeld: Standardaktion (Zeichen löschen) verhindert');
+            // Taste am Dokument, Fokus im Textfeld
+            if (document.activeElement === feld) {
+                var ev2 = taste(key);
+                if (ev2.defaultPrevented) f.push(key + ' bei Fokus im Textfeld: Standardaktion verhindert');
+            } else {
+                f.push('Testaufbau: Textfeld hat keinen Fokus');
+            }
+        });
+        // Taste in einem anderen Eingabefeld (Breitenregler der Werkzeugleiste)
+        var regler = B.overlay.querySelector('input');
+        if (regler) {
+            var ev3 = new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, cancelable: true });
+            regler.dispatchEvent(ev3);
+        }
+        if (el().length !== 4) f.push('Elemente gelöscht: ' + el().length + ' statt 4');
+        if (sortiert(B.auswahl) !== gewaehlt) f.push('Auswahl verändert: ' + sortiert(B.auswahl));
+        if (B.undoStapel.length !== undoVorher) f.push('Undo-Schritt angelegt');
+        var t = document.querySelector('.cbd-board-text-input');
+        if (t && t.parentNode) t.parentNode.removeChild(t);
+        return ergebnis(f);
+    }
+
+    function undoJeEinzeln() {
+        ctx.oeffnen();
+        var f = [];
+        var ids = waehleRegel();
+        var original = JSON.stringify(el());
+        var undoVorher = B.undoStapel.length;
+        var d = ziehe(120, 130, 160, 150, 4);
+        var verschoben = JSON.stringify(el());
+        if (verschoben === original) f.push('Ziehen ohne Wirkung');
+        // Auswahl besteht weiter -> Entf
+        taste('Delete');
+        if (el().length !== 1) f.push('Löschen nach Ziehen: ' + el().length + ' Elemente');
+        if (B.undoStapel.length !== undoVorher + 2) f.push('Undo-Schritte ' + (B.undoStapel.length - undoVorher) + ' statt 2');
+        // Strg+Z #1: Löschen rückgängig, Lage bleibt die verschobene
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+        if (JSON.stringify(el()) !== verschoben) f.push('erstes Strg+Z stellt nicht den verschobenen Stand her');
+        if (B.auswahl.length !== 0) f.push('Auswahl nach erstem Strg+Z');
+        if (!ebeneLeer(B.auswahlCanvas)) f.push('Rahmen nach erstem Strg+Z');
+        if (sichtbar(leiste())) f.push('Leiste nach erstem Strg+Z');
+        // Strg+Z #2: Verschieben rückgängig
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+        if (JSON.stringify(el()) !== original) f.push('zweites Strg+Z stellt nicht den Ausgangsstand her');
+        if (B.undoStapel.length !== undoVorher) f.push('Undo-Stapel ' + (B.undoStapel.length - undoVorher));
+        if (!istDunkelBei(120, 100)) f.push('A nach Rückgängig nicht an alter Stelle');
+        if (!leerBei(120 + d.dx, 100 + d.dy)) f.push('verschobenes A bleibt sichtbar');
+        return ergebnis(f);
+    }
+
+    function bildElementVerschiebenLoeschen() {
+        ctx.oeffnen();
+        var f = [];
+        var bild = ctx.basis && ctx.basis.schwarz;
+        if (!bild) return { ok: false, detail: 'kein Basisbild' };
+        var be = B.bildElementHinzufuegen(bild.src, bild);
+        if (!be) return { ok: false, detail: 'Bild-Element nicht angelegt' };
+        var mx = B.cssWidth / 2, my = B.cssHeight / 2;
+        lasso(rechteck(mx - 40, my - 40, mx + 40, my + 40));
+        if (sortiert(B.auswahl) !== be.id) return { ok: false, detail: 'Vorbedingung: Auswahl ' + sortiert(B.auswahl) };
+        var alt = lagenNachId();
+        var pngVorher = B.drawingCanvas.toDataURL('image/png');
+        var d = ziehe(mx, my, mx + 30, my + 20, 5);
+        verschobenUm(be.id, alt, d.dx, d.dy, 1e-6, f, 'Bild');
+        if (B.drawingCanvas.toDataURL('image/png') === pngVorher) f.push('Zeichenebene nach Verschieben unverändert');
+        var nachZiehen = JSON.stringify(el());
+        if (sortiert(B.auswahl) !== be.id) f.push('Auswahl nach Ziehen ' + sortiert(B.auswahl));
+        taste('Delete');
+        if (el().length !== 0) f.push('Bild nach Entf nicht gelöscht (' + el().length + ')');
+        if (!ebeneLeer(B.drawingCanvas)) f.push('Zeichenebene nach Löschen nicht leer');
+        B.undo();
+        if (JSON.stringify(el()) !== nachZiehen) f.push('Rückgängig stellt das verschobene Bild nicht her');
+        B.undo();
+        verschobenUm(be.id, alt, 0, 0, 0, f, 'Bild nach zweitem Rückgängig');
+        return ergebnis(f);
+    }
+
+    function zoomBeimZiehen() {
+        ctx.oeffnen();
+        var f = [];
+        var ids = regelZeichnung();
+        B.zoom = 1.5;
+        B.panX = 0;
+        B.panY = 0;
+        B.updateCanvasTransform();
+        lasso(LASSO_REGEL);
+        if (sortiert(B.auswahl) !== sortiert([ids.a, ids.b, ids.t])) return { ok: false, detail: 'Vorbedingung: Auswahl ' + sortiert(B.auswahl) };
+        var alt = lagenNachId();
+        // z() rechnet Element- in Bildschirmkoordinaten um: 40/20 Element-px = 60/30 Bildschirm-px
+        var d = ziehe(120, 130, 160, 150, 4);
+        if (Math.abs(d.dx - 40) > 1 || Math.abs(d.dy - 20) > 1) f.push('Testaufbau: ' + d.dx + '/' + d.dy);
+        verschobenUm(ids.a, alt, d.dx, d.dy, 1e-6, f, 'A');
+        verschobenUm(ids.t, alt, d.dx, d.dy, 1e-6, f, 'Text');
+        unveraendert(ids.d, alt, f, 'D');
+        // Aufsetzen im Rahmen (Element-Koordinaten) wird bei Zoom erkannt
+        var box = pixelBox(B.auswahlCanvas);
+        rahmenPasst(box, vereinigung([ids.a, ids.b, ids.t]), f);
+        if (!sichtbar(leiste())) f.push('Leiste nach Ziehen bei 150 % nicht sichtbar');
+        return ergebnis(f);
+    }
+
+    function fingerZiehenUndPinch() {
+        ctx.oeffnen();
+        var f = [];
+        // mit der Maus vorzeichnen (Stift-Vorrang, s. fingerUndHandballen)
+        B.setColor('#000000');
+        z('pointerdown', 1, 'mouse', 40, 100);
+        z('pointermove', 1, 'mouse', 200, 100);
+        z('pointerup', 1, 'mouse', 200, 100);
+        z('pointerdown', 1, 'mouse', 40, 300);
+        z('pointermove', 1, 'mouse', 200, 300);
+        z('pointerup', 1, 'mouse', 200, 300);
+        var ids = idsVon();
+        lasso(rechteck(20, 60, 240, 140), { art: 'touch', id: 31 });
+        if (sortiert(B.auswahl) !== ids[0]) return { ok: false, detail: 'Vorbedingung: Auswahl ' + sortiert(B.auswahl) };
+        var alt = lagenNachId();
+        var d = ziehe(120, 100, 150, 140, 5, { art: 'touch', id: 32 });
+        verschobenUm(ids[0], alt, d.dx, d.dy, 1e-6, f, 'Finger');
+        unveraendert(ids[1], alt, f, 'nicht gewählt');
+        // Maus zieht ebenso
+        var alt2 = lagenNachId();
+        var d2 = ziehe(120 + d.dx, 100 + d.dy, 100, 100, 5, { art: 'mouse', id: 1 });
+        verschobenUm(ids[0], alt2, d2.dx, d2.dy, 1e-6, f, 'Maus');
+        // zweiter Finger während des Finger-Ziehens: Ziehen verworfen
+        var alt3 = lagenNachId();
+        var undo3 = B.undoStapel.length;
+        ziehe(100, 100, 140, 130, 3, { art: 'touch', id: 33, ohneAbheben: true });
+        z('pointerdown', 34, 'touch', 400, 400);
+        unveraendert(ids[0], alt3, f, 'nach Pinch-Beginn');
+        if (B.undoStapel.length !== undo3) f.push('Pinch-Abbruch hinterlässt Undo-Schritt');
+        z('pointermove', 33, 'touch', 180, 180);
+        unveraendert(ids[0], alt3, f, 'nach Pinch, weiterer Fingerzug');
+        z('pointerup', 34, 'touch', 400, 400);
+        z('pointerup', 33, 'touch', 180, 180);
+        unveraendert(ids[0], alt3, f, 'nach Abheben');
+        if (B.undoStapel.length !== undo3) f.push('nach Abheben Undo-Schritt');
+        return ergebnis(f);
+    }
+
+    function lokalSpeichernUndWiederoeffnen() {
+        ctx.oeffnen();
+        var f = [];
+        var ids = regelZeichnung();
+        // nur A wählen und verschieben
+        lasso(rechteck(20, 80, 240, 120));
+        if (sortiert(B.auswahl) !== ids.a) return { ok: false, detail: 'Vorbedingung A: ' + sortiert(B.auswahl) };
+        var alt = lagenNachId();
+        var d = ziehe(120, 100, 150, 340, 6);
+        // nur B wählen und löschen
+        lasso(rechteck(20, 140, 240, 180));
+        if (sortiert(B.auswahl) !== ids.b) return { ok: false, detail: 'Vorbedingung B: ' + sortiert(B.auswahl) };
+        taste('Delete');
+        // Text weit über den Rand hinaus: bleibt im Modell (kein stilles Löschen)
+        lasso(rechteck(50, 195, 240, 250));
+        if (sortiert(B.auswahl) !== ids.t) return { ok: false, detail: 'Vorbedingung Text: ' + sortiert(B.auswahl) };
+        var dt = ziehe(100, 220, -400, 220, 5);
+        if (!finde(ids.t)) f.push('über den Rand geschobener Text aus dem Modell entfernt');
+        B.saveDrawing();
+        var png = null;
+        try { png = localStorage.getItem(SCHLUESSEL); } catch (e) {}
+        if (!png) f.push('kein PNG gespeichert');
+        // Wiederöffnen OHNE Speicher zu leeren
+        B.destroy();
+        B.open(CID, '<p>Inhalt für den Test</p>', '#ffffff');
+        if (sortiert(idsVon()) !== sortiert([ids.a, ids.t, ids.d])) f.push('nach Wiederöffnen ' + sortiert(idsVon()) + ' (B muss fehlen)');
+        if (el().some(function(e) { return e.typ === 'bild'; })) f.push('als Bild-Element geladen statt als Elemente');
+        // gespeichert wird auf 2 Nachkommastellen (Elementmodell v1)
+        verschobenUm(ids.a, alt, d.dx, d.dy, 0.006, f, 'A nach Wiederöffnen');
+        verschobenUm(ids.t, alt, dt.dx, dt.dy, 0.006, f, 'Text nach Wiederöffnen');
+        unveraendert(ids.d, alt, f, 'D nach Wiederöffnen');
+        if (!istDunkelBei(120 + d.dx, 100 + d.dy)) f.push('A an neuer Stelle nicht gezeichnet');
+        if (!leerBei(120, 100)) f.push('alte Stelle von A nicht leer');
+        if (!leerBei(120, 160)) f.push('gelöschtes B sichtbar');
+        if (B.auswahl.length !== 0) f.push('Auswahl nach Wiederöffnen');
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
+    // Prüfungen AP-5.2 (asynchron)
+    // ------------------------------------------------------------------
+    function zwischenstandImNaechstenFrame() {
+        ctx.oeffnen();
+        var ids = waehleRegel();
+        var alt = lagenNachId();
+        B.setTool('lasso');
+        z('pointerdown', 8, 'pen', 120, 130);
+        z('pointermove', 8, 'pen', 140, 140);
+        z('pointermove', 8, 'pen', 160, 150);
+        var f = [];
+        return ctx.warteAuf(function() {
+            var e = finde(ids.a);
+            return e && Math.abs(e.punkte[0][0] - (alt[ids.a].punkte[0][0] + 40)) < 1;
+        }, 1000).then(function() {
+            verschobenUm(ids.b, alt, 40, 20, 1, f, 'B im Zwischenstand');
+            unveraendert(ids.d, alt, f, 'D im Zwischenstand');
+            if (!istDunkelBei(120 + 40, 100 + 20)) f.push('Zwischenstand nicht gezeichnet');
+            if (sichtbar(leiste())) f.push('Leiste im Zwischenstand sichtbar');
+            z('pointerup', 8, 'pen', 160, 150);
+            verschobenUm(ids.a, alt, 40, 20, 1, f, 'A nach Abheben');
+            if (!sichtbar(leiste())) f.push('Leiste nach Abheben nicht sichtbar');
+            return ergebnis(f);
+        }, function() {
+            z('pointerup', 8, 'pen', 160, 150);
+            return { ok: false, detail: 'Modell folgt dem Ziehen nicht vor dem Abheben (kein Zwischenstand binnen 1 s)' };
+        });
+    }
+
+    function serverWegSpeichertNeueLage() {
+        var echt = window.fetch;
+        var gespeichert = null;
+        function stub(antwort) {
+            window.fetch = function(url, opts) {
+                var o = {};
+                if (opts && opts.body && typeof opts.body.forEach === 'function') opts.body.forEach(function(w, n) { o[n] = w; });
+                return Promise.resolve(antwort(o)).then(function(json) {
+                    return { json: function() { return Promise.resolve(json); } };
+                });
+            };
+        }
+        function klassenFelder() {
+            B.classId = '7';
+            B.ajaxUrl = '/nachgestellt/admin-ajax.php';
+            B.nonce = 'test-nonce';
+            B.pageId = '5663';
+            B.stableContainerId = CID;
+        }
+        function modellAus(text) {
+            var o = JSON.parse(text);
+            return o && o.modell ? o.modell : o;
+        }
+        var f = [];
+        var ids, alt, d;
+        return Promise.resolve().then(function() {
+            ctx.oeffnen();
+            stub(function(o) {
+                if (o.action === 'cbd_save_drawing') gespeichert = o;
+                return { success: true, data: { message: 'ok' } };
+            });
+            klassenFelder();
+            ids = regelZeichnung();
+            lasso(rechteck(20, 80, 240, 120)); // nur A
+            if (sortiert(B.auswahl) !== ids.a) throw new Error('Vorbedingung A: ' + sortiert(B.auswahl));
+            alt = lagenNachId();
+            d = ziehe(120, 100, 170, 330, 5);
+            lasso(rechteck(20, 140, 240, 180)); // nur B
+            if (typeof B.auswahlLoeschen === 'function') B.auswahlLoeschen();
+            B.saveDrawing();
+            if (!gespeichert) throw new Error('keine Speicheranfrage cbd_save_drawing');
+            if (!gespeichert.drawing_data || gespeichert.drawing_data.indexOf('data:image/png') !== 0) f.push('drawing_data kein PNG');
+            var m = modellAus(gespeichert.elemente_data);
+            var ga = null, gb = null;
+            m.elemente.forEach(function(e) { if (e.id === ids.a) ga = e; if (e.id === ids.b) gb = e; });
+            if (!ga) f.push('A fehlt in elemente_data');
+            else if (Math.abs(ga.punkte[0][0] - (alt[ids.a].punkte[0][0] + d.dx)) > 0.006 || Math.abs(ga.punkte[0][1] - (alt[ids.a].punkte[0][1] + d.dy)) > 0.006) {
+                f.push('A in elemente_data an alter Stelle ' + JSON.stringify(ga.punkte[0]));
+            }
+            if (gb) f.push('gelöschtes B in elemente_data');
+            return ctx.warteAuf(function() { return !B.isSaving; }, 2000);
+        }).then(function() {
+            // Wiederöffnen: Server liefert genau das Gespeicherte zurück
+            B.destroy();
+            B.open(CID, '<p>Inhalt für den Test</p>', '#ffffff');
+            stub(function(o) {
+                if (o.action === 'cbd_load_drawing') {
+                    // Der Server liefert dem Browser nur das Modell (ohne Hülle)
+                    return { success: true, data: { drawing_data: gespeichert.drawing_data, elemente_data: JSON.stringify(modellAus(gespeichert.elemente_data)) } };
+                }
+                return { success: true, data: { message: 'ok' } };
+            });
+            klassenFelder();
+            B.loadFromServer(CID);
+            return ctx.warteAuf(function() { return el().length === 3; }, 2000);
+        }).then(function() {
+            if (sortiert(idsVon()) !== sortiert([ids.a, ids.t, ids.d])) f.push('nach Laden ' + sortiert(idsVon()));
+            verschobenUm(ids.a, alt, d.dx, d.dy, 0.006, f, 'A nach Laden');
+            if (!istDunkelBei(120 + d.dx, 100 + d.dy)) f.push('A an neuer Stelle nicht gezeichnet');
+            window.fetch = echt;
+            return ergebnis(f);
+        }, function(e) {
+            window.fetch = echt;
+            return { ok: false, detail: (e && e.message ? e.message : String(e)) + (f.length ? '; ' + f.join('; ') : '') };
+        });
+    }
+
     // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
@@ -687,6 +1244,17 @@
         p('AP-5.1: Seitenwechsel und Rückgängig heben Auswahl auf', seiteUndUndoHebenAuf);
         p('AP-5.1: Schließen setzt Auswahl/Lasso zurück, Öffnen nicht im Lasso-Modus', schliessenSetztZurueck);
         p('AP-5.1: Auswahlleiste hell/dunkel lesbar', leisteDarkmode);
+        p('AP-5.2: Ziehen im Rahmen verschiebt nur Gewähltes (1 Undo, Leiste weg, Cursor move, Rahmen folgt)', ziehenVerschiebtNurGewaehlte);
+        p('AP-5.2: Verschiebung aus Momentaufnahme, nicht kumulativ gerundet', ziehenNichtKumulativGerundet);
+        p('AP-5.2: 0-px-Verschiebung und Antippen ohne Undo-Eintrag, außerhalb neues Lasso', nullVerschiebungOhneUndo);
+        p('AP-5.2: Knopf "Löschen" entfernt die Auswahl (1 Undo)', loeschenPerKnopf);
+        p('AP-5.2: Entf und Rücktaste löschen die Auswahl', loeschenPerTaste);
+        p('AP-5.2: Entf/Rücktaste im Textfeld bzw. Eingabefeld löschen nicht die Auswahl', entfImTextfeldLoeschtNichtAuswahl);
+        p('AP-5.2: Rückgängig je Verschieben und Löschen einzeln, hebt Auswahl auf', undoJeEinzeln);
+        p('AP-5.2: Bild-Element (alte Tafel) verschieb- und löschbar', bildElementVerschiebenLoeschen);
+        p('AP-5.2: Zoom 150 % - Verschiebung in Element-Koordinaten', zoomBeimZiehen);
+        p('AP-5.2: Finger und Maus ziehen, zweiter Finger verwirft das Ziehen', fingerZiehenUndPinch);
+        p('AP-5.2: lokal speichern + Wiederöffnen an neuer Stelle, gelöschtes fehlt, Randüberschreitung bleibt', lokalSpeichernUndWiederoeffnen);
     };
 
     window.__zusatzTestsAsync = function(c) {
@@ -694,6 +1262,10 @@
         return Promise.resolve(vorher).then(function() {
             ctx = c;
             return c.pruefeAsync('AP-5.1: ESC ohne Auswahl schließt die Tafel wie bisher', escOhneAuswahlSchliesst);
+        }).then(function() {
+            return c.pruefeAsync('AP-5.2: Zwischenstand folgt dem Ziehen vor dem Abheben (Frame-Bündelung)', zwischenstandImNaechstenFrame);
+        }).then(function() {
+            return c.pruefeAsync('AP-5.2: Server-Tafel speichert neue Lage, gelöschtes fehlt, Laden an neuer Stelle', serverWegSpeichertNeueLage);
         });
     };
 })();
