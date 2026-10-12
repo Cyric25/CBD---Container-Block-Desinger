@@ -24,6 +24,12 @@
     Textmarker über der Schrift eines Basisbilds (wieder geöffnete Tafel,
     zurückgeholte Seite). Diese Prüfungen laden Bilder asynchron - das
     Ergebnis steht erst nach Abschluss in window.__zusammenfassung.
+
+    AP-4.3 (Phase 4): board-mode.js arbeitet auf dem Elementmodell
+    (board-elemente.js, daher vor board-mode.js geladen). Die Prüfungen dazu
+    stehen in test-board-modell.js und hängen sich über window.__zusatzTests
+    bzw. window.__zusatzTestsAsync ein (vor test-board-zeiger.js geladen,
+    das die Haken beim Lauf aufruft).
 -->
 <link rel="stylesheet" href="../assets/css/board-mode.css">
 <style>
@@ -48,7 +54,9 @@
 <table id="ergebnis"><thead><tr><th>Test</th><th>Ergebnis</th><th>Detail</th></tr></thead><tbody></tbody></table>
 
 <script src="test-board-zeiger-zaehler.js"></script>
+<script src="../assets/js/board-elemente.js"></script>
 <script src="../assets/js/board-mode.js"></script>
+<script src="test-board-modell.js"></script>
 <script src="test-board-zeiger.js"></script>
 <script src="test-board-layout.js"></script>
 </body>
