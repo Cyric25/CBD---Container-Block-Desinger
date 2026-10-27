@@ -98,6 +98,8 @@
         // AP-5.2: laufendes Verschieben der Auswahl (siehe _ziehenBeginnen),
         // sonst null
         _ziehen: null,
+        // 3.1.143: Drehmodus der Auswahl (siehe auswahlDrehenStarten), sonst null
+        _drehen: null,
 
         isDrawing: false,
         currentTool: 'pen',
@@ -154,9 +156,12 @@
         _ladeNr: 0,           // AP-4.4: zaehlt Oeffnen/Seitenwechsel hoch; eine Server-Antwort
                               // mit veralteter Nummer gehoert zu einer anderen Seite/Sitzung
 
-        // Grid state: 'off', 'horizontal', 'vertical'
+        // Grid state: 'off', 'horizontal', 'vertical' (Sechsecke) und seit
+        // 3.1.143 'kaestchen', 'zeilen'. gridArt = zuletzt gewählte Art, die
+        // der Knopf beim Einschalten nimmt (Auswahlfeld .cbd-board-grid-art).
         gridMode: 'off',
-        gridSize: 30, // Hexagon-Radius in Pixeln
+        gridArt: 'horizontal',
+        gridSize: 30, // Hexagon-Radius bzw. Kästchenseite in Pixeln (Zeilen: doppelt)
         gridOffsetX: 0, // Horizontaler Offset in Pixeln
         gridOffsetY: 0, // Vertikaler Offset in Pixeln
 
@@ -289,6 +294,7 @@
             this._lasso = null;
             this._auswahlFarbeWert = null;
             this._ziehen = null;
+            this._drehen = null;
 
             // Zeigerverwaltung (#7149): Stift-Vorrang gilt je Tafelsitzung
             this.activePointers.clear();
@@ -302,6 +308,11 @@
             // Regler auf die geltende Breite setzen (Absicherung, falls die
             // fest gebaute Leiste und die Standardwerte auseinanderlaufen)
             this.updateToolUI();
+
+            // 3.1.143: Das Raster überlebt das Schließen (gridMode), die
+            // Leiste wird aber fest "aus" gebaut - Knopf, Auswahlfeld und
+            // Regler an den Zustand angleichen
+            this._gitterUIAktualisieren();
 
             // An Body anhaengen
             document.body.appendChild(this.overlay);
@@ -450,6 +461,7 @@
             this._lasso = null;
             this._auswahlLeiste = null;
             this._ziehen = null; // AP-5.2: ein noch offener Frame-Rückruf prüft das
+            this._drehen = null; // 3.1.143: ebenso
             if (this.currentTool === 'lasso') {
                 this.currentTool = 'pen';
             }
@@ -566,12 +578,19 @@
                             '<span class="cbd-board-opacity-display">30%</span>' +
                         '</div>' +
                         '<span class="cbd-board-separator"></span>' +
-                        // Gitter-Toggle
-                        '<button class="cbd-board-grid-toggle" title="Hexagon-Gitter ein/aus">' +
+                        // Gitter-Toggle (3.1.143: nur ein/aus, die Art wählt
+                        // das Auswahlfeld in den Grid-Einstellungen)
+                        '<button class="cbd-board-grid-toggle" title="Raster einblenden">' +
                             '<span class="dashicons dashicons-grid-view"></span>' +
                         '</button>' +
                         // Grid-Einstellungen (nur sichtbar wenn Gitter aktiv)
                         '<div class="cbd-board-grid-controls" style="display: none;">' +
+                            '<select class="cbd-board-grid-art" title="Rasterart">' +
+                                '<option value="kaestchen">Kästchen</option>' +
+                                '<option value="zeilen">Zeilen</option>' +
+                                '<option value="horizontal">Sechsecke – Kante seitlich</option>' +
+                                '<option value="vertical">Sechsecke – Kante unten</option>' +
+                            '</select>' +
                             '<label class="cbd-board-grid-label">Größe:</label>' +
                             '<input type="range" class="cbd-board-grid-size" min="15" max="60" value="30" title="Gitter-Größe">' +
                             '<span class="cbd-board-grid-size-display">30</span>' +
@@ -615,12 +634,30 @@
                 // bewusst NICHT im .cbd-board-canvas-area (dessen touchstart-
                 // Sperre #7149 unterdrückte sonst den Klick per Finger) und
                 // nicht im Canvas-Container (würde mitgezoomt).
-                // "Löschen": auswahlLoeschen() (AP-5.2).
+                // "Löschen": auswahlLoeschen() (AP-5.2). "Drehen" und
+                // "Duplizieren" (3.1.143): auswahlDrehenStarten() bzw.
+                // auswahlDuplizieren(). Im Drehmodus zeigt die Leiste nur den
+                // Hinweis und "Abbrechen" (Klasse --drehen, board-mode.css).
+                // "A−"/"A+" mit Größenanzeige (3.1.144): auswahlTextGroesse(),
+                // nur sichtbar, wenn Texte gewählt sind (Klasse --text).
                 '<div class="cbd-board-auswahl-leiste" role="toolbar" aria-label="Auswahl" style="display: none;">' +
+                    '<button type="button" class="cbd-board-auswahl-knopf" data-aktion="drehen" title="Um einen Drehpunkt drehen">' +
+                        '<span class="dashicons dashicons-image-rotate"></span> Drehen' +
+                    '</button>' +
+                    '<button type="button" class="cbd-board-auswahl-knopf" data-aktion="duplizieren" title="Auswahl duplizieren (Strg+D)">' +
+                        '<span class="dashicons dashicons-admin-page"></span> Duplizieren' +
+                    '</button>' +
+                    '<span class="cbd-board-auswahl-textgruppe cbd-board-auswahl-nur-text">' +
+                        '<button type="button" class="cbd-board-auswahl-knopf cbd-board-auswahl-text-kleiner" data-aktion="text-kleiner" title="Text verkleinern" aria-label="Text verkleinern">A−</button>' +
+                        '<span class="cbd-board-auswahl-textgroesse" title="Textgröße" aria-live="polite"></span>' +
+                        '<button type="button" class="cbd-board-auswahl-knopf cbd-board-auswahl-text-groesser" data-aktion="text-groesser" title="Text vergrößern" aria-label="Text vergrößern">A+</button>' +
+                    '</span>' +
                     '<button type="button" class="cbd-board-auswahl-knopf cbd-board-auswahl-loeschen" data-aktion="loeschen" title="Auswahl löschen">' +
                         '<span class="dashicons dashicons-trash"></span> Löschen' +
                     '</button>' +
                     '<button type="button" class="cbd-board-auswahl-knopf" data-aktion="aufheben" title="Auswahl aufheben (Esc)">Auswahl aufheben</button>' +
+                    '<span class="cbd-board-auswahl-hinweis cbd-board-auswahl-nur-drehen" aria-live="polite"></span>' +
+                    '<button type="button" class="cbd-board-auswahl-knopf cbd-board-auswahl-nur-drehen" data-aktion="drehen-abbrechen" title="Drehen abbrechen (Esc)">Abbrechen</button>' +
                 '</div>';
 
             // Block-Inhalt einfuegen
@@ -737,7 +774,39 @@
             } else if (this.gridMode === 'vertical') {
                 // Vertical: flache Kante unten (flat-top)
                 this.drawVerticalGrid(width, height, this.gridSize);
+            } else if (this.gridMode === 'kaestchen') {
+                // 3.1.143: Rechenpapier, Kästchenseite = Größe
+                this._gitterLinien(width, height, this.gridSize, true);
+            } else if (this.gridMode === 'zeilen') {
+                // 3.1.143: Linienpapier, Zeilenabstand = doppelte Größe
+                // (Standard 60 px - Platz für Handschrift und Text-Werkzeug)
+                this._gitterLinien(width, height, this.gridSize * 2, false);
             }
+        },
+
+        /**
+         * Waagrechte Linien im Abstand `abstand` (Zeilen), mit senkrechten
+         * zusätzlich Kästchen. Versatz X/Y wie bei den Sechsecken; Linien auf
+         * halbe Pixel gelegt, damit sie scharf bleiben.
+         */
+        _gitterLinien: function(width, height, abstand, mitSenkrechten) {
+            var ctx = this.gridCtx;
+            var start = function(versatz) {
+                return ((versatz % abstand) + abstand) % abstand;
+            };
+            var p;
+            ctx.beginPath();
+            for (p = start(this.gridOffsetY); p <= height; p += abstand) {
+                ctx.moveTo(0, Math.round(p) + 0.5);
+                ctx.lineTo(width, Math.round(p) + 0.5);
+            }
+            if (mitSenkrechten) {
+                for (p = start(this.gridOffsetX); p <= width; p += abstand) {
+                    ctx.moveTo(Math.round(p) + 0.5, 0);
+                    ctx.lineTo(Math.round(p) + 0.5, height);
+                }
+            }
+            ctx.stroke();
         },
 
         /**
@@ -828,38 +897,52 @@
         },
 
         /**
-         * Grid-Modus wechseln: off -> horizontal -> vertical -> off
+         * Raster ein/aus (Knopf). Eingeschaltet wird die zuletzt gewählte
+         * Art (gridArt). Bis 3.1.142 schaltete der Knopf reihum
+         * off -> horizontal -> vertical; seit 3.1.143 wählt die Art das
+         * Auswahlfeld (setGridArt).
          */
         toggleGrid: function() {
-            if (this.gridMode === 'off') {
-                this.gridMode = 'horizontal';
-            } else if (this.gridMode === 'horizontal') {
-                this.gridMode = 'vertical';
-            } else {
-                this.gridMode = 'off';
-            }
-
+            this.gridMode = this.gridMode === 'off' ? (this.gridArt || 'horizontal') : 'off';
             this.redrawGrid();
+            this._gitterUIAktualisieren();
+        },
 
-            // Button-Status und Text aktualisieren
+        /** Rasterart wählen und einschalten: 'kaestchen', 'zeilen', 'horizontal', 'vertical'. */
+        setGridArt: function(art) {
+            if (art !== 'kaestchen' && art !== 'zeilen' && art !== 'horizontal' && art !== 'vertical') return;
+            this.gridArt = art;
+            this.gridMode = art;
+            this.redrawGrid();
+            this._gitterUIAktualisieren();
+        },
+
+        /** Knopf, Auswahlfeld und Regler an gridMode/gridArt angleichen. */
+        _gitterUIAktualisieren: function() {
+            if (!this.overlay) return;
+            var an = this.gridMode !== 'off';
             var btn = this.overlay.querySelector('.cbd-board-grid-toggle');
             if (btn) {
-                if (this.gridMode === 'off') {
-                    btn.classList.remove('active');
-                    btn.title = 'Hexagon-Gitter ein/aus';
-                } else if (this.gridMode === 'horizontal') {
-                    btn.classList.add('active');
-                    btn.title = 'Horizontal (flache Kante seitlich)';
-                } else if (this.gridMode === 'vertical') {
-                    btn.classList.add('active');
-                    btn.title = 'Vertical (flache Kante unten)';
-                }
+                btn.classList.toggle('active', an);
+                btn.title = an ? 'Raster ausblenden' : 'Raster einblenden';
             }
-
+            var art = this.overlay.querySelector('.cbd-board-grid-art');
+            if (art) {
+                art.value = an ? this.gridMode : (this.gridArt || 'horizontal');
+            }
             // Grid-Einstellungen nur anzeigen wenn Gitter aktiv
             var gridControls = this.overlay.querySelector('.cbd-board-grid-controls');
             if (gridControls) {
-                gridControls.style.display = this.gridMode === 'off' ? 'none' : 'flex';
+                gridControls.style.display = an ? 'flex' : 'none';
+            }
+            // Regler zeigen die geltenden Werte (überleben das Schließen)
+            var felder = [['.cbd-board-grid-size', this.gridSize], ['.cbd-board-grid-offset-x', this.gridOffsetX],
+                ['.cbd-board-grid-offset-y', this.gridOffsetY]];
+            for (var i = 0; i < felder.length; i++) {
+                var regler = this.overlay.querySelector(felder[i][0]);
+                var anzeige = this.overlay.querySelector(felder[i][0] + '-display');
+                if (regler) regler.value = felder[i][1];
+                if (anzeige) anzeige.textContent = felder[i][1];
             }
         },
 
@@ -1070,6 +1153,14 @@
                 });
             }
 
+            // Rasterart (3.1.143)
+            var gridArt = this.overlay.querySelector('.cbd-board-grid-art');
+            if (gridArt) {
+                gridArt.addEventListener('change', function() {
+                    self.setGridArt(this.value);
+                });
+            }
+
             // Grid Size
             var gridSizeInput = this.overlay.querySelector('.cbd-board-grid-size');
             var gridSizeDisplay = this.overlay.querySelector('.cbd-board-grid-size-display');
@@ -1147,6 +1238,16 @@
                         self.auswahlAufheben();
                     } else if (aktion === 'loeschen' && typeof self.auswahlLoeschen === 'function') {
                         self.auswahlLoeschen(); // AP-5.2
+                    } else if (aktion === 'drehen') {
+                        self.auswahlDrehenStarten(); // 3.1.143
+                    } else if (aktion === 'duplizieren') {
+                        self.auswahlDuplizieren(); // 3.1.143
+                    } else if (aktion === 'text-groesser') {
+                        self.auswahlTextGroesse(1); // 3.1.144
+                    } else if (aktion === 'text-kleiner') {
+                        self.auswahlTextGroesse(-1);
+                    } else if (aktion === 'drehen-abbrechen') {
+                        self._drehenAbbrechen();
                     }
                 });
             }
@@ -1836,8 +1937,13 @@
             // beginnen; eine bestehende Auswahl wird dabei aufgehoben.
             // AP-5.2: Liegt der Punkt IN der Auswahl (auswahlRahmen(), also
             // Vereinigungsrahmen + 8 px), beginnt stattdessen das Verschieben.
+            // 3.1.143: Im Drehmodus setzt das erste Aufsetzen den Drehpunkt,
+            // das zweite den Bezugspunkt und dreht beim Ziehen - überall auf
+            // der Fläche, nicht nur im Auswahlrahmen.
             if (this.currentTool === 'lasso') {
-                if (this._imAuswahlRahmen(this.lastX, this.lastY)) {
+                if (this._drehen) {
+                    this._drehenAufsetzen(this.lastX, this.lastY);
+                } else if (this._imAuswahlRahmen(this.lastX, this.lastY)) {
                     this._ziehenBeginnen(this.lastX, this.lastY);
                 } else {
                     this._lassoBeginnen(this.lastX, this.lastY);
@@ -1944,6 +2050,11 @@
             if (this._ziehen) {
                 this._ziehenBeenden(false);
             }
+            // 3.1.143: laufende Drehung verwerfen - Elemente zurück, kein
+            // Undo-Rest; Drehpunkt und Drehmodus bleiben
+            if (this._drehen) {
+                this._drehenVerwerfen();
+            }
             this.isDrawing = false;
             this.currentStroke = null;
             this.drawingPointerId = null;
@@ -2007,6 +2118,8 @@
                 // angewandt im nächsten Frame (_ziehenVormerken)
                 if (this._ziehen) {
                     this._ziehenVormerken(x, y);
+                } else if (this._drehen) {
+                    this._drehenBewegen(x, y, !!e.shiftKey); // 3.1.143
                 } else if (this._lasso) {
                     var lp = this._punkteAusEreignis(e, rect);
                     for (var li = 0; li < lp.length; li++) {
@@ -2162,6 +2275,11 @@
                 // nimmt den Undo-Schritt wieder weg)
                 if (this._ziehen) {
                     this._ziehenBeenden(true);
+                }
+
+                // 3.1.143: Drehpunkt festlegen bzw. Drehung übernehmen
+                if (this._drehen) {
+                    this._drehenAbheben();
                 }
 
                 // Aktuellen Strich als Element übernehmen (außer bei Radierer).
@@ -2358,9 +2476,12 @@
                 }
 
                 if (el.typ === 'bild') {
+                    // In Bildkoordinaten prüfen und radieren (3.1.143:
+                    // gedrehte Bilder, _bildLokal)
+                    var bildFlaeche = {x: 0, y: 0, b: el.b, h: el.h};
                     for (k = 0; k < punkte.length; k++) {
-                        p = punkte[k];
-                        if (this._kreisSchneidetRahmen(p.x, p.y, r, el) && this._bildRadieren(el, p.x, p.y, r)) {
+                        var lp = this._bildLokal(el, punkte[k].x, punkte[k].y);
+                        if (this._kreisSchneidetRahmen(lp.x, lp.y, r, bildFlaeche) && this._bildRadieren(el, lp.x, lp.y, r)) {
                             bildGeaendert = true;
                         }
                     }
@@ -2395,8 +2516,10 @@
          * Kreis im Offscreen-Canvas eines Bild-Elements ausradieren. Der
          * Canvas hat die Auflösung der Bildquelle (bei HiDPI das Vielfache
          * der CSS-Maße b×h), damit das Bild durch das Radieren nicht
-         * unscharf wird; die Position wird umgerechnet. Liefert false, wenn
-         * die Bildquelle noch nicht geladen ist.
+         * unscharf wird; die Position wird umgerechnet. (x, y) sind
+         * BILDkoordinaten (CSS-Pixel ab der linken oberen Ecke, Drehung schon
+         * herausgerechnet - _bildLokal). Liefert false, wenn die Bildquelle
+         * noch nicht geladen ist.
          */
         _bildRadieren: function(el, x, y, r) {
             var c = this._radierBilder ? this._radierBilder[el.id] : null;
@@ -2418,10 +2541,23 @@
             g.globalCompositeOperation = 'destination-out';
             g.fillStyle = 'rgba(0,0,0,1)';
             g.beginPath();
-            g.arc(x - el.x, y - el.y, r, 0, Math.PI * 2);
+            g.arc(x, y, r, 0, Math.PI * 2);
             g.fill();
             g.restore();
             return true;
+        },
+
+        /**
+         * Punkt der Zeichenfläche (CSS-Pixel) in Koordinaten eines
+         * Bild-Elements: ab seiner linken oberen Ecke, ein Feld winkel
+         * (3.1.143, Grad um diese Ecke) zurückgedreht.
+         */
+        _bildLokal: function(el, x, y) {
+            var dx = x - el.x, dy = y - el.y;
+            if (!el.winkel) return {x: dx, y: dy};
+            var rad = -el.winkel * Math.PI / 180;
+            var cos = Math.cos(rad), sin = Math.sin(rad);
+            return {x: dx * cos - dy * sin, y: dx * sin + dy * cos};
         },
 
         /**
@@ -2444,6 +2580,7 @@
                     var daten = canvas.toDataURL('image/png');
                     this._bildQuellen.set(daten, canvas);
                     elemente[i] = {id: el.id, typ: 'bild', daten: daten, x: el.x, y: el.y, b: el.b, h: el.h};
+                    if (el.winkel) elemente[i].winkel = el.winkel; // 3.1.143
                 }
             }
             if (this._radierGeaendert) {
@@ -2617,17 +2754,21 @@
          * unshift landete dort doppelt. Wird ein Undo-Stand ersetzt, der der
          * Undo-Eintrag des Ziehens ist, zieht z.undoEintrag mit (der
          * Identitätsvergleich in _ziehenBeenden() nimmt ihn bei 0 px bzw.
-         * Verwerfen wieder vom Stapel).
+         * Verwerfen wieder vom Stapel). Dasselbe gilt seit 3.1.143 für die
+         * Momentaufnahme einer laufenden Drehung (this._drehen.basis).
          */
         _geladeneVornEinfuegen: function(vorn) {
             var z = this._ziehen;
+            var d = (this._drehen && this._drehen.basis) ? this._drehen : null;
             this.modell.elemente = vorn.concat(this.modell.elemente);
             for (var i = 0; i < this.undoStapel.length; i++) {
                 var neu = vorn.concat(this.undoStapel[i]);
                 if (z && this.undoStapel[i] === z.undoEintrag) z.undoEintrag = neu;
+                if (d && this.undoStapel[i] === d.undoEintrag) d.undoEintrag = neu;
                 this.undoStapel[i] = neu;
             }
             if (z) z.basis = vorn.concat(z.basis);
+            if (d) d.basis = vorn.concat(d.basis);
         },
 
         /** true, wenn alle Bild-Elemente des Modells zeichenbereit sind. */
@@ -2772,7 +2913,14 @@
                 el = elemente[i];
                 if (el.typ !== 'bild') continue;
                 var quelle = this._bildQuelle(el);
-                if (quelle) {
+                if (quelle && el.winkel) {
+                    // 3.1.143: um die linke obere Ecke gedreht (Elementmodell)
+                    ctx.save();
+                    ctx.translate(el.x, el.y);
+                    ctx.rotate(el.winkel * Math.PI / 180);
+                    ctx.drawImage(quelle, 0, 0, el.b, el.h);
+                    ctx.restore();
+                } else if (quelle) {
                     ctx.drawImage(quelle, el.x, el.y, el.b, el.h);
                 }
             }
@@ -2801,8 +2949,20 @@
                 ctx.fillStyle = el.farbe;
                 ctx.textBaseline = 'top';
                 var textLines = el.text.split('\n');
+                // 3.1.143: gedrehter Text um seine linke obere Ecke
+                var tx = el.x, ty = el.y;
+                if (el.winkel) {
+                    ctx.save();
+                    ctx.translate(el.x, el.y);
+                    ctx.rotate(el.winkel * Math.PI / 180);
+                    tx = 0;
+                    ty = 0;
+                }
                 for (var li = 0; li < textLines.length; li++) {
-                    ctx.fillText(textLines[li], el.x, el.y + li * fontSizePx * 1.2);
+                    ctx.fillText(textLines[li], tx, ty + li * fontSizePx * 1.2);
+                }
+                if (el.winkel) {
+                    ctx.restore();
                 }
             }
         },
@@ -2844,6 +3004,10 @@
         auswahlAufheben: function() {
             if (this._ziehen) {
                 this._ziehenBeenden(true);
+            }
+            // 3.1.143: ebenso eine laufende Drehung; der Drehmodus endet
+            if (this._drehen) {
+                this._drehenBeenden(true);
             }
             this.auswahl = [];
             this._lasso = null;
@@ -2932,25 +3096,42 @@
             if (!z) return;
             z.dx = x - z.x0;
             z.dy = y - z.y0;
+            var self = this;
+            this._frameVormerken(z, function() {
+                if (self._ziehen === z) self._ziehenAnwenden(z);
+            });
+        },
+
+        /**
+         * anwenden() im nächsten Frame aufrufen, höchstens einmal je Frame
+         * (z.frame hält die Vormerkung; Verschieben AP-5.2, Drehen 3.1.143).
+         * requestAnimationFrame bündelt auf einen Schritt je Frame. Ein
+         * Zeitgeber (50 ms) springt ein, falls der Browser keine Frames
+         * liefert (verborgener Tab/Bereich, gedrosselte Bildwiederholung) -
+         * wer zuerst kommt, wendet an und hebt den anderen auf.
+         */
+        _frameVormerken: function(z, anwenden) {
             if (z.frame !== null) return;
             var self = this;
-            // requestAnimationFrame bündelt auf einen Schritt je Frame. Ein
-            // Zeitgeber (50 ms) springt ein, falls der Browser keine Frames
-            // liefert (verborgener Tab/Bereich, gedrosselte Bildwiederholung) -
-            // wer zuerst kommt, wendet an und hebt den anderen auf.
             var fertig = function() {
                 if (z.frame === null) return;
-                if (typeof window.cancelAnimationFrame === 'function' && z.frame.raf !== null) {
-                    window.cancelAnimationFrame(z.frame.raf);
-                }
-                clearTimeout(z.frame.zeit);
-                z.frame = null;
-                if (self._ziehen === z) self._ziehenAnwenden(z);
+                self._frameAbbrechen(z);
+                anwenden();
             };
             z.frame = {
                 raf: typeof window.requestAnimationFrame === 'function' ? window.requestAnimationFrame(fertig) : null,
                 zeit: setTimeout(fertig, 50)
             };
+        },
+
+        /** Vormerkung aus _frameVormerken() zurücknehmen (ohne anzuwenden). */
+        _frameAbbrechen: function(z) {
+            if (z.frame === null) return;
+            if (z.frame.raf !== null && typeof window.cancelAnimationFrame === 'function') {
+                window.cancelAnimationFrame(z.frame.raf);
+            }
+            clearTimeout(z.frame.zeit);
+            z.frame = null;
         },
 
         /** Modell = Momentaufnahme + Gesamtverschiebung; neu zeichnen, Rahmen folgt. */
@@ -2975,13 +3156,7 @@
             var z = this._ziehen;
             if (!z) return;
             this._ziehen = null;
-            if (z.frame !== null) {
-                if (z.frame.raf !== null && typeof window.cancelAnimationFrame === 'function') {
-                    window.cancelAnimationFrame(z.frame.raf);
-                }
-                clearTimeout(z.frame.zeit);
-                z.frame = null;
-            }
+            this._frameAbbrechen(z);
             if (this.drawingCanvas) {
                 this.drawingCanvas.classList.remove('cbd-board-ziehen-aktiv');
             }
@@ -3008,6 +3183,7 @@
         auswahlLoeschen: function() {
             if (!this.modell || !this.auswahl || !this.auswahl.length) return false;
             if (this._ziehen) this._ziehenBeenden(true);
+            if (this._drehen) this._drehenBeenden(true); // 3.1.143
             var neu = elementeModul().entferne(this.modell, this.auswahl).elemente;
             if (neu.length === this.modell.elemente.length) {
                 this.auswahlAufheben();
@@ -3018,6 +3194,323 @@
             this.auswahlAufheben();
             this.zeichneModell();
             return true;
+        },
+
+        // ---------------------------------------------
+        // Drehen und Duplizieren der Auswahl (3.1.143)
+        // ---------------------------------------------
+        //
+        // Drehen wie in CAD-Programmen (Knopf "Drehen" der Auswahlleiste,
+        // das Werkzeug bleibt 'lasso'), this._drehen.phase:
+        //   'drehpunkt'  Aufsetzen setzt den Drehpunkt; solange der Zeiger
+        //                aufliegt, folgt der Punkt ihm, Abheben -> 'bezug'.
+        //   'bezug'      Aufsetzen setzt den Bezugspunkt -> 'drehen'.
+        //   'drehen'     Ziehen dreht die Auswahl um den Winkel zwischen den
+        //                Strahlen Drehpunkt->Bezugspunkt und Drehpunkt->Zeiger;
+        //                Abheben übernimmt die Drehung und beendet den Modus.
+        // Überall auf der Fläche, nicht nur im Auswahlrahmen. Wie beim
+        // Verschieben: EIN Undo-Schritt beim Aufsetzen des Bezugspunkts,
+        // jeder Zwischenstand aus der Momentaufnahme basis + Gesamtwinkel
+        // (CBDBoardElemente.drehe, nicht schrittweise), je Frame gebündelt;
+        // 0° -> Undo-Schritt wieder weg. Winkel in ganzen Grad, nahe (±3°)
+        // an Vielfachen von 45° rastet er ein, mit Umschalttaste 15°-Schritte.
+        // Drehpunkt, Strahlen, Bogen und Gradzahl stehen nur auf der
+        // Auswahl-Ebene, nie im PNG. ESC/"Abbrechen": laufende Drehung
+        // zurück, Modus aus, Auswahl bleibt. Aufheben der Auswahl
+        // (Werkzeugwechsel, Strg+Z, Seitenwechsel, Schließen) übernimmt eine
+        // laufende Drehung; zweiter Finger/Stift übernimmt -> Drehung
+        // verworfen, Drehpunkt bleibt ('bezug').
+        //
+        // Duplizieren: Kopien 20 px nach rechts unten versetzt am Ende der
+        // Liste (CBDBoardElemente.kopiere), danach sind die KOPIEN gewählt
+        // und lassen sich sofort ziehen. EIN Undo-Schritt. Knopf oder Strg+D.
+
+        /** Drehmodus für die Auswahl beginnen (Knopf "Drehen"). */
+        auswahlDrehenStarten: function() {
+            if (!this.modell || !this.auswahlRahmen()) return false;
+            if (this._ziehen) this._ziehenBeenden(true);
+            if (!this._drehen) {
+                this._drehen = {
+                    phase: 'drehpunkt',
+                    px: null,
+                    py: null,
+                    punktZieht: false,
+                    ax: 0, ay: 0, bx: 0, by: 0,
+                    grad: 0,
+                    // Momentaufnahme wie _ziehen.basis - asynchrones Einfügen
+                    // pflegt sie über _geladeneVornEinfuegen()
+                    basis: null,
+                    ids: null,
+                    undoEintrag: null,
+                    frame: null
+                };
+            }
+            this._auswahlZeichnen();
+            return true;
+        },
+
+        /** Zeiger setzt im Drehmodus auf (Drehpunkt bzw. Bezugspunkt). */
+        _drehenAufsetzen: function(x, y) {
+            var d = this._drehen;
+            if (d.phase === 'drehpunkt') {
+                d.px = x;
+                d.py = y;
+                d.punktZieht = true;
+            } else if (d.phase === 'bezug') {
+                this.merkeZustand();
+                d.phase = 'drehen';
+                d.ax = d.bx = x;
+                d.ay = d.by = y;
+                d.grad = 0;
+                d.basis = this.modell.elemente;
+                d.ids = this.auswahl.slice();
+                d.undoEintrag = this.undoStapel[this.undoStapel.length - 1];
+            }
+            this._auswahlZeichnen();
+        },
+
+        /** Zeiger bewegt sich im Drehmodus (fein: Umschalttaste, 15°-Schritte). */
+        _drehenBewegen: function(x, y, fein) {
+            var d = this._drehen;
+            if (!d) return;
+            if (d.phase === 'drehpunkt' && d.punktZieht) {
+                d.px = x;
+                d.py = y;
+                this._auswahlZeichnen();
+                return;
+            }
+            if (d.phase !== 'drehen') return;
+            d.bx = x;
+            d.by = y;
+            d.grad = this._drehwinkelRasten(elementeModul().drehwinkel(d.px, d.py, d.ax, d.ay, x, y), fein);
+            var self = this;
+            this._frameVormerken(d, function() {
+                if (self._drehen === d) self._drehenAnwenden(d);
+            });
+        },
+
+        /**
+         * Winkel auf ganze Grad; nahe an Vielfachen von 45° (±3°) einrasten,
+         * mit fein=true auf 15°-Schritte. Ergebnis in (-180, 180].
+         */
+        _drehwinkelRasten: function(grad, fein) {
+            var g;
+            if (fein) {
+                g = Math.round(grad / 15) * 15;
+            } else {
+                var rast = Math.round(grad / 45) * 45;
+                g = Math.abs(grad - rast) <= 3 ? rast : Math.round(grad);
+            }
+            if (g <= -180) g += 360;
+            if (g > 180) g -= 360;
+            return g === 0 ? 0 : g;
+        },
+
+        /** Modell = Momentaufnahme, um den Drehpunkt gedreht; neu zeichnen. */
+        _drehenAnwenden: function(d) {
+            if (!this.modell || !d.basis) return;
+            var m = elementeModul().drehe({
+                v: this.modell.v, breite: this.modell.breite, hoehe: this.modell.hoehe,
+                elemente: d.basis
+            }, d.ids, d.px, d.py, d.grad);
+            this.modell.elemente = m.elemente;
+            this.zeichneModell();
+            this._auswahlZeichnen();
+        },
+
+        /** Zeiger hebt im Drehmodus ab: Drehpunkt steht bzw. Drehung übernehmen. */
+        _drehenAbheben: function() {
+            var d = this._drehen;
+            if (!d) return;
+            if (d.phase === 'drehpunkt' && d.punktZieht) {
+                d.punktZieht = false;
+                d.phase = 'bezug';
+                this._auswahlZeichnen();
+            } else if (d.phase === 'drehen') {
+                this._drehenBeenden(true);
+            }
+        },
+
+        /** Laufende Drehung zurücknehmen (Elemente, Undo-Schritt); d bleibt. */
+        _drehenZuruecknehmen: function(d) {
+            this._frameAbbrechen(d);
+            if (this.modell && d.basis) {
+                this.modell.elemente = d.basis;
+                var st = this.undoStapel;
+                if (st.length && st[st.length - 1] === d.undoEintrag) {
+                    st.pop();
+                }
+                this.zeichneModell();
+            }
+            d.basis = null;
+            d.ids = null;
+            d.undoEintrag = null;
+            d.grad = 0;
+        },
+
+        /**
+         * Drehmodus beenden. uebernehmen=true: eine laufende Drehung gilt
+         * (0° nimmt den Undo-Schritt wieder weg); false: zurücknehmen.
+         * Die Auswahl bleibt in beiden Fällen.
+         */
+        _drehenBeenden: function(uebernehmen) {
+            var d = this._drehen;
+            if (!d) return;
+            this._drehen = null;
+            if (d.phase === 'drehen') {
+                if (uebernehmen && d.grad !== 0) {
+                    this._frameAbbrechen(d);
+                    this._drehenAnwenden(d);
+                    return;
+                }
+                this._drehenZuruecknehmen(d);
+            }
+            this._auswahlZeichnen();
+        },
+
+        /** ESC bzw. Knopf "Abbrechen": Drehung zurück, Modus aus. */
+        _drehenAbbrechen: function() {
+            this._drehenBeenden(false);
+        },
+
+        /**
+         * Zweiter Finger/Stift übernimmt (_strichVerwerfen): laufende Drehung
+         * zurück, Drehpunkt bleibt - der nächste Bezugspunkt dreht weiter.
+         */
+        _drehenVerwerfen: function() {
+            var d = this._drehen;
+            if (!d) return;
+            if (d.phase === 'drehen') {
+                this._drehenZuruecknehmen(d);
+                d.phase = 'bezug';
+            } else if (d.punktZieht) {
+                d.punktZieht = false;
+                d.phase = 'bezug';
+            }
+            this._auswahlZeichnen();
+        },
+
+        /**
+         * Gewählte Elemente duplizieren (Knopf "Duplizieren", Strg+D). Die
+         * Kopien sind danach gewählt. Liefert true, wenn etwas kopiert wurde.
+         */
+        auswahlDuplizieren: function() {
+            if (!this.modell || !this.auswahl || !this.auswahl.length) return false;
+            if (this._ziehen) this._ziehenBeenden(true);
+            if (this._drehen) this._drehenBeenden(true);
+            var self = this;
+            var k = elementeModul().kopiere(this.modell, this.auswahl, 20, 20, function() {
+                return self.neueId();
+            });
+            if (!k.ids.length) {
+                this.auswahlAufheben();
+                return false;
+            }
+            this.merkeZustand();
+            this.modell.elemente = k.modell.elemente;
+            this.auswahl = k.ids;
+            this.zeichneModell();
+            this._auswahlZeichnen();
+            return true;
+        },
+
+        /**
+         * Schrift der gewählten Texte einen Schritt größer (richtung > 0)
+         * bzw. kleiner (< 0) - Knöpfe "A+"/"A−" der Auswahlleiste (3.1.144).
+         * Faktor 1,2 je Schritt, 18-200 px (CBDBoardElemente.textGroesse);
+         * linke obere Ecke und winkel bleiben, andere gewählte Elemente
+         * bleiben unverändert, die Auswahl bleibt. EIN Undo-Schritt je Klick
+         * (wie bei Office-Programmen); an der Grenze kein Undo-Eintrag.
+         * Liefert true, wenn sich etwas geändert hat.
+         */
+        auswahlTextGroesse: function(richtung) {
+            if (!this.modell || !this.auswahl || !this.auswahl.length) return false;
+            if (this._ziehen) this._ziehenBeenden(true);
+            if (this._drehen) this._drehenBeenden(true);
+            var t = elementeModul().textGroesse(this.modell, this.auswahl, richtung);
+            if (!t.geaendert) return false;
+            this.merkeZustand();
+            this.modell.elemente = t.modell.elemente;
+            this.zeichneModell();
+            this._auswahlZeichnen();
+            return true;
+        },
+
+        /**
+         * Anzeige des Drehmodus auf der Auswahl-Ebene: Drehpunkt (Kreis mit
+         * Kreuz), während der Drehung Bezugsstrahl (gestrichelt), Strahl zum
+         * Zeiger, Bogen und Gradzahl (↻ im, ↺ gegen den Uhrzeigersinn).
+         */
+        _drehenZeichnen: function(c) {
+            var d = this._drehen;
+            if (!d || d.px === null) return;
+            var farbe = this._auswahlFarbe();
+            var px = d.px, py = d.py;
+            c.save();
+            c.globalCompositeOperation = 'source-over';
+            c.strokeStyle = farbe;
+            c.fillStyle = farbe;
+            c.lineCap = 'round';
+            c.setLineDash([]);
+            c.lineWidth = 2;
+
+            if (d.phase === 'drehen') {
+                var la = Math.sqrt((d.ax - px) * (d.ax - px) + (d.ay - py) * (d.ay - py));
+                var lb = Math.sqrt((d.bx - px) * (d.bx - px) + (d.by - py) * (d.by - py));
+                var a0 = Math.atan2(d.ay - py, d.ax - px);
+                var rad = d.grad * Math.PI / 180;
+                // Bezugsstrahl gestrichelt, Zielstrahl im eingerasteten Winkel
+                c.setLineDash([5, 4]);
+                c.beginPath();
+                c.moveTo(px, py);
+                c.lineTo(d.ax, d.ay);
+                c.stroke();
+                c.setLineDash([]);
+                var lz = Math.max(lb, 24);
+                c.beginPath();
+                c.moveTo(px, py);
+                c.lineTo(px + Math.cos(a0 + rad) * lz, py + Math.sin(a0 + rad) * lz);
+                c.stroke();
+                if (d.grad !== 0 && la > 0) {
+                    var rb = Math.max(18, Math.min(48, la, lb));
+                    c.beginPath();
+                    c.arc(px, py, rb, a0, a0 + rad, d.grad < 0);
+                    c.stroke();
+                }
+                // Gradzahl neben dem Bogen, mit hellem Rand (auf jeder Tafelfarbe lesbar)
+                var mitte = a0 + rad / 2;
+                var rt = Math.max(18, Math.min(48, la || 48, lb || 48)) + 22;
+                var text = Math.abs(d.grad) + '°' + (d.grad > 0 ? ' ↻' : (d.grad < 0 ? ' ↺' : ''));
+                c.font = 'bold 15px sans-serif';
+                c.textAlign = 'center';
+                c.textBaseline = 'middle';
+                c.lineWidth = 4;
+                c.strokeStyle = '#ffffff';
+                c.lineJoin = 'round';
+                c.strokeText(text, px + Math.cos(mitte) * rt, py + Math.sin(mitte) * rt);
+                c.fillText(text, px + Math.cos(mitte) * rt, py + Math.sin(mitte) * rt);
+                c.strokeStyle = farbe;
+                c.lineWidth = 2;
+            }
+
+            // Drehpunkt: Kreis mit Kreuz und Mittelpunkt
+            c.beginPath();
+            c.arc(px, py, 7, 0, Math.PI * 2);
+            c.stroke();
+            c.beginPath();
+            c.moveTo(px - 13, py);
+            c.lineTo(px - 9, py);
+            c.moveTo(px + 9, py);
+            c.lineTo(px + 13, py);
+            c.moveTo(px, py - 13);
+            c.lineTo(px, py - 9);
+            c.moveTo(px, py + 9);
+            c.lineTo(px, py + 13);
+            c.stroke();
+            c.beginPath();
+            c.arc(px, py, 2.5, 0, Math.PI * 2);
+            c.fill();
+            c.restore();
         },
 
         /**
@@ -3100,6 +3593,7 @@
                     c.stroke();
                     c.restore();
                 }
+                this._drehenZeichnen(c); // 3.1.143
             }
             this._auswahlLeisteAusrichten();
         },
@@ -3115,14 +3609,41 @@
         _auswahlLeisteAusrichten: function() {
             var leiste = this._auswahlLeiste;
             if (!leiste) return;
+            // 3.1.143: Im Drehmodus nur Hinweis + "Abbrechen" (board-mode.css);
+            // ausgeblendet, solange der Drehpunkt gezogen oder gedreht wird
+            var d = this._drehen;
+            leiste.classList.toggle('cbd-board-auswahl-leiste--drehen', !!d);
+            var hinweis = leiste.querySelector('.cbd-board-auswahl-hinweis');
+            if (hinweis) {
+                hinweis.textContent = !d ? '' : (d.phase === 'drehpunkt'
+                    ? 'Drehpunkt antippen'
+                    : 'Bezugspunkt antippen und ziehen');
+            }
+            var dreht = !!d && (d.phase === 'drehen' || d.punktZieht);
             // AP-5.2: auch während des Verschiebens ausgeblendet
-            var r = (!this._lasso && !this._ziehen && this.overlay && this.drawingCanvas && this.cssWidth && this.cssHeight)
+            var r = (!this._lasso && !this._ziehen && !dreht && this.overlay && this.drawingCanvas && this.cssWidth && this.cssHeight)
                 ? this.auswahlRahmen() : null;
             if (!r) {
                 leiste.style.display = 'none';
                 return;
             }
             leiste.style.display = 'flex';
+            // 3.1.144: Textgröße nur bei gewählten Texten (vor dem Messen der
+            // Leistenbreite unten); Knopf gesperrt, wenn kein Text mehr wachsen
+            // bzw. schrumpfen kann
+            var E = elementeModul();
+            var tg = E.textGroessen(this.modell, this.auswahl);
+            leiste.classList.toggle('cbd-board-auswahl-leiste--text', tg.anzahl > 0);
+            if (tg.anzahl > 0) {
+                var anzeige = leiste.querySelector('.cbd-board-auswahl-textgroesse');
+                var kleiner = leiste.querySelector('[data-aktion="text-kleiner"]');
+                var groesser = leiste.querySelector('[data-aktion="text-groesser"]');
+                if (anzeige) {
+                    anzeige.textContent = (tg.min === tg.max ? tg.min : tg.min + '–' + tg.max) + ' px';
+                }
+                if (kleiner) kleiner.disabled = tg.max <= E.TEXT_PX_MIN;
+                if (groesser) groesser.disabled = tg.min >= E.TEXT_PX_MAX;
+            }
             var ov = this.overlay.getBoundingClientRect();
             var skala = this.overlay.offsetWidth ? ov.width / this.overlay.offsetWidth : 1;
             if (!skala) skala = 1;
@@ -3136,6 +3657,10 @@
             var oben = ly(cv.top + r.y * fy);
             var unten = ly(cv.top + (r.y + r.h) * fy);
             var bL = lx(ba.left), bR = lx(ba.right), bO = ly(ba.top), bU = ly(ba.bottom);
+            // 3.1.144: nie breiter als die Zeichenfläche - sonst bricht die
+            // Leiste in eine zweite Zeile um (flex-wrap, board-mode.css),
+            // statt rechts über den Rand zu ragen (schmale Anzeigen, iPad hoch)
+            leiste.style.maxWidth = Math.max(160, Math.floor(bR - bL - 8)) + 'px';
             var lb = leiste.offsetWidth, lh = leiste.offsetHeight, abstand = 6;
             var top = oben - abstand - lh;
             if (top < bO + 4) {
@@ -3150,6 +3675,13 @@
 
         onKeyDown: function(e) {
             if (e.key === 'Escape') {
+                // 3.1.143: im Drehmodus beendet ESC zuerst nur den Drehmodus
+                // (laufende Drehung zurück), die Auswahl bleibt
+                if (this._drehen) {
+                    e.preventDefault();
+                    this._drehenAbbrechen();
+                    return;
+                }
                 // Lasso (AP-5.1): Bei aktiver Auswahl oder laufender
                 // Lassolinie hebt ESC nur die Auswahl auf - die Tafel bleibt
                 // offen. Ohne Auswahl schließt ESC wie bisher.
@@ -3162,6 +3694,15 @@
             } else if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
                 e.preventDefault();
                 this.undo();
+            } else if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D') &&
+                       this.auswahl && this.auswahl.length) {
+                // 3.1.143: Strg+D dupliziert die Auswahl (statt Lesezeichen),
+                // nicht aus Eingabefeldern heraus
+                if (this._istEingabefeld(e.target) || this._istEingabefeld(document.activeElement)) {
+                    return;
+                }
+                e.preventDefault();
+                this.auswahlDuplizieren();
             } else if ((e.key === 'Delete' || e.key === 'Backspace') &&
                        this.auswahl && this.auswahl.length) {
                 // AP-5.2: Entf/Rücktaste löschen die Auswahl - aber nie aus
@@ -3591,7 +4132,8 @@
          */
         _elementeUebernehmen: function(geladen) {
             if (!this.modell) return;
-            if (!this.modell.elemente.length && !this.undoStapel.length && !this.currentStroke && !this._ziehen) {
+            if (!this.modell.elemente.length && !this.undoStapel.length && !this.currentStroke && !this._ziehen &&
+                !(this._drehen && this._drehen.basis)) {
                 this.modell = geladen;
                 this.zeichneModell();
                 return;

@@ -89,7 +89,8 @@
             height: extra.height !== undefined ? extra.height : (art === 'touch' ? 10 : 1),
             pressure: typ === 'pointerup' ? 0 : 0.5,
             button: extra.button !== undefined ? extra.button : (typ === 'pointermove' ? -1 : 0),
-            buttons: extra.buttons !== undefined ? extra.buttons : (typ === 'pointerup' ? 0 : 1)
+            buttons: extra.buttons !== undefined ? extra.buttons : (typ === 'pointerup' ? 0 : 1),
+            shiftKey: extra.shiftKey === true // 3.1.143: Drehen in 15°-Schritten
         };
         var ev = new PointerEvent(typ, init);
         (extra.ziel || B.drawingCanvas).dispatchEvent(ev);

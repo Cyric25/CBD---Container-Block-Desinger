@@ -3709,7 +3709,9 @@ geringfügig, kein Korrekturbedarf:
 4. Die Textgröße hat keinen eigenen gespeicherten Wert — `lineWidth` wird
    beim Werkzeugwechsel wieder zur Stiftbreite; innerhalb einer
    ununterbrochenen Nutzung des Text-Werkzeugs wirkt der Breitenregler
-   aber sofort auf die Schriftgröße.
+   aber sofort auf die Schriftgröße. **Nachträglich ändern lässt sich die
+   Größe seit 3.1.144** über Lasso + „A−"/„A+" (Abschnitt „Textgröße der
+   Auswahl ändern").
 5. Kein eigener Mauszeiger (`cursor: text`) für das Werkzeug.
 6. `eraseStrokeAtPoint()` setzt `this.drawingCtx.font` für die
    Trefferflächen-Messung eines Textes, ohne den vorherigen Wert danach
@@ -3999,6 +4001,18 @@ Zeilenhöhe 1,2, `textBaseline 'top'`) und `bild` (`daten` = PNG-data-URL, `x`,
 Nachkommastellen gerundet; IDs `e<Zahl>`. Unbekannte Felder fallen beim Prüfen
 weg, ein ungültiges Element verwirft nur sich selbst.
 
+**Seit 3.1.143: optionales Feld `winkel`** bei `text` und `bild` (Lasso-Drehen,
+Abschnitt „Drehen und Duplizieren" unten): Grad, Drehung um die linke obere
+Ecke (x, y), positiv = im Uhrzeigersinn (Bildschirmsinn, wie `ctx.rotate()`),
+normiert auf (-180, 180], auf 2 Stellen gerundet. 0 wird nie geschrieben —
+unverdrehte Elemente sind byte-gleich zu vorher. `winkel` vorhanden, aber
+keine Zahl (auch `null`) → Element ungültig (Browser `pruefeElement()` UND
+Server `CBD_Classroom::elemente_winkel()`, gleiche Regel). Striche haben kein
+`winkel`, ihre Punkte werden gedreht. Das Format bleibt `v:1`: **Rückweg auf
+3.1.142** lässt `winkel` beim Prüfen still fallen — gedrehte Texte/Bilder
+stünden in der Elementliste dann waagrecht, das PNG (maßgeblich, E7) zeigt sie
+aber weiter gedreht, bis dort neu gespeichert wird.
+
 **Das PNG bleibt die maßgebliche Darstellung (E7).** Schüleransicht,
 Live-Aktualisierung (Klassenpuls), Blockanzeige und PDF-Export lesen
 ausschließlich das PNG (`drawing_data` bzw. `localStorage['cbd-board-<id>']`)
@@ -4159,10 +4173,10 @@ dann Teil des Bild-Elements.
 
 | Aufruf | Prüft | Stand |
 |---|---|---|
-| `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | 191 Prüfungen |
-| `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall | 113 Prüfungen |
+| `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | 266 Prüfungen (seit 3.1.143 inkl. Gruppe 11 Drehen/Kopieren/`winkel`, seit 3.1.144 Gruppe 12 Textgröße) |
+| `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall, `winkel` (G), Textgröße (H) | 130 Prüfungen |
 | `node tools/test-notizen-manager-js.js` | `personal-notes-manager.js` (Mini-DOM im `vm`) | 34 Prüfungen |
-| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **142 Prüfungen** (50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4, Stand 3.1.142) |
+| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **159 Prüfungen**, Stand 3.1.144 (davon 11 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4) |
 | `php tools/check-php74.php` | PHP-7.4-Kompatibilität | muss OK sein |
 
 Prüfseite: Viewport VOR dem Laden auf ~1366×768, nach dem Laden ca. 10 s
@@ -4287,9 +4301,10 @@ Fläche; ausgeblendet während Lasso und Ziehen.
    können Finger weder umranden noch ziehen (Handballen-Schutz); die Knöpfe
    der Leisten bleiben per Finger bedienbar.
 
-**Nicht-Ziele (bewusst nicht eingebaut):** Skalieren, Drehen, Kopieren,
-Umfärben der Auswahl; kein Hover-Cursor über der Auswahl (nur `move`
-während des Ziehens).
+**Nicht-Ziele (bewusst nicht eingebaut):** Skalieren (von Strichen und
+Bildern) und Umfärben der Auswahl; kein Hover-Cursor über der Auswahl (nur
+`move` während des Ziehens). Drehen und Kopieren gibt es seit 3.1.143, die
+Textgröße gewählter Texte seit 3.1.144 (nächste Abschnitte).
 
 **Prüfungen:** `tools/test-board-lasso.js` (34 Prüfungen, in der Prüfseite
 nach `test-board-speichern.js` geladen). Die Prüfung „`zeichneModell()`
@@ -4297,6 +4312,140 @@ verändert die Auswahl-Ebene nicht“ zählt seit AP-5.fix1 schreibende Aufrufe
 und vergleicht Pixel mit ±1 Toleranz (vorher flatterte sie wegen der
 GPU-Rücklesung). **Abnahme am echten Stift-/Touchgerät steht aus** – Finger
 und Stift sind nur synthetisch geprüft, Maus und Tastatur echt.
+
+### Drehen und Duplizieren der Auswahl (Rückmeldung 2026-10-27, Plugin 3.1.143)
+
+Zwei neue Knöpfe in der Auswahlleiste vor „Löschen": **„Drehen"**
+(`dashicons-image-rotate`, `data-aktion="drehen"`) und **„Duplizieren"**
+(`dashicons-admin-page`, `data-aktion="duplizieren"`, auch **Strg+D**).
+
+**Drehen wie in CAD-Programmen**, `this._drehen.phase` in `board-mode.js`:
+1. `'drehpunkt'` — Knopf „Drehen" (`auswahlDrehenStarten()`); die Leiste zeigt
+   nur noch den Hinweis „Drehpunkt antippen" und „Abbrechen" (Klasse
+   `cbd-board-auswahl-leiste--drehen`). Aufsetzen setzt den Drehpunkt; solange
+   der Zeiger aufliegt, folgt er ihm. Abheben → Phase 2.
+2. `'bezug'` — Hinweis „Bezugspunkt antippen und ziehen". Aufsetzen setzt den
+   Bezugspunkt: EIN `merkeZustand()`, Momentaufnahme `basis`.
+3. `'drehen'` — Ziehen dreht die Auswahl um den Winkel zwischen den Strahlen
+   Drehpunkt→Bezugspunkt und Drehpunkt→Zeiger
+   (`CBDBoardElemente.drehwinkel()`), live aus `basis` + Gesamtwinkel
+   (`CBDBoardElemente.drehe()`, je Frame gebündelt über den gemeinsamen Helfer
+   `_frameVormerken()` – derselbe wie beim Verschieben). Abheben übernimmt und
+   **beendet den Drehmodus**; die Auswahl bleibt (gedreht).
+
+Überall auf der Fläche, nicht nur im Auswahlrahmen. Winkel in ganzen Grad;
+**±3° an Vielfachen von 45° rastet er ein** (0°, 45°, 90° …), mit
+**Umschalttaste 15°-Schritte** (`_drehwinkelRasten()`). 0° → Undo-Eintrag
+wieder weg. Anzeige nur auf der Auswahl-Ebene (`_drehenZeichnen()`):
+Drehpunkt (Kreis mit Kreuz), Bezugsstrahl gestrichelt, Strahl im
+eingerasteten Winkel, Bogen, Gradzahl mit ↻ (im) bzw. ↺ (gegen den
+Uhrzeigersinn). Leiste während Drehpunkt-Ziehen und Drehen ausgeblendet.
+
+**Abbruch und Sonderfälle:** ESC bzw. „Abbrechen" nimmt eine laufende
+Drehung zurück (kein Undo-Rest) und beendet nur den Drehmodus – erst das
+nächste ESC hebt die Auswahl auf, erst danach schließt ESC die Tafel.
+Zweiter Finger/Pinch oder Stift übernimmt (`_strichVerwerfen()`) → Drehung
+zurück, **Drehpunkt bleibt** (`'bezug'`). Werkzeugwechsel, Strg+Z,
+Seitenwechsel, Schließen, Löschen und Duplizieren beenden den Modus und
+übernehmen eine laufende Drehung (wie beim Verschieben). Asynchron geladene
+Elemente pflegt `_geladeneVornEinfuegen()` auch in `_drehen.basis`.
+
+**Wie gedreht wird (`board-elemente.js`):** Striche: jeder Punkt um den
+Drehpunkt. Text und Bild: die linke obere Ecke wird gedreht und `winkel`
+wächst um denselben Wert; `zeichneModell()` zeichnet sie mit
+`translate(x, y)` + `rotate(winkel)`. Beides zusammen ist exakt die Drehung um
+den Drehpunkt, mehrfaches Drehen setzt sich ohne Fehler zusammen (4 × 90° →
+Ausgangslage ohne `winkel`). `rahmen()` liefert für gedrehte Texte/Bilder das
+umschließende achsparallele Rechteck (Auswahlrahmen, Lasso-Mittelpunkt,
+Radierer). **Punkt-Radierer auf gedrehten Bildern:** `_bildLokal()` rechnet
+den Radierpunkt in Bildkoordinaten zurück, `_bildRadieren()` erwartet seither
+Bildkoordinaten; `_radierGesteAbschliessen()` behält `winkel`. Strich-Radierer
+auf gedrehtem Text prüft das umschließende Rechteck (etwas großzügiger).
+`skaliere()` (Streckung E13) behält `winkel` – bei ungleichen Faktoren x/y
+eine Näherung.
+
+**Duplizieren (`auswahlDuplizieren()`, `CBDBoardElemente.kopiere()`):**
+Kopien 20 px nach rechts unten, neue IDs (`neueId()`), ans **Ende** der Liste
+(also obenauf in ihrer Zeichenebene), Originale bleiben dieselben Objekte.
+Danach sind die **Kopien** gewählt und lassen sich sofort ziehen. EIN
+Undo-Schritt. Strg+D nicht aus Eingabefeldern (`_istEingabefeld()`), dann
+`preventDefault` (kein Lesezeichen-Dialog).
+
+**Prüfungen:** `tools/test-board-drehen.js` (11 Prüfungen in der Prüfseite,
+nach `test-board-standard.js` geladen), Gruppe 11 in
+`tools/test-board-elemente-js.js` (41), Gruppe G in
+`tools/test-board-elemente.php` (15). Zusätzlich mit echter Maus auf der
+Testinstallation durchgespielt (Striche, „Drehen", Drehpunkt, Ziehen,
+„Duplizieren", Raster). **Abnahme am Smartboard/iPad steht aus.**
+
+### Textgröße der Auswahl ändern (Rückmeldung 2026-10-27, Plugin 3.1.144)
+
+Sind Texte im Lasso gewählt, zeigt die Auswahlleiste zwischen
+„Duplizieren" und „Löschen" die Gruppe **„A−" · Größe · „A+"**
+(`span.cbd-board-auswahl-textgruppe`, Knöpfe `data-aktion="text-kleiner"` /
+`"text-groesser"`, Anzeige `.cbd-board-auswahl-textgroesse`). Sichtbar nur
+bei Klasse `cbd-board-auswahl-leiste--text` (gesetzt in
+`_auswahlLeisteAusrichten()`), nie im Drehmodus. Gemischte Größen stehen als
+Spanne da („20–28 px").
+
+**Rechnung (`CBDBoardElemente`, DOM-frei):** Die Schrift folgt weiter aus
+`breite` (`schriftPx()` = `Math.round(16 + breite * 4)`) — es gibt **kein
+neues Feld**, das Format bleibt v1, ein Rückweg auf 3.1.143 verliert nichts.
+`naechsteSchrift(px, richtung)` rechnet mal bzw. durch **1,2**, ganzzahlig,
+mindestens 1 px Änderung, Grenzen **18–200 px** (`TEXT_PX_MIN`/`TEXT_PX_MAX`;
+18 px = `breite` 0,5, weil `breite` > 0 sein muss). `textGroesse(modell, ids,
+richtung)` setzt `breite = (px − 16) / 4` — ein Vielfaches von 0,25, das
+`serialisiere()` (2 Stellen) und der Server exakt behalten (Gruppe H in
+`test-board-elemente.php`). Jeder Text wächst mit seiner **eigenen** Schrift,
+die Verhältnisse bleiben also, bis einer an eine Grenze stößt. Linke obere
+Ecke und `winkel` bleiben; Striche, Bilder und nicht gewählte Texte bleiben
+dieselben Objekte. Eine Schrift jenseits der Grenze (z. B. nach der
+Streckung E13) bleibt in dieser Richtung, wie sie ist.
+
+**Bedienung (`auswahlTextGroesse(richtung)` in `board-mode.js`):** EIN
+Undo-Schritt **je Klick** (wie in Office-Programmen), Auswahl bleibt. An der
+Grenze ist der Knopf gesperrt (`disabled`: „A+", wenn der kleinste gewählte
+Text schon 200 px hat; „A−", wenn der größte schon 18 px hat), und es
+entsteht kein Undo-Eintrag. Ein laufendes Ziehen bzw. Drehen wird vorher
+übernommen. Keine Tastenkürzel — Strg+Plus/Minus gehört dem Browser-Zoom.
+
+**Die Leiste bricht jetzt um, statt überzulaufen.** Mit der Gruppe ist sie
+rund 570 px breit; bei 1024 px Fensterbreite hat die Zeichenhälfte nur
+512 px, und „Auswahl aufheben" ragte über den Rand (bei iPad hoch schon
+vorher). `_auswahlLeisteAusrichten()` setzt deshalb `max-width` auf die
+Breite der Zeichenfläche (− 8 px, mindestens 160 px), `board-mode.css` gibt
+der Leiste `flex-wrap: wrap`. Die Höhe wird danach gemessen, die Lage über
+dem Rahmen stimmt also auch zweizeilig. Gemessen bei 1024 × 768 und
+820 × 1180: Leiste innerhalb der Zeichenfläche, zwei Zeilen.
+
+**Prüfungen:** `tools/test-board-textgroesse.js` (5 Prüfungen in der
+Prüfseite, nach `test-board-drehen.js` geladen), Gruppe 12 in
+`tools/test-board-elemente-js.js` (34), Gruppe H in
+`tools/test-board-elemente.php` (3). Mit echtem Mausklick auf „A+" auf der
+Testinstallation geprüft (28 → 34 px). **Abnahme am Smartboard/iPad steht
+aus.**
+
+### Raster: Kästchen und Zeilen (Rückmeldung 2026-10-27, Plugin 3.1.143)
+
+Der Raster-Knopf (`.cbd-board-grid-toggle`, `dashicons-grid-view`) schaltet
+seit 3.1.143 nur noch **ein/aus**; die Art wählt das Auswahlfeld
+`select.cbd-board-grid-art` in den Raster-Einstellungen (sichtbar, solange das
+Raster an ist): **Kästchen** (`'kaestchen'`, Seite = Größe), **Zeilen**
+(`'zeilen'`, Abstand = 2 × Größe, Standard 60 px), **Sechsecke – Kante
+seitlich** (`'horizontal'`) und **Sechsecke – Kante unten** (`'vertical'`).
+Bis 3.1.142 schaltete der Knopf reihum aus → Sechsecke seitlich → unten → aus.
+Einschalten nimmt die zuletzt gewählte Art (`gridArt`, Vorgabe Sechsecke
+seitlich wie bisher). Versatz X/Y wirken auch auf Kästchen und Zeilen. Linien
+wie bei den Sechsecken `rgba(150,150,150,0.3)`, auf halbe Pixel gelegt
+(`_gitterLinien()`). Das Raster liegt auf der Gitter-Ebene, **nie im PNG**.
+
+**Nebenbei behoben:** `gridMode`, Größe und Versatz überlebten schon immer das
+Schließen (ein Objekt je Seite), die Leiste wurde aber fest „aus" gebaut – nach
+dem Wiederöffnen war das Raster zu sehen, der Knopf inaktiv und die Regler
+verborgen. `_gitterUIAktualisieren()` gleicht Knopf, Auswahlfeld und Regler
+jetzt beim Öffnen an (`_openOverlay()`, nach `updateToolUI()`). Ob das Raster
+beim Öffnen stattdessen immer aus sein soll (wie Stift/Farbe seit 3.1.141),
+ist eine offene Betreiberentscheidung.
 
 ### Standardeinstellung beim Öffnen (Hotfix 3.1.141/3.1.142, Rückmeldung 2026-10-12)
 
