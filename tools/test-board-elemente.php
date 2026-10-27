@@ -688,5 +688,52 @@ speichern(array('drawing_data' => $png_neu, 'elemente_data' => geslasht($json)))
 $wpdb->fehler_mit_elementen = false;
 check('F10 Schreibfehler-Rückfall: Spalte NULL, keine Hülle', $wpdb->zeile && null === $wpdb->zeile['elemente_data']);
 
+// =========================================================================
+echo "\nG: Feld winkel bei Text und Bild (Lasso-Drehen 3.1.143)\n";
+// =========================================================================
+
+$gedreht = json_encode(array('v' => 1, 'breite' => 100, 'hoehe' => 100, 'elemente' => array(
+    array('id' => 'e1', 'typ' => 'text', 'farbe' => '#000', 'breite' => 1, 'text' => 'a', 'x' => 1, 'y' => 2, 'winkel' => 45),
+    array('id' => 'e2', 'typ' => 'bild', 'daten' => $bild, 'x' => 0, 'y' => 0, 'b' => 10, 'h' => 5, 'winkel' => -30.5),
+    array('id' => 'e3', 'typ' => 'text', 'farbe' => '#000', 'breite' => 1, 'text' => 'a', 'x' => 1, 'y' => 2, 'winkel' => 0),
+    array('id' => 'e4', 'typ' => 'strich', 'werkzeug' => 'pen', 'farbe' => '#000', 'breite' => 1,
+        'punkte' => array(array(1, 1), array(2, 2)), 'winkel' => 90),
+)));
+$r = pj(geslasht($gedreht));
+$d = is_string($r) ? json_decode($r, true) : null;
+check('G1 Text behält winkel 45', $d && 45 === $d['elemente'][0]['winkel'], $r);
+check('G2 Bild behält winkel -30.5', $d && -30.5 === $d['elemente'][1]['winkel'], $r);
+check('G3 winkel 0 entfällt', $d && !array_key_exists('winkel', $d['elemente'][2]), $r);
+check('G4 Strich: winkel ist kein Feld und fällt weg', $d && !array_key_exists('winkel', $d['elemente'][3]), $r);
+check('G5 winkel steht als letztes Feld (wie board-elemente.js)', $d && array_keys($d['elemente'][0]) === array('id', 'typ', 'farbe', 'breite', 'text', 'x', 'y', 'winkel'), $d ? array_keys($d['elemente'][0]) : null);
+
+foreach (array('Zeichenkette' => 'schief', 'null' => null, 'Array' => array(1), 'true' => true) as $fall => $wert) {
+    $el = array('id' => 'e1', 'typ' => 'text', 'farbe' => '#000', 'breite' => 1, 'text' => 'a', 'x' => 1, 'y' => 2, 'winkel' => $wert);
+    check("G6 Text mit winkel $fall -> verworfen", null === pj(geslasht(mit_element($el))));
+    $el = array('id' => 'e1', 'typ' => 'bild', 'daten' => $bild, 'x' => 0, 'y' => 0, 'b' => 10, 'h' => 5, 'winkel' => $wert);
+    check("G7 Bild mit winkel $fall -> verworfen", null === pj(geslasht(mit_element($el))));
+}
+$el = array('id' => 'e1', 'typ' => 'text', 'farbe' => '#000', 'breite' => 1, 'text' => 'a', 'x' => 1, 'y' => 2, 'winkel' => '12.5');
+$r = pj(geslasht(mit_element($el)));
+check('G8 numerische Zeichenkette wird Zahl', is_string($r) && false !== strpos($r, '"winkel":12.5'), $r);
+
+// =========================================================================
+echo "\nH: Textgröße nachträglich (A−/A+, 3.1.144)\n";
+// =========================================================================
+
+// Die Knöpfe setzen breite = (Schrift - 16) / 4 für 18 bis 200 px, also
+// 0.5 bis 46 in Schritten von 0.25. Der Server darf davon nichts verwerfen
+// oder runden (sonst stünde nach dem Neuladen eine andere Größe da).
+$groessen = json_encode(array('v' => 1, 'breite' => 100, 'hoehe' => 100, 'elemente' => array(
+    array('id' => 'e1', 'typ' => 'text', 'farbe' => '#000', 'breite' => 0.5, 'text' => 'klein', 'x' => 1, 'y' => 2),
+    array('id' => 'e2', 'typ' => 'text', 'farbe' => '#000', 'breite' => 46, 'text' => 'gross', 'x' => 1, 'y' => 2),
+    array('id' => 'e3', 'typ' => 'text', 'farbe' => '#000', 'breite' => 4.75, 'text' => 'mittel', 'x' => 1, 'y' => 2, 'winkel' => 30),
+)));
+$r = pj(geslasht($groessen));
+$d = is_string($r) ? json_decode($r, true) : null;
+check('H1 kleinste Textgröße (breite 0.5 = 18 px) bleibt', $d && 0.5 === $d['elemente'][0]['breite'], $r);
+check('H2 größte Textgröße (breite 46 = 200 px) bleibt', $d && 46 === $d['elemente'][1]['breite'], $r);
+check('H3 Zwischenwert 4.75 mit winkel bleibt', $d && 4.75 === $d['elemente'][2]['breite'] && 30 === $d['elemente'][2]['winkel'], $r);
+
 echo "\nErgebnis: {$GLOBALS['oks']} OK, {$GLOBALS['fails']} FAIL\n";
 exit($GLOBALS['fails'] > 0 ? 1 : 0);

@@ -663,4 +663,212 @@ console.log('\nGruppe 10: Fingerabdruck (abdruck, verpacke, entpacke)');
 	gleich('10.21 Rundreise verpacke -> entpacke -> deserialisiere', rund && rund.modell, JSON.parse(modellText));
 })();
 
+// =========================================================================
+// Gruppe 11: Drehen, Kopieren, Feld winkel (Lasso-Drehen 3.1.143)
+// =========================================================================
+console.log('\nGruppe 11: drehe / kopiere / drehwinkel / winkel');
+(function () {
+	const nah = (a, b) => Math.abs(a - b) < 1e-9;
+	const punkteNah = (ist, soll) => ist.length === soll.length &&
+		ist.every((p, i) => nah(p[0], soll[i][0]) && nah(p[1], soll[i][1]));
+
+	['drehe', 'kopiere', 'drehwinkel'].forEach(function (n) {
+		pruefe('11.0 Schnittstelle: ' + n + ' ist Funktion', typeof E[n] === 'function');
+	});
+
+	// drehwinkel: Bildschirmsinn (y nach unten), positiv = im Uhrzeigersinn
+	pruefe('11.1 drehwinkel rechts -> unten = +90', nah(E.drehwinkel(0, 0, 10, 0, 0, 10), 90));
+	pruefe('11.2 drehwinkel rechts -> oben = -90', nah(E.drehwinkel(0, 0, 10, 0, 0, -10), -90));
+	pruefe('11.3 drehwinkel gegenueber = 180 (nie -180)', nah(E.drehwinkel(0, 0, 10, 0, -10, 0), 180));
+	pruefe('11.4 drehwinkel ueber die -x-Achse: 170 -> -170 ergibt +20',
+		nah(E.drehwinkel(0, 0, Math.cos(170 * Math.PI / 180), Math.sin(170 * Math.PI / 180),
+			Math.cos(-170 * Math.PI / 180), Math.sin(-170 * Math.PI / 180)), 20));
+	gleich('11.5 drehwinkel mit Punkt im Drehpunkt -> 0', E.drehwinkel(5, 5, 5, 5, 9, 9), 0);
+
+	// drehe: Strich um (100, 100) um 90 Grad
+	const m = {
+		v: 1, breite: 400, hoehe: 300, elemente: [
+			{ id: 'e1', typ: 'strich', werkzeug: 'pen', farbe: '#000', breite: 3, punkte: [[110, 100], [120, 100]] },
+			{ id: 'e2', typ: 'text', farbe: '#000', breite: 1, text: 'ab', x: 110, y: 100 },
+			{ id: 'e3', typ: 'bild', daten: BILD_DATEN, x: 100, y: 120, b: 40, h: 20 },
+			{ id: 'e4', typ: 'strich', werkzeug: 'pen', farbe: '#000', breite: 3, punkte: [[0, 0], [5, 5]] }
+		]
+	};
+	const vorher = kopie(m);
+	const d = E.drehe(m, ['e1', 'e2', 'e3'], 100, 100, 90);
+	gleich('11.6 drehe veraendert die Eingabe nicht', m, vorher);
+	pruefe('11.7 Strichpunkte um 90 Grad gedreht', punkteNah(d.elemente[0].punkte, [[100, 110], [100, 120]]),
+		JSON.stringify(d.elemente[0].punkte));
+	pruefe('11.8 Text: Ecke gedreht, winkel 90', nah(d.elemente[1].x, 100) && nah(d.elemente[1].y, 110) && d.elemente[1].winkel === 90,
+		JSON.stringify(d.elemente[1]));
+	pruefe('11.9 Bild: Ecke gedreht, winkel 90, b/h unveraendert',
+		nah(d.elemente[2].x, 80) && nah(d.elemente[2].y, 100) && d.elemente[2].winkel === 90 && d.elemente[2].b === 40 && d.elemente[2].h === 20,
+		JSON.stringify(d.elemente[2]));
+	pruefe('11.10 nicht gewaehltes Element bleibt dieselbe Referenz', d.elemente[3] === m.elemente[3]);
+	gleich('11.11 IDs und Reihenfolge bleiben', d.elemente.map(e => e.id), ['e1', 'e2', 'e3', 'e4']);
+
+	// Rahmen des gedrehten Bilds: 40x20 um (80,100) um 90 Grad -> x 60..80, y 100..140
+	const rb = E.rahmen(d.elemente[2]);
+	pruefe('11.12 rahmen eines gedrehten Bilds ist das umschliessende Rechteck',
+		nah(rb.x, 60) && nah(rb.y, 100) && nah(rb.b, 20) && nah(rb.h, 40), JSON.stringify(rb));
+	const rt = E.rahmen(d.elemente[1], mass);
+	pruefe('11.13 rahmen eines gedrehten Texts (90 Grad): Breite und Hoehe getauscht',
+		nah(rt.b, 1.2 * E.schriftPx(1)) && nah(rt.h, mass('ab', E.schriftPx(1))), JSON.stringify(rt));
+
+	// Zusammensetzen: 4 x 90 = Ausgangslage, winkel faellt weg
+	let z = m;
+	for (let i = 0; i < 4; i++) z = E.drehe(z, ['e1', 'e2', 'e3'], 100, 100, 90);
+	pruefe('11.14 viermal 90 Grad -> Punkte wieder am Ausgang', punkteNah(z.elemente[0].punkte, m.elemente[0].punkte));
+	pruefe('11.15 viermal 90 Grad -> Text/Bild ohne Feld winkel',
+		!('winkel' in z.elemente[1]) && !('winkel' in z.elemente[2]), JSON.stringify(z.elemente.slice(1, 3)));
+	pruefe('11.16 viermal 90 Grad -> Bildecke wieder am Ausgang', nah(z.elemente[2].x, 100) && nah(z.elemente[2].y, 120));
+	const z2 = E.drehe(E.drehe(m, ['e3'], 100, 100, 170), ['e3'], 100, 100, 20);
+	gleich('11.17 170 + 20 Grad -> winkel -170 (normiert)', z2.elemente[2].winkel, -170);
+	gleich('11.18 drehe mit 0 Grad -> gleiche Elemente', E.drehe(m, ['e1'], 0, 0, 0).elemente[0] === m.elemente[0], true);
+	gleich('11.19 drehe mit 360 Grad -> gleiche Elemente', E.drehe(m, ['e1'], 0, 0, 360).elemente[0] === m.elemente[0], true);
+
+	// Drehen um den Mittelpunkt eines Bilds: Mittelpunkt bleibt
+	const mb = E.drehe(m, ['e3'], 120, 130, 37);
+	const r37 = E.rahmen(mb.elemente[2]);
+	pruefe('11.20 Drehen um die Bildmitte haelt die Mitte des Rahmens fest',
+		nah(r37.x + r37.b / 2, 120) && nah(r37.y + r37.h / 2, 130), JSON.stringify(r37));
+
+	// verschiebe behaelt winkel
+	const v = E.verschiebe(d, ['e2', 'e3'], 5, -5);
+	pruefe('11.21 verschiebe behaelt winkel', v.elemente[1].winkel === 90 && v.elemente[2].winkel === 90);
+
+	// pruefeModell: winkel optional, keine Zahl -> Element ungueltig, 0 faellt weg
+	const p = E.pruefeModell({ v: 1, breite: 10, hoehe: 10, elemente: [
+		{ id: 'e1', typ: 'text', farbe: '#000', breite: 1, text: 'a', x: 1, y: 1, winkel: 45 },
+		{ id: 'e2', typ: 'bild', daten: BILD_DATEN, x: 0, y: 0, b: 1, h: 1, winkel: -30.5 },
+		{ id: 'e3', typ: 'text', farbe: '#000', breite: 1, text: 'a', x: 1, y: 1, winkel: 'schief' },
+		{ id: 'e4', typ: 'bild', daten: BILD_DATEN, x: 0, y: 0, b: 1, h: 1, winkel: null },
+		{ id: 'e5', typ: 'text', farbe: '#000', breite: 1, text: 'a', x: 1, y: 1, winkel: 0 },
+		{ id: 'e6', typ: 'text', farbe: '#000', breite: 1, text: 'a', x: 1, y: 1, winkel: 270 }
+	] });
+	gleich('11.22 pruefeModell: winkel uebernommen', p && p.modell.elemente.map(e => e.winkel), [45, -30.5, undefined, -90]);
+	gleich('11.23 pruefeModell: winkel keine Zahl / null -> verworfen', p && p.verworfen, 2);
+	pruefe('11.24 pruefeModell: winkel 0 -> kein Feld', p && !('winkel' in p.modell.elemente[2]));
+
+	// serialisiere: winkel gerundet, 0 entfaellt; Rundreise
+	const s = JSON.parse(E.serialisiere({ v: 1, breite: 10, hoehe: 10, elemente: [
+		{ id: 'e1', typ: 'text', farbe: '#000', breite: 1, text: 'a', x: 1, y: 1, winkel: 12.3456 },
+		{ id: 'e2', typ: 'bild', daten: BILD_DATEN, x: 0, y: 0, b: 1, h: 1, winkel: 0.001 },
+		{ id: 'e3', typ: 'text', farbe: '#000', breite: 1, text: 'a', x: 1, y: 1 }
+	] }));
+	gleich('11.25 serialisiere: winkel auf 2 Stellen', s.elemente[0].winkel, 12.35);
+	pruefe('11.26 serialisiere: auf 0 gerundeter winkel entfaellt', !('winkel' in s.elemente[1]));
+	gleich('11.27 serialisiere: unverdrehter Text wie bisher (keine neuen Felder)', Object.keys(s.elemente[2]),
+		['id', 'typ', 'farbe', 'breite', 'text', 'x', 'y']);
+	const rr = E.deserialisiere(E.serialisiere(d));
+	gleich('11.28 Rundreise serialisiere -> deserialisiere behaelt winkel', rr && rr.modell.elemente.map(e => e.winkel),
+		[undefined, 90, 90, undefined]);
+
+	// skaliere behaelt winkel
+	gleich('11.29 skaliere behaelt winkel', E.skaliere(d, 800, 600).elemente[2].winkel, 90);
+
+	// kopiere
+	const k = E.kopiere(d, ['e3', 'e1'], 20, 20);
+	gleich('11.30 kopiere: Originale unveraendert und zuerst', k.modell.elemente.slice(0, 4).every((e, i) => e === d.elemente[i]), true);
+	gleich('11.31 kopiere: Kopien in Listenreihenfolge ans Ende, neue IDs', k.ids, ['e5', 'e6']);
+	gleich('11.32 kopiere: IDs der Kopien in der Liste', k.modell.elemente.slice(4).map(e => e.id), ['e5', 'e6']);
+	pruefe('11.33 kopiere: Strich versetzt', punkteNah(k.modell.elemente[4].punkte,
+		d.elemente[0].punkte.map(q => [q[0] + 20, q[1] + 20])));
+	pruefe('11.34 kopiere: Bild versetzt, winkel und daten mitgenommen',
+		nah(k.modell.elemente[5].x, d.elemente[2].x + 20) && k.modell.elemente[5].winkel === 90 && k.modell.elemente[5].daten === BILD_DATEN);
+	pruefe('11.35 kopiere: Kopie ist ein neues Objekt (keine geteilten Punkte)',
+		k.modell.elemente[4].punkte !== d.elemente[0].punkte && k.modell.elemente[4].punkte[0] !== d.elemente[0].punkte[0]);
+	let zaehler = 41;
+	const k2 = E.kopiere(d, ['e2'], 0, 0, () => 'e' + (zaehler++));
+	gleich('11.36 kopiere: neueId wird benutzt', k2.ids, ['e41']);
+	const k3 = E.kopiere(d, ['e99'], 0, 0);
+	gleich('11.37 kopiere ohne passende ID: nichts angehaengt', [k3.ids, k3.modell.elemente.length], [[], 4]);
+	const geprueft = E.pruefeModell(k.modell);
+	gleich('11.38 kopiertes Modell besteht pruefeModell ohne Verwerfen', geprueft && geprueft.verworfen, 0);
+})();
+
+// =========================================================================
+console.log('\nGruppe 12: textGroesse / textGroessen / naechsteSchrift (3.1.144)');
+(function () {
+	['naechsteSchrift', 'textGroesse', 'textGroessen'].forEach(function (n) {
+		pruefe('12.0 Schnittstelle: ' + n + ' ist Funktion', typeof E[n] === 'function');
+	});
+	gleich('12.1 Grenzen TEXT_PX_MIN/MAX', [E.TEXT_PX_MIN, E.TEXT_PX_MAX], [18, 200]);
+
+	// naechsteSchrift: Faktor 1,2, ganzzahlig, Grenzen
+	gleich('12.2 groesser: 28 -> 34 (28 * 1,2 = 33,6)', E.naechsteSchrift(28, 1), 34);
+	gleich('12.3 kleiner: 28 -> 23 (28 / 1,2 = 23,3)', E.naechsteSchrift(28, -1), 23);
+	gleich('12.4 groesser endet bei 200', [E.naechsteSchrift(180, 1), E.naechsteSchrift(200, 1)], [200, 200]);
+	gleich('12.5 kleiner endet bei 18', [E.naechsteSchrift(20, -1), E.naechsteSchrift(18, -1)], [18, 18]);
+	gleich('12.6 jenseits der Grenze bleibt die Schrift in dieser Richtung',
+		[E.naechsteSchrift(16, -1), E.naechsteSchrift(250, 1)], [16, 250]);
+	gleich('12.7 ... und kommt in der Gegenrichtung zurueck',
+		[E.naechsteSchrift(16, 1), E.naechsteSchrift(250, -1)], [19, 208]);
+	gleich('12.8 richtung 0 -> unveraendert', E.naechsteSchrift(28, 0), 28);
+	// jeder Schritt aendert um mindestens 1 px: von 18 bis 200 in endlich vielen Schritten
+	let s = 18, schritte = 0;
+	while (s < 200 && schritte < 100) { const n = E.naechsteSchrift(s, 1); if (n <= s) break; s = n; schritte++; }
+	gleich('12.9 von 18 bis 200 streng wachsend, < 20 Schritte', [s, schritte < 20], [200, true]);
+	s = 200; schritte = 0;
+	while (s > 18 && schritte < 100) { const n = E.naechsteSchrift(s, -1); if (n >= s) break; s = n; schritte++; }
+	gleich('12.10 von 200 bis 18 streng fallend, < 20 Schritte', [s, schritte < 20], [18, true]);
+
+	// textGroesse
+	const m = {
+		v: 1, breite: 400, hoehe: 300, elemente: [
+			{ id: 'e1', typ: 'text', farbe: '#000', breite: 3, text: 'Hallo', x: 10, y: 20 },
+			{ id: 'e2', typ: 'strich', werkzeug: 'pen', farbe: '#000', breite: 3, punkte: [[0, 0], [10, 0]] },
+			{ id: 'e3', typ: 'text', farbe: '#c00', breite: 1, text: 'klein', x: 50, y: 60, winkel: 30 },
+			{ id: 'e4', typ: 'text', farbe: '#000', breite: 3, text: 'nicht gewaehlt', x: 0, y: 0 },
+			{ id: 'e5', typ: 'bild', daten: BILD_DATEN, x: 0, y: 0, b: 10, h: 10 }
+		]
+	};
+	const vorher = kopie(m);
+	const g = E.textGroesse(m, ['e1', 'e2', 'e3', 'e5'], 1);
+	gleich('12.11 groesser: zwei Texte geaendert', g.geaendert, 2);
+	gleich('12.12 Text 28 px -> 34 px (breite 4,5)', [g.modell.elemente[0].breite, E.schriftPx(g.modell.elemente[0].breite)], [4.5, 34]);
+	gleich('12.13 Text 20 px -> 24 px (eigener Faktor je Text)', E.schriftPx(g.modell.elemente[2].breite), 24);
+	gleich('12.14 Ecke, Farbe, Text, ID bleiben', [g.modell.elemente[0].x, g.modell.elemente[0].y,
+		g.modell.elemente[0].farbe, g.modell.elemente[0].text, g.modell.elemente[0].id], [10, 20, '#000', 'Hallo', 'e1']);
+	gleich('12.15 winkel bleibt', g.modell.elemente[2].winkel, 30);
+	pruefe('12.16 Strich, Bild und nicht gewaehlter Text bleiben dieselben Objekte',
+		g.modell.elemente[1] === m.elemente[1] && g.modell.elemente[4] === m.elemente[4] && g.modell.elemente[3] === m.elemente[3]);
+	pruefe('12.17 geaenderter Text ist ein neues Objekt', g.modell.elemente[0] !== m.elemente[0]);
+	gleich('12.18 Eingabe unveraendert', m, vorher);
+	gleich('12.19 unverdrehter Text bekommt kein winkel-Feld', Object.keys(g.modell.elemente[0]),
+		['id', 'typ', 'farbe', 'breite', 'text', 'x', 'y']);
+	const k = E.textGroesse(m, ['e1'], -1);
+	gleich('12.20 kleiner: 28 px -> 23 px (breite 1,75)', [k.geaendert, k.modell.elemente[0].breite], [1, 1.75]);
+
+	// Grenzen: nichts zu tun -> geaendert 0, alle Elemente dieselben Objekte
+	const grenze = { v: 1, breite: 10, hoehe: 10, elemente: [
+		{ id: 'e1', typ: 'text', farbe: '#000', breite: 46, text: 'gross', x: 0, y: 0 },
+		{ id: 'e2', typ: 'text', farbe: '#000', breite: 0.5, text: 'klein', x: 0, y: 0 }
+	] };
+	const oben = E.textGroesse(grenze, ['e1'], 1), unten = E.textGroesse(grenze, ['e2'], -1);
+	gleich('12.21 an den Grenzen (200 / 18 px): geaendert 0', [oben.geaendert, unten.geaendert], [0, 0]);
+	pruefe('12.22 ... Elemente unveraendert dieselben Objekte',
+		oben.modell.elemente.every((e, i) => e === grenze.elemente[i]) && unten.modell.elemente.every((e, i) => e === grenze.elemente[i]));
+	gleich('12.23 nur Striche gewaehlt: geaendert 0', E.textGroesse(m, ['e2', 'e5'], 1).geaendert, 0);
+	gleich('12.24 richtung keine Zahl: geaendert 0', E.textGroesse(m, ['e1'], 'gross').geaendert, 0);
+	// zusammen gewaehlt: der eine stoesst an, der andere waechst weiter
+	const gemischt = E.textGroesse(grenze, ['e1', 'e2'], 1);
+	gleich('12.25 gemischt an der Grenze: nur der kleinere waechst',
+		[gemischt.geaendert, E.schriftPx(gemischt.modell.elemente[0].breite), E.schriftPx(gemischt.modell.elemente[1].breite)],
+		[1, 200, 22]);
+
+	// Speichern: breite bleibt exakt (Vielfache von 0,25), Modell gueltig
+	const r = E.deserialisiere(E.serialisiere(g.modell));
+	gleich('12.26 Rundreise serialisiere -> deserialisiere behaelt die Schrift',
+		r && r.modell.elemente.filter(e => e.typ === 'text').map(e => E.schriftPx(e.breite)), [34, 24, 28]);
+	gleich('12.27 Ergebnis besteht pruefeModell ohne Verwerfen', r && r.verworfen, 0);
+	pruefe('12.28 Rahmen waechst mit der Schrift',
+		E.rahmen(g.modell.elemente[0]).h > E.rahmen(m.elemente[0]).h && E.rahmen(g.modell.elemente[0]).b > E.rahmen(m.elemente[0]).b);
+
+	// textGroessen
+	gleich('12.29 textGroessen: gemischte Auswahl', E.textGroessen(m, ['e1', 'e2', 'e3']), { anzahl: 2, min: 20, max: 28 });
+	gleich('12.30 textGroessen: ohne Texte', E.textGroessen(m, ['e2', 'e5']), { anzahl: 0, min: null, max: null });
+	gleich('12.31 textGroessen: leere Auswahl', E.textGroessen(m, []), { anzahl: 0, min: null, max: null });
+})();
+
 ende();

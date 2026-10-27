@@ -699,6 +699,24 @@ html.cbd-board-offen .sidebar-toggle-btn {
     font-family: monospace; /* generisches monospace, kein exakter Treffer zu --font-family-mono ('Courier New', monospace) */
 }
 
+/* Rasterart (3.1.143): Kaestchen, Zeilen, Sechsecke */
+.cbd-board-grid-art {
+    height: 30px;
+    padding: 0 6px;
+    border: 2px solid #ccc; /* wie .cbd-board-grid-toggle, kein AP-1.1-Treffer */
+    border-radius: 6px;
+    background: var(--color-background, #ffffff);
+    color: var(--color-text-primary, #333);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+[data-theme="dark"] .cbd-board-grid-art {
+    border-color: var(--color-border, #444444);
+    background: var(--color-background, #121212);
+    color: var(--color-text-primary, #e8e8e8);
+}
+
 /* Grid Controls */
 .cbd-board-grid-label {
     font-size: 11px;
@@ -899,6 +917,7 @@ html.cbd-board-offen .sidebar-toggle-btn {
     position: absolute;
     z-index: 20;
     display: flex;
+    flex-wrap: wrap; /* 3.1.144: max-width setzt board-mode.js */
     align-items: center;
     gap: 6px;
     padding: 4px;
@@ -940,6 +959,80 @@ html.cbd-board-offen .sidebar-toggle-btn {
    Akzentfarbe (Schrift bleibt --color-text-primary, in beiden Modi lesbar) */
 .cbd-board-auswahl-loeschen .dashicons {
     color: var(--color-ui-surface, #e24614);
+}
+
+/* 3.1.143: Drehmodus. Die Leiste zeigt dann nur den Hinweis und
+   "Abbrechen", sonst nur die normalen Knoepfe (board-mode.js setzt die
+   Klasse in _auswahlLeisteAusrichten). */
+.cbd-board-auswahl-leiste .cbd-board-auswahl-nur-drehen,
+.cbd-board-auswahl-leiste--drehen .cbd-board-auswahl-knopf:not(.cbd-board-auswahl-nur-drehen) {
+    display: none;
+}
+
+.cbd-board-auswahl-leiste--drehen .cbd-board-auswahl-nur-drehen {
+    display: inline-flex;
+}
+
+.cbd-board-auswahl-hinweis {
+    align-items: center;
+    min-height: 30px;
+    padding: 0 6px;
+    color: var(--color-text-primary, #333333);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* 3.1.144: Textgroesse ("A-", Anzeige, "A+") nur, wenn Texte gewaehlt sind
+   (Klasse --text, board-mode.js _auswahlLeisteAusrichten), nie im
+   Drehmodus. Eine Gruppe, damit ein Zeilenumbruch der Leiste sie nicht
+   auseinanderreisst. */
+.cbd-board-auswahl-leiste .cbd-board-auswahl-nur-text {
+    display: none;
+}
+
+.cbd-board-auswahl-leiste--text:not(.cbd-board-auswahl-leiste--drehen) .cbd-board-auswahl-nur-text {
+    display: inline-flex;
+}
+
+.cbd-board-auswahl-textgruppe {
+    align-items: center;
+    gap: 2px;
+}
+
+.cbd-board-auswahl-textgroesse {
+    display: inline-flex;
+}
+
+.cbd-board-auswahl-text-kleiner,
+.cbd-board-auswahl-text-groesser {
+    justify-content: center;
+    min-width: 36px;
+    padding: 0 6px;
+    font-weight: 700;
+}
+
+.cbd-board-auswahl-text-kleiner {
+    font-size: 12px;
+}
+
+.cbd-board-auswahl-text-groesser {
+    font-size: 16px;
+}
+
+.cbd-board-auswahl-knopf:disabled {
+    opacity: 0.4;
+    cursor: default;
+    background: var(--color-background, #ffffff);
+}
+
+.cbd-board-auswahl-textgroesse {
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 30px;
+    color: var(--color-text-primary, #333333);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Board Color Picker Overlay (on canvas) */
@@ -1322,6 +1415,15 @@ html.cbd-board-offen .sidebar-toggle-btn {
 [data-theme="dark"] .cbd-board-auswahl-knopf:focus-visible {
     background: var(--color-background-light, #2a2a2a);
     color: var(--color-text-primary, #e8e8e8);
+}
+
+[data-theme="dark"] .cbd-board-auswahl-hinweis,
+[data-theme="dark"] .cbd-board-auswahl-textgroesse {
+    color: var(--color-text-primary, #e8e8e8);
+}
+
+[data-theme="dark"] .cbd-board-auswahl-knopf:disabled {
+    background: var(--color-background, #121212);
 }
 
 [data-theme="dark"] .cbd-board-text-input {

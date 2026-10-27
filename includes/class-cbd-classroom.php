@@ -956,25 +956,35 @@ class CBD_Classroom {
                 $x = self::elemente_zahl($el['x'] ?? null);
                 $y = self::elemente_zahl($el['y'] ?? null);
                 $inhalt = $el['text'] ?? null;
+                $winkel = self::elemente_winkel($el);
                 if (!is_string($farbe) || !preg_match($farb_muster, $farbe)
-                    || null === $b || $b <= 0 || null === $x || null === $y || !is_string($inhalt)) {
+                    || null === $b || $b <= 0 || null === $x || null === $y || !is_string($inhalt)
+                    || false === $winkel) {
                     continue;
                 }
                 $sauber = array('id' => $id, 'typ' => 'text', 'farbe' => $farbe, 'breite' => $b,
                     'text' => mb_substr($inhalt, 0, 5000, 'UTF-8'), 'x' => $x, 'y' => $y);
+                if (null !== $winkel) {
+                    $sauber['winkel'] = $winkel;
+                }
             } elseif ('bild' === $typ) {
                 $bild = $el['daten'] ?? null;
                 $x = self::elemente_zahl($el['x'] ?? null);
                 $y = self::elemente_zahl($el['y'] ?? null);
                 $b = self::elemente_zahl($el['b'] ?? null);
                 $h = self::elemente_zahl($el['h'] ?? null);
+                $winkel = self::elemente_winkel($el);
                 if (!is_string($bild) || 0 !== strpos($bild, $praefix)
                     || !preg_match('/^[A-Za-z0-9+\/=]*$/', substr($bild, strlen($praefix)))
-                    || null === $x || null === $y || null === $b || null === $h || $b <= 0 || $h <= 0) {
+                    || null === $x || null === $y || null === $b || null === $h || $b <= 0 || $h <= 0
+                    || false === $winkel) {
                     continue;
                 }
                 $sauber = array('id' => $id, 'typ' => 'bild', 'daten' => $bild,
                     'x' => $x, 'y' => $y, 'b' => $b, 'h' => $h);
+                if (null !== $winkel) {
+                    $sauber['winkel'] = $winkel;
+                }
             } else {
                 continue; // unbekannter typ: nur dieses Element verwerfen
             }
@@ -1013,6 +1023,29 @@ class CBD_Classroom {
         }
         $zahl = 0 + $wert;
         return is_finite((float) $zahl) ? $zahl : null;
+    }
+
+    /**
+     * Optionales Feld `winkel` eines Text- oder Bild-Elements (Grad,
+     * Lasso-Drehen 3.1.143; Gegenstück `mitWinkel()` in board-elemente.js).
+     *
+     * Rückgabe: null = fehlt oder 0 (Feld entfällt), false = vorhanden, aber
+     * keine endliche Zahl (Element ungültig, wie im Browser), sonst die Zahl.
+     * Der Browser schreibt nur Werte in (-180, 180]; hier wird nicht normiert,
+     * jede endliche Zahl ist eine gültige Drehung.
+     *
+     * @param array $el
+     * @return int|float|null|false
+     */
+    private static function elemente_winkel($el) {
+        if (!array_key_exists('winkel', $el)) {
+            return null;
+        }
+        $winkel = self::elemente_zahl($el['winkel']);
+        if (null === $winkel) {
+            return false;
+        }
+        return 0 == $winkel ? null : $winkel;
     }
 
     /**

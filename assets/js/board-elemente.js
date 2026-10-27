@@ -16,8 +16,13 @@
  * Format (verbindlich, Plan Abschnitt 4 „Elementmodell v1"):
  *   { v: 1, breite, hoehe, elemente: [
  *     { id:'e1', typ:'strich', werkzeug:'pen'|'highlighter', farbe, breite, punkte:[[x,y],...] },
- *     { id:'e2', typ:'text', farbe, breite, text, x, y },
- *     { id:'e3', typ:'bild', daten:'data:image/png;base64,...', x, y, b, h } ] }
+ *     { id:'e2', typ:'text', farbe, breite, text, x, y [, winkel] },
+ *     { id:'e3', typ:'bild', daten:'data:image/png;base64,...', x, y, b, h [, winkel] } ] }
+ *
+ * `winkel` (seit 3.1.143, Lasso-Drehen) ist optional: Drehung in Grad um die
+ * linke obere Ecke (x, y), positiv = im Uhrzeigersinn, in (-180, 180]. Fehlt
+ * es, ist das Element unverdreht; 0 wird nie geschrieben. Das Format bleibt
+ * v1 - eine aeltere Version laesst das Feld beim Pruefen still fallen.
  *
  * Alle Funktionen sind frei von Seiteneffekten: Eingaben werden nie
  * veraendert, Ergebnisse sind neue Objekte. Unveraenderte Elemente duerfen
@@ -43,6 +48,11 @@
     var BASE64_MUSTER = /^[A-Za-z0-9+\/=]*$/;
     // Schrift wie im Text-Werkzeug von board-mode.js.
     var ZEILENHOEHE = 1.2;
+    // Textgroesse nachtraeglich (3.1.144, textGroesse): Schrift in px und
+    // Faktor je Schritt. 18 px entspricht breite 0.5 (breite muss > 0 sein).
+    var TEXT_PX_MIN = 18;
+    var TEXT_PX_MAX = 200;
+    var TEXT_SCHRITT = 1.2;
 
     // =====================================================================
     // Hilfsfunktionen
@@ -98,6 +108,73 @@
         return neu;
     }
 
+    /** Winkel in Grad auf (-180, 180] bringen, ohne -0. */
+    function normWinkel(grad) {
+        var w = grad % 360;
+        if (w > 180) w -= 360;
+        if (w <= -180) w += 360;
+        return w === 0 ? 0 : w;
+    }
+
+    /**
+     * Optionales Feld `winkel` (Grad, Lasso-Drehen 3.1.143) an ein NEUES
+     * Text-/Bild-Objekt haengen - nur, wenn es nicht 0 ist. Unverdrehte
+     * Elemente sehen damit genau aus wie vor dem Drehen (gleiche Felder,
+     * gleiche Serialisierung).
+     */
+    function mitWinkel(el, grad) {
+        var w = istZahl(grad) ? normWinkel(grad) : 0;
+        if (w !== 0) el.winkel = w;
+        return el;
+    }
+
+    /**
+     * Umschliessendes Rechteck eines um seine linke obere Ecke (x, y)
+     * gedrehten Rechtecks b x h. Bildschirmsinn (y nach unten): positiver
+     * Winkel dreht im Uhrzeigersinn, wie ctx.rotate().
+     */
+    function gedrehterRahmen(x, y, b, h, grad) {
+        if (!grad) return { x: x, y: y, b: b, h: h };
+        var rad = grad * Math.PI / 180;
+        var cos = Math.cos(rad), sin = Math.sin(rad);
+        var ecken = [[0, 0], [b, 0], [b, h], [0, h]];
+        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (var i = 0; i < 4; i++) {
+            var ex = x + ecken[i][0] * cos - ecken[i][1] * sin;
+            var ey = y + ecken[i][0] * sin + ecken[i][1] * cos;
+            if (ex < minX) minX = ex;
+            if (ex > maxX) maxX = ex;
+            if (ey < minY) minY = ey;
+            if (ey > maxY) maxY = ey;
+        }
+        return { x: minX, y: minY, b: maxX - minX, h: maxY - minY };
+    }
+
+    /**
+     * Element um (dx, dy) versetzt als NEUES Objekt mit der ID `id`
+     * (verschiebe() behaelt die ID, kopiere() vergibt eine neue). Unbekannter
+     * Typ -> null.
+     */
+    function versetzt(e, dx, dy, id) {
+        if (e.typ === 'strich') {
+            var punkte = [];
+            for (var j = 0; j < e.punkte.length; j++) {
+                punkte.push([e.punkte[j][0] + dx, e.punkte[j][1] + dy]);
+            }
+            return { id: id, typ: 'strich', werkzeug: e.werkzeug, farbe: e.farbe,
+                breite: e.breite, punkte: punkte };
+        }
+        if (e.typ === 'text') {
+            return mitWinkel({ id: id, typ: 'text', farbe: e.farbe, breite: e.breite,
+                text: e.text, x: e.x + dx, y: e.y + dy }, e.winkel);
+        }
+        if (e.typ === 'bild') {
+            return mitWinkel({ id: id, typ: 'bild', daten: e.daten, x: e.x + dx, y: e.y + dy,
+                b: e.b, h: e.h }, e.winkel);
+        }
+        return null;
+    }
+
     // =====================================================================
     // Pruefen
     // =====================================================================
@@ -130,9 +207,11 @@
             if (!istZahl(el.breite) || el.breite <= 0) return null;
             if (typeof el.text !== 'string') return null;
             if (!istZahl(el.x) || !istZahl(el.y)) return null;
-            return { id: el.id, typ: 'text', farbe: el.farbe, breite: el.breite,
+            // winkel optional (Lasso-Drehen 3.1.143); vorhanden, aber keine Zahl -> ungueltig
+            if (el.winkel !== undefined && !istZahl(el.winkel)) return null;
+            return mitWinkel({ id: el.id, typ: 'text', farbe: el.farbe, breite: el.breite,
                 text: el.text.length > MAX_TEXT ? el.text.substring(0, MAX_TEXT) : el.text,
-                x: el.x, y: el.y };
+                x: el.x, y: el.y }, el.winkel);
         }
 
         if (el.typ === 'bild') {
@@ -140,7 +219,9 @@
             if (!BASE64_MUSTER.test(el.daten.substring(BILD_PRAEFIX.length))) return null;
             if (!istZahl(el.x) || !istZahl(el.y) || !istZahl(el.b) || !istZahl(el.h)) return null;
             if (el.b <= 0 || el.h <= 0) return null;
-            return { id: el.id, typ: 'bild', daten: el.daten, x: el.x, y: el.y, b: el.b, h: el.h };
+            if (el.winkel !== undefined && !istZahl(el.winkel)) return null;
+            return mitWinkel({ id: el.id, typ: 'bild', daten: el.daten, x: el.x, y: el.y,
+                b: el.b, h: el.h }, el.winkel);
         }
 
         return null; // unbekannter typ
@@ -258,10 +339,10 @@
                     : zeilen[z].length * groesse * 0.6;
                 if (w > breitest) breitest = w;
             }
-            return { x: el.x, y: el.y, b: breitest, h: zeilen.length * ZEILENHOEHE * groesse };
+            return gedrehterRahmen(el.x, el.y, breitest, zeilen.length * ZEILENHOEHE * groesse, el.winkel);
         }
         if (el.typ === 'bild') {
-            return { x: el.x, y: el.y, b: el.b, h: el.h };
+            return gedrehterRahmen(el.x, el.y, el.b, el.h, el.winkel);
         }
         return { x: 0, y: 0, b: 0, h: 0 };
     }
@@ -314,26 +395,165 @@
         var neu = [];
         for (var i = 0; i < modell.elemente.length; i++) {
             var e = modell.elemente[i];
+            neu.push(wahl.hasOwnProperty(e.id) ? (versetzt(e, dx, dy, e.id) || e) : e);
+        }
+        return kopf(modell, neu);
+    }
+
+    /**
+     * Neues Modell, in dem die Elemente mit diesen IDs um den Drehpunkt
+     * (cx, cy) gedreht sind (Lasso-Drehen 3.1.143). `grad` im Bildschirmsinn:
+     * positiv = im Uhrzeigersinn (y zeigt nach unten, wie ctx.rotate()).
+     * Striche: jeder Punkt wird gedreht. Text und Bild: die linke obere Ecke
+     * (x, y) wird gedreht und `winkel` waechst um `grad` - gezeichnet wird um
+     * diese Ecke (board-mode.js, zeichneModell). Beides zusammen ist genau
+     * die Drehung um (cx, cy); mehrfaches Drehen setzt sich exakt zusammen.
+     * grad 0 (bzw. Vielfache von 360) -> unveraenderte Liste.
+     */
+    function drehe(modell, ids, cx, cy, grad) {
+        if (!istZahl(grad) || normWinkel(grad) === 0) {
+            return kopf(modell, modell.elemente.slice());
+        }
+        var wahl = mengeAus(ids);
+        var rad = grad * Math.PI / 180;
+        var cos = Math.cos(rad), sin = Math.sin(rad);
+        var neu = [];
+        for (var i = 0; i < modell.elemente.length; i++) {
+            var e = modell.elemente[i];
             if (!wahl.hasOwnProperty(e.id)) {
                 neu.push(e);
-            } else if (e.typ === 'strich') {
+                continue;
+            }
+            var dx, dy;
+            if (e.typ === 'strich') {
                 var punkte = [];
                 for (var j = 0; j < e.punkte.length; j++) {
-                    punkte.push([e.punkte[j][0] + dx, e.punkte[j][1] + dy]);
+                    dx = e.punkte[j][0] - cx;
+                    dy = e.punkte[j][1] - cy;
+                    punkte.push([cx + dx * cos - dy * sin, cy + dx * sin + dy * cos]);
                 }
                 neu.push({ id: e.id, typ: 'strich', werkzeug: e.werkzeug, farbe: e.farbe,
                     breite: e.breite, punkte: punkte });
-            } else if (e.typ === 'text') {
-                neu.push({ id: e.id, typ: 'text', farbe: e.farbe, breite: e.breite,
-                    text: e.text, x: e.x + dx, y: e.y + dy });
-            } else if (e.typ === 'bild') {
-                neu.push({ id: e.id, typ: 'bild', daten: e.daten, x: e.x + dx, y: e.y + dy,
-                    b: e.b, h: e.h });
+            } else if (e.typ === 'text' || e.typ === 'bild') {
+                dx = e.x - cx;
+                dy = e.y - cy;
+                var g = versetzt(e, cx + dx * cos - dy * sin - e.x, cy + dx * sin + dy * cos - e.y, e.id);
+                delete g.winkel;
+                neu.push(mitWinkel(g, (e.winkel || 0) + grad));
             } else {
                 neu.push(e);
             }
         }
         return kopf(modell, neu);
+    }
+
+    /**
+     * Kopien der Elemente mit diesen IDs, um (dx, dy) versetzt, mit neuen
+     * IDs aus `neueId()` (Lasso-Duplizieren 3.1.143). Die Kopien kommen in
+     * Listenreihenfolge ans ENDE der Liste (also obenauf in ihrer
+     * Zeichenebene); Originale bleiben dieselben Objekte. Ohne `neueId`
+     * werden die IDs ab hoechsteIdNummer(modell) + 1 vergeben.
+     * Rueckgabe: { modell, ids } mit den IDs der Kopien.
+     */
+    function kopiere(modell, ids, dx, dy, neueId) {
+        var n = hoechsteIdNummer(modell) + 1;
+        var id = typeof neueId === 'function' ? neueId : function () { return 'e' + (n++); };
+        var wahl = mengeAus(ids);
+        var kopien = [];
+        var neueIds = [];
+        for (var i = 0; i < modell.elemente.length; i++) {
+            var e = modell.elemente[i];
+            if (!wahl.hasOwnProperty(e.id)) continue;
+            if (e.typ !== 'strich' && e.typ !== 'text' && e.typ !== 'bild') continue;
+            var k = versetzt(e, dx, dy, id());
+            kopien.push(k);
+            neueIds.push(k.id);
+        }
+        return { modell: kopf(modell, modell.elemente.concat(kopien)), ids: neueIds };
+    }
+
+    /**
+     * Schrift (px) nach einem Schritt groesser (richtung > 0) bzw. kleiner
+     * (< 0): mal bzw. durch TEXT_SCHRITT, ganzzahlig, mindestens 1 px
+     * Aenderung. Groesser endet bei TEXT_PX_MAX, kleiner bei TEXT_PX_MIN;
+     * eine Schrift jenseits der Grenze (z. B. nach skaliere()) bleibt in
+     * dieser Richtung unveraendert.
+     */
+    function naechsteSchrift(schrift, richtung) {
+        if (richtung > 0) {
+            if (schrift >= TEXT_PX_MAX) return schrift;
+            return Math.min(TEXT_PX_MAX, Math.max(schrift + 1, Math.round(schrift * TEXT_SCHRITT)));
+        }
+        if (richtung < 0) {
+            if (schrift <= TEXT_PX_MIN) return schrift;
+            return Math.max(TEXT_PX_MIN, Math.min(schrift - 1, Math.round(schrift / TEXT_SCHRITT)));
+        }
+        return schrift;
+    }
+
+    /**
+     * Neues Modell, in dem die TEXTE unter diesen IDs einen Schritt groesser
+     * (richtung > 0) bzw. kleiner (< 0) sind (3.1.144, Knoepfe "A+"/"A-" der
+     * Auswahlleiste). Jeder Text waechst mit seiner eigenen Schrift, die
+     * Verhaeltnisse bleiben also, bis ein Text eine Grenze erreicht. Linke
+     * obere Ecke (x, y) und winkel bleiben; Striche, Bilder und nicht
+     * gewaehlte Texte bleiben dieselben Objekte. Die Schrift folgt aus
+     * `breite` (schriftPx), deshalb wird `breite` = (Schrift - 16) / 4
+     * gesetzt - ein Vielfaches von 0,25, das serialisiere() exakt behaelt.
+     * Liefert { modell, geaendert } (geaendert = Zahl der veraenderten Texte).
+     */
+    function textGroesse(modell, ids, richtung) {
+        var wahl = mengeAus(ids);
+        var neu = [];
+        var geaendert = 0;
+        for (var i = 0; i < modell.elemente.length; i++) {
+            var e = modell.elemente[i];
+            if (e.typ !== 'text' || !wahl.hasOwnProperty(e.id) || !istZahl(richtung)) {
+                neu.push(e);
+                continue;
+            }
+            var alt = schriftPx(e.breite);
+            var schrift = naechsteSchrift(alt, richtung);
+            if (schrift === alt) {
+                neu.push(e);
+                continue;
+            }
+            geaendert++;
+            neu.push(mitWinkel({ id: e.id, typ: 'text', farbe: e.farbe, breite: (schrift - 16) / 4,
+                text: e.text, x: e.x, y: e.y }, e.winkel));
+        }
+        return { modell: kopf(modell, neu), geaendert: geaendert };
+    }
+
+    /**
+     * Schriftgroessen (px) der Texte unter diesen IDs: { anzahl, min, max }
+     * (ohne Texte anzahl 0, min/max null). Fuer die Anzeige und das
+     * Sperren der Knoepfe in der Auswahlleiste.
+     */
+    function textGroessen(modell, ids) {
+        var wahl = mengeAus(ids);
+        var anzahl = 0, min = null, max = null;
+        for (var i = 0; i < modell.elemente.length; i++) {
+            var e = modell.elemente[i];
+            if (e.typ !== 'text' || !wahl.hasOwnProperty(e.id)) continue;
+            var s = schriftPx(e.breite);
+            anzahl++;
+            if (min === null || s < min) min = s;
+            if (max === null || s > max) max = s;
+        }
+        return { anzahl: anzahl, min: min, max: max };
+    }
+
+    /**
+     * Drehwinkel in Grad vom Strahl (cx,cy)->(ax,ay) zum Strahl
+     * (cx,cy)->(bx,by), in (-180, 180], Bildschirmsinn wie drehe(). Ist
+     * einer der Strahlen kuerzer als 1e-9 -> 0.
+     */
+    function drehwinkel(cx, cy, ax, ay, bx, by) {
+        var ux = ax - cx, uy = ay - cy, vx = bx - cx, vy = by - cy;
+        if (ux * ux + uy * uy < 1e-18 || vx * vx + vy * vy < 1e-18) return 0;
+        var grad = (Math.atan2(vy, vx) - Math.atan2(uy, ux)) * 180 / Math.PI;
+        return normWinkel(grad);
     }
 
     /** Neues Modell ohne die Elemente mit diesen IDs. */
@@ -502,11 +722,13 @@
                 if (sm !== 1) {
                     tb = Math.max(0.1, ((16 + e.breite * 4) * sm - 16) / 4);
                 }
-                neu.push({ id: e.id, typ: 'text', farbe: e.farbe, breite: tb,
-                    text: e.text, x: e.x * sx, y: e.y * sy });
+                // winkel bleibt; bei ungleichen Faktoren sx/sy ist das eine
+                // Naeherung (eine gedrehte Flaeche wuerde eigentlich geschert)
+                neu.push(mitWinkel({ id: e.id, typ: 'text', farbe: e.farbe, breite: tb,
+                    text: e.text, x: e.x * sx, y: e.y * sy }, e.winkel));
             } else if (e.typ === 'bild') {
-                neu.push({ id: e.id, typ: 'bild', daten: e.daten, x: e.x * sx, y: e.y * sy,
-                    b: e.b * sx, h: e.h * sy });
+                neu.push(mitWinkel({ id: e.id, typ: 'bild', daten: e.daten, x: e.x * sx, y: e.y * sy,
+                    b: e.b * sx, h: e.h * sy }, e.winkel));
             } else {
                 neu.push(e);
             }
@@ -531,11 +753,13 @@
                 el.push({ id: e.id, typ: 'strich', werkzeug: e.werkzeug, farbe: e.farbe,
                     breite: runde(e.breite), punkte: punkte });
             } else if (e.typ === 'text') {
-                el.push({ id: e.id, typ: 'text', farbe: e.farbe, breite: runde(e.breite),
-                    text: e.text, x: runde(e.x), y: runde(e.y) });
+                // winkel in Grad, damit 2 Nachkommastellen genuegen (0,01°);
+                // auf 0 gerundet entfaellt das Feld
+                el.push(mitWinkel({ id: e.id, typ: 'text', farbe: e.farbe, breite: runde(e.breite),
+                    text: e.text, x: runde(e.x), y: runde(e.y) }, runde(e.winkel || 0)));
             } else if (e.typ === 'bild') {
-                el.push({ id: e.id, typ: 'bild', daten: e.daten, x: runde(e.x), y: runde(e.y),
-                    b: runde(e.b), h: runde(e.h) });
+                el.push(mitWinkel({ id: e.id, typ: 'bild', daten: e.daten, x: runde(e.x), y: runde(e.y),
+                    b: runde(e.b), h: runde(e.h) }, runde(e.winkel || 0)));
             }
         }
         return JSON.stringify({ v: VERSION, breite: runde(modell.breite), hoehe: runde(modell.hoehe), elemente: el });
@@ -633,6 +857,8 @@
 
     global.CBDBoardElemente = {
         VERSION: VERSION,
+        TEXT_PX_MIN: TEXT_PX_MIN,
+        TEXT_PX_MAX: TEXT_PX_MAX,
         pruefeModell: pruefeModell,
         ausStrokes: ausStrokes,
         zuStrokes: zuStrokes,
@@ -640,6 +866,12 @@
         punktImPolygon: punktImPolygon,
         waehleImLasso: waehleImLasso,
         verschiebe: verschiebe,
+        drehe: drehe,
+        kopiere: kopiere,
+        drehwinkel: drehwinkel,
+        naechsteSchrift: naechsteSchrift,
+        textGroesse: textGroesse,
+        textGroessen: textGroessen,
         entferne: entferne,
         radiereKreis: radiereKreis,
         skaliere: skaliere,
