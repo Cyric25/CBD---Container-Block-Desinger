@@ -506,6 +506,35 @@
         return ergebnis(f);
     }
 
+    /**
+     * 3.1.145: Einschalten blendet die Raster-Regler ein, die Leiste wird
+     * höher, die Zeichenfläche kleiner - resizeAllCanvases() leert dabei
+     * alle Ebenen. Das Raster muss danach wieder da sein (bis 3.1.144 hing
+     * das Neuzeichnen an einem Merker, der nie gesetzt wurde).
+     */
+    function rasterNachGroessenaenderung() {
+        ctx.oeffnen();
+        var f = [];
+        var knopfR = B.overlay.querySelector('.cbd-board-grid-toggle');
+        if (B.gridMode !== 'off') {
+            B.gridMode = 'off';
+            B._gitterUIAktualisieren();
+            B.redrawGrid();
+        }
+        B.gridArt = 'kaestchen';
+        knopfR.click();
+        if (B.gridMode !== 'kaestchen' || ebeneLeer(B.gridCanvas)) f.push('Raster nach Klick nicht gezeichnet');
+        B.resizeAllCanvases();
+        if (ebeneLeer(B.gridCanvas)) f.push('Raster nach Größenänderung der Zeichenfläche verschwunden');
+        B.setGridArt('zeilen');
+        B.resizeAllCanvases();
+        if (ebeneLeer(B.gridCanvas)) f.push('Zeilen nach Größenänderung verschwunden');
+        knopfR.click();
+        B.resizeAllCanvases();
+        if (B.gridMode !== 'off' || !ebeneLeer(B.gridCanvas)) f.push('ausgeschaltetes Raster nach Größenänderung wieder da');
+        return ergebnis(f);
+    }
+
     // ------------------------------------------------------------------
     // Prüfungen (asynchron)
     // ------------------------------------------------------------------
@@ -547,6 +576,7 @@
         p('3.1.143: Punkt-Radierer trifft gedrehtes Bild an der gedrehten Stelle', radiererAufGedrehtemBild);
         p('3.1.143: Duplizieren per Knopf und Strg+D (+20 px, Kopien gewählt, 1 Undo)', duplizieren);
         p('3.1.143: Raster Kästchen/Zeilen/Sechsecke, ein/aus, Versatz, Wiederöffnen', rasterZeilenKaestchen);
+        p('3.1.145: Raster bleibt nach Größenänderung der Zeichenfläche (Einschalten ohne Regler-Bewegung)', rasterNachGroessenaenderung);
     };
 
     window.__zusatzTestsAsync = function(c) {

@@ -4176,7 +4176,7 @@ dann Teil des Bild-Elements.
 | `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | 266 Prüfungen (seit 3.1.143 inkl. Gruppe 11 Drehen/Kopieren/`winkel`, seit 3.1.144 Gruppe 12 Textgröße) |
 | `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall, `winkel` (G), Textgröße (H) | 130 Prüfungen |
 | `node tools/test-notizen-manager-js.js` | `personal-notes-manager.js` (Mini-DOM im `vm`) | 34 Prüfungen |
-| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **159 Prüfungen**, Stand 3.1.144 (davon 11 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4) |
+| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **160 Prüfungen**, Stand 3.1.145 (davon 12 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4) |
 | `php tools/check-php74.php` | PHP-7.4-Kompatibilität | muss OK sein |
 
 Prüfseite: Viewport VOR dem Laden auf ~1366×768, nach dem Laden ca. 10 s
@@ -4446,6 +4446,23 @@ verborgen. `_gitterUIAktualisieren()` gleicht Knopf, Auswahlfeld und Regler
 jetzt beim Öffnen an (`_openOverlay()`, nach `updateToolUI()`). Ob das Raster
 beim Öffnen stattdessen immer aus sein soll (wie Stift/Farbe seit 3.1.141),
 ist eine offene Betreiberentscheidung.
+
+**Raster erschien erst beim Bewegen eines Reglers (behoben 3.1.145,
+Rückmeldung 2026-10-27).** Der Knopf zeichnete das Raster sofort — aber das
+Einschalten blendet auch die Regler ein, die Werkzeugleiste wird höher
+(gemessen bei 1024 × 768: Zeichenfläche 631 → 609 px), der `ResizeObserver`
+ruft `resizeAllCanvases()`, und das Neusetzen der Canvas-Größe leert alle
+Ebenen. Neu gezeichnet wurde das Raster dort nur `if (this.showGrid)` —
+ein Merker, der seit Langem nur noch auf `false` gesetzt und nie `true`
+wurde. Das Raster verschwand also Millisekunden nach dem Klick wieder, bis
+ein Regler `redrawGrid()` aufrief. Derselbe Fehler traf jede andere
+Größenänderung (Fenster, Leiste ein-/ausblenden, iPad drehen). Jetzt ruft
+`resizeAllCanvases()` `redrawGrid()` immer auf (es prüft `gridMode` selbst),
+der tote Merker ist entfernt. Vorbestehend seit der Zeit vor 3.1.143; mit dem
+zusätzlichen Auswahlfeld bricht die Leiste öfter um und der Fehler fiel auf.
+Prüfung: „3.1.145: Raster bleibt nach Größenänderung" in
+`tools/test-board-drehen.js` — gegen den alten Stand rot, mit dem Fix grün;
+dazu echter Klick bei 1024 × 768.
 
 ### Standardeinstellung beim Öffnen (Hotfix 3.1.141/3.1.142, Rückmeldung 2026-10-12)
 
