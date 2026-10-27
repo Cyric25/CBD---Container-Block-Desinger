@@ -436,7 +436,6 @@
             this.pageId = null;
             this.stableContainerId = null;
             this.isSaving = false;
-            this.showGrid = false;
 
             // Zeigerverwaltung (#7149): aktive Zeiger und Stift-Vorrang zurücksetzen
             this.activePointers.clear();
@@ -724,10 +723,13 @@
             // Background neu zeichnen
             this.redrawBackground();
 
-            // Grid neu zeichnen (falls aktiv)
-            if (this.showGrid) {
-                this.redrawGrid();
-            }
+            // Raster neu zeichnen - die Größenänderung hat die Ebene geleert.
+            // redrawGrid() selbst prüft gridMode. Bis 3.1.144 hing das an
+            // einem Merker showGrid, der nie true wurde: Einschalten blendet
+            // die Raster-Regler ein, die Leiste wird höher, die Fläche kleiner
+            // - und das eben gezeichnete Raster verschwand wieder, bis ein
+            // Regler bewegt wurde.
+            this.redrawGrid();
 
             // Zeichnung aus dem Elementmodell neu aufbauen (AP-4.3, statt
             // getImageData/putImageData). modell.breite/hoehe bleiben bewusst
