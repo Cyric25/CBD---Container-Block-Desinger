@@ -423,7 +423,7 @@ const FL = { x: 10, y: 20, b: 1000, h: 600 };
 			return b.text.split('\n').every(function (z) { return mass(z, 18) <= 300; });
 		}));
 		pruefe('Rest beginnt mit dem Rest des geteilten Absatzes oder einem ganzen Absatz',
-			eingabe.some(function (a) { return ohne(a).endsWith(ohne(r.rest[0])); }), JSON.stringify(r.rest[0]));
+			r.rest.length > 0 && eingabe.some(function (a) { return ohne(a).endsWith(ohne(r.rest[0])); }), JSON.stringify(r.rest[0]));
 	}
 })();
 (function () {

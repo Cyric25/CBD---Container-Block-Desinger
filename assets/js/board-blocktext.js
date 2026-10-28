@@ -10,16 +10,34 @@
  * Browser-Speicher oder Zeichenflaechen. Der Harnisch
  * „node tools/test-board-blocktext-js.js" fuehrt diese Datei in einem leeren
  * vm-Kontext aus und prueft den Quelltext auf die Namen dieser Schnittstellen
- * — auch in Kommentaren. Textbreiten misst der Aufrufer (ab AP-1.3 ueber
- * eine uebergebene Messfunktion).
+ * — auch in Kommentaren. Textbreiten misst der Aufrufer: Er uebergibt eine
+ * Messfunktion mass(text, px) -> Breite in Pixeln (im Browser measureText).
  *
- * Schnittstelle (Plan, Abschnitt 4):
- *   latexZuText(latex, protokoll) -> string
+ * Schnittstelle (Plan, Abschnitt 4) - genau diese sechs Funktionen:
+ *   latexZuText(latex, protokoll) -> string                         (AP-1.2)
  *     Verwandelt LaTeX-Quelltext (Attribut data-latex der Formeln) in
  *     lesbaren Unicode-Text, z. B. „\text{Ag}^+ + e^- \rightleftharpoons
  *     \text{Ag}" -> „Ag⁺ + e⁻ ⇌ Ag". Wirft NIE und gibt NIE einen Backslash
  *     aus. Ist „protokoll" ein Objekt, landet jeder unbekannte Befehl (ohne
  *     Backslash) in protokoll.unbekannt (nur fuer die Messung im Harnisch).
+ *   absaetzeAusText(text) -> [string]                               (AP-1.3)
+ *     Trennt an Leerzeilen; einzelne Zeilenwechsel bleiben im Absatz.
+ *   umbrechen(text, maxBreite, px, mass) -> [zeile]                 (AP-1.3)
+ *     Bricht an Leerzeichen auf maxBreite um, vorhandene \n bleiben, zu
+ *     breite Woerter werden zeichenweise geteilt.
+ *   verteile(absaetze, flaeche, mass, optionen)                     (AP-1.3)
+ *     -> {px, bloecke: [{text, x, y, b, h}], rest: [string]}
+ *     Schrift 24 -> 18 px, bis alles in flaeche {x, y, b, h} passt; sonst
+ *     auffuellen und Rest zurueckgeben. Je Absatz ein Block (Zeilen mit \n),
+ *     Abstand Math.round(0,6 * px), Bloecke hoechstens 5000 Zeichen.
+ *   flaecheUnter(sichtbar, rahmenListe, rand) -> {x, y, b, h}       (AP-1.3)
+ *     Freier Platz unter vorhandenem Inhalt im sichtbaren Bereich.
+ *   lesbareFarbe(stift, tafel) -> '#rrggbb'                         (AP-1.3)
+ *     Stiftfarbe bei mindestens 3:1 Kontrast (WCAG), sonst Weiss/Schwarz.
+ *
+ * Alle Funktionen sind frei von Seiteneffekten; Eingaben werden nie
+ * veraendert. Listen werden mit Array.isArray erkannt (nicht instanceof),
+ * weil der Harnisch sie aus einem anderen Kontext uebergibt.
  *
  * Regeln der Umwandlung (Einzelheiten an den Tabellen unten):
  *   - Hoch-/Tiefstellung ueber Unicode-Tabellen. Ist ein Zeichen nicht
@@ -274,7 +292,9 @@
 
     function merkeUnbekannt(z, name) {
         if (z.p) {
-            if (!(z.p.unbekannt instanceof Array)) {
+            // Array.isArray statt instanceof: Das Protokoll kann aus einem
+            // anderen Kontext stammen (Harnisch: vm), dort schlaegt instanceof fehl.
+            if (!Array.isArray(z.p.unbekannt)) {
                 z.p.unbekannt = [];
             }
             z.p.unbekannt.push(name);
@@ -798,6 +818,327 @@
     }
 
     // =====================================================================
+    // Absaetze, Umbruch, Verteilung, freie Flaeche, Farbe (AP-1.3)
+    //   Schrift px und Zeilenhoehe 1,2 * px wie beim Text-Element der Tafel
+    //   (board-elemente.js); Text-Elemente brechen selbst nicht um, eine
+    //   Zeile ist ein mit \n getrennter Abschnitt des Elementtexts.
+    // =====================================================================
+
+    var ZEILENHOEHE = 1.2;
+    var ABSATZ_ABSTAND = 0.6;
+    // Ein Text-Element darf hoechstens so viele Zeichen haben (MAX_TEXT in
+    // board-elemente.js, mb_substr in class-cbd-classroom.php) - sonst wird
+    // es beim Pruefen still gekuerzt.
+    var VORGABE_MAX_ZEICHEN = 5000;
+    var VORGABE_START_PX = 24;
+    var VORGABE_MIN_PX = 18;
+    var EPS = 1e-9;
+
+    function zahl(v, vorgabe) {
+        return (typeof v === 'number' && isFinite(v)) ? v : vorgabe;
+    }
+
+    function ohneEndLeer(s) {
+        return s.replace(/\s+$/, '');
+    }
+
+    /** Ersatz, falls der Aufrufer keine Messfunktion uebergibt. */
+    function schaetzMass(t, px) {
+        return t.length * px * 0.55;
+    }
+
+    /**
+     * Text -> Absaetze. Getrennt wird an Zeilen, die nur Leerraum enthalten;
+     * Zeilenenden und Absatz werden getrimmt, einzelne Zeilenwechsel bleiben.
+     */
+    function absaetzeAusText(text) {
+        if (typeof text !== 'string') {
+            return [];
+        }
+        var teile = text.replace(/\r\n?/g, '\n').split(/\n\s*\n/);
+        var aus = [];
+        for (var i = 0; i < teile.length; i++) {
+            var zeilen = teile[i].split('\n');
+            for (var j = 0; j < zeilen.length; j++) {
+                zeilen[j] = ohneEndLeer(zeilen[j]);
+            }
+            var absatz = zeilen.join('\n').replace(/^\s+|\s+$/g, '');
+            if (absatz !== '') {
+                aus.push(absatz);
+            }
+        }
+        return aus;
+    }
+
+    /** Eine harte Zeile umbrechen; haengt die Zeilen an „aus" an. */
+    function umbrecheZeile(zeile, grenze, px, mass, aus) {
+        if (mass(zeile, px) <= grenze) {
+            aus.push(ohneEndLeer(zeile));
+            return;
+        }
+        var woerter = zeile.split(' ');
+        var akt = '';
+        for (var w = 0; w < woerter.length; w++) {
+            var wort = woerter[w];
+            var kandidat = akt === '' ? wort : akt + ' ' + wort;
+            if (mass(kandidat, px) <= grenze) {
+                akt = kandidat;
+                continue;
+            }
+            // Umbruchstelle: Leerzeichen dort entfallen.
+            if (ohneEndLeer(akt) !== '') {
+                aus.push(ohneEndLeer(akt));
+            }
+            akt = '';
+            if (wort === '') {
+                continue;
+            }
+            if (mass(wort, px) <= grenze) {
+                akt = wort;
+                continue;
+            }
+            // Ein Wort, breiter als die Zeile: zeichenweise teilen. Der letzte
+            // Teil bleibt offen, das naechste Wort darf anschliessen.
+            var stueck = '';
+            for (var c = 0; c < wort.length; c++) {
+                var zeichen = wort.charAt(c);
+                if (stueck !== '' && mass(stueck + zeichen, px) > grenze) {
+                    aus.push(stueck);
+                    stueck = '';
+                }
+                stueck += zeichen;
+            }
+            akt = stueck;
+        }
+        if (ohneEndLeer(akt) !== '') {
+            aus.push(ohneEndLeer(akt));
+        }
+    }
+
+    /**
+     * Text auf eine Breite umbrechen -> Zeilen. Vorhandene \n bleiben
+     * Zeilenwechsel; gebrochen wird an Leerzeichen so, dass
+     * mass(zeile, px) <= maxBreite; ein zu breites Wort wird zeichenweise
+     * geteilt. mass(text, px) liefert die Breite in Pixeln.
+     */
+    function umbrechen(text, maxBreite, px, mass) {
+        if (typeof text !== 'string' || text === '') {
+            return [];
+        }
+        var m = typeof mass === 'function' ? mass : schaetzMass;
+        var grenze = (typeof maxBreite === 'number' && maxBreite > 0) ? maxBreite : Infinity;
+        var harte = text.replace(/\r\n?/g, '\n').split('\n');
+        var aus = [];
+        for (var i = 0; i < harte.length; i++) {
+            umbrecheZeile(harte[i], grenze, px, m, aus);
+        }
+        return aus;
+    }
+
+    /** Zeilen eines Absatzes in Teile von hoechstens max Zeichen (mit \n). */
+    function teileNachZeichen(zeilen, max) {
+        var teile = [];
+        var akt = [];
+        var laenge = 0;
+        for (var i = 0; i < zeilen.length; i++) {
+            var z = zeilen[i];
+            if (z.length > max) {
+                if (akt.length) {
+                    teile.push(akt);
+                    akt = [];
+                    laenge = 0;
+                }
+                for (var s = 0; s < z.length; s += max) {
+                    teile.push([z.slice(s, s + max)]);
+                }
+                continue;
+            }
+            var neu = akt.length ? laenge + 1 + z.length : z.length;
+            if (neu > max) {
+                teile.push(akt);
+                akt = [z];
+                laenge = z.length;
+            } else {
+                akt.push(z);
+                laenge = neu;
+            }
+        }
+        if (akt.length) {
+            teile.push(akt);
+        }
+        return teile;
+    }
+
+    /** Zeilenlisten -> Bloecke {text, x, y, b, h}, fortlaufend ab flaeche.y. */
+    function zuBloecken(zeilenListe, f, px, mass, maxZeichen) {
+        var zh = ZEILENHOEHE * px;
+        var abstand = Math.round(ABSATZ_ABSTAND * px);
+        var y = f.y;
+        var aus = [];
+        for (var i = 0; i < zeilenListe.length; i++) {
+            if (i > 0) {
+                y += abstand;
+            }
+            // Ueberlange Absaetze: Teile direkt untereinander, ohne Abstand.
+            var teile = teileNachZeichen(zeilenListe[i], maxZeichen);
+            for (var t = 0; t < teile.length; t++) {
+                var zeilen = teile[t];
+                var b = 0;
+                for (var z = 0; z < zeilen.length; z++) {
+                    b = Math.max(b, mass(zeilen[z], px));
+                }
+                var h = zeilen.length * zh;
+                aus.push({ text: zeilen.join('\n'), x: f.x, y: y, b: b, h: h });
+                y += h;
+            }
+        }
+        return aus;
+    }
+
+    /**
+     * Absaetze in einer Flaeche {x, y, b, h} anordnen.
+     * optionen: {startPx: 24, minPx: 18, maxZeichen: 5000}.
+     * Rueckgabe {px, bloecke: [{text, x, y, b, h}], rest: [string]}.
+     * Die Schrift sinkt in Schritten von 1 px von startPx bis minPx, bis
+     * alles passt. Passt es auch mit minPx nicht, wird von oben aufgefuellt;
+     * ein teilweise passender Absatz wird an einer Zeilengrenze geteilt, der
+     * Rest (Zeilen mit \n verbunden) ist der erste Eintrag von „rest",
+     * danach folgen die uebrigen Absaetze unveraendert.
+     */
+    function verteile(absaetze, flaeche, mass, optionen) {
+        var o = optionen || {};
+        var startPx = Math.round(zahl(o.startPx, VORGABE_START_PX));
+        var minPx = Math.min(startPx, Math.round(zahl(o.minPx, VORGABE_MIN_PX)));
+        var maxZeichen = Math.max(1, Math.floor(zahl(o.maxZeichen, VORGABE_MAX_ZEICHEN)));
+        var m = typeof mass === 'function' ? mass : schaetzMass;
+        var liste = [];
+        if (Array.isArray(absaetze)) {
+            for (var a = 0; a < absaetze.length; a++) {
+                if (typeof absaetze[a] === 'string' && absaetze[a] !== '') {
+                    liste.push(absaetze[a]);
+                }
+            }
+        }
+        if (!liste.length) {
+            return { px: startPx, bloecke: [], rest: [] };
+        }
+        var f = flaeche || {};
+        f = { x: zahl(f.x, 0), y: zahl(f.y, 0), b: zahl(f.b, 0), h: zahl(f.h, 0) };
+
+        var px, zh, abstand, gesetzt, i;
+        for (px = startPx; px >= minPx; px--) {
+            zh = ZEILENHOEHE * px;
+            abstand = Math.round(ABSATZ_ABSTAND * px);
+            gesetzt = [];
+            var hoehe = 0;
+            for (i = 0; i < liste.length; i++) {
+                gesetzt.push(umbrechen(liste[i], f.b, px, m));
+                hoehe += (i > 0 ? abstand : 0) + gesetzt[i].length * zh;
+            }
+            if (hoehe <= f.h + EPS) {
+                return { px: px, bloecke: zuBloecken(gesetzt, f, px, m, maxZeichen), rest: [] };
+            }
+        }
+
+        // Passt auch mit minPx nicht: von oben auffuellen.
+        px = minPx;
+        zh = ZEILENHOEHE * px;
+        abstand = Math.round(ABSATZ_ABSTAND * px);
+        var platziert = [];
+        var rest = [];
+        var belegt = 0;
+        for (i = 0; i < liste.length; i++) {
+            var zeilen = umbrechen(liste[i], f.b, px, m);
+            var oben = platziert.length ? belegt + abstand : 0;
+            var passen = Math.floor((f.h - oben) / zh + EPS);
+            if (passen >= zeilen.length) {
+                platziert.push(zeilen);
+                belegt = oben + zeilen.length * zh;
+                continue;
+            }
+            if (passen > 0) {
+                platziert.push(zeilen.slice(0, passen));
+                rest.push(zeilen.slice(passen).join('\n'));
+            } else {
+                rest.push(liste[i]);
+            }
+            for (var k = i + 1; k < liste.length; k++) {
+                rest.push(liste[k]);
+            }
+            break;
+        }
+        return { px: px, bloecke: zuBloecken(platziert, f, px, m, maxZeichen), rest: rest };
+    }
+
+    /**
+     * Freie Flaeche unter vorhandenem Inhalt im sichtbaren Bereich.
+     * sichtbar und rahmenListe in Modell-Koordinaten {x, y, b, h}; zaehlt
+     * nur Rahmen, die sich waagrecht mit dem sichtbaren Bereich
+     * ueberschneiden. Rueckgabe {x, y, b, h}, h nie negativ.
+     */
+    function flaecheUnter(sichtbar, rahmenListe, rand) {
+        var s = sichtbar || {};
+        s = { x: zahl(s.x, 0), y: zahl(s.y, 0), b: zahl(s.b, 0), h: zahl(s.h, 0) };
+        var r = zahl(rand, 0);
+        var y = s.y + r;
+        if (Array.isArray(rahmenListe)) {
+            for (var i = 0; i < rahmenListe.length; i++) {
+                var q = rahmenListe[i];
+                if (!q || !isFinite(q.x) || !isFinite(q.y) || !isFinite(q.b) || !isFinite(q.h)) {
+                    continue;
+                }
+                if (q.x < s.x + s.b && q.x + q.b > s.x) {
+                    y = Math.max(y, q.y + q.h + r);
+                }
+            }
+        }
+        var h = s.y + s.h - r - y;
+        return { x: s.x + r, y: y, b: Math.max(0, s.b - 2 * r), h: h > 0 ? h : 0 };
+    }
+
+    /** '#rgb' oder '#rrggbb' -> '#rrggbb' (klein) oder null. */
+    function hexFarbe(f) {
+        if (typeof f !== 'string') {
+            return null;
+        }
+        var t = f.replace(/^\s+|\s+$/g, '').toLowerCase();
+        var kurz = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(t);
+        if (kurz) {
+            return '#' + kurz[1] + kurz[1] + kurz[2] + kurz[2] + kurz[3] + kurz[3];
+        }
+        return /^#[0-9a-f]{6}$/.test(t) ? t : null;
+    }
+
+    /** Relative Leuchtdichte nach WCAG 2. */
+    function leuchtdichte(hex) {
+        function linear(stelle) {
+            var c = parseInt(hex.substr(stelle, 2), 16) / 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        }
+        return 0.2126 * linear(1) + 0.7152 * linear(3) + 0.0722 * linear(5);
+    }
+
+    function kontrast(a, b) {
+        var la = leuchtdichte(a);
+        var lb = leuchtdichte(b);
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    }
+
+    /**
+     * Stiftfarbe, wenn sie zur Tafel mindestens 3:1 Kontrast hat; sonst
+     * Weiss oder Schwarz, je nachdem, was mehr Kontrast hat. Ungueltiger
+     * Stift gilt als Schwarz, ungueltige Tafel als Weiss.
+     */
+    function lesbareFarbe(stift, tafel) {
+        var s = hexFarbe(stift) || '#000000';
+        var t = hexFarbe(tafel) || '#ffffff';
+        if (kontrast(s, t) >= 3) {
+            return s;
+        }
+        return kontrast('#ffffff', t) >= kontrast('#000000', t) ? '#ffffff' : '#000000';
+    }
+
+    // =====================================================================
     // Oeffentlich
     // =====================================================================
 
@@ -823,6 +1164,11 @@
     }
 
     global.CBDBoardBlocktext = {
-        latexZuText: latexZuText
+        latexZuText: latexZuText,
+        absaetzeAusText: absaetzeAusText,
+        umbrechen: umbrechen,
+        verteile: verteile,
+        flaecheUnter: flaecheUnter,
+        lesbareFarbe: lesbareFarbe
     };
 })(window);
