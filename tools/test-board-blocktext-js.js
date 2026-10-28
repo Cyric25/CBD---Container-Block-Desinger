@@ -477,4 +477,46 @@ gleich('Kurzform wird ausgeschrieben', versuche(function () { return B.lesbareFa
 gleich('ungueltige Tafel gilt als weiss', versuche(function () { return B.lesbareFarbe('#ffffff', 'kaputt'); }), '#000000');
 gleich('weiss auf schwarzer Tafel bleibt weiss', versuche(function () { return B.lesbareFarbe('#ffffff', '#1c1c1c'); }), '#ffffff');
 
+// =========================================================================
+// Gruppe 9: AP-1.fix1 (Review-Befunde M1, G2, G3)
+// =========================================================================
+console.log('\nGruppe 9: Rest als Quelltext, lineares Trimmen, Rueckfall');
+(function () {
+	const ohne = function (s) { return String(s).replace(/\s+/g, ''); };
+	const absatz = 'Wenn Kohlenstoffdioxid in Wasser geloest wird, entsteht ein einfaches '
+		+ 'Gleichgewichtssystem, das sich je nach Temperatur und Druck verschiebt und '
+		+ 'deshalb im Unterricht gern als erstes Beispiel dient.';
+	// 18 px: 9 px je Zeichen, Breite 300 -> 33 Zeichen je Zeile; Hoehe 50 -> 2 Zeilen.
+	const r = versuche(function () { return B.verteile([absatz], { x: 0, y: 0, b: 300, h: 50 }, mass, {}); });
+	pruefe('M1: teilweise passender Absatz wird geteilt (ein Block, ein Rest)',
+		r && r.px === 18 && r.bloecke && r.bloecke.length === 1 && r.rest && r.rest.length === 1, JSON.stringify(r));
+	if (r && r.bloecke && r.bloecke.length === 1 && r.rest && r.rest.length === 1) {
+		const rest0 = r.rest[0];
+		pruefe('M1: Rest enthaelt keine weichen Umbrueche (kein \\n)', rest0.indexOf('\n') < 0, JSON.stringify(rest0));
+		pruefe('M1: Rest ist das unveraenderte Ende des Absatzes', absatz.endsWith(rest0) && rest0.length < absatz.length, JSON.stringify(rest0));
+		pruefe('M1: Rest beginnt nicht mit Leerraum', !/^\s/.test(rest0), JSON.stringify(rest0));
+		gleich('M1: Block + Rest = Absatz (ohne Leerraum)', ohne(r.bloecke[0].text + rest0), ohne(absatz));
+	}
+	const mitWechsel = 'Erste Zeile, die lang genug ist, um umbrochen zu werden\nZweite harte Zeile bleibt';
+	const r2 = versuche(function () { return B.verteile([mitWechsel], { x: 0, y: 0, b: 300, h: 25 }, mass, {}); });
+	const rest2 = r2 && r2.rest && r2.rest[0];
+	pruefe('M1: harter Zeilenwechsel im Rest bleibt erhalten',
+		typeof rest2 === 'string' && mitWechsel.endsWith(rest2) && rest2.split('\n').length === 2, JSON.stringify(r2));
+})();
+gleich('G3: catch-Rueckfall bei eingefrorenem Protokoll',
+	versuche(function () { return B.latexZuText(R`\foo{x}  y`, Object.freeze({})); }), 'foo{x} y');
+(function () {
+	const leer = new Array(20001).join(' ');
+	let t0 = Date.now();
+	const a = versuche(function () { return B.absaetzeAusText('a' + leer + 'b'); });
+	const d1 = Date.now() - t0;
+	pruefe('G2: absaetzeAusText mit 20 000 Leerzeichen unter 200 ms (' + d1 + ' ms)', d1 < 200);
+	pruefe('G2: Leerzeichen im Inneren bleiben', Array.isArray(a) && a.length === 1 && a[0].length === 20002);
+	t0 = Date.now();
+	const u = versuche(function () { return B.umbrechen('a' + leer + 'b', 1e9, 20, mass); });
+	const d2 = Date.now() - t0;
+	pruefe('G2: umbrechen mit 20 000 Leerzeichen unter 200 ms (' + d2 + ' ms)', d2 < 200);
+	pruefe('G2: umbrechen liefert eine Zeile', Array.isArray(u) && u.length === 1 && u[0].length === 20002);
+})();
+
 ende();
