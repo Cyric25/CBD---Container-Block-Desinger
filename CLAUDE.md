@@ -4176,6 +4176,7 @@ dann Teil des Bild-Elements.
 | `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | 266 Prüfungen (seit 3.1.143 inkl. Gruppe 11 Drehen/Kopieren/`winkel`, seit 3.1.144 Gruppe 12 Textgröße) |
 | `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall, `winkel` (G), Textgröße (H) | 130 Prüfungen |
 | `node tools/test-notizen-manager-js.js` | `personal-notes-manager.js` (Mini-DOM im `vm`) | 34 Prüfungen |
+| `node tools/test-board-blocktext-js.js` | Modul `board-blocktext.js` ohne Browser (Blocktext auf die Tafel, seit 2026-10-28): Formelumwandlung inkl. Bestandslauf über `tools/fixtures/blocktext/formeln.json`, Absätze, Umbruch, Verteilung, Farbe | 239 Prüfungen |
 | `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **160 Prüfungen**, Stand 3.1.145 (davon 12 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4) |
 | `php tools/check-php74.php` | PHP-7.4-Kompatibilität | muss OK sein |
 
@@ -4424,6 +4425,116 @@ Prüfseite, nach `test-board-drehen.js` geladen), Gruppe 12 in
 `tools/test-board-elemente.php` (3). Mit echtem Mausklick auf „A+" auf der
 Testinstallation geprüft (28 → 34 px). **Abnahme am Smartboard/iPad steht
 aus.**
+
+### Blocktext auf die Tafel (Plan `PLAN-Blocktext-auf-Tafel.md`, Phase 1 seit 2026-10-28)
+
+Wunsch der Schüler: den Text des geöffneten Blocks als Text-Elemente auf die
+eigene Tafel kopieren. Geplant ist ein Knopf „Text auf die Tafel" oben im
+linken Blockbereich mit Vorschau zum Kürzen; eingefügt wird je Absatz ein
+Text-Element (Schrift 24 → 18 px, Rest auf Nachfrage auf neuer Seite).
+**Phase 1 (dieser Stand) liefert nur die Grundlagen: das DOM-freie Modul und
+Testmaterial. Das Modul ist noch NICHT eingereiht – das Plugin verhält sich
+unverändert.** Phase 2 (Lesen des Blockbereichs in `board-mode.js`,
+Einfügen, Knopf, Vorschau, Einreihen in `class-cbd-style-loader.php` vor
+`cbd-board-mode`) folgt nach dem Plan.
+
+#### Modul `board-blocktext.js`
+
+`assets/js/board-blocktext.js`, IIFE, ES5, setzt `window.CBDBoardBlocktext`,
+DOM-frei (Harnisch prüft auch Kommentare auf `document`, `localStorage`,
+`getContext`, `querySelector`, `getComputedStyle` und auf Backticks).
+Textbreiten misst der Aufrufer über `mass(text, px)` (im Browser
+`measureText`). Genau sechs Funktionen:
+
+| Funktion | Ergebnis | Regeln (kurz) |
+|---|---|---|
+| `latexZuText(latex, protokoll)` | lesbarer Unicode-Text | siehe unten; wirft nie, nie ein Backslash; unbekannte Befehle → `protokoll.unbekannt` |
+| `absaetzeAusText(text)` | `[string]` | Trennung an Leerzeilen, einzelne `\n` bleiben, getrimmt |
+| `umbrechen(text, maxBreite, px, mass)` | `[zeile]` | an Leerzeichen; harte `\n` bleiben; zu breites Wort zeichenweise |
+| `verteile(absaetze, flaeche, mass, optionen)` | `{px, bloecke:[{text,x,y,b,h}], rest}` | Schrift `startPx` 24 → `minPx` 18 in 1-px-Schritten, bis alles passt; Zeilenhöhe `1.2*px`, Absatzabstand `Math.round(0.6*px)`; sonst Auffüllen, Teilung an Zeilengrenze; Blöcke ≤ 5000 Zeichen (Teile direkt untereinander) |
+| `flaecheUnter(sichtbar, rahmenListe, rand)` | `{x,y,b,h}` | unter der Unterkante aller Rahmen, die den sichtbaren Bereich waagrecht schneiden; `h` nie negativ |
+| `lesbareFarbe(stift, tafel)` | `'#rrggbb'` | Stift, wenn Kontrast ≥ 3:1 (WCAG); sonst Weiß/Schwarz; ungültiger Stift = Schwarz, ungültige Tafel = Weiß |
+
+**Rest eines geteilten Absatzes (AP-1.fix1):** `rest[0]` ist der
+**unveränderte restliche Quelltext** des Absatzes – ohne die weichen
+Umbrüche der 18-px-Fläche, harte `\n` bleiben. Ursprünglich verlangte der
+Plan die nicht platzierten Zeilen mit `\n` verbunden; das Review fand, dass
+die Folgeseite (24 px, evtl. andere Breite) dann treppenartig umbricht und
+ein echter Zeilenwechsel nicht mehr erkennbar ist. Ermittelt wird die
+Teilungsstelle über die Zahl der Nicht-Leerraum-Zeichen der platzierten
+Zeilen (`umbrechen` entfernt nur Leerraum).
+
+**Formelumwandlung (`latexZuText`):** kleiner Zerleger (Befehl, Gruppe,
+`^`/`_`, Zeichen) mit Tabellen.
+- Hoch-/Tiefstellung über Unicode (`H_2O` → `H₂O`, `SO_4^{2-}` → `SO₄²⁻`,
+  `v_{\text{max}}` → `vₘₐₓ`); nicht abbildbar: Gruppe als `^(…)`/`_(…)`,
+  Einzelzeichen als `^q`. `°`, `‡`, `′`, `*` stehen ohne `^`
+  (`25\,^\circ\text{C}` → `25 °C`, `\Delta G^‡` → `ΔG‡`).
+- Brüche `a/b`; Klammern nur, wenn nötig – ohne Klammern bleiben Zahlen,
+  ein Zeichen (auch mit Index: `x²`, `c°`), ein einzelner Textbefehl
+  (`\frac{\mathrm{mol}}{\mathrm{L}}` → `mol/L`). Wurzeln `√x`, `³√x`.
+- Leerzeichen: nach griechischen/Zeichen-Befehlen entfällt eins (`\Delta G`
+  → `ΔG`); Relationen/Pfeile immer mit Leerzeichen (`A\rightarrow B` →
+  `A → B`); `\cdot`, `\times`, `\pm` nur, wenn links eines steht;
+  Funktionsnamen (`\ln K`) behalten es. Innenränder von Klammern entfallen.
+- Beschriftete Pfeile `\xrightarrow[u]{o}` → `→(o, u)`, `\overset{X}{Y}` →
+  `Y(X)`; `\ce{…}`: Ziffern nach Buchstabe/`)` tief, Ladungen hoch
+  (`Fe3+` → `Fe³⁺`), Pfeile `->`, `<=>`, `<->`.
+- Unbekannter Befehl → Name ohne Backslash, Argumente laufen weiter
+  (`\foo{x}` → `foox`). Tiefenschutz `MAX_TIEFE` 100 (Gruppen und Befehle
+  zusammen; darüber flach, ohne Rekursion); sonst `try/catch` mit Rückfall
+  „Quelltext ohne Backslashes".
+- Listen per `Array.isArray`, nicht `instanceof Array` – der Harnisch
+  übergibt Arrays aus einem anderen `vm`-Kontext (erster grüner Versuch
+  scheiterte daran).
+- Trimmen per Schleife, nicht per `/\s+$/` (quadratisch bei langen
+  Leerzeichenfolgen; die Eingabe kommt in Phase 2 aus einem frei
+  bearbeitbaren Textfeld).
+
+**Messwerte (Bestandslauf über alle Formeln der Website):** 2915 eindeutige
+Formeln (5685 Vorkommen auf 246 Seiten): 0 Ausnahmen, 0 Ergebnisse mit
+Backslash, **0 % unbekannte Befehle**, rund 15 ms in Node, 24 ms im Browser.
+30 Stichproben: 27 lesbar, 3 vereinfacht, 0 falsch (Liste im Plan,
+Übergabenotiz AP-1.2). Häufigste Befehle: `\mathrm` (1046 Formeln),
+Backslash-Leerzeichen (705), `\text` (697), `\cdot` (334), `\frac` (320);
+`\ce` nur in 3 Formeln.
+
+**Testmaterial `tools/fixtures/blocktext/`** (README dort): acht Paare
+`<name>.html` (sichtbarer Inhalt von `.cbd-board-content` echter Container,
+versteckte Teile entfernt, abweichender Darstellungstyp als
+`style="display:…"` konserviert, weil der Prüfseite das Website-CSS fehlt)
+und `<name>.erwartet.txt` (Text für den Schüler). **Formeln als Platzhalter
+`{{F:<data-latex>}}`**; ein Platzhalter endet am ersten `}}` mit
+ausgeglichenen Klammern (`{{F:C_{40}}}` kommt vor). Vor dem Vergleich
+`\r\n` → `\n` (Repo mit `core.autocrlf`). Dazu `formeln.json` (Bestand).
+Formeln aus Blocktiteln stehen in `post_content` JSON-maskiert
+(Backslash als `\`+`u005c`) – beim Erheben zurückgewandelt.
+
+**Befunde der Bestandsaufnahme, wichtig für Phase 2:** Accordion-Zeilen
+lassen sich in der Tafel NICHT aufklappen (die Kopie trägt
+`data-mb-accordion-init`, das Blockskript startet nicht neu) – kopierbar
+sind nur die Zeilentitel, die in `h3 > button` stehen (deshalb: Knopf in
+Überschrift zählt als Text). Quiz-Blöcke verstecken Lösungen per
+`display:none`; Antwortknöpfe sind `<button>`. `opacity: 0` ist **kein**
+Versteck-Merkmal (Einblend-Animation der Formeln). KaTeX gibt hier nur
+`.katex-html` (`aria-hidden`) aus, kein `.katex-mathml`. `.screen-reader-text`
+überspringen (Review-Befund G7).
+
+**Bekannte, bewusst akzeptierte Einschränkungen (Review AP-1.rev, alle
+gering):** Breite ≤ 0 schaltet den Umbruch ab, dann können Teilblöcke über
+die Fläche ragen; Optionen ohne Grenzprüfung (G1). Akzent nur auf dem
+letzten Zeichen (`OZ̅`), verschachteltes `\overset`/`\underset` unten vor
+oben, `\ce`-Pfeilbeschriftung nicht als Chemie gesetzt, `flach()` verschluckt
+ab 100 Ebenen das Zeichen nach einem Backslash (G5). `·` nach griechischem
+Buchstaben ohne Leerzeichen (`ε·c · d`, G4). Zeichenweise Teilung trennt
+Surrogatpaare und kombinierende Zeichen (G6). Harnisch-Lücken:
+`teileNachZeichen`-Grenze ±1 und `MAX_TIEFE` werden von keiner Prüfung
+festgenagelt (G3).
+
+**Prüfungen:** `node tools/test-board-blocktext-js.js` – **239 Prüfungen**
+(Gruppe 0 DOM-frei/ES5, 1/1b `latexZuText` inkl. 18 bösartiger Eingaben,
+2 Bestandslauf, 3–8 Schnittstelle und AP-1.3-Funktionen, 9 Befunde des
+Reviews); Mutationsproben über `CBD_BLOCKTEXT_DATEI`.
 
 ### Raster: Kästchen und Zeilen (Rückmeldung 2026-10-27, Plugin 3.1.143)
 
