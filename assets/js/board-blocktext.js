@@ -28,7 +28,8 @@
  *   verteile(absaetze, flaeche, mass, optionen)                     (AP-1.3)
  *     -> {px, bloecke: [{text, x, y, b, h}], rest: [string]}
  *     Schrift 24 -> 18 px, bis alles in flaeche {x, y, b, h} passt; sonst
- *     auffuellen und Rest zurueckgeben. Je Absatz ein Block (Zeilen mit \n),
+ *     auffuellen und Rest zurueckgeben (ein geteilter Absatz als restlicher
+ *     Quelltext ohne weiche Umbrueche). Je Absatz ein Block (Zeilen mit \n),
  *     Abstand Math.round(0,6 * px), Bloecke hoechstens 5000 Zeichen.
  *   flaecheUnter(sichtbar, rahmenListe, rand) -> {x, y, b, h}       (AP-1.3)
  *     Freier Platz unter vorhandenem Inhalt im sichtbaren Bereich.
@@ -583,7 +584,9 @@
         }
         if (BINAER.hasOwnProperty(name)) {
             ueberspringeLeer(z);
-            return /\s$/.test(links) ? ' ' + BINAER[name] + ' ' : BINAER[name];
+            // Nur das letzte Zeichen ansehen: /\s$/ wuerde bei jedem Aufruf den
+            // ganzen bisherigen Text absuchen (quadratisch bei vielen \cdot).
+            return istLeer(links.charAt(links.length - 1)) ? ' ' + BINAER[name] + ' ' : BINAER[name];
         }
         if (FUNKTIONEN.hasOwnProperty(name)) {
             return name + (ueberspringeLeer(z) ? ' ' : '');
@@ -838,8 +841,58 @@
         return (typeof v === 'number' && isFinite(v)) ? v : vorgabe;
     }
 
+    // Trimmen als Schleife, nicht als regulaerer Ausdruck: /\s+$/ braucht
+    // bei langen Leerzeichenfolgen im Inneren quadratische Zeit (Review
+    // AP-1.rev, G2: 20 000 Leerzeichen 1,3 s) - die Eingabe kommt aus dem
+    // frei bearbeitbaren Vorschau-Textfeld.
     function ohneEndLeer(s) {
-        return s.replace(/\s+$/, '');
+        var e = s.length;
+        while (e > 0 && istLeer(s.charAt(e - 1))) {
+            e--;
+        }
+        return s.slice(0, e);
+    }
+
+    function getrimmt(s) {
+        var a = 0;
+        while (a < s.length && istLeer(s.charAt(a))) {
+            a++;
+        }
+        return ohneEndLeer(s.slice(a));
+    }
+
+    /** Anzahl der Nicht-Leerraum-Zeichen in einer Zeilenliste. */
+    function zeichenOhneLeer(zeilen) {
+        var n = 0;
+        for (var i = 0; i < zeilen.length; i++) {
+            for (var j = 0; j < zeilen[i].length; j++) {
+                if (!istLeer(zeilen[i].charAt(j))) {
+                    n++;
+                }
+            }
+        }
+        return n;
+    }
+
+    /**
+     * Quelltext ab dem (k+1)-ten Nicht-Leerraum-Zeichen, ohne fuehrenden
+     * Leerraum. umbrechen() entfernt nur Leerraum (an Bruchstellen und
+     * Zeilenenden), die platzierten Zeilen enthalten also genau die ersten k
+     * Nicht-Leerraum-Zeichen des Absatzes in Originalreihenfolge.
+     */
+    function restAb(text, k) {
+        var i = 0;
+        var gezaehlt = 0;
+        while (i < text.length && gezaehlt < k) {
+            if (!istLeer(text.charAt(i))) {
+                gezaehlt++;
+            }
+            i++;
+        }
+        while (i < text.length && istLeer(text.charAt(i))) {
+            i++;
+        }
+        return text.slice(i);
     }
 
     /** Ersatz, falls der Aufrufer keine Messfunktion uebergibt. */
@@ -862,7 +915,7 @@
             for (var j = 0; j < zeilen.length; j++) {
                 zeilen[j] = ohneEndLeer(zeilen[j]);
             }
-            var absatz = zeilen.join('\n').replace(/^\s+|\s+$/g, '');
+            var absatz = getrimmt(zeilen.join('\n'));
             if (absatz !== '') {
                 aus.push(absatz);
             }
@@ -1001,9 +1054,11 @@
      * Rueckgabe {px, bloecke: [{text, x, y, b, h}], rest: [string]}.
      * Die Schrift sinkt in Schritten von 1 px von startPx bis minPx, bis
      * alles passt. Passt es auch mit minPx nicht, wird von oben aufgefuellt;
-     * ein teilweise passender Absatz wird an einer Zeilengrenze geteilt, der
-     * Rest (Zeilen mit \n verbunden) ist der erste Eintrag von „rest",
-     * danach folgen die uebrigen Absaetze unveraendert.
+     * ein teilweise passender Absatz wird an einer Zeilengrenze geteilt. Der
+     * erste Eintrag von „rest" ist dann der unveraenderte restliche
+     * Quelltext dieses Absatzes (ohne die weichen Umbrueche dieser Flaeche,
+     * harte \n bleiben; AP-1.fix1), danach folgen die uebrigen Absaetze
+     * unveraendert.
      */
     function verteile(absaetze, flaeche, mass, optionen) {
         var o = optionen || {};
@@ -1057,8 +1112,13 @@
                 continue;
             }
             if (passen > 0) {
+                // Rest als unveraenderter Quelltext ab der Teilungsstelle:
+                // Weiche Umbrueche dieser Flaeche gehoeren nicht hinein, sonst
+                // entsteht auf der Folgeseite (24 px, evtl. andere Breite) ein
+                // Treppenumbruch, und harte \n waeren nicht mehr erkennbar
+                // (Review AP-1.rev, M1; AP-1.fix1).
                 platziert.push(zeilen.slice(0, passen));
-                rest.push(zeilen.slice(passen).join('\n'));
+                rest.push(restAb(liste[i], zeichenOhneLeer(zeilen.slice(0, passen))));
             } else {
                 rest.push(liste[i]);
             }
