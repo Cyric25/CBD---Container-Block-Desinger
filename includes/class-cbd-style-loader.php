@@ -219,10 +219,21 @@ class CBD_Style_Loader {
                 CBD_VERSION,
                 true
             );
+            // Reines Blocktext-Modul (Formeln als Text, Absaetze, Umbruch,
+            // Verteilung, Farbwahl; DOM-frei, window.CBDBoardBlocktext) -
+            // Plan "Blocktext auf die Tafel", AP-2.1. Ebenfalls VOR
+            // board-mode.js, daher als Abhaengigkeit von cbd-board-mode.
+            wp_enqueue_script(
+                'cbd-board-blocktext',
+                CBD_PLUGIN_URL . 'assets/js/board-blocktext.js',
+                array(),
+                CBD_VERSION,
+                true
+            );
             wp_enqueue_script(
                 'cbd-board-mode',
                 CBD_PLUGIN_URL . 'assets/js/board-mode.js',
-                array('cbd-board-elemente'),
+                array('cbd-board-elemente', 'cbd-board-blocktext'),
                 CBD_VERSION,
                 true
             );

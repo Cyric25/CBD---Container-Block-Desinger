@@ -20,6 +20,31 @@
         return window.CBDBoardElemente;
     }
 
+    // "Blocktext auf die Tafel" (PLAN-Blocktext-auf-Tafel.md, Phase 2):
+    // Formelumwandlung, Absatzzerlegung, Umbruch, Verteilung und Farbwahl
+    // liegen im DOM-freien Modul assets/js/board-blocktext.js
+    // (window.CBDBoardBlocktext, per Abhaengigkeit 'cbd-board-blocktext' VOR
+    // dieser Datei geladen). Hier bleibt nur, was DOM und berechnete Stile
+    // braucht (_blocktextLesen, Architektur E6).
+    function blocktextModul() {
+        return window.CBDBoardBlocktext;
+    }
+
+    // Was _blocktextLesen() samt Inhalt ueberspringt. Bedienelemente und
+    // Medien tragen keinen Text, den ein Schueler abschreiben will; die
+    // Klassen sind Knoepfe/Tafelbilder des Plugins im Blockbereich und
+    // .screen-reader-text (per clip versteckt, nicht per display - traegt in
+    // .cbd-container-number die Blocknummer; Review-Befund G7).
+    var BLOCKTEXT_WEG_TAGS = {
+        SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, TEMPLATE: 1, BUTTON: 1, INPUT: 1,
+        SELECT: 1, TEXTAREA: 1, OPTION: 1, SVG: 1, CANVAS: 1, IMG: 1,
+        PICTURE: 1, VIDEO: 1, AUDIO: 1, IFRAME: 1, OBJECT: 1, EMBED: 1
+    };
+    var BLOCKTEXT_WEG_KLASSEN = [
+        'cbd-action-buttons', 'cbd-class-drawing-section', 'cbd-drawing-overlay',
+        'cbd-drawing-toggle', 'cbd-board-blocktext-leiste', 'screen-reader-text'
+    ];
+
     // Eigene Notizen im localStorage (AP-4.4, Schritt 7): Alle Schlüssel mit
     // dem Präfix 'cbd-board-' gehören zu den Tafeln und werden exportiert,
     // importiert und mit "Alle Notizen löschen" entfernt - außer den
@@ -4971,6 +4996,195 @@
                     }
                 });
             });
+        },
+
+        // =============================================
+        // Blocktext auf die Tafel (PLAN-Blocktext-auf-Tafel.md, Phase 2)
+        // =============================================
+
+        /**
+         * Sichtbaren Text eines Bereichs in Absätze zerlegen (AP-2.1).
+         * Liefert [{art, text}], art = 'titel' | 'ueberschrift' | 'absatz' |
+         * 'liste' | 'zeile' | 'formel' (nur zur Information).
+         *
+         * Gelesen wird nur, was der Schüler sieht (Architektur E7): hidden,
+         * aria-hidden="true", berechnet display:none oder visibility:hidden
+         * fallen samt Inhalt weg - sonst kämen versteckte Lösungen von
+         * Quiz-Blöcken auf die Tafel. opacity:0 zählt NICHT als versteckt:
+         * Formeln blenden damit ein. Ein BUTTON in einer Überschrift bleibt
+         * (Zeilentitel des Accordion-Blocks: h3 > button).
+         *
+         * Formeln kommen aus data-latex über CBDBoardBlocktext.latexZuText();
+         * ins KaTeX-Innenleben wird nicht hineingestiegen (.katex-mathml ist
+         * nur weggeschnitten und doppelte sonst den Text).
+         *
+         * Absatzgrenzen setzt jedes Element, dessen berechnetes display nicht
+         * mit "inline" beginnt und nicht "contents" ist. Innerhalb einer
+         * Tabellenzeile gelten sie nicht: TR = ein Absatz, Zellen mit " | ".
+         * Braucht deshalb einen im Dokument hängenden Bereich.
+         */
+        _blocktextLesen: function(wurzel) {
+            var modul = blocktextModul();
+            var absaetze = [];
+            var lauf = null; // {art, praefix, text}
+            var zelleNr = 0;
+
+            function abschliessen(hart) {
+                if (!lauf) return;
+                var t = lauf.text.replace(/ {2,}/g, ' ').replace(/ *\n */g, '\n')
+                    .replace(/^[ \n]+|[ \n]+$/g, '');
+                if (t) {
+                    absaetze.push({ art: lauf.art, text: lauf.praefix + t });
+                    lauf = null;
+                } else if (hart || !lauf.praefix) {
+                    lauf = null;
+                }
+                // Sonst bleibt ein leerer Listenpunkt offen: <li><p>a</p></li>
+                // soll "• a" ergeben, nicht "a" ohne Aufzählungszeichen.
+            }
+
+            function beginnen(art, praefix) {
+                abschliessen(true);
+                lauf = { art: art, praefix: praefix || '', text: '' };
+            }
+
+            function anhaengen(s) {
+                if (!lauf) lauf = { art: 'absatz', praefix: '', text: '' };
+                lauf.text += s;
+            }
+
+            function hatWegKlasse(el) {
+                if (!el.classList) return false;
+                for (var i = 0; i < BLOCKTEXT_WEG_KLASSEN.length; i++) {
+                    if (el.classList.contains(BLOCKTEXT_WEG_KLASSEN[i])) return true;
+                }
+                return false;
+            }
+
+            function listenPraefix(li) {
+                var liste = li.parentNode;
+                if (!liste || !liste.tagName || liste.tagName.toUpperCase() !== 'OL') return '• ';
+                var start = parseInt(liste.getAttribute('start'), 10);
+                if (isNaN(start)) start = 1;
+                var n = 0;
+                for (var k = liste.firstElementChild; k; k = k.nextElementSibling) {
+                    if (k.tagName.toUpperCase() === 'LI') n++;
+                    if (k === li) break;
+                }
+                return (n + start - 1) + '. ';
+            }
+
+            function formel(el, inZeile) {
+                var quelle = el.getAttribute('data-latex');
+                var t = (modul && typeof modul.latexZuText === 'function') ? modul.latexZuText(quelle) : quelle;
+                if (!inZeile && el.classList.contains('cbd-latex-display')) {
+                    beginnen('formel');
+                    anhaengen(t);
+                    abschliessen(true);
+                } else {
+                    anhaengen(t);
+                }
+            }
+
+            function element(el, ctx) {
+                var tag = el.tagName.toUpperCase();
+                if (BLOCKTEXT_WEG_TAGS[tag] && !(tag === 'BUTTON' && ctx.ueberschrift)) return;
+                if (hatWegKlasse(el) || el.hasAttribute('hidden') ||
+                    el.getAttribute('aria-hidden') === 'true') {
+                    return;
+                }
+                var stil = window.getComputedStyle(el);
+                if (stil.display === 'none' || stil.visibility === 'hidden') return;
+
+                if (el.classList.contains('cbd-latex-formula') && el.hasAttribute('data-latex')) {
+                    formel(el, ctx.inZeile);
+                    return;
+                }
+                if (tag === 'BR') {
+                    anhaengen('\n');
+                    return;
+                }
+
+                var istUeberschrift = /^H[1-6]$/.test(tag);
+                var art = null;
+                var praefix = '';
+                if (el.classList.contains('cbd-block-title')) art = 'titel';
+                else if (istUeberschrift) art = 'ueberschrift';
+                else if (tag === 'LI') { art = 'liste'; praefix = listenPraefix(el); }
+                else if (tag === 'TR') art = 'zeile';
+
+                var display = stil.display || '';
+                var istBlock = display.indexOf('inline') !== 0 && display !== 'contents' &&
+                    tag !== 'TD' && tag !== 'TH';
+                var kind = {
+                    pre: ctx.pre || tag === 'PRE',
+                    ueberschrift: ctx.ueberschrift || istUeberschrift,
+                    inZeile: ctx.inZeile
+                };
+
+                if (ctx.inZeile) {
+                    // In einer Tabellenzeile: Zellen verbinden, alles
+                    // andere Blockige nur als Leerzeichen trennen
+                    if (tag === 'TD' || tag === 'TH') {
+                        if (zelleNr > 0) anhaengen(' | ');
+                        zelleNr++;
+                    } else if (istBlock || art) {
+                        anhaengen(' ');
+                    }
+                    besuchen(el, kind);
+                    if (istBlock || art) anhaengen(' ');
+                    return;
+                }
+
+                if (art === 'zeile') {
+                    beginnen('zeile');
+                    var vorher = zelleNr;
+                    zelleNr = 0;
+                    kind.inZeile = true;
+                    besuchen(el, kind);
+                    zelleNr = vorher;
+                    abschliessen(true);
+                    return;
+                }
+                if (art) {
+                    beginnen(art, praefix);
+                    besuchen(el, kind);
+                    abschliessen(true);
+                    return;
+                }
+                if (istBlock) abschliessen(false);
+                besuchen(el, kind);
+                if (istBlock) abschliessen(false);
+            }
+
+            function besuchen(knoten, ctx) {
+                for (var k = knoten.firstChild; k; k = k.nextSibling) {
+                    if (k.nodeType === 3) {
+                        var s = k.nodeValue;
+                        s = ctx.pre ? s.replace(/\r\n?/g, '\n').replace(/[ \t\f]+/g, ' ')
+                            : s.replace(/[ \t\n\r\f]+/g, ' ');
+                        if (s) anhaengen(s);
+                    } else if (k.nodeType === 1) {
+                        element(k, ctx);
+                    }
+                }
+            }
+
+            if (wurzel) besuchen(wurzel, { pre: false, ueberschrift: false, inZeile: false });
+            abschliessen(true);
+            return absaetze;
+        },
+
+        /**
+         * Text des linken Blockbereichs für die Vorschau (AP-2.1): Absätze
+         * aus _blocktextLesen(), durch eine Leerzeile getrennt. Ohne offene
+         * Tafel ''.
+         */
+        _blocktextAlsText: function() {
+            if (!this.overlay) return '';
+            var bereich = this.overlay.querySelector('.cbd-board-content');
+            if (!bereich) return '';
+            return this._blocktextLesen(bereich).map(function(a) { return a.text; }).join('\n\n');
         },
 
         // =============================================
