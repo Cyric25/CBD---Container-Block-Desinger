@@ -70,6 +70,9 @@ soll).
 - Absätze durch genau eine Leerzeile getrennt; Leerraum im Absatz zu einem
   Leerzeichen zusammengefasst; Datei endet mit einem Zeilenwechsel (beim
   Vergleich am Ende trimmen).
+- **Zeilenenden:** Das Repository läuft mit `core.autocrlf`; nach einem
+  Auschecken können die Dateien CRLF tragen. Beim Vergleich deshalb zuerst
+  `\r\n` durch `\n` ersetzen.
 - Keine Knopf-Beschriftungen, keine Bild-Alternativtexte. **Ausnahme:** Ein
   `<button>` innerhalb einer Überschrift `H1`–`H6` zählt als Text der
   Überschrift – so stehen die Zeilentitel des Accordion-Blocks
