@@ -1,0 +1,7 @@
+Innerhalb einer Familie
+
+Element | Li | Na | K | Rb | Cs
+
+1. Ionisierungsenergie in eV | 5,4 | 5,1 | 4,3 | 4,2 | 3,9
+
+Die Werte fallen von oben nach unten. Und genau in dieser Reihenfolge wurde im letzten Kapitel die Reaktion mit Wasser heftiger. Zwei völlig unabhängige Messreihen — eine Energiemessung und eine Beobachtung am Reagenzglas — zeigen dasselbe Muster. Das ist ein starker Hinweis. Eine Erklärung ist es noch nicht.

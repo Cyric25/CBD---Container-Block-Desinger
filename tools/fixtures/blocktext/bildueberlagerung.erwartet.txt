@@ -1,0 +1,21 @@
+Chemischer Aufbau
+
+Carotinoide gehören zur Stoffklasse der Terpene und sind genauer Tetraterpene. Sie bestehen aus acht Isopren-Einheiten ({{F:C_5H_8}}) und enthalten daher insgesamt 40 Kohlenstoff-Atome ({{F:C_{40}}}). Die allgemeine Struktur lässt sich als:
+
+{{F:8 \times C_5 = C_{40}}}
+
+darstellen.
+
+Strukturelle Merkmale
+
+Das charakteristische Merkmal der Carotinoide ist eine lange Kette konjugierter Doppelbindungen. Diese konjugierten Doppelbindungen sind für die Farbigkeit verantwortlich. Die Grundstruktur besteht aus:
+
+• Einer zentralen Polyenkohlenwasserstoffkette
+
+• Optional cyclischen Endgruppen (Ionon-Ringe oder {{F:\beta}}-Ringe)
+
+• Bei Xanthophyllen zusätzlich Hydroxyl- oder Carbonylgruppen
+
+Carotinoide
+
+Verschiedene Strukturen von Carotionoiden

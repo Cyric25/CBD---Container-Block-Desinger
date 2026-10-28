@@ -1,0 +1,15 @@
+Theoretische Grundlagen Kompakt
+
+Druck (nur bei Gasreaktionen)
+
+• Druckerhöhung → Gleichgewicht verschiebt sich zur Seite mit weniger Gasteilchen
+
+• Drucksenkung → Gleichgewicht verschiebt sich zur Seite mit mehr Gasteilchen
+
+Die Reaktion
+
+Wenn Kohlenstoffdioxid (CO₂) in Wasser gelöst wird, entsteht ein einfaches Gleichgewichtssystem:
+
+CO₂(aq) + H₂O(l) ⇌ H₂CO₃(aq)
+
+Kohlenstoffdioxid reagiert mit Wasser zu Kohlensäure (H₂CO₃). Diese Reaktion ist reversibel – das bedeutet, sie kann in beide Richtungen ablaufen.
