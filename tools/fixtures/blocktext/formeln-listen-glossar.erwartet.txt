@@ -1,0 +1,19 @@
+Potentiale und Vorteile
+
+Standardpotentiale der Ag/AgCl-Elektrode:
+
+• Mit gesättigter KCl-Lösung: {{F:E = +0{,}197}} V (gegen NHE bei 25°C)
+
+• Mit 3 M KCl-Lösung: {{F:E = +0{,}210}} V (gegen NHE bei 25°C)
+
+Vorteile der Ag/AgCl-Elektrode:
+
+• Konstantes, reproduzierbares Potential
+
+• Nicht toxisch (im Gegensatz zur quecksilberhaltigen Kalomel-Elektrode)
+
+• Einfache Herstellung
+
+• Robust und langlebig
+
+• Für die meisten Anwendungen ausreichend genau

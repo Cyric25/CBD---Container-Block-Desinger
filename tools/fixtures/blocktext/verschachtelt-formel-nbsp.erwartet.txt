@@ -1,0 +1,11 @@
+Veresterung
+
+Die Bildung eines Triglycerids erfolgt durch Veresterung: Die drei Hydroxylgruppen des Glycerins reagieren mit drei Fettsäuren unter Abspaltung von drei Wassermolekülen. Dabei entstehen drei Esterbindungen.
+
+Allgemeine Reaktionsgleichung:
+
+{{F:Glycerin+3 Fettsäuren→Triglycerid+3 H2O}}
+
+Zeichne
+
+Zeichne ein Triglycerid in Skelettformel Schreibweise!

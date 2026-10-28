@@ -1,0 +1,7 @@
+Schritt 2: Hydratisierung (Wasseranlagerung)
+
+Im zweiten Schritt wird ein Wassermolekül (H{{F:_2}}O) an die neu entstandene Doppelbindung angelagert. Das β-C-Atom erhält dabei eine Hydroxylgruppe (OH-Gruppe).
+
+{{F:\text{trans-}\Delta^2\text{-Enoyl-CoA} + \text{H}_2\text{O} \xrightarrow{\text{Enoyl-CoA-Hydratase}} \text{L-3-Hydroxyacyl-CoA}}}
+
+Das Enzym Enoyl-CoA-Hydratase (auch Crotonase genannt) katalysiert diese Reaktion. Es erkennt nur Fettsäuren mit trans-Doppelbindung – daher war die Bildung der trans-Konfiguration im ersten Schritt so wichtig.
