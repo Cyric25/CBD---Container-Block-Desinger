@@ -339,4 +339,142 @@ console.log('\nGruppe 2: Bestandslauf (tools/fixtures/blocktext/formeln.json)');
 	pruefe('Bestand: hoechstens 2 % mit unbekanntem Befehl', anteil <= 0.02);
 })();
 
+// =========================================================================
+// Ab hier AP-1.3: Absaetze, Umbruch, Verteilung, freie Flaeche, Farbe
+// =========================================================================
+
+/** Ruft fn auf und liefert Ergebnis oder 'AUSNAHME: ...' (Harnisch bricht nie ab). */
+function versuche(fn) {
+	try {
+		return fn();
+	} catch (e) {
+		return 'AUSNAHME: ' + e.message;
+	}
+}
+
+// Schaetz-Messfunktion (Plan AP-1.3, Schritt 1): deterministisch.
+function mass(t, px) {
+	return t.length * px * 0.5;
+}
+
+console.log('\nGruppe 3: Schnittstelle');
+gleich('genau die sechs Funktionen der Schnittstelle (Plan, Abschnitt 4)',
+	Object.keys(B).sort(),
+	['absaetzeAusText', 'flaecheUnter', 'latexZuText', 'lesbareFarbe', 'umbrechen', 'verteile']);
+Object.keys(B).forEach(function (k) {
+	pruefe('Schnittstelle: ' + k + ' ist Funktion', typeof B[k] === 'function');
+});
+
+console.log('\nGruppe 4: absaetzeAusText');
+gleich('a\\n\\nb', versuche(function () { return B.absaetzeAusText('a\n\nb'); }), ['a', 'b']);
+gleich('a\\n \\n\\n b ', versuche(function () { return B.absaetzeAusText('a\n \n\n b '); }), ['a', 'b']);
+gleich('a\\nb bleibt ein Absatz', versuche(function () { return B.absaetzeAusText('a\nb'); }), ['a\nb']);
+gleich('leer', versuche(function () { return B.absaetzeAusText(''); }), []);
+gleich('\\r\\n\\r\\nx', versuche(function () { return B.absaetzeAusText('\r\n\r\nx'); }), ['x']);
+gleich('Zeilenenden getrimmt', versuche(function () { return B.absaetzeAusText('a  \nb\t\n\nc'); }), ['a\nb', 'c']);
+gleich('keine Zeichenkette', versuche(function () { return B.absaetzeAusText(null); }), []);
+
+console.log('\nGruppe 5: umbrechen');
+gleich('umbrechen(aaa bbb ccc, 75)', versuche(function () { return B.umbrechen('aaa bbb ccc', 75, 20, mass); }), ['aaa bbb', 'ccc']);
+gleich('umbrechen(abcdefghij, 45) teilt das Wort', versuche(function () { return B.umbrechen('abcdefghij', 45, 20, mass); }), ['abcd', 'efgh', 'ij']);
+gleich('umbrechen(a\\nb) harte Zeilenwechsel', versuche(function () { return B.umbrechen('a\nb', 1000, 20, mass); }), ['a', 'b']);
+gleich('umbrechen(leer)', versuche(function () { return B.umbrechen('', 100, 20, mass); }), []);
+gleich('Leerzeichen an der Umbruchstelle entfallen', versuche(function () { return B.umbrechen('aaa    bbb', 45, 20, mass); }), ['aaa', 'bbb']);
+gleich('Wort nach Teilung laeuft weiter', versuche(function () { return B.umbrechen('abcdefg hi', 55, 20, mass); }), ['abcde', 'fg hi']);
+(function () {
+	const zeilen = versuche(function () { return B.umbrechen('Die Werte fallen von oben nach unten und zeigen dasselbe Muster.', 200, 24, mass); });
+	pruefe('jede Zeile passt in die Breite', Array.isArray(zeilen) && zeilen.every(function (z) { return mass(z, 24) <= 200; }), JSON.stringify(zeilen));
+	pruefe('kein Wort geht verloren', Array.isArray(zeilen) && zeilen.join(' ') === 'Die Werte fallen von oben nach unten und zeigen dasselbe Muster.', JSON.stringify(zeilen));
+})();
+
+console.log('\nGruppe 6: verteile');
+const FL = { x: 10, y: 20, b: 1000, h: 600 };
+(function () {
+	const r = versuche(function () { return B.verteile(['Erster Absatz', 'Zweiter'], FL, mass, {}); });
+	const zh = 1.2 * 24;
+	pruefe('zwei kurze Absaetze: px 24', r && r.px === 24, JSON.stringify(r));
+	pruefe('zwei kurze Absaetze: zwei Bloecke, kein Rest', r && r.bloecke && r.bloecke.length === 2 && r.rest.length === 0, JSON.stringify(r));
+	if (r && r.bloecke && r.bloecke.length === 2) {
+		gleich('erster Block', r.bloecke[0], { text: 'Erster Absatz', x: 10, y: 20, b: mass('Erster Absatz', 24), h: zh });
+		gleich('zweiter Block mit Absatzabstand darunter', r.bloecke[1],
+			{ text: 'Zweiter', x: 10, y: 20 + zh + Math.round(0.6 * 24), b: mass('Zweiter', 24), h: zh });
+	}
+})();
+(function () {
+	// Drei einzeilige Absaetze; Hoehe 100 passt erst ab 20 px:
+	// 21 px: 3*25.2 + 2*13 = 101.6 > 100, 20 px: 3*24 + 2*12 = 96 <= 100.
+	const r = versuche(function () { return B.verteile(['a', 'b', 'c'], { x: 0, y: 0, b: 500, h: 100 }, mass, {}); });
+	pruefe('passt erst mit 20 px: px 20', r && r.px === 20, JSON.stringify(r));
+	pruefe('passt erst mit 20 px: kein Rest', r && r.rest && r.rest.length === 0, JSON.stringify(r && r.rest));
+})();
+(function () {
+	const absatz = 'Ein langer Satz mit vielen Woertern, der sich ueber mehrere Zeilen erstreckt und umbrochen wird.';
+	const eingabe = [absatz, absatz + ' Zwei', absatz + ' Drei', absatz + ' Vier', absatz + ' Fuenf'];
+	const r = versuche(function () { return B.verteile(eingabe, { x: 5, y: 5, b: 300, h: 200 }, mass, {}); });
+	pruefe('passt auch mit 18 px nicht: px 18', r && r.px === 18, JSON.stringify(r && r.px));
+	pruefe('passt auch mit 18 px nicht: Rest nicht leer', r && r.rest && r.rest.length > 0);
+	if (r && r.bloecke && r.rest) {
+		const ohne = function (s) { return s.replace(/\s+/g, ''); };
+		const zusammen = r.bloecke.map(function (b) { return b.text; }).concat(r.rest).join('');
+		gleich('verlustfrei: Bloecke + Rest = Eingabe (ohne Leerraum)', ohne(zusammen), ohne(eingabe.join('')));
+		const unten = r.bloecke.length ? r.bloecke[r.bloecke.length - 1].y + r.bloecke[r.bloecke.length - 1].h : 5;
+		pruefe('alle Bloecke liegen in der Flaeche', unten <= 5 + 200 + 1e-9, 'unten=' + unten);
+		pruefe('alle Zeilen passen in die Breite', r.bloecke.every(function (b) {
+			return b.text.split('\n').every(function (z) { return mass(z, 18) <= 300; });
+		}));
+		pruefe('Rest beginnt mit dem Rest des geteilten Absatzes oder einem ganzen Absatz',
+			eingabe.some(function (a) { return ohne(a).endsWith(ohne(r.rest[0])); }), JSON.stringify(r.rest[0]));
+	}
+})();
+(function () {
+	const r = versuche(function () { return B.verteile(['a', 'b'], { x: 0, y: 0, b: 500, h: 20 }, mass, {}); });
+	gleich('Flaeche niedriger als eine Zeile: keine Bloecke, alles Rest', r, { px: 18, bloecke: [], rest: ['a', 'b'] });
+})();
+(function () {
+	let gross = '';
+	while (gross.length < 12000) { gross += 'Wort' + (gross.length % 97) + ' '; }
+	gross = gross.slice(0, 12000).replace(/\s+$/, '');
+	const r = versuche(function () { return B.verteile([gross], { x: 0, y: 0, b: 1000, h: 100000 }, mass, {}); });
+	pruefe('12 000 Zeichen: mehrere Bloecke', r && r.bloecke && r.bloecke.length >= 3, JSON.stringify(r && r.bloecke && r.bloecke.length));
+	pruefe('12 000 Zeichen: jeder Block hoechstens 5000 Zeichen', r && r.bloecke && r.bloecke.every(function (b) { return b.text.length <= 5000; }));
+	pruefe('12 000 Zeichen: kein Rest', r && r.rest && r.rest.length === 0);
+	if (r && r.bloecke && r.bloecke.length > 1) {
+		pruefe('12 000 Zeichen: Teilbloecke direkt untereinander (ohne Absatzabstand)',
+			r.bloecke.every(function (b, i) { return i === 0 || Math.abs(b.y - (r.bloecke[i - 1].y + r.bloecke[i - 1].h)) < 1e-9; }));
+		gleich('12 000 Zeichen: verlustfrei', r.bloecke.map(function (b) { return b.text; }).join('').replace(/\s+/g, ''), gross.replace(/\s+/g, ''));
+	}
+})();
+gleich('leere Absatzliste', versuche(function () { return B.verteile([], FL, mass, {}); }), { px: 24, bloecke: [], rest: [] });
+(function () {
+	const r = versuche(function () { return B.verteile(['a'], FL, mass, { startPx: 30, minPx: 20 }); });
+	pruefe('Optionen werden beachtet (startPx 30)', r && r.px === 30, JSON.stringify(r && r.px));
+	const r2 = versuche(function () { return B.verteile(['a'], FL, mass); });
+	pruefe('ohne Optionen: Vorgaben (24 px)', r2 && r2.px === 24, JSON.stringify(r2 && r2.px));
+})();
+
+console.log('\nGruppe 7: flaecheUnter');
+const SICHT = { x: 100, y: 50, b: 800, h: 600 };
+gleich('leere Liste', versuche(function () { return B.flaecheUnter(SICHT, [], 20); }), { x: 120, y: 70, b: 760, h: 560 });
+gleich('ein Rahmen unten im Bild: y darunter', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 200, y: 300, b: 100, h: 50 }], 20); }),
+	{ x: 120, y: 370, b: 760, h: 260 });
+gleich('Rahmen rechts ausserhalb: ignoriert', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 950, y: 300, b: 100, h: 50 }], 20); }),
+	{ x: 120, y: 70, b: 760, h: 560 });
+gleich('Rahmen unterhalb des sichtbaren Bereichs: h 0', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 200, y: 700, b: 100, h: 50 }], 20); }),
+	{ x: 120, y: 770, b: 760, h: 0 });
+gleich('Rahmen oberhalb: Oberkante bleibt', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 200, y: 0, b: 100, h: 20 }], 20); }),
+	{ x: 120, y: 70, b: 760, h: 560 });
+gleich('Rahmen ragt von links hinein: zaehlt', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 50, y: 100, b: 60, h: 100 }], 20); }),
+	{ x: 120, y: 220, b: 760, h: 410 });
+
+console.log('\nGruppe 8: lesbareFarbe');
+gleich('schwarz auf weiss', versuche(function () { return B.lesbareFarbe('#000000', '#ffffff'); }), '#000000');
+gleich('schwarz auf gruener Tafel -> weiss', versuche(function () { return B.lesbareFarbe('#000000', '#1a472a'); }), '#ffffff');
+gleich('schwarz auf schwarzer Tafel -> weiss', versuche(function () { return B.lesbareFarbe('#000000', '#1c1c1c'); }), '#ffffff');
+gleich('rot auf weiss bleibt rot', versuche(function () { return B.lesbareFarbe('#ff0000', '#ffffff'); }), '#ff0000');
+gleich('#FFF auf weiss -> schwarz', versuche(function () { return B.lesbareFarbe('#FFF', '#ffffff'); }), '#000000');
+gleich('ungueltiger Stift auf gruen -> weiss', versuche(function () { return B.lesbareFarbe('rot', '#1a472a'); }), '#ffffff');
+gleich('Kurzform wird ausgeschrieben', versuche(function () { return B.lesbareFarbe('#F00', '#FFFFFF'); }), '#ff0000');
+gleich('ungueltige Tafel gilt als weiss', versuche(function () { return B.lesbareFarbe('#ffffff', 'kaputt'); }), '#000000');
+gleich('weiss auf schwarzer Tafel bleibt weiss', versuche(function () { return B.lesbareFarbe('#ffffff', '#1c1c1c'); }), '#ffffff');
+
 ende();
