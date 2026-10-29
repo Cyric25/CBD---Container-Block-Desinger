@@ -21,6 +21,14 @@
  *   - AP-1.fix1 (Review-Befund B5): zeichneModell() misst in Pass 4 nur Teile,
  *     auf die in derselben Zeile noch ein Teil folgt (ohne teile: keine
  *     measureText-Aufrufe)
+ *   - AP-3.1 (Phase 3, F7/F11/F12): Knopf "Text bearbeiten" in der
+ *     Auswahlleiste nur bei genau einem gewählten Text (nicht bei zwei
+ *     Texten, Strich, Text + Strich, im Drehmodus), Klick ruft
+ *     auswahlTextBearbeiten(), Höhenmessung der Leiste mit dem Knopf;
+ *     textErsetzen(id, absaetze): gleiche ID und Stelle, ein Undo-Schritt,
+ *     Auswahl bleibt, Absätze mit \n, Umbruch am sichtbaren Rand (nur
+ *     unverdreht), Teilfarben lesbar, leerer Inhalt entfernt, laufende
+ *     Gesten werden beendet
  *
  * Wird von tools/test-board-zeiger.html NACH test-board-textgroesse.js und
  * VOR test-board-blocktext.js geladen und hängt sich an den Haken
@@ -684,6 +692,490 @@
     }
 
     // ------------------------------------------------------------------
+    // AP-3.1 (Phase 3, Entscheidungen F7, F11, F12): Knopf "Text bearbeiten"
+    // in der Auswahlleiste (nur bei genau einem gewählten Text) und
+    // textErsetzen(id, absaetze) - ersetzt den Inhalt eines Texts unter
+    // derselben ID (x, y, breite, winkel, farbe bleiben), ein Undo-Schritt,
+    // Auswahl bleibt; Absätze mit \n verbunden; Umbruch am rechten Rand des
+    // sichtbaren Ausschnitts (minus 20 px) nur bei unverdrehten Texten;
+    // Teilfarben lesbar (lesbareLauffarbe); leerer Inhalt entfernt das Element.
+    // ------------------------------------------------------------------
+    var U = window.CBDBoardBlocktext;
+
+    function sichtbar(k) {
+        if (!k) return false;
+        var cs = getComputedStyle(k);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+        var r = k.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+    }
+
+    /** Strich mit der Maus von (x1,y1) nach (x2,y2); liefert seine ID. */
+    function strich(x1, y1, x2, y2) {
+        B.setTool('pen');
+        B.setColor('#000000');
+        var n = Math.max(1, Math.round(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) / 10));
+        ctx.zeiger('pointerdown', 3, 'mouse', x1, y1);
+        for (var i = 1; i <= n; i++) {
+            ctx.zeiger('pointermove', 3, 'mouse', x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n);
+        }
+        ctx.zeiger('pointerup', 3, 'mouse', x2, y2);
+        return el()[el().length - 1].id;
+    }
+
+    function strgZ() {
+        return taste('z', { ctrlKey: true });
+    }
+
+    function teileText(x) {
+        return x && x.teile !== undefined ? JSON.stringify(x.teile) : 'ohne teile';
+    }
+
+    /** Stil je UTF-16-Einheit ('f|k|farbe') eines Texts mit (optionalen) teile. */
+    function stilJeZeichen(text, teile) {
+        var aus = [];
+        var liste = teile || [{ t: text }];
+        for (var i = 0; i < liste.length; i++) {
+            var s = (liste[i].f ? 1 : 0) + '|' + (liste[i].k ? 1 : 0) + '|' + (liste[i].farbe || '');
+            for (var j = 0; j < liste[i].t.length; j++) aus.push(s);
+        }
+        return aus;
+    }
+
+    /** Breite jeder Zeile eines Text-Elements, je Teil in seiner Schrift gemessen. */
+    function zeilenBreiten(e) {
+        var m = B._textMass();
+        var px = E.schriftPx(e.breite);
+        return E.zeilenTeile(e).map(function(z) {
+            var w = 0;
+            for (var i = 0; i < z.length; i++) w += m(z[i].t, px, { f: z[i].f, k: z[i].k });
+            return w;
+        });
+    }
+
+    /**
+     * Lange Zeile (60 Wörter, einzelne Leerzeichen) mit einem fetten, einem
+     * kursiven und einem roten Abschnitt -> {text, teile}.
+     */
+    function langeZeile() {
+        var woerter = [];
+        for (var i = 0; i < 60; i++) woerter.push('Wort' + i);
+        var a = woerter.slice(0, 10).join(' ') + ' ';
+        var b = woerter.slice(10, 13).join(' ');
+        var c = ' ' + woerter.slice(13, 30).join(' ') + ' ';
+        var d = woerter.slice(30, 32).join(' ');
+        var e = ' ' + woerter.slice(32, 45).join(' ') + ' ';
+        var g = woerter[45];
+        var h = ' ' + woerter.slice(46).join(' ');
+        return {
+            text: a + b + c + d + e + g + h,
+            teile: [{ t: a }, { t: b, f: 1 }, { t: c }, { t: d, k: 1 }, { t: e }, { t: g, farbe: '#ff0000' }, { t: h }]
+        };
+    }
+
+    function knopfNurBeiEinemText() {
+        ctx.oeffnen();
+        var f = [];
+        var a = einsetzen(neuesText({ x: 100, y: 100, text: 'Eins' }));
+        var b = einsetzen(neuesText({ x: 100, y: 220, text: 'Zwei' }));
+        var s = strich(320, 400, 460, 400);
+        var kb = knopf('text-bearbeiten');
+        if (!kb) return { ok: false, detail: 'Knopf [data-aktion="text-bearbeiten"] fehlt in der Auswahlleiste' };
+        // Markup wie im Plan (AP-3.1, Schritt 2), direkt nach "Duplizieren"
+        if (kb.tagName !== 'BUTTON' || kb.getAttribute('type') !== 'button') f.push('kein <button type="button">');
+        if (!kb.classList.contains('cbd-board-auswahl-knopf') || !kb.classList.contains('cbd-board-auswahl-nur-ein-text')) {
+            f.push('Klassen "' + kb.className + '"');
+        }
+        if (kb.getAttribute('title') !== 'Text bearbeiten') f.push('title "' + kb.getAttribute('title') + '"');
+        if (kb.textContent.replace(/\s+/g, ' ').trim() !== 'Text bearbeiten') f.push('Beschriftung "' + kb.textContent + '"');
+        if (!kb.querySelector('.dashicons.dashicons-edit')) f.push('Symbol dashicons-edit fehlt');
+        if (kb.previousElementSibling !== knopf('duplizieren')) f.push('steht nicht direkt nach "Duplizieren"');
+        // genau ein Text
+        lassoUm(a);
+        if (B.auswahl.join() !== a) return { ok: false, detail: 'Testaufbau: Text nicht gewählt (' + B.auswahl.join() + ')' };
+        if (!sichtbar(kb)) f.push('bei genau einem Text nicht sichtbar');
+        if (!leiste().classList.contains('cbd-board-auswahl-leiste--ein-text')) f.push('Leiste ohne Klasse --ein-text bei einem Text');
+        // zwei Texte
+        lasso(60, 60, 260, 300);
+        if (B.auswahl.length !== 2) f.push('Testaufbau: zwei Texte nicht gewählt (' + B.auswahl.join() + ')');
+        else if (sichtbar(kb)) f.push('bei zwei Texten sichtbar');
+        if (leiste().classList.contains('cbd-board-auswahl-leiste--ein-text')) f.push('Klasse --ein-text bei zwei Texten');
+        // ein Strich
+        lassoUm(s);
+        if (B.auswahl.join() !== s) f.push('Testaufbau: Strich nicht gewählt (' + B.auswahl.join() + ')');
+        else if (sichtbar(kb)) f.push('bei einem Strich sichtbar');
+        // Text und Strich
+        lasso(60, 190, 500, 430);
+        if (B.auswahl.length !== 2 || B.auswahl.indexOf(b) < 0 || B.auswahl.indexOf(s) < 0) {
+            f.push('Testaufbau: Text + Strich nicht gewählt (' + B.auswahl.join() + ')');
+        } else if (sichtbar(kb)) {
+            f.push('bei Text + Strich sichtbar');
+        }
+        // Drehmodus: weg, nach "Abbrechen" wieder da
+        lassoUm(a);
+        if (!sichtbar(kb)) f.push('vor dem Drehmodus nicht sichtbar');
+        if (!B.auswahlDrehenStarten()) f.push('Testaufbau: Drehmodus startet nicht');
+        if (!sichtbar(leiste())) f.push('Testaufbau: Leiste im Drehmodus unsichtbar');
+        if (sichtbar(kb)) f.push('im Drehmodus sichtbar');
+        if (leiste().classList.contains('cbd-board-auswahl-leiste--ein-text')) f.push('Klasse --ein-text im Drehmodus');
+        B._drehenAbbrechen();
+        if (!sichtbar(kb)) f.push('nach "Abbrechen" des Drehmodus nicht wieder sichtbar');
+        // Strg+Z hebt die Auswahl auf: Leiste samt Knopf weg
+        strgZ();
+        if (sichtbar(kb)) f.push('nach Strg+Z sichtbar');
+        return ergebnis(f);
+    }
+
+    function knopfRuftAuswahlTextBearbeiten() {
+        ctx.oeffnen();
+        var f = [];
+        var a = einsetzen(neuesText({ x: 100, y: 100, text: 'Eins' }));
+        lassoUm(a);
+        var kb = knopf('text-bearbeiten');
+        if (!kb) return { ok: false, detail: 'Knopf [data-aktion="text-bearbeiten"] fehlt' };
+        if (typeof B.auswahlTextBearbeiten !== 'function') f.push('B.auswahlTextBearbeiten ist keine Funktion');
+        // Stellvertreter: nur der Aufruf aus der Klick-Weiche wird geprüft
+        // (den Inhalt der Methode baut AP-3.2)
+        var hatte = Object.prototype.hasOwnProperty.call(B, 'auswahlTextBearbeiten');
+        var original = B.auswahlTextBearbeiten;
+        var aufrufe = 0;
+        B.auswahlTextBearbeiten = function() { aufrufe++; };
+        var vorher = el().slice(), undo0 = B.undoStapel.length;
+        try {
+            kb.click();
+        } finally {
+            if (hatte) B.auswahlTextBearbeiten = original;
+            else delete B.auswahlTextBearbeiten;
+        }
+        if (aufrufe !== 1) f.push('Klick ruft auswahlTextBearbeiten() ' + aufrufe + '-mal statt einmal');
+        if (el().length !== vorher.length || el()[0] !== vorher[0] || B.undoStapel.length !== undo0) f.push('Klick ändert die Tafel');
+        if (B.auswahl.join() !== a) f.push('Auswahl nach dem Klick ' + B.auswahl.join());
+        return ergebnis(f);
+    }
+
+    /**
+     * _auswahlLeisteHoeheText() (Folge-AP G9, Platz über eingefügtem Text)
+     * misst konservativ MIT dem Knopf "Text bearbeiten" (Klasse --ein-text).
+     * Gesucht wird eine Höchstbreite, bei der der Knopf die Leiste um eine
+     * Zeile höher macht; dort muss die Messung die höhere Leiste liefern.
+     */
+    function leistenHoeheMitKnopf() {
+        ctx.oeffnen();
+        var f = [];
+        var l = leiste();
+        if (!knopf('text-bearbeiten')) return { ok: false, detail: 'Knopf [data-aktion="text-bearbeiten"] fehlt' };
+        var anzeige = l.querySelector('.cbd-board-auswahl-textgroesse');
+        // Leiste so wie in _auswahlLeisteHoeheText (unsichtbar, Anzeige "200 px")
+        function hoehe(w, einText) {
+            var vorher = { css: l.style.cssText, klassen: l.className, anzeige: anzeige ? anzeige.textContent : '' };
+            l.style.visibility = 'hidden';
+            l.style.display = 'flex';
+            l.style.maxWidth = w + 'px';
+            l.className = 'cbd-board-auswahl-leiste cbd-board-auswahl-leiste--text' + (einText ? ' cbd-board-auswahl-leiste--ein-text' : '');
+            if (anzeige) anzeige.textContent = '200 px';
+            var h = l.offsetHeight;
+            l.style.cssText = vorher.css;
+            l.className = vorher.klassen;
+            if (anzeige) anzeige.textContent = vorher.anzeige;
+            return h;
+        }
+        var a = einsetzen(neuesText({ x: 100, y: 200, text: 'Eins' }));
+        lassoUm(a);
+        if (B.auswahl.join() !== a) return { ok: false, detail: 'Testaufbau: Text nicht gewählt' };
+        var w = 0;
+        for (var b = 200; b <= 1400 && !w; b += 10) {
+            if (hoehe(b, true) > hoehe(b, false)) w = b;
+        }
+        if (!w) return { ok: false, detail: 'Testaufbau: keine Breite, bei der der Knopf die Leiste höher macht' };
+        var echt = B._auswahlLeisteMaxBreite;
+        var soll, ohne, ist, gezeigt, klassenVorher, klassenNachher;
+        B._auswahlLeisteMaxBreite = function() { return w; };
+        try {
+            B._auswahlLeisteAusrichten();
+            soll = hoehe(w, true);
+            ohne = hoehe(w, false);
+            gezeigt = l.offsetHeight;
+            klassenVorher = l.className;
+            ist = B._auswahlLeisteHoeheText();
+            klassenNachher = l.className;
+        } finally {
+            B._auswahlLeisteMaxBreite = echt;
+        }
+        if (!(soll > ohne)) f.push('Testaufbau: an der Leistenlage macht der Knopf sie nicht höher (' + soll + '/' + ohne + ')');
+        if (ist !== soll) f.push('_auswahlLeisteHoeheText() ' + ist + ' px statt ' + soll + ' px (mit "Text bearbeiten", Höchstbreite ' + w + ' px; ohne Knopf ' + ohne + ' px)');
+        if (!(ist >= gezeigt)) f.push('gemessen ' + ist + ' px, gezeigte Leiste bei einem Text ' + gezeigt + ' px');
+        if (klassenNachher !== klassenVorher) f.push('Klassen danach "' + klassenNachher + '" statt "' + klassenVorher + '"');
+        return ergebnis(f);
+    }
+
+    function textErsetzenGrundfall() {
+        ctx.oeffnen();
+        var f = [];
+        if (typeof B.textErsetzen !== 'function') return { ok: false, detail: 'B.textErsetzen fehlt' };
+        var davor = einsetzen(neuesText({ x: 420, y: 420, text: 'Davor' }));
+        var e = neuesText({ x: 120, y: 140, breite: 3, text: 'Alt', farbe: '#1565c0', winkel: 15 });
+        var id = einsetzen(e);
+        strich(300, 560, 420, 560);
+        lassoUm(id);
+        if (B.auswahl.join() !== id) return { ok: false, detail: 'Testaufbau: Text nicht gewählt (' + B.auswahl.join() + ')' };
+        var liste = el().slice();
+        var i0 = liste.indexOf(e);
+        var undo0 = B.undoStapel.length;
+        var r = B.textErsetzen(id, [{ text: 'Neu fett', teile: [{ t: 'Neu ' }, { t: 'fett', f: 1 }] }]);
+        var n = element(id);
+        if (r !== true) f.push('Rückgabe ' + r + ' statt true');
+        if (!n) return { ok: false, detail: 'Element mit derselben ID fehlt danach' };
+        if (n === e) return { ok: false, detail: 'Element unverändert' };
+        if (el().length !== liste.length) f.push(el().length + ' Elemente statt ' + liste.length);
+        if (el().indexOf(n) !== i0) f.push('Stelle in der Liste ' + el().indexOf(n) + ' statt ' + i0);
+        for (var k = 0; k < liste.length; k++) {
+            if (k !== i0 && el()[k] !== liste[k]) f.push('anderes Element ' + k + ' verändert');
+        }
+        if (n.typ !== 'text' || n.text !== 'Neu fett') f.push('text "' + n.text + '"');
+        if (teileText(n) !== '[{"t":"Neu "},{"t":"fett","f":1}]') f.push('teile ' + teileText(n));
+        if (n.x !== 120 || n.y !== 140 || n.breite !== 3 || n.winkel !== 15 || n.farbe !== '#1565c0') {
+            f.push('Lage/Größe/Drehung/Farbe ' + JSON.stringify([n.x, n.y, n.breite, n.winkel, n.farbe]));
+        }
+        if (Object.keys(n).join() !== 'id,typ,farbe,breite,text,x,y,teile,winkel') f.push('Schlüssel ' + Object.keys(n).join());
+        if (B.undoStapel.length !== undo0 + 1) f.push('Undo-Schritte ' + (B.undoStapel.length - undo0) + ' statt 1');
+        if (B.auswahl.join() !== id) f.push('Auswahl ' + B.auswahl.join() + ' statt ' + id);
+        if (!sichtbar(leiste()) || !sichtbar(knopf('text-bearbeiten'))) f.push('Leiste mit "Text bearbeiten" danach nicht sichtbar');
+        // Die Modellprüfung (Speichern/Laden) lässt das Element, wie es ist
+        var p = E.pruefeModell(B.modell);
+        if (!p || !p.modell || JSON.stringify(p.modell.elemente[i0]) !== JSON.stringify(n)) f.push('pruefeModell ändert das Element');
+        if (element(davor) !== liste[0]) f.push('"Davor" verändert');
+        // gezeichnet: "fett" fett in der Schrift des Elements (breite 3 = 28 px)
+        var log = zeichnenMitschreiben().filter(function(x) { return x.t === 'fett'; });
+        if (log.length !== 1 || log[0].font !== normSchrift('bold 28px sans-serif')) f.push('"fett" gezeichnet: ' + JSON.stringify(log.map(function(x) { return x.font; })));
+        // Strg+Z stellt den alten Text her
+        strgZ();
+        if (element(id) !== e) f.push('Strg+Z: nicht das alte Element (' + (element(id) && element(id).text) + ')');
+        if (B.undoStapel.length !== undo0) f.push('Undo-Stapel nach Strg+Z ' + B.undoStapel.length + ' statt ' + undo0);
+        return ergebnis(f);
+    }
+
+    function textErsetzenOhneAenderung() {
+        ctx.oeffnen();
+        var f = [];
+        if (typeof B.textErsetzen !== 'function') return { ok: false, detail: 'B.textErsetzen fehlt' };
+        var e = neuesText({ x: 100, y: 100, text: 'Gleich fett', teile: [{ t: 'Gleich ' }, { t: 'fett', f: 1 }] });
+        var id = einsetzen(e);
+        var s = strich(300, 400, 420, 400);
+        var vorher = el().slice();
+        var undo0 = B.undoStapel.length;
+        // gleicher Inhalt (anders zerlegt): keine Änderung, kein Undo-Eintrag
+        var r = B.textErsetzen(id, [{ text: 'Gleich fett', teile: [{ t: 'Gleich ' }, { t: 'fe', f: 1 }, { t: 'tt', f: 1 }] }]);
+        if (r !== false) f.push('gleicher Inhalt: Rückgabe ' + r + ' statt false');
+        // unbekannte ID, Strich, Eingabe kein Array: nichts
+        var faelle = [['unbekannte ID', 'gibt-es-nicht', ['x']], ['Strich', s, ['x']], ['null', id, null],
+            ['undefined', id, undefined], ['Zahl', id, 5], ['Zeichenkette', id, 'x'], ['Objekt', id, { text: 'x' }]];
+        for (var i = 0; i < faelle.length; i++) {
+            var erg = B.textErsetzen(faelle[i][1], faelle[i][2]);
+            if (erg !== false) f.push(faelle[i][0] + ': Rückgabe ' + erg + ' statt false');
+        }
+        if (el().length !== vorher.length) f.push('Zahl der Elemente ' + el().length);
+        for (var k = 0; k < vorher.length; k++) {
+            if (el()[k] !== vorher[k]) f.push('Element ' + k + ' verändert');
+        }
+        if (B.undoStapel.length !== undo0) f.push('Undo-Einträge ' + (B.undoStapel.length - undo0) + ' statt 0');
+        return ergebnis(f);
+    }
+
+    function textErsetzenMehrereAbsaetze() {
+        ctx.oeffnen();
+        var f = [];
+        if (typeof B.textErsetzen !== 'function') return { ok: false, detail: 'B.textErsetzen fehlt' };
+        var id = einsetzen(neuesText({ x: 100, y: 100, text: 'Alt' }));
+        B.textErsetzen(id, [{ text: 'Eins', teile: [{ t: 'Eins', f: 1 }] }, 'Zwei', { text: 'Drei', teile: [{ t: 'Drei', farbe: '#ff0000' }] }]);
+        var n = element(id);
+        if (n.text !== 'Eins\nZwei\nDrei') f.push('drei Absätze: text ' + JSON.stringify(n.text));
+        if (teileText(n) !== JSON.stringify([{ t: 'Eins', f: 1 }, { t: '\nZwei\n' }, { t: 'Drei', farbe: '#ff0000' }])) f.push('drei Absätze: teile ' + teileText(n));
+        // ohne Formatierung: kein Feld teile
+        B.textErsetzen(id, ['a', { text: 'b' }, { text: 'c', teile: [{ t: 'c' }] }]);
+        n = element(id);
+        if (n.text !== 'a\nb\nc' || Object.prototype.hasOwnProperty.call(n, 'teile')) f.push('Klartext: ' + JSON.stringify(n.text) + ', ' + teileText(n));
+        // Einträge ohne sichtbaren Text zählen nicht (wie bei blocktextEinfuegen)
+        B.textErsetzen(id, [{ text: 'x' }, null, { text: '   ' }, {}, { text: 5 }, ' \n ', 'y']);
+        if (element(id).text !== 'x\ny') f.push('leere Einträge: ' + JSON.stringify(element(id).text));
+        // vorhandene Zeilenwechsel in einem Absatz bleiben
+        B.textErsetzen(id, [{ text: 'p\nq', teile: [{ t: 'p\n', k: 1 }, { t: 'q' }] }, 'r']);
+        n = element(id);
+        if (n.text !== 'p\nq\nr' || teileText(n) !== JSON.stringify([{ t: 'p\n', k: 1 }, { t: 'q\nr' }])) f.push('Zeilenwechsel im Absatz: ' + JSON.stringify(n.text) + ', ' + teileText(n));
+        // unbrauchbare teile -> Absatz als Klartext
+        B.textErsetzen(id, [{ text: 'ab', teile: [{ t: 'a', f: 1 }] }, { text: 'cd', teile: [null, { t: 'cd', f: 1 }] },
+            { text: 'gh', teile: 'fett' }, { text: 'ef', teile: [{ t: 'ef', k: 1 }] }]);
+        n = element(id);
+        if (n.text !== 'ab\ncd\ngh\nef' || teileText(n) !== JSON.stringify([{ t: 'ab\ncd\ngh\n' }, { t: 'ef', k: 1 }])) {
+            f.push('unbrauchbare teile: ' + JSON.stringify(n.text) + ', ' + teileText(n));
+        }
+        return ergebnis(f);
+    }
+
+    function textErsetzenUmbruch() {
+        ctx.oeffnen();
+        var f = [];
+        if (typeof B.textErsetzen !== 'function') return { ok: false, detail: 'B.textErsetzen fehlt' };
+        var x = 100;
+        var id = einsetzen(neuesText({ x: x, y: 60, breite: 3.5, text: 'kurz' }));
+        var px = E.schriftPx(3.5); // 30 px - Schrift des Elements, nicht die 24 px von "Text auf die Tafel"
+        var s = B._sichtbarerBereich();
+        var grenze = s.x + s.b - 20 - x;
+        var lang = langeZeile();
+        var absatz = { text: 'Erste Zeile\n' + lang.text + '\nEnde', teile: [{ t: 'Erste Zeile\n' }].concat(lang.teile, [{ t: '\nEnde' }]) };
+        var zeilen = U.umbrechenTeile(lang, grenze, px, B._textMass());
+        if (zeilen.length < 4) return { ok: false, detail: 'Testaufbau: lange Zeile ergibt nur ' + zeilen.length + ' Zeilen bei ' + grenze + ' px' };
+        var undo0 = B.undoStapel.length;
+        B.textErsetzen(id, [absatz]);
+        var n = element(id);
+        var soll = 'Erste Zeile\n' + zeilen.map(function(z) { return z.text; }).join('\n') + '\nEnde';
+        if (n.text !== soll) f.push('text ' + JSON.stringify(n.text.slice(0, 120)) + ' statt ' + JSON.stringify(soll.slice(0, 120)));
+        if (n.text.split('\n')[0] !== 'Erste Zeile' || n.text.split('\n').pop() !== 'Ende') f.push('vorhandene Zeilen nicht erhalten');
+        zeilenBreiten(n).forEach(function(w, i) {
+            if (w > grenze + 0.01) f.push('Zeile ' + i + ': ' + w.toFixed(1) + ' px > ' + grenze.toFixed(1) + ' px');
+        });
+        // nur die Leerzeichen an den Umbruchstellen wurden Zeilenwechsel,
+        // die Formatierung jedes Zeichens bleibt
+        if (n.text.replace(/\n/g, ' ') !== absatz.text.replace(/\n/g, ' ')) f.push('Text über den Umbruch hinaus verändert');
+        var kette = (n.teile || []).map(function(t) { return t.t; }).join('');
+        if (kette !== n.text) f.push('Verkettung der teile ist nicht der text');
+        var vorStil = stilJeZeichen(absatz.text, absatz.teile), nachStil = stilJeZeichen(n.text, n.teile);
+        var abweichend = 0;
+        for (var i = 0; i < n.text.length; i++) {
+            if (n.text.charAt(i) !== '\n' && nachStil[i] !== vorStil[i]) abweichend++;
+        }
+        if (abweichend) f.push(abweichend + ' Zeichen mit anderer Formatierung');
+        var r = B._rahmen(n);
+        if (r.x + r.b > s.x + s.b - 20 + 0.01) f.push('Rahmen endet bei ' + (r.x + r.b).toFixed(1) + ', Rand ' + (s.x + s.b - 20).toFixed(1));
+        if (B.undoStapel.length !== undo0 + 1) f.push('Undo-Schritte ' + (B.undoStapel.length - undo0));
+        return ergebnis(f);
+    }
+
+    function textErsetzenUmbruchSichtbarerAusschnitt() {
+        ctx.oeffnen();
+        var f = [];
+        if (typeof B.textErsetzen !== 'function') return { ok: false, detail: 'B.textErsetzen fehlt' };
+        B.zoom = 2;
+        B.panX = -300;
+        B.panY = -100;
+        B.updateCanvasTransform();
+        var s = B._sichtbarerBereich();
+        if (Math.abs(s.x - 150) > 0.01 || Math.abs(s.y - 50) > 0.01) return { ok: false, detail: 'Testaufbau: Ausschnitt ' + JSON.stringify(s) };
+        var x = s.x + 40;
+        var id = einsetzen(neuesText({ x: x, y: s.y + 40, breite: 2, text: 'kurz' }));
+        var grenze = s.x + s.b - 20 - x;
+        if (!(B.cssWidth - 20 - x > grenze + 50)) return { ok: false, detail: 'Testaufbau: Ausschnitt nicht schmaler als die Zeichenfläche' };
+        var lang = langeZeile();
+        B.textErsetzen(id, [lang]);
+        var n = element(id);
+        var soll = U.umbrechenTeile(lang, grenze, 24, B._textMass()).map(function(z) { return z.text; }).join('\n');
+        if (n.text !== soll) f.push('nicht am Rand des sichtbaren Ausschnitts umbrochen: ' + JSON.stringify(n.text.slice(0, 80)));
+        zeilenBreiten(n).forEach(function(w, i) {
+            if (w > grenze + 0.01) f.push('Zeile ' + i + ': ' + w.toFixed(1) + ' px > ' + grenze.toFixed(1) + ' px');
+        });
+        return ergebnis(f);
+    }
+
+    function textErsetzenGedrehtOhneUmbruch() {
+        ctx.oeffnen();
+        var f = [];
+        if (typeof B.textErsetzen !== 'function') return { ok: false, detail: 'B.textErsetzen fehlt' };
+        var id = einsetzen(neuesText({ x: 100, y: 60, breite: 3.5, text: 'kurz', winkel: 30 }));
+        var s = B._sichtbarerBereich();
+        var lang = langeZeile();
+        B.textErsetzen(id, [lang]);
+        var n = element(id);
+        if (n.text !== lang.text) f.push('gedrehter Text umbrochen: ' + JSON.stringify(n.text.slice(0, 80)));
+        if (teileText(n) !== JSON.stringify(lang.teile)) f.push('teile ' + teileText(n));
+        if (n.winkel !== 30) f.push('winkel ' + n.winkel);
+        if (!(zeilenBreiten(n)[0] > s.x + s.b - 20 - 100)) f.push('Testaufbau: Zeile nicht breiter als der Rand');
+        return ergebnis(f);
+    }
+
+    function textErsetzenLeer() {
+        ctx.oeffnen();
+        var f = [];
+        if (typeof B.textErsetzen !== 'function') return { ok: false, detail: 'B.textErsetzen fehlt' };
+        var e = neuesText({ x: 100, y: 100, text: 'Weg damit', teile: [{ t: 'Weg ' }, { t: 'damit', f: 1 }] });
+        var id = einsetzen(e);
+        var bleibt = einsetzen(neuesText({ x: 100, y: 300, text: 'bleibt' }));
+        [[], [{ text: '   ' }], [' \n ', { text: '\n', teile: [{ t: '\n', f: 1 }] }]].forEach(function(leer, nr) {
+            lassoUm(id);
+            if (B.auswahl.join() !== id) {
+                f.push(nr + ': Testaufbau, Auswahl ' + B.auswahl.join());
+                return;
+            }
+            var undo0 = B.undoStapel.length;
+            var r = B.textErsetzen(id, leer);
+            if (r !== true) f.push(nr + ': Rückgabe ' + r + ' statt true');
+            if (element(id)) f.push(nr + ': Element nicht entfernt');
+            if (!element(bleibt)) f.push(nr + ': anderes Element entfernt');
+            if (B.undoStapel.length !== undo0 + 1) f.push(nr + ': Undo-Schritte ' + (B.undoStapel.length - undo0) + ' statt 1');
+            if (B.auswahl.length) f.push(nr + ': Auswahl ' + B.auswahl.join());
+            if (sichtbar(leiste())) f.push(nr + ': Auswahlleiste noch sichtbar');
+            strgZ();
+            if (element(id) !== e) f.push(nr + ': Strg+Z holt das Element nicht zurück');
+        });
+        return ergebnis(f);
+    }
+
+    function textErsetzenTeilfarbenLesbar() {
+        ctx.oeffnen();
+        var f = [];
+        if (typeof B.textErsetzen !== 'function') return { ok: false, detail: 'B.textErsetzen fehlt' };
+        var gruen = '#1a472a';
+        B.setBoardColor(gruen);
+        var id = einsetzen(neuesText({ x: 100, y: 100, text: 'Alt', farbe: '#ffffff' }));
+        if (U.lesbareLauffarbe('#71230a', gruen) === '#71230a') return { ok: false, detail: 'Testaufbau: Dunkelrot auf Grün schon lesbar' };
+        B.textErsetzen(id, [{ text: 'dunkelrot rot schwarz blau', teile: [{ t: 'dunkelrot ', farbe: '#71230a' },
+            { t: 'rot ', farbe: '#ff0000' }, { t: 'schwarz ', farbe: '#000000' }, { t: 'blau', farbe: 'blau' }] }]);
+        var soll = E.teileZusammenlegen([
+            { t: 'dunkelrot ', farbe: U.lesbareLauffarbe('#71230a', gruen) },
+            { t: 'rot ', farbe: U.lesbareLauffarbe('#ff0000', gruen) },
+            { t: 'schwarz ', farbe: U.lesbareLauffarbe('#000000', gruen) },
+            { t: 'blau' } // keine gültige Farbe -> ohne
+        ]);
+        if (teileText(element(id)) !== JSON.stringify(soll)) f.push('grüne Tafel: ' + teileText(element(id)) + ' statt ' + JSON.stringify(soll));
+        // weiße Tafel: Rot und Dunkelrot bleiben, Weiß wird lesbar
+        B.setBoardColor('#ffffff');
+        B.textErsetzen(id, [{ text: 'rot dunkel weiß', teile: [{ t: 'rot ', farbe: '#ff0000' }, { t: 'dunkel ', farbe: '#71230a' }, { t: 'weiß', farbe: '#ffffff' }] }]);
+        var soll2 = JSON.stringify([{ t: 'rot ', farbe: '#ff0000' }, { t: 'dunkel ', farbe: '#71230a' }, { t: 'weiß', farbe: U.lesbareLauffarbe('#ffffff', '#ffffff') }]);
+        if (teileText(element(id)) !== soll2) f.push('weiße Tafel: ' + teileText(element(id)) + ' statt ' + soll2);
+        return ergebnis(f);
+    }
+
+    function textErsetzenBeendetGesten() {
+        ctx.oeffnen();
+        var f = [];
+        if (typeof B.textErsetzen !== 'function') return { ok: false, detail: 'B.textErsetzen fehlt' };
+        var id = einsetzen(neuesText({ x: 100, y: 100, text: 'Alt' }));
+        lassoUm(id);
+        // Drehmodus (Drehpunkt noch nicht gesetzt) endet
+        if (!B.auswahlDrehenStarten()) return { ok: false, detail: 'Testaufbau: Drehmodus startet nicht' };
+        B.textErsetzen(id, [{ text: 'Neu' }]);
+        if (B._drehen) f.push('Drehmodus läuft nach textErsetzen weiter');
+        if (element(id).text !== 'Neu') f.push('im Drehmodus nicht ersetzt');
+        // laufendes Ziehen (aufgesetzt und bewegt, nicht abgehoben): die
+        // erreichte Lage gilt, das Ersetzen ist ein eigener Undo-Schritt
+        var ar = B.auswahlRahmen();
+        var mx = ar.x + ar.b / 2, my = ar.y + ar.h / 2;
+        var undo0 = B.undoStapel.length;
+        ctx.zeiger('pointerdown', 8, 'mouse', mx, my);
+        for (var i = 1; i <= 3; i++) ctx.zeiger('pointermove', 8, 'mouse', mx + 10 * i, my + 10 * i);
+        if (!B._ziehen) return { ok: false, detail: 'Testaufbau: Ziehen läuft nicht' };
+        B.textErsetzen(id, [{ text: 'Neuer' }]);
+        var n = element(id);
+        if (B._ziehen) f.push('Ziehen läuft nach textErsetzen weiter');
+        if (n.text !== 'Neuer' || n.x !== 130 || n.y !== 130) f.push('nach dem Ziehen: ' + JSON.stringify([n.text, n.x, n.y]) + ' statt ["Neuer",130,130]');
+        if (B.undoStapel.length !== undo0 + 2) f.push('Undo-Schritte ' + (B.undoStapel.length - undo0) + ' statt 2 (Ziehen, Ersetzen)');
+        if (B.auswahl.join() !== id) f.push('Auswahl ' + B.auswahl.join());
+        strgZ();
+        if (!element(id) || element(id).text !== 'Neu' || element(id).x !== 130) f.push('1. Strg+Z: ' + JSON.stringify(element(id) && [element(id).text, element(id).x]));
+        strgZ();
+        if (!element(id) || element(id).text !== 'Neu' || element(id).x !== 100) f.push('2. Strg+Z: ' + JSON.stringify(element(id) && [element(id).text, element(id).x]));
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     window.__zusatzTests = function(c) {
@@ -704,5 +1196,18 @@
         p('AP-1.3: teile überlebt Speichern und Wiederöffnen und wird formatiert gezeichnet', speichernUndWiederoeffnen);
         p('AP-1.3: Strich- und Punkt-Radierer entfernen formatierten Text', radiererEntferntFormatiertenText);
         p('AP-1.fix1: Zeichnen misst nur Teile, auf die in derselben Zeile ein Teil folgt (B5)', zeichnenMisstNurFolgendeTeile);
+        // PLAN-Blocktext-Formatierung.md, AP-3.1
+        p('AP-3.1: Knopf "Text bearbeiten" nur bei genau einem Text (nicht bei zwei Texten, Strich, Text + Strich, Drehmodus)', knopfNurBeiEinemText);
+        p('AP-3.1: Klick auf "Text bearbeiten" ruft auswahlTextBearbeiten()', knopfRuftAuswahlTextBearbeiten);
+        p('AP-3.1: _auswahlLeisteHoeheText misst mit "Text bearbeiten" (konservativ)', leistenHoeheMitKnopf);
+        p('AP-3.1: textErsetzen - gleiche ID und Stelle, Lage/Größe/Drehung/Farbe bleiben, 1 Undo, Auswahl bleibt, Strg+Z', textErsetzenGrundfall);
+        p('AP-3.1: textErsetzen - gleicher Inhalt oder ungültiger Aufruf ändert nichts (false, kein Undo)', textErsetzenOhneAenderung);
+        p('AP-3.1: textErsetzen - mehrere Absätze mit \\n in einem Element, Teile entsprechend', textErsetzenMehrereAbsaetze);
+        p('AP-3.1: textErsetzen - Umbruch am sichtbaren Rand minus 20 px in der Schrift des Elements, \\n bleiben', textErsetzenUmbruch);
+        p('AP-3.1: textErsetzen - Umbruch am Rand des sichtbaren Ausschnitts (Zoom 2), nicht der Zeichenfläche', textErsetzenUmbruchSichtbarerAusschnitt);
+        p('AP-3.1: textErsetzen - gedrehter Text wird nicht umbrochen', textErsetzenGedrehtOhneUmbruch);
+        p('AP-3.1: textErsetzen - leerer Inhalt entfernt das Element (1 Undo, Auswahl leer)', textErsetzenLeer);
+        p('AP-3.1: textErsetzen - Teilfarben durch lesbareLauffarbe(…, Tafelfarbe)', textErsetzenTeilfarbenLesbar);
+        p('AP-3.1: textErsetzen - beendet Drehmodus und laufendes Ziehen (erreichte Lage gilt)', textErsetzenBeendetGesten);
     };
 })();
