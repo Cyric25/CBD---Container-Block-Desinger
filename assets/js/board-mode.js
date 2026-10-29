@@ -3330,6 +3330,16 @@
          * Verschieben zurück.
          */
         auswahlAufheben: function() {
+            // Fenster "Text bearbeiten" (AP-3.2) gehört zu dieser Auswahl:
+            // fällt sie weg - Seitenwechsel (_seiteLeeren), Werkzeugwechsel,
+            // Rückgängig -, schließt es ohne Änderung. Sonst träfe
+            // "Übernehmen" bei einer anderen Seite (IDs gelten nur je Seite)
+            // womöglich ein fremdes Element. Andere Blocktext-Fenster (Vorschau,
+            // Rückfrage) bleiben unberührt: blocktextEinfuegen() ruft diese
+            // Methode mitten im Klick auf "Auf die Tafel".
+            if (this._textBearbeitenFenster) {
+                this._blocktextFensterSchliessen(false);
+            }
             if (this._ziehen) {
                 this._ziehenBeenden(true);
             }
@@ -3787,11 +3797,127 @@
         },
 
         /**
-         * Knopf "Text bearbeiten" der Auswahlleiste (F11). In AP-3.1 ein
-         * leerer Platzhalter, der nichts tut - das Fenster dazu baut AP-3.2.
+         * Knopf "Text bearbeiten" der Auswahlleiste (F11, AP-3.2): öffnet den
+         * gewählten Text in einem Fenster - dasselbe Bearbeitungsfeld wie die
+         * Vorschau von "Text auf die Tafel" (_textFeldBauen), aber im Modus
+         * 'bearbeiten' (ein Absatz, Enter = Zeilenwechsel, F12), mit der
+         * Farbe des Elements als Grundschrift und der Tafelfarbe als
+         * Hintergrund, samt Formatleiste. Nur bei genau EINEM gewählten Text
+         * (_einGewaehlterText), sonst nichts. Die Schreibmarke steht am ENDE
+         * des Texts (Weitertippen hängt an).
+         *
+         * "Übernehmen" liest das Feld (_textFeldLesen) und ruft
+         * textErsetzen(id, absaetze) - außer wenn sich der Inhalt seit dem
+         * Öffnen nicht geändert hat (dann bliebe sonst durch das
+         * zusammenfassende Lesen etwa ein doppeltes Leerzeichen auf der
+         * Strecke, und es gäbe einen überflüssigen Undo-Schritt) oder wenn
+         * der Text inzwischen nicht mehr als einziger gewählt ist (dann
+         * schließt es ohne Änderung; Element-IDs sind nur je Seite eindeutig).
+         * Danach: Klickschutz (400 ms, wie bei "Auf die Tafel"), der Fokus
+         * liegt nicht mehr im Fenster und auf keinem Knopf. "Abbrechen" und
+         * Escape ändern nichts; der Fokus kehrt auf "Text bearbeiten" in der
+         * Auswahlleiste zurück.
+         *
+         * Das Fenster schließt ohne Änderung, wenn die Tafel schließt
+         * (close/destroy/_openOverlay über _blocktextFensterSchliessen) oder
+         * die Auswahl aufgehoben wird - auch beim Seitenwechsel, der über
+         * _seiteLeeren() auswahlAufheben() ruft. Liefert true, wenn das
+         * Fenster geöffnet wurde.
          */
         auswahlTextBearbeiten: function() {
-            return false;
+            if (!this.overlay) return false;
+            // Laufende Gesten zuerst übernehmen (wie auswahlTextGroesse und
+            // textErsetzen): sie bauen neue Element-Objekte
+            if (this._ziehen) this._ziehenBeenden(true);
+            if (this._drehen) this._drehenBeenden(true);
+            var alt = this._einGewaehlterText();
+            if (!alt) return false;
+            var self = this;
+            var id = alt.id;
+            var teile = this._blocktextFensterBauen('cbd-board-text-bearbeiten', 'Text bearbeiten',
+                'Ändere den Text. Markiere Wörter, um sie fett, kursiv oder farbig zu machen.',
+                function() { self._textBearbeitenSchliessen(true); });
+            var bau = this._textFeldBauen([{ text: alt.text, teile: alt.teile }], {
+                modus: 'bearbeiten',
+                grundfarbe: alt.farbe,
+                hintergrund: this.boardColor
+            });
+            var feld = bau.feld;
+            // Feld VOR der Leiste (erstes Ziel der Tab-Falle); board-mode.css
+            // stellt die Leiste per order darüber (wie in der Vorschau)
+            teile.dialog.appendChild(feld);
+            teile.dialog.appendChild(bau.leiste);
+
+            var anfang = null;
+            var erledigt = false;
+            teile.aktionen.appendChild(this._blocktextFensterKnopf('cbd-board-confirm-cancel', 'Abbrechen', function() {
+                self._textBearbeitenSchliessen(true);
+            }));
+            teile.aktionen.appendChild(this._blocktextFensterKnopf('cbd-board-blocktext-einfuegen cbd-board-text-uebernehmen',
+                'Übernehmen', function() {
+                    if (erledigt) return; // schneller Doppelklick
+                    erledigt = true;
+                    // Lesen, solange das Feld noch im Dokument hängt
+                    var absaetze = self._textFeldLesen(feld);
+                    var geaendert = JSON.stringify(absaetze) !== anfang;
+                    var gewaehlt = self._einGewaehlterText();
+                    var ziel = gewaehlt && gewaehlt.id === id;
+                    self._blocktextFensterSchliessen(false);
+                    if (geaendert && ziel) self.textErsetzen(id, absaetze);
+                    self._blocktextKlickschutz();
+                }));
+            teile.dialog.appendChild(teile.aktionen);
+            document.body.appendChild(teile.fenster);
+            this._textBearbeitenFenster = teile.fenster;
+
+            // Fokus ins Feld, Schreibmarke ans Ende. Zurückgelesen wird der
+            // Ausgangszustand, damit "Übernehmen" ohne eigene Änderung nichts
+            // ändert (anfang).
+            feld.focus();
+            this._textFeldMarkeAmEnde(feld);
+            feld.scrollTop = feld.scrollHeight;
+            anfang = JSON.stringify(this._textFeldLesen(feld));
+            return true;
+        },
+
+        /**
+         * Fenster "Text bearbeiten" ohne Änderung schließen (Abbrechen,
+         * Escape). rueckfokus: Fokus zurück auf den Knopf "Text bearbeiten"
+         * der Auswahlleiste (die Auswahl bleibt, der Knopf ist sichtbar).
+         */
+        _textBearbeitenSchliessen: function(rueckfokus) {
+            this._blocktextFensterSchliessen(false);
+            var knopf = (rueckfokus && this._auswahlLeiste) ?
+                this._auswahlLeiste.querySelector('[data-aktion="text-bearbeiten"]') : null;
+            if (knopf) {
+                try {
+                    knopf.focus({ preventScroll: true });
+                } catch (fehler) {
+                    knopf.focus();
+                }
+            }
+        },
+
+        /**
+         * Schreibmarke ans Ende des Texts im Bearbeitungsfeld setzen
+         * (eingeklappt). Sie steht im letzten Textknoten, hinter dessen
+         * letztem Zeichen - Weitertippen bleibt im selben Block und in der
+         * Formatierung des letzten Teils, ein Eintrag direkt am Feld (hinter
+         * dem div) hätte einen neuen Absatz gemacht. Endet der Text auf einen
+         * Zeilenwechsel (<br>), steht sie davor.
+         */
+        _textFeldMarkeAmEnde: function(feld) {
+            var sel = window.getSelection();
+            if (!sel || !feld) return;
+            var blatt = feld;
+            while (blatt.lastChild) blatt = blatt.lastChild;
+            var bereich = document.createRange();
+            if (blatt.nodeType === 3) bereich.setStart(blatt, blatt.nodeValue.length);
+            else if (blatt.tagName === 'BR') bereich.setStartBefore(blatt);
+            else bereich.setStart(blatt, 0);
+            bereich.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(bereich);
         },
 
         /**
@@ -6268,6 +6394,7 @@
             this._textFeldLauscherEntfernen();
             var f = this._blocktextFenster;
             this._blocktextFenster = null;
+            this._textBearbeitenFenster = null; // Fenster "Text bearbeiten" (AP-3.2)
             if (f && f.parentNode) f.parentNode.removeChild(f);
             if (rueckfokus && f && this.overlay) {
                 var knopf = this.overlay.querySelector('.cbd-board-blocktext-knopf');
