@@ -2837,9 +2837,9 @@
          *
          * _rahmen() und _lassoAbschliessen() messen NUR darueber und bauen
          * keine eigene Messfunktion - sonst messen sie fett/kursiv wieder in
-         * normaler Schrift. Zwei Stellen messen noch selbst: das laufende x
-         * beim Zeichnen (zeichneModell, Pass 4) und _blocktextVerteilen()
-         * (das stellt AP-2.3 um).
+         * normaler Schrift. Seit AP-2.3 gilt das auch fuer _blocktextVerteilen()
+         * ("Text auf die Tafel"); nur das laufende x beim Zeichnen
+         * (zeichneModell, Pass 4) misst noch selbst, mit derselben Schrift.
          */
         _textMass: function() {
             var ctx = this.drawingCtx;
@@ -5541,12 +5541,22 @@
          * umbrochen (Zeilenwechsel stehen danach im Text, Architektur E8).
          * Aufgerufen von der Vorschau (AP-2.3).
          *
+         * Eingabe (PLAN-Blocktext-Formatierung.md, AP-2.3): eine Zeichenkette
+         * (Leerzeile trennt die Absätze, wie bisher) ODER ein Array von
+         * Absätzen - Objekte {text, teile?} (teile wie im Elementmodell, F3)
+         * und/oder Zeichenketten. Einträge ohne Text zählen nicht. Ein Absatz
+         * mit teile wird zu einem Text-Element mit teile: gemessen wird je
+         * Teil in seiner Schrift (fett ist breiter), Teilfarben macht
+         * _blocktextMitTeilen() lesbar (F7). Ohne teile sind Element und
+         * Ergebnis byte-gleich wie vor dieser Änderung.
+         *
          * Platzierung (E9): unter allem, was im sichtbaren Ausschnitt schon
          * auf der Seite steht, 20 px Rand - eigene Notizen werden nicht
          * überdeckt; oben mindestens so tief, dass die Auswahlleiste über
          * den Text passt (G9, _blocktextVerteilen). Schrift 24 px, bis 18 px verkleinert, bis alles passt;
-         * was dann nicht passt, kommt als "rest" zurück (Absätze als
-         * Quelltext, für blocktextAufNeueSeite).
+         * was dann nicht passt, kommt als "rest" zurück (in der Form der
+         * Eingabe: Zeichenketten bleiben Zeichenketten, Objekte kommen als
+         * {text[, teile]} zurück - beides für blocktextAufNeueSeite).
          *
          * Farbe (E10): aktuelle Stiftfarbe, aber mit Kontrastschutz - nach
          * dem Öffnen ist der Stift immer Schwarz, auf grüner oder schwarzer
@@ -5560,12 +5570,12 @@
          * keinPlatz: nicht einmal eine Zeile in 18 px passt - nichts geändert,
          * kein Undo-Eintrag.
          */
-        blocktextEinfuegen: function(text) {
+        blocktextEinfuegen: function(eingabe) {
             if (!this.modell) return null;
             var modul = blocktextModul();
             if (this._ziehen) this._ziehenBeenden(true);
             if (this._drehen) this._drehenBeenden(true);
-            var absaetze = modul.absaetzeAusText(text);
+            var absaetze = this._blocktextAbsaetzeAus(eingabe);
             if (!absaetze.length) return { eingefuegt: 0, rest: [], keinPlatz: false };
 
             var self = this;
@@ -5581,6 +5591,7 @@
                 var el = this._elementAusStroke({ tool: 'text', text: blk.text, color: farbe,
                     width: (erg.px - 16) / 4, points: [{ x: blk.x, y: blk.y }] });
                 if (el) {
+                    if (blk.teile) el = this._blocktextMitTeilen(el, blk.teile);
                     neu.push(el);
                     ids.push(el.id);
                 }
@@ -5605,9 +5616,80 @@
         },
 
         /**
+         * Eingabe von blocktextEinfuegen()/blocktextAufNeueSeite() -> Liste
+         * der Absätze für CBDBoardBlocktext.verteile() (AP-2.3): eine
+         * Zeichenkette wird an Leerzeilen in Absatz-Zeichenketten zerlegt
+         * (wie bisher); aus einem Array werden Objekte mit nicht leerem
+         * Text als neue Objekte {text[, teile]} übernommen (teile nur, wenn
+         * es ein Array ist - die Prüfung der Teile macht das Modul, ein
+         * unbrauchbares teile gilt dort als Klartext), Zeichenketten gehen
+         * wie die Zeichenkette-Eingabe durch absaetzeAusText(). Alles andere
+         * (null, Zahlen, Objekte ohne Text, nur Leerraum) zählt nicht.
+         */
+        _blocktextAbsaetzeAus: function(eingabe) {
+            var modul = blocktextModul();
+            if (typeof eingabe === 'string') return modul.absaetzeAusText(eingabe);
+            var aus = [];
+            if (!Array.isArray(eingabe)) return aus;
+            for (var i = 0; i < eingabe.length; i++) {
+                var a = eingabe[i];
+                if (typeof a === 'string') {
+                    aus = aus.concat(modul.absaetzeAusText(a));
+                } else if (a !== null && typeof a === 'object' && typeof a.text === 'string' && /\S/.test(a.text)) {
+                    var absatz = { text: a.text };
+                    if (Array.isArray(a.teile)) absatz.teile = a.teile;
+                    aus.push(absatz);
+                }
+            }
+            return aus;
+        },
+
+        /**
+         * Text-Element el (aus _elementAusStroke) um die Teile eines Blocks
+         * von verteile() ergänzen (AP-2.3, F7/F4): liefert ein NEUES Objekt
+         * mit denselben Feldern plus teile in der Schlüsselreihenfolge des
+         * Elementmodells (id, typ, farbe, breite, text, x, y, teile). Jede
+         * Teilfarbe geht durch lesbareLauffarbe(farbe, Tafelfarbe) - eine
+         * Farbe, die das nicht kann (z. B. rgb()), entfällt -, danach legt
+         * CBDBoardElemente.teileZusammenlegen benachbarte gleiche Teile
+         * zusammen. Bleibt keine Formatierung übrig, kommt el unverändert
+         * zurück (ohne teile). Dasselbe gilt, wenn die Teile die Prüfung des
+         * Elementmodells nicht bestünden - mehr als MAX_TEILE Teile oder eine
+         * Verkettung, die nicht der Text ist: Sonst verwürfe sie erst das
+         * Speichern/Laden (und zeichnen würde schon vorher unformatiert,
+         * zeilenTeile), der Text bleibt vollständig.
+         */
+        _blocktextMitTeilen: function(el, teile) {
+            var modul = blocktextModul();
+            var E = elementeModul();
+            var lesbar = [];
+            for (var i = 0; i < teile.length; i++) {
+                var t = teile[i];
+                var teil = { t: t.t };
+                if (t.f) teil.f = 1;
+                if (t.k) teil.k = 1;
+                var farbe = t.farbe ? modul.lesbareLauffarbe(t.farbe, this.boardColor) : null;
+                if (farbe) teil.farbe = farbe;
+                lesbar.push(teil);
+            }
+            var fertig = E.teileZusammenlegen(lesbar);
+            if (!fertig.length || fertig.length > E.MAX_TEILE) return el;
+            var verkettet = '';
+            for (var k = 0; k < fertig.length; k++) verkettet += fertig[k].t;
+            if (verkettet !== el.text) return el;
+            return { id: el.id, typ: el.typ, farbe: el.farbe, breite: el.breite, text: el.text,
+                x: el.x, y: el.y, teile: fertig };
+        },
+
+        /**
          * Absätze im sichtbaren Ausschnitt unter den gegebenen Rahmen
          * verteilen (24 -> 18 px, höchstens 5000 Zeichen je Block); Breiten
-         * mit der Zeichenebene gemessen wie in _rahmen().
+         * mit der Zeichenebene gemessen wie in _rahmen() - über _textMass()
+         * mit Stil, ein fetter oder kursiver Teil misst also in seiner
+         * Schrift (AP-2.3; vorher setzte diese Methode ctx.font selbst und
+         * kannte nur normale Schrift). Ohne Zeichenebene schätzt das Modul.
+         * Absätze sind Zeichenketten oder {text, teile?} (siehe
+         * CBDBoardBlocktext.verteile).
          *
          * Folge-AP G9: Nach dem Einfügen ist alles gewählt, und die
          * Auswahlleiste gehört über den Rahmen (8 px Rand, 6 px Abstand,
@@ -5620,11 +5702,7 @@
          */
         _blocktextVerteilen: function(absaetze, rahmen) {
             var modul = blocktextModul();
-            var ctx = this.drawingCtx;
-            var mass = function(t, px) {
-                ctx.font = px + 'px sans-serif';
-                return ctx.measureText(t).width;
-            };
+            var mass = this._textMass();
             var optionen = { startPx: 24, minPx: 18, maxZeichen: 5000 };
             var sichtbar = this._sichtbarerBereich();
             var flaeche = modul.flaecheUnter(sichtbar, rahmen, 20);
@@ -5648,11 +5726,26 @@
          * etwas hin (stark vergrößert), entsteht ebenfalls keine Seite -
          * Rückgabe keinPlatz (AP-2.fix1, Review-Befund G5: vorher blieb eine
          * leere Seite zurück, Seiten lassen sich nicht löschen).
+         *
+         * rest (AP-2.3): ein Array aus Zeichenketten wie bisher; enthält es
+         * Objekte {text, teile?} (der Rest eines formatierten Texts), geht
+         * die Liste als Array an blocktextEinfuegen() - Zeichenketten darin
+         * gelten wie dort als Absätze -, und die Probe gegen die leere Seite
+         * läuft mit denselben Absätzen. Der Rest behält so seine Formatierung.
          */
         blocktextAufNeueSeite: function(rest) {
             if (!this.modell) return null;
-            var text = Array.isArray(rest) ? rest.join('\n\n') : '';
-            var absaetze = blocktextModul().absaetzeAusText(text);
+            var mitObjekten = Array.isArray(rest) && rest.some(function(r) {
+                return r !== null && typeof r === 'object';
+            });
+            var text = null;
+            var absaetze;
+            if (mitObjekten) {
+                absaetze = this._blocktextAbsaetzeAus(rest);
+            } else {
+                text = Array.isArray(rest) ? rest.join('\n\n') : '';
+                absaetze = blocktextModul().absaetzeAusText(text);
+            }
             if (!absaetze.length) {
                 return { eingefuegt: 0, rest: [], keinPlatz: false };
             }
@@ -5660,7 +5753,7 @@
                 return { eingefuegt: 0, rest: absaetze, keinPlatz: true };
             }
             this.addPage();
-            return this.blocktextEinfuegen(text);
+            return this.blocktextEinfuegen(mitObjekten ? absaetze : text);
         },
 
         /**
