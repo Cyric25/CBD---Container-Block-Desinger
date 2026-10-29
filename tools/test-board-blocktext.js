@@ -971,6 +971,22 @@
         }
     ];
 
+    // Nachtrag (Mutationsprobe): Klartext muss auch INNERHALB einer
+    // Formatierung Klartext bleiben - in (e2) und (i) ist das Elternelement
+    // des BR bzw. der Zelle unformatiert, dort fiele ein Fehler nicht auf.
+    // BR in <strong>: "\n" ohne f; Absätze in einer fetten Tabellenzelle:
+    // das trennende Leerzeichen ohne f.
+    function formatKlartextInFormatierung() {
+        var f = [];
+        var br = teileFall('<p><strong>a<br>b</strong></p>',
+            [{ text: 'a\nb', teile: [{ t: 'a', f: 1 }, { t: '\n' }, { t: 'b', f: 1 }] }])();
+        if (br !== true) f.push('BR in strong: ' + br.detail);
+        var zelle = teileFall('<table><tr><td style="font-weight:700"><p>x</p><p>y</p></td></tr></table>',
+            [{ text: 'x y', teile: [{ t: 'x', f: 1 }, { t: ' ' }, { t: 'y', f: 1 }] }])();
+        if (zelle !== true) f.push('Absätze in fetter Zelle: ' + zelle.detail);
+        return ergebnis(f);
+    }
+
     // (d, zweiter Teil): ohne .cbd-container-content gilt die Farbe der
     // übergebenen Wurzel als Grundfarbe
     function formatGrundfarbeWurzel() {
@@ -1206,6 +1222,7 @@
         p('Formatierung lesen: Regel F6 (Stärke 600 ja, 500 nein, oblique, Glossarbegriff)', formatRegelF6);
         p('Formatierung lesen (B10): color(srgb …) -> #rrggbb, oklab(…) und Alpha 0 ohne Farbe', formatB10Farbformen);
         p('Formatierung lesen: _blocktextAbsaetze() als [{text, teile?}], ohne Tafel []', formatAbsaetze);
+        p('Formatierung lesen: BR und Blockgrenzen-Leerzeichen bleiben auch in Fett Klartext', formatKlartextInFormatierung);
     };
 
     window.__zusatzTestsAsync = function(c) {
