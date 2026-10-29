@@ -45,6 +45,164 @@
         'cbd-drawing-toggle', 'cbd-board-blocktext-leiste', 'screen-reader-text'
     ];
 
+    // Formatierung beim Lesen (PLAN-Blocktext-Formatierung.md, AP-2.1):
+    // Stil eines Zeichens, das nicht aus einem Textknoten stammt - Listen-
+    // praefix, " | " zwischen Tabellenzellen, Leerzeichen an Blockgrenzen
+    // in einer Tabellenzeile und "\n" aus BR.
+    var BLOCKTEXT_KLARTEXT = { f: 0, k: 0, farbe: null };
+
+    // Namen der Stiftfarben (presetColors) für die Farbknöpfe der
+    // Formatleiste im Bearbeitungsfeld (PLAN-Blocktext-Formatierung.md,
+    // AP-2.4): aria-label und Tooltip. Unbekannte Farbe -> ihr Hex-Wert.
+    var FORMAT_FARBNAMEN = {
+        '#000000': 'Schwarz', '#ffffff': 'Weiß', '#ff0000': 'Rot',
+        '#0000ff': 'Blau', '#ffff00': 'Gelb', '#00ff00': 'Grün'
+    };
+
+    /**
+     * Farbangabe -> '#rrggbb' oder null (AP-2.1, Review-Befund B10 aus
+     * AP-1.rev). getComputedStyle liefert meist rgb()/rgba(), fuer
+     * color-mix() aber color(srgb …) oder oklab(…). Solche Formen passen
+     * nicht auf das Farbmuster des Elementmodells, und teileZusammenlegen()
+     * liesse sie still weg - deshalb wird hier vereinheitlicht:
+     * #rgb/#rrggbb, rgb()/rgba() (Komma- oder Leerzeichenform) und
+     * color(srgb r g b [/ a]) mit Anteilen 0..1 werden zu '#rrggbb';
+     * ein Alpha ueber 0 wird uebergangen (halb durchsichtiges Rot -> Rot).
+     * null (= keine eigene Farbe): Alpha 0 (durchsichtig, Regel F6) und
+     * alles nicht Darstellbare (oklab, lab, display-p3, Farbnamen, Anteile
+     * ausserhalb des Bereichs).
+     */
+    function blocktextHexFarbe(wert) {
+        if (typeof wert !== 'string') return null;
+        var s = wert.replace(/^\s+|\s+$/g, '').toLowerCase();
+        var m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/.exec(s);
+        if (m) {
+            var h = m[1];
+            if (h.length === 3) {
+                h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+            }
+            return '#' + h;
+        }
+        var faktor = 1;
+        m = /^rgba?\(([^()]*)\)$/.exec(s);
+        if (!m) {
+            m = /^color\(\s*srgb\s+([^()]*)\)$/.exec(s);
+            if (!m) return null;
+            faktor = 255;
+        }
+        var werte = m[1].split(/[\s,\/]+/);
+        if (werte.length && werte[0] === '') werte.shift();
+        if (werte.length && werte[werte.length - 1] === '') werte.pop();
+        if (werte.length !== 3 && werte.length !== 4) return null;
+        var zahlen = [];
+        for (var i = 0; i < werte.length; i++) {
+            if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/.test(werte[i])) return null;
+            zahlen.push(parseFloat(werte[i]));
+        }
+        if (zahlen.length === 4 && !(zahlen[3] > 0)) return null;
+        var hex = '#';
+        for (var j = 0; j < 3; j++) {
+            var v = zahlen[j] * faktor;
+            if (!(v >= -0.5 && v <= 255.5)) return null;
+            var n = Math.max(0, Math.min(255, Math.round(v)));
+            hex += (n < 16 ? '0' : '') + n.toString(16);
+        }
+        return hex;
+    }
+
+    /**
+     * Einzelne UTF-16-Surrogate in einer Zeichenkette durch U+FFFD ersetzen
+     * (AP-2.fix2, Review-Befund B5 aus AP-2.rev): ein High-Surrogat ohne
+     * folgendes Low und ein Low ohne vorheriges High. Eine präparierte
+     * Zwischenablage (text/plain) oder ein zerlegtes Zeichen im Feld
+     * brächten sonst ein halbes Zeichen in den Text; json_decode im Server
+     * lehnt das ab, und die Klassen-Tafel würde nur als Bild gespeichert.
+     * Gültige Paare (Emoji) bleiben ganz.
+     */
+    function blocktextEinzelneSurrogate(text) {
+        var s = String(text);
+        var aus = '';
+        var von = 0;
+        for (var i = 0; i < s.length; i++) {
+            var c = s.charCodeAt(i);
+            if (c >= 0xD800 && c <= 0xDBFF) {
+                var n = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
+                if (n >= 0xDC00 && n <= 0xDFFF) {
+                    i++;
+                    continue;
+                }
+            } else if (!(c >= 0xDC00 && c <= 0xDFFF)) {
+                continue;
+            }
+            aus += s.slice(von, i) + '�';
+            von = i + 1;
+        }
+        return von === 0 && aus === '' ? s : aus + s.slice(von);
+    }
+
+    /**
+     * Wie blocktextEinzelneSurrogate() für einen gelesenen Absatz
+     * {text, teile?}. Ersetzt wird anhand von text (ein Paar über einer
+     * Teilgrenze bleibt gültig und unverändert); jedes Zeichen wird durch
+     * genau ein Zeichen ersetzt, die Länge ändert sich also nie. Die
+     * Verkettung der Teile ergibt danach weiter text. Ein Absatz ohne
+     * einzelnes Surrogat kommt unverändert zurück (dasselbe Objekt).
+     */
+    function blocktextAbsatzOhneEinzelneSurrogate(absatz) {
+        var neu = blocktextEinzelneSurrogate(absatz.text);
+        if (neu === absatz.text) return absatz;
+        var aus = { text: neu };
+        if (absatz.teile) {
+            var pos = 0;
+            aus.teile = absatz.teile.map(function(teil) {
+                var kopie = {};
+                for (var schluessel in teil) {
+                    if (Object.prototype.hasOwnProperty.call(teil, schluessel)) kopie[schluessel] = teil[schluessel];
+                }
+                kopie.t = neu.slice(pos, pos + teil.t.length);
+                pos += teil.t.length;
+                return kopie;
+            });
+        }
+        return aus;
+    }
+
+    // Leerraum eines gelesenen Absatzes bereinigen - zeichenweise auf Text
+    // UND Stil-Liste zugleich (AP-2.1). Ergebnis-Text exakt wie die frueheren
+    // regulaeren Ausdruecke in _blocktextLesen() (bis 3.1.147):
+    //   text.replace(/ {2,}/g, ' ').replace(/ *\n */g, '\n')
+    //       .replace(/^[ \n]+|[ \n]+$/g, '')
+    // 1. Mehrere Leerzeichen -> eines; das ERSTE behaelt seinen Stil
+    //    (<p>a <b> b </b> c</p> -> "a " normal, "b " fett, "c" normal).
+    // 2. Leerzeichen direkt vor oder nach "\n" entfallen (nach Schritt 1
+    //    sind Leerzeichenfolgen hoechstens 1 lang - genau das, was der
+    //    zweite Ausdruck entfernt).
+    // 3. Leerzeichen und "\n" an beiden Raendern entfallen.
+    // Nur U+0020 und "\n" werden angefasst, Surrogatpaare bleiben ganz.
+    // Bitte nicht wieder auf die regulaeren Ausdruecke umstellen: die
+    // Stil-Liste muss Zeichen fuer Zeichen mitlaufen. (Als Zeilenkommentar,
+    // weil der zweite Ausdruck einen Block-Kommentar beenden wuerde.)
+    function blocktextBereinigen(text, stile) {
+        var z = [], s = [];
+        var i;
+        for (i = 0; i < text.length; i++) {
+            var c = text.charAt(i);
+            if (c === ' ' && i > 0 && text.charAt(i - 1) === ' ') continue;
+            z.push(c);
+            s.push(stile[i]);
+        }
+        var z2 = [], s2 = [];
+        for (i = 0; i < z.length; i++) {
+            if (z[i] === ' ' && ((i > 0 && z[i - 1] === '\n') || (i + 1 < z.length && z[i + 1] === '\n'))) continue;
+            z2.push(z[i]);
+            s2.push(s[i]);
+        }
+        var von = 0, bis = z2.length;
+        while (von < bis && (z2[von] === ' ' || z2[von] === '\n')) von++;
+        while (bis > von && (z2[bis - 1] === ' ' || z2[bis - 1] === '\n')) bis--;
+        return { text: z2.slice(von, bis).join(''), stile: s2.slice(von, bis) };
+    }
+
     // Eigene Notizen im localStorage (AP-4.4, Schritt 7): Alle Schlüssel mit
     // dem Präfix 'cbd-board-' gehören zu den Tafeln und werden exportiert,
     // importiert und mit "Alle Notizen löschen" entfernt - außer den
@@ -2744,9 +2902,9 @@
          *
          * _rahmen() und _lassoAbschliessen() messen NUR darueber und bauen
          * keine eigene Messfunktion - sonst messen sie fett/kursiv wieder in
-         * normaler Schrift. Zwei Stellen messen noch selbst: das laufende x
-         * beim Zeichnen (zeichneModell, Pass 4) und _blocktextVerteilen()
-         * (das stellt AP-2.3 um).
+         * normaler Schrift. Seit AP-2.3 gilt das auch fuer _blocktextVerteilen()
+         * ("Text auf die Tafel"); nur das laufende x beim Zeichnen
+         * (zeichneModell, Pass 4) misst noch selbst, mit derselben Schrift.
          */
         _textMass: function() {
             var ctx = this.drawingCtx;
@@ -5154,19 +5312,98 @@
          * mit "inline" beginnt und nicht "contents" ist. Innerhalb einer
          * Tabellenzeile gelten sie nicht: TR = ein Absatz, Zellen mit " | ".
          * Braucht deshalb einen im Dokument hängenden Bereich.
+         *
+         * Formatierung (PLAN-Blocktext-Formatierung.md, AP-2.1, Regel F6):
+         * Jeder Absatz trägt zusätzlich teile [{t, f?, k?, farbe?}] im Format
+         * des Elementmodells - aber nur, wenn etwas formatiert ist (sonst
+         * fehlt der Schlüssel). fett = berechnete font-weight >= 600, kursiv =
+         * font-style italic/oblique, farbe = berechnete Farbe als '#rrggbb',
+         * wenn sie von der Grundfarbe abweicht. Grundfarbe:
+         * optionen.grundfarbe, sonst die berechnete Farbe des ersten
+         * .cbd-container-content in wurzel, sonst die von wurzel. Stil eines
+         * Textknotens = Stil seines Elternelements, Formeltext = Stil des
+         * Formel-Elements; Listenpräfix, " | ", Leerzeichen an Blockgrenzen
+         * und "\n" aus BR sind Klartext. Der reine Text bleibt genau wie vor
+         * AP-2.1 (die Leerraum-Bereinigung läuft zeichenweise über Text und
+         * Stile zugleich, siehe blocktextBereinigen()).
+         *
+         * optionen (F10, das Bearbeitungsfeld aus AP-2.4 wird mit demselben
+         * Leser zurückgelesen): grundfarbe ('#rrggbb' u. a.) ersetzt die
+         * berechnete Grundfarbe; nbsp: true behandelt geschütztes Leerzeichen
+         * (U+00A0) wie ein Leerzeichen (zusammengefasst, am Rand entfernt).
+         * Ohne optionen bleibt es wie bisher erhalten; auch das
+         * Bearbeitungsfeld setzt nbsp seit AP-2.fix2 nicht mehr
+         * (_textFeldLesen).
+         * pre: true (AP-2.4) liest schon die Wurzel wie ein PRE - "\n" in
+         * Textknoten bleibt ein Zeilenwechsel. Das Bearbeitungsfeld hat
+         * white-space: pre-wrap, und Chrome/Safari fügen dort bei einem
+         * Zeilenwechsel (Umschalt+Enter, insertLineBreak) ein "\n"-Zeichen
+         * statt eines <br> ein - ohne die Option würde er beim Lesen zum
+         * Leerzeichen. Nur _textFeldLesen() setzt sie.
          */
-        _blocktextLesen: function(wurzel) {
+        _blocktextLesen: function(wurzel, optionen) {
             var modul = blocktextModul();
+            var elemente = elementeModul();
+            var opt = optionen || {};
             var absaetze = [];
-            var lauf = null; // {art, praefix, text}
+            var lauf = null; // {art, praefix, text, stile} - stile: ein Stil je Zeichen von text
             var zelleNr = 0;
+            var LEER = opt.nbsp ? /[ \t\n\r\f ]+/g : /[ \t\n\r\f]+/g;
+            var LEER_PRE = opt.nbsp ? /[ \t\f ]+/g : /[ \t\f]+/g;
+            var istElement = !!(wurzel && wurzel.nodeType === 1);
+
+            var grundfarbe = blocktextHexFarbe(opt.grundfarbe);
+            if (!grundfarbe && istElement) {
+                var inhalt = wurzel.querySelector('.cbd-container-content');
+                grundfarbe = blocktextHexFarbe(window.getComputedStyle(inhalt || wurzel).color);
+            }
+
+            // Berechneter Stil -> {f, k, farbe} (Regel F6). 'bold'/'normal'
+            // nur zur Sicherheit, Browser liefern Zahlen ("700").
+            function formatVon(stil) {
+                var g = stil.fontWeight;
+                g = g === 'bold' ? 700 : (g === 'normal' ? 400 : parseFloat(g));
+                var lage = String(stil.fontStyle || '');
+                var farbe = blocktextHexFarbe(stil.color);
+                return {
+                    f: g >= 600 ? 1 : 0,
+                    k: (lage.indexOf('italic') === 0 || lage.indexOf('oblique') === 0) ? 1 : 0,
+                    farbe: (farbe && farbe !== grundfarbe) ? farbe : null
+                };
+            }
+
+            // Zeichen gleichen Stils zu Teilen; Präfix als Klartext davor.
+            // teileZusammenlegen liefert für reinen Klartext [] -> kein teile.
+            function teileBilden(praefix, text, stile) {
+                if (!elemente || typeof elemente.teileZusammenlegen !== 'function') return null;
+                var roh = praefix ? [{ t: praefix }] : [];
+                var i = 0;
+                while (i < text.length) {
+                    var st = stile[i];
+                    var j = i + 1;
+                    while (j < text.length && (stile[j] === st ||
+                        (stile[j].f === st.f && stile[j].k === st.k && stile[j].farbe === st.farbe))) {
+                        j++;
+                    }
+                    var teil = { t: text.slice(i, j) };
+                    if (st.f) teil.f = 1;
+                    if (st.k) teil.k = 1;
+                    if (st.farbe) teil.farbe = st.farbe;
+                    roh.push(teil);
+                    i = j;
+                }
+                var teile = elemente.teileZusammenlegen(roh);
+                return teile.length ? teile : null;
+            }
 
             function abschliessen(hart) {
                 if (!lauf) return;
-                var t = lauf.text.replace(/ {2,}/g, ' ').replace(/ *\n */g, '\n')
-                    .replace(/^[ \n]+|[ \n]+$/g, '');
-                if (t) {
-                    absaetze.push({ art: lauf.art, text: lauf.praefix + t });
+                var b = blocktextBereinigen(lauf.text, lauf.stile);
+                if (b.text) {
+                    var absatz = { art: lauf.art, text: lauf.praefix + b.text };
+                    var teile = teileBilden(lauf.praefix, b.text, b.stile);
+                    if (teile) absatz.teile = teile;
+                    absaetze.push(absatz);
                     lauf = null;
                 } else if (hart || !lauf.praefix) {
                     lauf = null;
@@ -5177,12 +5414,14 @@
 
             function beginnen(art, praefix) {
                 abschliessen(true);
-                lauf = { art: art, praefix: praefix || '', text: '' };
+                lauf = { art: art, praefix: praefix || '', text: '', stile: [] };
             }
 
-            function anhaengen(s) {
-                if (!lauf) lauf = { art: 'absatz', praefix: '', text: '' };
+            function anhaengen(s, format) {
+                if (!lauf) lauf = { art: 'absatz', praefix: '', text: '', stile: [] };
+                var st = format || BLOCKTEXT_KLARTEXT;
                 lauf.text += s;
+                for (var i = 0; i < s.length; i++) lauf.stile.push(st);
             }
 
             function hatWegKlasse(el) {
@@ -5206,15 +5445,16 @@
                 return (n + start - 1) + '. ';
             }
 
-            function formel(el, inZeile) {
+            // format: Stil des Formel-Elements selbst (z. B. fett in <strong>)
+            function formel(el, inZeile, format) {
                 var quelle = el.getAttribute('data-latex');
-                var t = (modul && typeof modul.latexZuText === 'function') ? modul.latexZuText(quelle) : quelle;
+                var t = String((modul && typeof modul.latexZuText === 'function') ? modul.latexZuText(quelle) : quelle);
                 if (!inZeile && el.classList.contains('cbd-latex-display')) {
                     beginnen('formel');
-                    anhaengen(t);
+                    anhaengen(t, format);
                     abschliessen(true);
                 } else {
-                    anhaengen(t);
+                    anhaengen(t, format);
                 }
             }
 
@@ -5227,13 +5467,14 @@
                 }
                 var stil = window.getComputedStyle(el);
                 if (stil.display === 'none' || stil.visibility === 'hidden') return;
+                var format = formatVon(stil);
 
                 if (el.classList.contains('cbd-latex-formula') && el.hasAttribute('data-latex')) {
-                    formel(el, ctx.inZeile);
+                    formel(el, ctx.inZeile, format);
                     return;
                 }
                 if (tag === 'BR') {
-                    anhaengen('\n');
+                    anhaengen('\n', BLOCKTEXT_KLARTEXT);
                     return;
                 }
 
@@ -5251,20 +5492,21 @@
                 var kind = {
                     pre: ctx.pre || tag === 'PRE',
                     ueberschrift: ctx.ueberschrift || istUeberschrift,
-                    inZeile: ctx.inZeile
+                    inZeile: ctx.inZeile,
+                    format: format
                 };
 
                 if (ctx.inZeile) {
                     // In einer Tabellenzeile: Zellen verbinden, alles
                     // andere Blockige nur als Leerzeichen trennen
                     if (tag === 'TD' || tag === 'TH') {
-                        if (zelleNr > 0) anhaengen(' | ');
+                        if (zelleNr > 0) anhaengen(' | ', BLOCKTEXT_KLARTEXT);
                         zelleNr++;
                     } else if (istBlock || art) {
-                        anhaengen(' ');
+                        anhaengen(' ', BLOCKTEXT_KLARTEXT);
                     }
                     besuchen(el, kind);
-                    if (istBlock || art) anhaengen(' ');
+                    if (istBlock || art) anhaengen(' ', BLOCKTEXT_KLARTEXT);
                     return;
                 }
 
@@ -5297,17 +5539,23 @@
                 for (var k = knoten.firstChild; k; k = k.nextSibling) {
                     if (zu && k.nodeName !== 'SUMMARY') continue;
                     if (k.nodeType === 3) {
+                        // Stil eines Textknotens = Stil seines Elternelements
                         var s = k.nodeValue;
-                        s = ctx.pre ? s.replace(/\r\n?/g, '\n').replace(/[ \t\f]+/g, ' ')
-                            : s.replace(/[ \t\n\r\f]+/g, ' ');
-                        if (s) anhaengen(s);
+                        s = ctx.pre ? s.replace(/\r\n?/g, '\n').replace(LEER_PRE, ' ')
+                            : s.replace(LEER, ' ');
+                        if (s) anhaengen(s, ctx.format);
                     } else if (k.nodeType === 1) {
                         element(k, ctx);
                     }
                 }
             }
 
-            if (wurzel) besuchen(wurzel, { pre: false, ueberschrift: false, inZeile: false });
+            if (wurzel) {
+                besuchen(wurzel, {
+                    pre: !!opt.pre, ueberschrift: false, inZeile: false,
+                    format: istElement ? formatVon(window.getComputedStyle(wurzel)) : BLOCKTEXT_KLARTEXT
+                });
+            }
             abschliessen(true);
             return absaetze;
         },
@@ -5322,6 +5570,120 @@
             var bereich = this.overlay.querySelector('.cbd-board-content');
             if (!bereich) return '';
             return this._blocktextLesen(bereich).map(function(a) { return a.text; }).join('\n\n');
+        },
+
+        /**
+         * Absätze des linken Blockbereichs mit Formatierung
+         * (PLAN-Blocktext-Formatierung.md, AP-2.1): [{text, teile?}] aus
+         * _blocktextLesen() ohne art; teile nur bei formatierten Absätzen.
+         * Gleiche Texte wie _blocktextAlsText(). Ohne offene Tafel [].
+         *
+         * Im Darkmode mit den Stilen des Hellmodus gelesen (AP-2.fix1, siehe
+         * _imHellmodus): Die gespeicherten Farben hängen sonst davon ab, in
+         * welchem Modus die Lehrperson die Seite gerade ansieht (Glossar
+         * '#f0b090' statt '#71230a', Grundfarbe hell statt '#333333').
+         */
+        _blocktextAbsaetze: function() {
+            if (!this.overlay) return [];
+            var bereich = this.overlay.querySelector('.cbd-board-content');
+            if (!bereich) return [];
+            var self = this;
+            var gelesen = this._imHellmodus(function() {
+                return self._blocktextLesen(bereich);
+            }, bereich);
+            return gelesen.map(function(a) {
+                var absatz = { text: a.text };
+                if (a.teile) absatz.teile = a.teile;
+                return absatz;
+            });
+        },
+
+        /**
+         * Führt lesen() mit den berechneten Stilen des Hellmodus aus und
+         * gibt sein Ergebnis zurück (PLAN-Blocktext-Formatierung.md,
+         * AP-2.fix1). Der Darkmode des Themes ist das Attribut data-theme an
+         * <html> (Theme/header.php; Hellmodus = Attribut fehlt). Es wird für
+         * die Dauer des SYNCHRONEN Lesens entfernt und danach mit demselben
+         * Wert wieder gesetzt - dazwischen zeichnet der Browser kein Bild,
+         * es flackert also nichts. Ohne data-theme läuft lesen() direkt,
+         * ohne jeden Eingriff.
+         *
+         * Zwei Fallen - bitte nicht vereinfachen:
+         * 1. CSS-Übergänge: Das Theme hat z. B. .glossar-term
+         *    {transition: all 0.2s}. Ohne Sperre startet das Umschalten mit
+         *    der nächsten Stilberechnung einen Übergang, und
+         *    getComputedStyle() liefert dessen STARTWERT - also wieder die
+         *    Darkmode-Farbe (Hinweg); auf dem Rückweg liefe ein sichtbarer
+         *    Übergang hell -> dunkel. Deshalb sperrt ein eigenes <style> alle
+         *    Übergänge, bis nach dem Zurücksetzen eine Stilberechnung
+         *    erzwungen ist (getComputedStyle an <html> und am gelesenen
+         *    Bereich); erst danach wird es entfernt. Die Reihenfolge
+         *    "zurücksetzen, berechnen, Sperre weg" ist entscheidend: Wer die
+         *    Sperre vor der Berechnung entfernt, startet den Übergang
+         *    hell -> dunkel auf der ganzen Seite. Laufende
+         *    Übergänge (z. B. Hover auf dem Knopf) springen durch die
+         *    Sperre an ihr Ende.
+         *    Die Sperre ist bevorzugt ein Constructable Stylesheet
+         *    (new CSSStyleSheet() + replaceSync(), angehängt über
+         *    document.adoptedStyleSheets; danach wird exakt die alte Liste
+         *    wiederhergestellt): Das wirkt auch unter einer CSP OHNE
+         *    'unsafe-inline' in style-src, unter der ein eingefügtes
+         *    <style>-Element wirkungslos bliebe (Review AP-2.rev, B3: dann
+         *    würde wieder der Startwert des Übergangs gelesen, dazu ein
+         *    CSP-Konsolenfehler je Lesen). Fehlen Constructable
+         *    Stylesheets (ältere Browser) oder scheitert der Aufbau,
+         *    sperrt ein <style data-cbd-hellmodus-lesen>-Element wie
+         *    bisher; das setzt 'unsafe-inline' in style-src voraus - das
+         *    braucht das Theme ohnehin (Customizer-CSS als Inline-<style>).
+         * 2. Beobachter auf <html>: Ein MutationObserver auf data-theme
+         *    bekäme zwei Einträge (entfernt, wieder gesetzt). Sein Rückruf
+         *    läuft als Mikrotask NACH diesem synchronen Block und sieht das
+         *    Attribut wieder im alten Zustand. Theme und beide Plugins
+         *    beobachten <html> nicht (Stand AP-2.fix1, Liste in der
+         *    Übergabenotiz des Plans); der Theme-Knopf liest das Attribut
+         *    nur beim Klick, die Tafel-Inversion setzt nur
+         *    updateDarkModeInversion(). Wer einen solchen Beobachter
+         *    einbaut, muss ihn gegen dieses kurze Umschalten prüfen.
+         * Mit try/finally: data-theme kommt auch bei einer Ausnahme zurück.
+         * Gelesen werden nur berechnete Stile (kein Layout) - Resize- und
+         * IntersectionObserver bemerken nichts.
+         */
+        _imHellmodus: function(lesen, bereich) {
+            var html = document.documentElement;
+            if (!html || !html.hasAttribute('data-theme')) return lesen();
+            var wert = html.getAttribute('data-theme');
+            var SPERRE_CSS = '*, *::before, *::after { transition: none !important; }';
+            var altBlaetter = null; // adoptedStyleSheets vor der Sperre (exakt wiederherzustellen)
+            var sperre = null;      // <style>-Element, nur im Rückfall
+            try {
+                if (typeof window.CSSStyleSheet === 'function' && document.adoptedStyleSheets) {
+                    var blatt = new window.CSSStyleSheet();
+                    blatt.replaceSync(SPERRE_CSS);
+                    var alt = Array.prototype.slice.call(document.adoptedStyleSheets);
+                    document.adoptedStyleSheets = alt.concat([blatt]);
+                    altBlaetter = alt; // erst nach gelungener Zuweisung gesetzt
+                }
+            } catch (fehler) {
+                altBlaetter = null;
+            }
+            if (!altBlaetter) {
+                sperre = document.createElement('style');
+                sperre.setAttribute('data-cbd-hellmodus-lesen', '');
+                sperre.appendChild(document.createTextNode(SPERRE_CSS));
+                (document.head || html).appendChild(sperre);
+            }
+            try {
+                html.removeAttribute('data-theme');
+                return lesen();
+            } finally {
+                html.setAttribute('data-theme', wert);
+                // Stilberechnung erzwingen, solange die Sperre noch gilt
+                // (Falle 1 oben) - der Rückgabewert wird nicht gebraucht
+                window.getComputedStyle(html).getPropertyValue('color');
+                if (bereich && bereich.nodeType === 1) window.getComputedStyle(bereich).getPropertyValue('color');
+                if (altBlaetter) document.adoptedStyleSheets = altBlaetter;
+                if (sperre && sperre.parentNode) sperre.parentNode.removeChild(sperre);
+            }
         },
 
         /**
@@ -5349,12 +5711,22 @@
          * umbrochen (Zeilenwechsel stehen danach im Text, Architektur E8).
          * Aufgerufen von der Vorschau (AP-2.3).
          *
+         * Eingabe (PLAN-Blocktext-Formatierung.md, AP-2.3): eine Zeichenkette
+         * (Leerzeile trennt die Absätze, wie bisher) ODER ein Array von
+         * Absätzen - Objekte {text, teile?} (teile wie im Elementmodell, F3)
+         * und/oder Zeichenketten. Einträge ohne Text zählen nicht. Ein Absatz
+         * mit teile wird zu einem Text-Element mit teile: gemessen wird je
+         * Teil in seiner Schrift (fett ist breiter), Teilfarben macht
+         * _blocktextMitTeilen() lesbar (F7). Ohne teile sind Element und
+         * Ergebnis byte-gleich wie vor dieser Änderung.
+         *
          * Platzierung (E9): unter allem, was im sichtbaren Ausschnitt schon
          * auf der Seite steht, 20 px Rand - eigene Notizen werden nicht
          * überdeckt; oben mindestens so tief, dass die Auswahlleiste über
          * den Text passt (G9, _blocktextVerteilen). Schrift 24 px, bis 18 px verkleinert, bis alles passt;
-         * was dann nicht passt, kommt als "rest" zurück (Absätze als
-         * Quelltext, für blocktextAufNeueSeite).
+         * was dann nicht passt, kommt als "rest" zurück (in der Form der
+         * Eingabe: Zeichenketten bleiben Zeichenketten, Objekte kommen als
+         * {text[, teile]} zurück - beides für blocktextAufNeueSeite).
          *
          * Farbe (E10): aktuelle Stiftfarbe, aber mit Kontrastschutz - nach
          * dem Öffnen ist der Stift immer Schwarz, auf grüner oder schwarzer
@@ -5368,12 +5740,12 @@
          * keinPlatz: nicht einmal eine Zeile in 18 px passt - nichts geändert,
          * kein Undo-Eintrag.
          */
-        blocktextEinfuegen: function(text) {
+        blocktextEinfuegen: function(eingabe) {
             if (!this.modell) return null;
             var modul = blocktextModul();
             if (this._ziehen) this._ziehenBeenden(true);
             if (this._drehen) this._drehenBeenden(true);
-            var absaetze = modul.absaetzeAusText(text);
+            var absaetze = this._blocktextAbsaetzeAus(eingabe);
             if (!absaetze.length) return { eingefuegt: 0, rest: [], keinPlatz: false };
 
             var self = this;
@@ -5389,6 +5761,7 @@
                 var el = this._elementAusStroke({ tool: 'text', text: blk.text, color: farbe,
                     width: (erg.px - 16) / 4, points: [{ x: blk.x, y: blk.y }] });
                 if (el) {
+                    if (blk.teile) el = this._blocktextMitTeilen(el, blk.teile);
                     neu.push(el);
                     ids.push(el.id);
                 }
@@ -5413,9 +5786,80 @@
         },
 
         /**
+         * Eingabe von blocktextEinfuegen()/blocktextAufNeueSeite() -> Liste
+         * der Absätze für CBDBoardBlocktext.verteile() (AP-2.3): eine
+         * Zeichenkette wird an Leerzeilen in Absatz-Zeichenketten zerlegt
+         * (wie bisher); aus einem Array werden Objekte mit nicht leerem
+         * Text als neue Objekte {text[, teile]} übernommen (teile nur, wenn
+         * es ein Array ist - die Prüfung der Teile macht das Modul, ein
+         * unbrauchbares teile gilt dort als Klartext), Zeichenketten gehen
+         * wie die Zeichenkette-Eingabe durch absaetzeAusText(). Alles andere
+         * (null, Zahlen, Objekte ohne Text, nur Leerraum) zählt nicht.
+         */
+        _blocktextAbsaetzeAus: function(eingabe) {
+            var modul = blocktextModul();
+            if (typeof eingabe === 'string') return modul.absaetzeAusText(eingabe);
+            var aus = [];
+            if (!Array.isArray(eingabe)) return aus;
+            for (var i = 0; i < eingabe.length; i++) {
+                var a = eingabe[i];
+                if (typeof a === 'string') {
+                    aus = aus.concat(modul.absaetzeAusText(a));
+                } else if (a !== null && typeof a === 'object' && typeof a.text === 'string' && /\S/.test(a.text)) {
+                    var absatz = { text: a.text };
+                    if (Array.isArray(a.teile)) absatz.teile = a.teile;
+                    aus.push(absatz);
+                }
+            }
+            return aus;
+        },
+
+        /**
+         * Text-Element el (aus _elementAusStroke) um die Teile eines Blocks
+         * von verteile() ergänzen (AP-2.3, F7/F4): liefert ein NEUES Objekt
+         * mit denselben Feldern plus teile in der Schlüsselreihenfolge des
+         * Elementmodells (id, typ, farbe, breite, text, x, y, teile). Jede
+         * Teilfarbe geht durch lesbareLauffarbe(farbe, Tafelfarbe) - eine
+         * Farbe, die das nicht kann (z. B. rgb()), entfällt -, danach legt
+         * CBDBoardElemente.teileZusammenlegen benachbarte gleiche Teile
+         * zusammen. Bleibt keine Formatierung übrig, kommt el unverändert
+         * zurück (ohne teile). Dasselbe gilt, wenn die Teile die Prüfung des
+         * Elementmodells nicht bestünden - mehr als MAX_TEILE Teile oder eine
+         * Verkettung, die nicht der Text ist: Sonst verwürfe sie erst das
+         * Speichern/Laden (und zeichnen würde schon vorher unformatiert,
+         * zeilenTeile), der Text bleibt vollständig.
+         */
+        _blocktextMitTeilen: function(el, teile) {
+            var modul = blocktextModul();
+            var E = elementeModul();
+            var lesbar = [];
+            for (var i = 0; i < teile.length; i++) {
+                var t = teile[i];
+                var teil = { t: t.t };
+                if (t.f) teil.f = 1;
+                if (t.k) teil.k = 1;
+                var farbe = t.farbe ? modul.lesbareLauffarbe(t.farbe, this.boardColor) : null;
+                if (farbe) teil.farbe = farbe;
+                lesbar.push(teil);
+            }
+            var fertig = E.teileZusammenlegen(lesbar);
+            if (!fertig.length || fertig.length > E.MAX_TEILE) return el;
+            var verkettet = '';
+            for (var k = 0; k < fertig.length; k++) verkettet += fertig[k].t;
+            if (verkettet !== el.text) return el;
+            return { id: el.id, typ: el.typ, farbe: el.farbe, breite: el.breite, text: el.text,
+                x: el.x, y: el.y, teile: fertig };
+        },
+
+        /**
          * Absätze im sichtbaren Ausschnitt unter den gegebenen Rahmen
          * verteilen (24 -> 18 px, höchstens 5000 Zeichen je Block); Breiten
-         * mit der Zeichenebene gemessen wie in _rahmen().
+         * mit der Zeichenebene gemessen wie in _rahmen() - über _textMass()
+         * mit Stil, ein fetter oder kursiver Teil misst also in seiner
+         * Schrift (AP-2.3; vorher setzte diese Methode ctx.font selbst und
+         * kannte nur normale Schrift). Ohne Zeichenebene schätzt das Modul.
+         * Absätze sind Zeichenketten oder {text, teile?} (siehe
+         * CBDBoardBlocktext.verteile).
          *
          * Folge-AP G9: Nach dem Einfügen ist alles gewählt, und die
          * Auswahlleiste gehört über den Rahmen (8 px Rand, 6 px Abstand,
@@ -5428,11 +5872,7 @@
          */
         _blocktextVerteilen: function(absaetze, rahmen) {
             var modul = blocktextModul();
-            var ctx = this.drawingCtx;
-            var mass = function(t, px) {
-                ctx.font = px + 'px sans-serif';
-                return ctx.measureText(t).width;
-            };
+            var mass = this._textMass();
             var optionen = { startPx: 24, minPx: 18, maxZeichen: 5000 };
             var sichtbar = this._sichtbarerBereich();
             var flaeche = modul.flaecheUnter(sichtbar, rahmen, 20);
@@ -5456,11 +5896,26 @@
          * etwas hin (stark vergrößert), entsteht ebenfalls keine Seite -
          * Rückgabe keinPlatz (AP-2.fix1, Review-Befund G5: vorher blieb eine
          * leere Seite zurück, Seiten lassen sich nicht löschen).
+         *
+         * rest (AP-2.3): ein Array aus Zeichenketten wie bisher; enthält es
+         * Objekte {text, teile?} (der Rest eines formatierten Texts), geht
+         * die Liste als Array an blocktextEinfuegen() - Zeichenketten darin
+         * gelten wie dort als Absätze -, und die Probe gegen die leere Seite
+         * läuft mit denselben Absätzen. Der Rest behält so seine Formatierung.
          */
         blocktextAufNeueSeite: function(rest) {
             if (!this.modell) return null;
-            var text = Array.isArray(rest) ? rest.join('\n\n') : '';
-            var absaetze = blocktextModul().absaetzeAusText(text);
+            var mitObjekten = Array.isArray(rest) && rest.some(function(r) {
+                return r !== null && typeof r === 'object';
+            });
+            var text = null;
+            var absaetze;
+            if (mitObjekten) {
+                absaetze = this._blocktextAbsaetzeAus(rest);
+            } else {
+                text = Array.isArray(rest) ? rest.join('\n\n') : '';
+                absaetze = blocktextModul().absaetzeAusText(text);
+            }
             if (!absaetze.length) {
                 return { eingefuegt: 0, rest: [], keinPlatz: false };
             }
@@ -5468,7 +5923,7 @@
                 return { eingefuegt: 0, rest: absaetze, keinPlatz: true };
             }
             this.addPage();
-            return this.blocktextEinfuegen(text);
+            return this.blocktextEinfuegen(mitObjekten ? absaetze : text);
         },
 
         /**
@@ -5490,6 +5945,9 @@
          * (aria-modal, Review-Befund G1); eine gehaltene Taste auf einem
          * Knopf (keydown mit repeat) wirkt nicht - gehaltenes Enter auf
          * "Auf neuer Seite einfügen" legte sonst Seite um Seite an (M1).
+         * Seit PLAN-Blocktext-Formatierung.md, AP-2.4 zählt auch das
+         * Bearbeitungsfeld (div[contenteditable]) als Ziel; es steht im
+         * DOM vor seiner Formatleiste und bleibt so das erste Ziel.
          */
         _blocktextFensterBauen: function(zusatzKlasse, titel, meldung, beiEscape) {
             this._blocktextFensterSchliessen(false);
@@ -5520,7 +5978,7 @@
                     e.preventDefault();
                     beiEscape();
                 } else if (e.key === 'Tab') {
-                    var ziele = dialog.querySelectorAll('textarea, button:not([disabled])');
+                    var ziele = dialog.querySelectorAll('textarea, [contenteditable="true"], button:not([disabled])');
                     if (!ziele.length) return;
                     var erstes = ziele[0];
                     var letztes = ziele[ziele.length - 1];
@@ -5555,9 +6013,11 @@
          * Offenes Blocktext-Fenster entfernen (auch aus close/destroy/
          * _openOverlay). rueckfokus: Fokus zurück auf den Knopf "Text auf die
          * Tafel" (Abbrechen, Weglassen, Schließen, Escape - AP-2.fix1, G1);
-         * sonst bliebe er auf body.
+         * sonst bliebe er auf body. Entfernt auch den selectionchange-
+         * Lauscher eines Bearbeitungsfelds (_textFeldBauen, AP-2.4).
          */
         _blocktextFensterSchliessen: function(rueckfokus) {
+            this._textFeldLauscherEntfernen();
             var f = this._blocktextFenster;
             this._blocktextFenster = null;
             if (f && f.parentNode) f.parentNode.removeChild(f);
@@ -5607,30 +6067,390 @@
             if (s && s.parentNode) s.parentNode.removeChild(s);
         },
 
+        // =============================================
+        // Bearbeitungsfeld mit Formatleiste (PLAN-Blocktext-Formatierung.md,
+        // AP-2.4, F8-F10): Vorschau "Text auf die Tafel", in Phase 3 auch
+        // "Text bearbeiten"
+        // =============================================
+
+        /**
+         * Formatiert bearbeitbares Feld samt Formatleiste bauen (F8).
+         * Liefert {feld, leiste}. Der Aufrufer hängt feld VOR leiste ins
+         * Fenster: Die Tab-Falle von _blocktextFensterBauen nimmt das erste
+         * Ziel im DOM als Anfang (Prüfung g1Fokus: Tab vom letzten Knopf
+         * führt ins Feld); board-mode.css stellt die Leiste per order über
+         * das Feld.
+         *
+         * absaetze: [{text, teile?}] (auch Zeichenketten) wie aus
+         * _blocktextAbsaetze() bzw. aus einem Text-Element. teile werden nur
+         * übernommen, wenn ihre Verkettung genau text ergibt. optionen:
+         *   modus       'vorschau' (Standard): je Absatz ein div, Enter =
+         *               neuer Absatz; 'bearbeiten' (Phase 3): alles in EINEM
+         *               div, Absätze und Zeilen durch <br>, Enter =
+         *               Zeilenwechsel (F12)
+         *   grundfarbe  Farbe des Texts ohne eigene Farbe (Einfügefarbe bzw.
+         *               Farbe des Elements)
+         *   hintergrund Tafelfarbe
+         * Das Feld zeigt den Text so, wie er auf die Tafel kommt: Hintergrund
+         * = Tafel, Schrift = Grundfarbe, Teilfarben schon über
+         * lesbareLauffarbe (F7). Zurückgelesen wird mit _textFeldLesen().
+         *
+         * Inhalt NUR über DOM-Methoden (createElement, Textknoten, <br>) -
+         * nie innerHTML mit Text aus dem Block oder der Zwischenablage (XSS).
+         *
+         * Formatleiste: Fett, Kursiv, die Stiftfarben (presetColors),
+         * Standard (= Grundfarbe, entfernt die Farbe). Die Leiste verhindert
+         * pointerdown und mousedown, damit Fokus und Markierung im Feld
+         * bleiben. Ein Klick nimmt die Markierung im Feld - liegt keine im
+         * Feld (auf dem iPad kann sie beim Antippen verloren gehen, Risiko in
+         * Abschnitt 5 des Plans), die zuletzt dort gemerkte (selectionchange)
+         * - und formatiert per document.execCommand mit styleWithCSS (F9).
+         * Nur eine Schreibmarke im Feld oder gar keine Markierung: nichts.
+         * Die Leiste ist EIN Tab-Halt (role toolbar), Pfeiltasten/Pos1/Ende
+         * wandern zwischen den Knöpfen.
+         *
+         * Feld: Einfügen aus der Zwischenablage nur als Klartext
+         * (insertText), Ziehen und Ablegen gesperrt, kein Unterstreichen
+         * (Strg/Cmd+U, dazu beforeinput formatUnderline für das iPad-Menü) -
+         * unterstrichen käme nicht auf die Tafel.
+         *
+         * Der selectionchange-Lauscher hängt am document; entfernt wird er
+         * in _blocktextFensterSchliessen() (also auch in close/destroy/
+         * _openOverlay) und beim Bau des nächsten Felds - es gibt höchstens
+         * eines.
+         */
+        _textFeldBauen: function(absaetze, optionen) {
+            var opt = optionen || {};
+            var modul = blocktextModul();
+            var modus = opt.modus === 'bearbeiten' ? 'bearbeiten' : 'vorschau';
+            var hintergrund = blocktextHexFarbe(opt.hintergrund) || '#ffffff';
+            var grundfarbe = blocktextHexFarbe(opt.grundfarbe) || '#000000';
+
+            // Teilfarbe so, wie sie auf die Tafel kommt (F7); null = keine
+            function lauffarbe(farbe) {
+                var hex = blocktextHexFarbe(farbe);
+                if (!hex || !modul || typeof modul.lesbareLauffarbe !== 'function') return hex;
+                return modul.lesbareLauffarbe(hex, hintergrund);
+            }
+
+            var feld = document.createElement('div');
+            feld.className = 'cbd-board-blocktext-feld';
+            feld.setAttribute('contenteditable', 'true');
+            feld.setAttribute('role', 'textbox');
+            feld.setAttribute('aria-multiline', 'true');
+            feld.setAttribute('aria-label', modus === 'bearbeiten' ? 'Text bearbeiten' : 'Text für die Tafel');
+            feld.setAttribute('spellcheck', 'false');
+            feld.setAttribute('autocorrect', 'off');
+            feld.setAttribute('autocapitalize', 'off');
+            feld.setAttribute('data-modus', modus);
+            feld.setAttribute('data-grundfarbe', grundfarbe);
+            feld.style.backgroundColor = hintergrund;
+            feld.style.color = grundfarbe;
+
+            // Text in ziel hängen, "\n" -> <br>
+            function zeilenAnhaengen(ziel, text) {
+                var zeilen = text.split('\n');
+                for (var i = 0; i < zeilen.length; i++) {
+                    if (i > 0) ziel.appendChild(document.createElement('br'));
+                    if (zeilen[i]) ziel.appendChild(document.createTextNode(zeilen[i]));
+                }
+            }
+
+            // Absatz -> Teile; teile nur, wenn sie genau den Text ergeben,
+            // sonst gilt der Absatz als Klartext. Die Schleifenbedingung
+            // prüft teile VOR teile.length: Ein ungültiger Teil setzt teile
+            // auf null (Review AP-2.rev, B1 - "i < teile.length && teile"
+            // las teile.length nach teile = null und warf einen TypeError).
+            function teileVon(absatz) {
+                var text = typeof absatz === 'string' ? absatz : String((absatz && absatz.text) || '');
+                var teile = (absatz && typeof absatz === 'object' && Array.isArray(absatz.teile)) ? absatz.teile : null;
+                if (teile) {
+                    var kette = '';
+                    for (var i = 0; teile && i < teile.length; i++) {
+                        if (!teile[i] || typeof teile[i].t !== 'string') teile = null;
+                        else kette += teile[i].t;
+                    }
+                    if (teile && kette !== text) teile = null;
+                }
+                return teile || [{ t: text }];
+            }
+
+            // Je formatiertem Teil ein span (fett, kursiv, Farbe), Klartext
+            // als Textknoten
+            function absatzAnhaengen(ziel, absatz) {
+                var teile = teileVon(absatz);
+                for (var i = 0; i < teile.length; i++) {
+                    var teil = teile[i];
+                    var farbe = teil.farbe ? lauffarbe(teil.farbe) : null;
+                    var behaelter = ziel;
+                    if (teil.f || teil.k || farbe) {
+                        behaelter = document.createElement('span');
+                        if (teil.f) behaelter.style.fontWeight = 'bold';
+                        if (teil.k) behaelter.style.fontStyle = 'italic';
+                        if (farbe) behaelter.style.color = farbe;
+                        ziel.appendChild(behaelter);
+                    }
+                    zeilenAnhaengen(behaelter, teil.t);
+                }
+            }
+
+            var liste = Array.isArray(absaetze) ? absaetze : [];
+            var i;
+            if (modus === 'bearbeiten') {
+                var block = document.createElement('div');
+                for (i = 0; i < liste.length; i++) {
+                    if (i > 0) block.appendChild(document.createElement('br'));
+                    absatzAnhaengen(block, liste[i]);
+                }
+                // Ein leeres div hat keine Zeile für die Schreibmarke
+                if (!block.firstChild) block.appendChild(document.createElement('br'));
+                feld.appendChild(block);
+            } else {
+                for (i = 0; i < liste.length; i++) {
+                    var div = document.createElement('div');
+                    absatzAnhaengen(div, liste[i]);
+                    if (div.firstChild) feld.appendChild(div);
+                }
+                if (!feld.firstChild) {
+                    var leer = document.createElement('div');
+                    leer.appendChild(document.createElement('br'));
+                    feld.appendChild(leer);
+                }
+            }
+
+            // ---- Markierung merken ----
+            var gemerkt = null;
+            function imFeld(r) {
+                return !!r && feld.contains(r.startContainer) && feld.contains(r.endContainer);
+            }
+            // Markierung, auf die ein Knopf wirkt: die aktuelle, wenn sie im
+            // Feld liegt (nur Schreibmarke -> keine); liegt keine im Feld,
+            // die zuletzt dort gemerkte
+            function markierung() {
+                var sel = window.getSelection();
+                var r = (sel && sel.rangeCount) ? sel.getRangeAt(0) : null;
+                if (!imFeld(r)) r = gemerkt;
+                return (r && imFeld(r) && !r.collapsed) ? r.cloneRange() : null;
+            }
+            this._textFeldLauscherEntfernen();
+            var merken = function() {
+                var sel = window.getSelection();
+                if (!sel || !sel.rangeCount) return;
+                var r = sel.getRangeAt(0);
+                if (imFeld(r)) gemerkt = r.cloneRange();
+            };
+            document.addEventListener('selectionchange', merken);
+            this._textFeldLauscher = merken;
+
+            function ausfuehren(befehl, wert) {
+                var bereich = markierung();
+                if (!bereich) return;
+                if (document.activeElement !== feld) {
+                    try {
+                        feld.focus({ preventScroll: true });
+                    } catch (fehler) {
+                        feld.focus();
+                    }
+                }
+                var sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(bereich);
+                document.execCommand('styleWithCSS', false, true);
+                document.execCommand(befehl, false, wert);
+            }
+
+            function standardVerhindern(e) {
+                e.preventDefault();
+            }
+
+            // ---- Formatleiste ----
+            var leiste = document.createElement('div');
+            leiste.className = 'cbd-board-blocktext-format';
+            leiste.setAttribute('role', 'toolbar');
+            leiste.setAttribute('aria-label', 'Formatieren');
+            var knoepfe = [];
+
+            function tabHalt(aktiv) {
+                for (var j = 0; j < knoepfe.length; j++) knoepfe[j].tabIndex = knoepfe[j] === aktiv ? 0 : -1;
+            }
+
+            function knopf(klasse, beschriftung, name, beiKlick) {
+                var k = document.createElement('button');
+                k.type = 'button';
+                k.className = 'cbd-board-format-knopf ' + klasse;
+                k.textContent = beschriftung;
+                if (name) {
+                    k.setAttribute('aria-label', name);
+                    k.title = name;
+                }
+                k.tabIndex = knoepfe.length ? -1 : 0;
+                k.addEventListener('click', function() {
+                    tabHalt(k);
+                    beiKlick();
+                });
+                knoepfe.push(k);
+                leiste.appendChild(k);
+                return k;
+            }
+
+            function farbKnopf(farbe) {
+                var hex = blocktextHexFarbe(farbe) || String(farbe);
+                var k = knopf('cbd-board-format-farbe', '', FORMAT_FARBNAMEN[hex] || hex, function() {
+                    ausfuehren('foreColor', lauffarbe(hex) || hex);
+                });
+                k.style.backgroundColor = hex;
+                k.setAttribute('data-farbe', hex);
+            }
+
+            knopf('cbd-board-format-fett', 'F', 'Fett', function() { ausfuehren('bold'); });
+            knopf('cbd-board-format-kursiv', 'K', 'Kursiv', function() { ausfuehren('italic'); });
+            var stifte = this.presetColors || [];
+            for (i = 0; i < stifte.length; i++) farbKnopf(stifte[i]);
+            var standard = knopf('cbd-board-format-standard', 'Standard', '', function() {
+                ausfuehren('foreColor', grundfarbe);
+            });
+            standard.title = 'Farbe entfernen';
+
+            leiste.addEventListener('pointerdown', standardVerhindern);
+            leiste.addEventListener('mousedown', standardVerhindern);
+            leiste.addEventListener('keydown', function(e) {
+                var nr = knoepfe.indexOf(e.target);
+                if (nr < 0) return;
+                var n = knoepfe.length;
+                var neu = -1;
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') neu = (nr + 1) % n;
+                else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') neu = (nr + n - 1) % n;
+                else if (e.key === 'Home') neu = 0;
+                else if (e.key === 'End') neu = n - 1;
+                if (neu < 0) return;
+                e.preventDefault();
+                tabHalt(knoepfe[neu]);
+                knoepfe[neu].focus();
+            });
+
+            // ---- Feld ----
+            feld.addEventListener('paste', function(e) {
+                e.preventDefault();
+                var daten = e.clipboardData;
+                // Einzelne Surrogate -> U+FFFD (B5): Eine präparierte
+                // Zwischenablage soll kein halbes Zeichen in den Text bringen
+                var text = daten ? blocktextEinzelneSurrogate(String(daten.getData('text/plain') || '').replace(/\r\n?/g, '\n')) : '';
+                if (!text) return;
+                if (modus === 'bearbeiten') {
+                    var zeilen = text.split('\n');
+                    for (var z = 0; z < zeilen.length; z++) {
+                        if (z > 0) document.execCommand('insertLineBreak');
+                        if (zeilen[z]) document.execCommand('insertText', false, zeilen[z]);
+                    }
+                } else {
+                    // Zeilenwechsel werden hier zu neuen Absätzen (Chrome/Safari)
+                    document.execCommand('insertText', false, text);
+                }
+            });
+            feld.addEventListener('dragover', standardVerhindern);
+            feld.addEventListener('drop', standardVerhindern);
+            feld.addEventListener('beforeinput', function(e) {
+                if (e.inputType === 'formatUnderline') e.preventDefault();
+            });
+            feld.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'u' || e.key === 'U')) {
+                    e.preventDefault();
+                    return;
+                }
+                if (e.key !== 'Enter' || e.isComposing) return;
+                if (modus === 'bearbeiten') {
+                    if (!e.shiftKey) {
+                        e.preventDefault();
+                        document.execCommand('insertLineBreak');
+                    }
+                } else {
+                    document.execCommand('defaultParagraphSeparator', false, 'div');
+                }
+            });
+
+            return { feld: feld, leiste: leiste };
+        },
+
+        /** selectionchange-Lauscher des Bearbeitungsfelds abmelden (AP-2.4). */
+        _textFeldLauscherEntfernen: function() {
+            if (this._textFeldLauscher) {
+                document.removeEventListener('selectionchange', this._textFeldLauscher);
+                this._textFeldLauscher = null;
+            }
+        },
+
+        /**
+         * Bearbeitungsfeld zurücklesen (AP-2.4, F10): derselbe Leser wie für
+         * den Blockbereich (_blocktextLesen), mit der Grundfarbe des Felds -
+         * Teile in dieser Farbe tragen keine eigene, auch nach "Standard" -
+         * und "\n" als Zeilenwechsel (Option pre, siehe dort).
+         *
+         * Geschütztes Leerzeichen (U+00A0) bleibt erhalten (nbsp: false,
+         * AP-2.fix2, Review-Befund B2): Es stammt aus der Quelle ("25 °C",
+         * bis 3.1.147 blieb es auf der Tafel erhalten, dort bricht die Zeile
+         * nicht zwischen Zahl und Einheit). Ein im Feld getipptes
+         * Leerzeichen ist U+0020 - das Feld hat white-space: pre-wrap, dort
+         * fügt der Browser kein &nbsp; ein (gemessen in Chrome, Prüfung
+         * "getipptes Leerzeichen"); aufeinanderfolgende Leerzeichen fasst
+         * der Leser trotzdem zusammen. Die Option nbsp des Lesers selbst
+         * bleibt bestehen.
+         *
+         * Einzelne Surrogate werden zu U+FFFD (B5, siehe
+         * blocktextEinzelneSurrogate): in text und in allen t.
+         *
+         * Liefert [{text, teile?}] wie _blocktextAbsaetze() - direkt für
+         * blocktextEinfuegen() (AP-2.3) bzw. in Phase 3 für textErsetzen().
+         * Das Feld muss im Dokument hängen (berechnete Stile).
+         */
+        _textFeldLesen: function(feld) {
+            if (!feld) return [];
+            var grundfarbe = feld.getAttribute('data-grundfarbe') || window.getComputedStyle(feld).color;
+            return this._blocktextLesen(feld, { grundfarbe: grundfarbe, nbsp: false, pre: true }).map(function(a) {
+                var absatz = { text: a.text };
+                if (a.teile) absatz.teile = a.teile;
+                return blocktextAbsatzOhneEinzelneSurrogate(absatz);
+            });
+        },
+
         /**
          * Vorschau "Text auf die Tafel" (AP-2.3, E1): Text des Blockbereichs
-         * im Textfeld zum Kürzen und Ändern, "Auf die Tafel" fügt ein.
-         * Bleibt ein Rest oder ist kein Platz, folgt die Rückfrage.
+         * zum Kürzen und Ändern, "Auf die Tafel" fügt ein. Bleibt ein Rest
+         * oder ist kein Platz, folgt die Rückfrage.
+         *
+         * Seit PLAN-Blocktext-Formatierung.md, AP-2.4 (F8) ein formatiert
+         * bearbeitbares Feld mit Formatleiste (_textFeldBauen) statt eines
+         * textarea: Es zeigt fett, kursiv und Farben so, wie sie auf die
+         * Tafel kommen (Tafelfarbe als Hintergrund, Einfügefarbe als
+         * Grundschrift - dieselbe lesbareFarbe() wie in blocktextEinfuegen);
+         * jeder Absatz (div) wird ein eigener Textblock. "Auf die Tafel"
+         * liest das Feld mit _textFeldLesen() und übergibt die Absätze als
+         * Array (AP-2.3).
          */
         blocktextVorschau: function() {
             if (!this.overlay) return;
             var self = this;
-            var text = this._blocktextAlsText();
-            var leer = !text;
+            var absaetze = this._blocktextAbsaetze();
+            var leer = !absaetze.length;
             var teile = this._blocktextFensterBauen('', 'Text auf die Tafel',
                 leer ? 'In diesem Block gibt es keinen Text zum Übernehmen.'
-                     : 'Lösche, was du nicht brauchst. Leere Zeilen trennen die Textblöcke.',
+                     : 'Lösche, was du nicht brauchst. Jeder Absatz wird ein eigener Textblock. ' +
+                       'Markiere Wörter, um sie fett, kursiv oder farbig zu machen.',
                 function() { self._blocktextFensterSchliessen(true); });
 
             var feld = null;
             if (!leer) {
-                feld = document.createElement('textarea');
-                feld.className = 'cbd-board-blocktext-feld';
-                feld.rows = 12;
-                feld.spellcheck = false;
-                feld.setAttribute('aria-label', 'Text für die Tafel');
-                feld.value = text;
+                var modul = blocktextModul();
+                var bau = this._textFeldBauen(absaetze, {
+                    modus: 'vorschau',
+                    grundfarbe: (modul && typeof modul.lesbareFarbe === 'function') ?
+                        modul.lesbareFarbe(this.currentColor, this.boardColor) : this.currentColor,
+                    hintergrund: this.boardColor
+                });
+                feld = bau.feld;
+                // Feld VOR der Leiste (erstes Ziel der Tab-Falle);
+                // board-mode.css stellt die Leiste per order darüber
                 teile.dialog.appendChild(feld);
+                teile.dialog.appendChild(bau.leiste);
             }
 
             teile.aktionen.appendChild(this._blocktextFensterKnopf('cbd-board-confirm-cancel',
@@ -5643,7 +6463,8 @@
                     'Auf die Tafel', function() {
                         if (erledigt) return; // schneller Doppelklick
                         erledigt = true;
-                        var erg = self.blocktextEinfuegen(feld.value);
+                        // Lesen, solange das Feld noch im Dokument hängt
+                        var erg = self.blocktextEinfuegen(self._textFeldLesen(feld));
                         self._blocktextFensterSchliessen(false);
                         self._blocktextKlickschutz();
                         self._blocktextNachEinfuegen(erg, false);
@@ -5653,8 +6474,16 @@
             document.body.appendChild(teile.fenster);
 
             if (feld) {
+                // Fokus ins Feld, Schreibmarke an den Anfang (eingeklappt)
                 feld.focus();
-                feld.setSelectionRange(0, 0);
+                var sel = window.getSelection();
+                if (sel) {
+                    var anfang = document.createRange();
+                    anfang.setStart(feld, 0);
+                    anfang.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(anfang);
+                }
                 feld.scrollTop = 0;
             } else {
                 teile.aktionen.firstChild.focus();

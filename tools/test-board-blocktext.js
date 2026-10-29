@@ -9,6 +9,48 @@
  *     ersetzt (Format: tools/fixtures/blocktext/README.md)
  *   - künstliche Fälle (a)-(f) aus dem Plan und einige Randfälle
  *
+ * Formatierung lesen (PLAN-Blocktext-Formatierung.md, AP-2.1, F6/F10):
+ *   _blocktextLesen(wurzel, optionen) liefert je Absatz zusätzlich teile
+ *   (fett = font-weight >= 600, kursiv = italic/oblique, Farbe = berechnete
+ *   Farbe != Grundfarbe, als '#rrggbb'); Fälle (a)-(l) des Plans, Regel F6,
+ *   Befund B10 (color(srgb …)/oklab(…)), _blocktextAbsaetze() und
+ *   asynchron die Teile des Testmaterials (Verkettung = Text, gültig).
+ *   Prüfnamen beginnen mit "Formatierung lesen".
+ *
+ * Formatiert einfügen (PLAN-Blocktext-Formatierung.md, AP-2.3, F7/F14):
+ *   blocktextEinfuegen(Array von Absätzen [{text, teile?}]) legt Text-
+ *   Elemente mit teile an (Teilfarben über lesbareLauffarbe, Messung über
+ *   _textMass() mit fett/kursiv, ein Undo-Schritt, Modellprüfung ändert
+ *   nichts), blocktextAufNeueSeite() setzt einen formatierten Rest fort.
+ *   Prüfnamen beginnen mit "Formatiert einfügen".
+ *
+ * Bearbeitungsfeld (PLAN-Blocktext-Formatierung.md, AP-2.4, F8-F10): Die
+ *   Vorschau ist ein formatiert bearbeitbares div (_textFeldBauen) mit
+ *   Formatleiste; gelesen über _textFeldLesen. Aufbau und Tafelfarben,
+ *   berechnete Stile, Rundlauf Feld = Blockbereich, Knöpfe F/K/Farben/
+ *   Standard (Markierung per Range), Klartext-Einfügen, Strg+U, Ziehen,
+ *   Zeilenwechsel, Modus "bearbeiten", Tastatur der Leiste, gemerkte
+ *   Markierung (asynchron). Drei ältere Vorschau-Prüfungen (vorschauKlick,
+ *   gekuerztEinfuegen, klickNebenFenster) lesen das Feld seit AP-2.4 über
+ *   feldText()/feldSetzen() statt textarea.value (geplante Umstellung F8).
+ *   Prüfnamen beginnen mit "Bearbeitungsfeld".
+ *
+ * Darkmode lesen (PLAN-Blocktext-Formatierung.md, AP-2.fix1): Im Darkmode
+ *   (data-theme an <html>) liest _blocktextAbsaetze() den Blockbereich mit
+ *   den Stilen des Hellmodus; danach ist data-theme wieder gesetzt, die
+ *   Farben sind sofort wieder die dunklen, kein CSS-Übergang läuft, die
+ *   Tafel-Inversion bleibt; Hellmodus, Ausnahme beim Lesen und
+ *   _textFeldLesen (schaltet nicht um). Prüfnamen beginnen mit
+ *   "Darkmode lesen".
+ *
+ * Robustheit des Bearbeitungsfelds (PLAN-Blocktext-Formatierung.md,
+ *   AP-2.fix2, Review-Befunde B1, B2, B3, B5): ungültige teile -> Klartext
+ *   statt Ausnahme (B1); geschütztes Leerzeichen der Quelle bleibt U+00A0,
+ *   getipptes bleibt U+0020 (B2); die Übergangssperre von _imHellmodus ist
+ *   ein adoptiertes Stylesheet mit Rückfall auf <style> (B3, Prüfnamen
+ *   "Darkmode lesen (B3)"); einzelne Surrogate werden beim Lesen und beim
+ *   Einfügen zu U+FFFD (B5). Prüfnamen "AP-2.fix2 (B…)".
+ *
  * Die Fixture-Prüfungen holen die Dateien per fetch - die Prüfseite muss
  * über den Webserver laufen. Wird von tools/test-board-zeiger.html als
  * letzte Zusatzdatei vor test-board-zeiger.js geladen und hängt sich an die
@@ -404,6 +446,38 @@
         return document.querySelector('.cbd-board-blocktext-feld');
     }
 
+    // Bearbeitungsfeld der Vorschau (PLAN-Blocktext-Formatierung.md, AP-2.4,
+    // F8): ein formatiert bearbeitbares div statt des früheren Textfelds.
+    // feldText(): Texte der Absätze aus B._textFeldLesen() mit Leerzeile
+    // verbunden (wie früher feld().value); feldSetzen(absaetze): Inhalt über
+    // DOM-Methoden ersetzen, je Absatz ein div (wie früher feld().value = …).
+    function feldText() {
+        return B._textFeldLesen(feld()).map(function(a) { return a.text; }).join('\n\n');
+    }
+
+    function feldSetzen(absaetze) {
+        var fe = feld();
+        while (fe.firstChild) fe.removeChild(fe.firstChild);
+        absaetze.forEach(function(a) {
+            var d = document.createElement('div');
+            d.textContent = a;
+            fe.appendChild(d);
+        });
+    }
+
+    // Text vor der Schreibmarke im Feld t ('' = Marke am Anfang) oder null,
+    // wenn die Auswahl nicht eingeklappt im Feld steht
+    function textVorMarke(t) {
+        var sel = window.getSelection();
+        if (!sel || sel.rangeCount !== 1 || !sel.isCollapsed) return null;
+        var r = sel.getRangeAt(0);
+        if (!t.contains(r.startContainer)) return null;
+        var vor = document.createRange();
+        vor.setStart(t, 0);
+        vor.setEnd(r.startContainer, r.startOffset);
+        return vor.toString();
+    }
+
     function taste(ziel, key, extra) {
         var init = { key: key, bubbles: true, cancelable: true };
         for (var k in (extra || {})) init[k] = extra[k];
@@ -457,9 +531,13 @@
         var t = vorschauOeffnen();
         if (!fenster()) return { ok: false, detail: 'kein Fenster' };
         if (!t) return { ok: false, detail: 'kein Textfeld' };
-        if (t.value !== 'Eins\n\nZwei') f.push('Inhalt ' + JSON.stringify(t.value));
+        // AP-2.4 (F8): Inhalt über _textFeldLesen, Schreibmarke über die
+        // Auswahl des Dokuments (am Anfang des Felds, eingeklappt)
+        var inhalt = feldText();
+        if (inhalt !== 'Eins\n\nZwei') f.push('Inhalt ' + JSON.stringify(inhalt));
         if (document.activeElement !== t) f.push('Fokus auf ' + (document.activeElement && document.activeElement.className));
-        if (t.selectionStart !== 0 || t.selectionEnd !== 0) f.push('Schreibmarke ' + t.selectionStart + '-' + t.selectionEnd);
+        var vorMarke = textVorMarke(t);
+        if (vorMarke !== '') f.push('Schreibmarke nicht eingeklappt am Anfang (Text davor ' + JSON.stringify(vorMarke) + ')');
         if (fenster().parentNode !== document.body) f.push('Fenster nicht am body');
         if (!fenster().querySelector('.cbd-board-blocktext-einfuegen')) f.push('kein Knopf "Auf die Tafel"');
         return ergebnis(f);
@@ -510,8 +588,8 @@
 
     function gekuerztEinfuegen() {
         oeffnenMit('<p>Eins</p><p>Zwei</p><p>Drei</p>');
-        var t = vorschauOeffnen();
-        t.value = 'Eins\n\nDrei';
+        vorschauOeffnen();
+        feldSetzen(['Eins', 'Drei']); // AP-2.4 (F8): Feld statt t.value
         fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
         var f = [];
         if (fenster()) f.push('Fenster noch offen');
@@ -606,12 +684,12 @@
 
     function klickNebenFenster() {
         oeffnenMit('<p>Eins</p>');
-        var t = vorschauOeffnen();
-        t.value = 'gekürzt';
+        vorschauOeffnen();
+        feldSetzen(['gekürzt']); // AP-2.4 (F8): Feld statt t.value
         var fe = fenster();
         fe.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         var f = [];
-        if (!fenster() || feld().value !== 'gekürzt') f.push('Klick neben das Fenster schließt es');
+        if (!fenster() || feldText() !== 'gekürzt') f.push('Klick neben das Fenster schließt es');
         // Tasten bei Fokus außerhalb des Fensters wirken nicht auf die Tafel
         document.body.focus();
         taste(document.body, 'Escape');
@@ -851,6 +929,1595 @@
     }
 
     // ------------------------------------------------------------------
+    // Formatierung lesen (PLAN-Blocktext-Formatierung.md, AP-2.1, F6/F10):
+    // _blocktextLesen(wurzel, optionen) liefert je Absatz neben text auch
+    // teile [{t, f?, k?, farbe?}] - nur, wenn der Absatz formatiert ist.
+    // Grundfarbe der Prüfseite ist Schwarz (Blockbereich ohne Website-CSS).
+    // ------------------------------------------------------------------
+
+    // Absätze als {text, teile?}. Ein vorhandener Schlüssel teile mit dem
+    // Wert undefined wird sichtbar gemacht - "kein Schlüssel teile" gehört
+    // zur Regel (F3: ohne Formatierung kein Feld).
+    function textUndTeile(liste) {
+        return (liste || []).map(function(a) {
+            var o = { text: a.text };
+            if (Object.prototype.hasOwnProperty.call(a, 'teile')) {
+                o.teile = a.teile === undefined ? 'undefined' : a.teile;
+            }
+            return o;
+        });
+    }
+
+    function teileVergleich(ist, soll) {
+        var i = JSON.stringify(textUndTeile(ist));
+        var s = JSON.stringify(soll);
+        return i === s ? true : { ok: false, detail: 'ist ' + i + ' / soll ' + s };
+    }
+
+    // Prüffunktion: Tafel mit html öffnen, _blocktextLesen(Blockbereich,
+    // optionen) mit soll = [{text, teile?}] vergleichen (Schlüsselreihenfolge
+    // der Teile t, f, k, farbe wie bei teileZusammenlegen)
+    function teileFall(html, soll, optionen) {
+        return function() {
+            oeffnenMit(html);
+            return teileVergleich(B._blocktextLesen(bereich(), optionen), soll);
+        };
+    }
+
+    // Fälle (a)-(i) des Plans - text UND teile. Fall (l) prüft für dieselben
+    // HTML-Stücke, dass _blocktextAlsText() unverändert bleibt.
+    var FORMAT_FAELLE = [
+        {
+            name: '(a) strong mitten im Wort',
+            html: '<p>Es entsteht eine <strong>trans</strong>-Bindung</p>',
+            soll: [{ text: 'Es entsteht eine trans-Bindung', teile: [{ t: 'Es entsteht eine ' }, { t: 'trans', f: 1 }, { t: '-Bindung' }] }]
+        },
+        {
+            name: '(b) em, strong+em',
+            html: '<p><em>kursiv</em> und <strong><em>beides</em></strong></p>',
+            soll: [{ text: 'kursiv und beides', teile: [{ t: 'kursiv', k: 1 }, { t: ' und ' }, { t: 'beides', f: 1, k: 1 }] }]
+        },
+        {
+            name: '(c) eigene Farbe als #rrggbb',
+            html: '<p>Ein <span style="color:#71230a">Begriff</span>.</p>',
+            soll: [{ text: 'Ein Begriff.', teile: [{ t: 'Ein ' }, { t: 'Begriff', farbe: '#71230a' }, { t: '.' }] }]
+        },
+        {
+            // Grundfarbe = erstes .cbd-container-content (#123456), nicht der
+            // (schwarze) Blockbereich: Titel in Grundfarbe ohne farbe,
+            // Schwarz im Inhalt mit farbe; Absatz ohne Formatierung ohne teile
+            name: '(d) Farbe = Grundfarbe -> kein farbe, ohne Formatierung kein teile',
+            html: '<h3 class="cbd-block-title" style="color:#123456">Titel</h3>' +
+                '<div class="cbd-container-content" style="color:#123456">' +
+                '<p>Ganz <span style="color:#123456">ohne</span> Formatierung</p>' +
+                '<p>Mit <span style="color:rgb(0, 0, 0)">Schwarz</span></p></div>',
+            soll: [
+                { text: 'Titel', teile: [{ t: 'Titel', f: 1 }] },
+                { text: 'Ganz ohne Formatierung' },
+                { text: 'Mit Schwarz', teile: [{ t: 'Mit ' }, { t: 'Schwarz', farbe: '#000000' }] }
+            ]
+        },
+        {
+            name: '(e) Leerraum über Teilgrenzen - erstes Leerzeichen behält seine Formatierung',
+            html: '<p>a <strong> b </strong> c</p>',
+            soll: [{ text: 'a b c', teile: [{ t: 'a ' }, { t: 'b ', f: 1 }, { t: 'c' }] }]
+        },
+        {
+            // \n aus BR ist Klartext, Leerzeichen um \n entfallen
+            name: '(e2) BR als Klartext, Leerzeichen um den Zeilenwechsel entfallen',
+            html: '<p><strong>a </strong><br> <em>b</em></p>',
+            soll: [{ text: 'a\nb', teile: [{ t: 'a', f: 1 }, { t: '\n' }, { t: 'b', k: 1 }] }]
+        },
+        {
+            name: '(f) Listenpräfix immer Klartext',
+            html: '<ul><li><strong>x</strong></li></ul><ol start="3"><li style="font-weight:700;color:#ff0000">y</li></ol>',
+            soll: [
+                { text: '• x', teile: [{ t: '• ' }, { t: 'x', f: 1 }] },
+                { text: '3. y', teile: [{ t: '3. ' }, { t: 'y', f: 1, farbe: '#ff0000' }] }
+            ]
+        },
+        {
+            name: '(g) Überschrift fett über den Standard-Stil',
+            html: '<h3>Titel</h3>',
+            soll: [{ text: 'Titel', teile: [{ t: 'Titel', f: 1 }] }]
+        },
+        {
+            name: '(h) Formel hat den Stil des Formel-Elements',
+            html: '<p>Wasser: <strong><span class="cbd-latex-formula cbd-latex-inline" data-latex="H_2O">' +
+                '<span class="katex"><span class="katex-html" aria-hidden="true">H2O</span></span></span></strong></p>' +
+                '<div style="font-style:italic"><span class="cbd-latex-formula cbd-latex-display" data-latex="x^2" style="display:block">x2</span></div>',
+            soll: [
+                { text: 'Wasser: ' + M.latexZuText('H_2O'), teile: [{ t: 'Wasser: ' }, { t: M.latexZuText('H_2O'), f: 1 }] },
+                { text: M.latexZuText('x^2'), teile: [{ t: M.latexZuText('x^2'), k: 1 }] }
+            ]
+        },
+        {
+            name: '(i) Tabellenzeile - " | " ist Klartext',
+            html: '<table><tr><td><strong>A</strong></td><td>B</td></tr><tr><th>C</th><th>D</th></tr></table>',
+            soll: [
+                { text: 'A | B', teile: [{ t: 'A', f: 1 }, { t: ' | B' }] },
+                { text: 'C | D', teile: [{ t: 'C', f: 1 }, { t: ' | ' }, { t: 'D', f: 1 }] }
+            ]
+        }
+    ];
+
+    // Nachtrag (Mutationsprobe): Klartext muss auch INNERHALB einer
+    // Formatierung Klartext bleiben - in (e2) und (i) ist das Elternelement
+    // des BR bzw. der Zelle unformatiert, dort fiele ein Fehler nicht auf.
+    // BR in <strong>: "\n" ohne f; Absätze in einer fetten Tabellenzelle:
+    // das trennende Leerzeichen ohne f.
+    function formatKlartextInFormatierung() {
+        var f = [];
+        var br = teileFall('<p><strong>a<br>b</strong></p>',
+            [{ text: 'a\nb', teile: [{ t: 'a', f: 1 }, { t: '\n' }, { t: 'b', f: 1 }] }])();
+        if (br !== true) f.push('BR in strong: ' + br.detail);
+        var zelle = teileFall('<table><tr><td style="font-weight:700"><p>x</p><p>y</p></td></tr></table>',
+            [{ text: 'x y', teile: [{ t: 'x', f: 1 }, { t: ' ' }, { t: 'y', f: 1 }] }])();
+        if (zelle !== true) f.push('Absätze in fetter Zelle: ' + zelle.detail);
+        return ergebnis(f);
+    }
+
+    // (d, zweiter Teil): ohne .cbd-container-content gilt die Farbe der
+    // übergebenen Wurzel als Grundfarbe
+    function formatGrundfarbeWurzel() {
+        oeffnenMit('<div id="fmt-wurzel" style="color:#336699"><p>a <span style="color:#336699">b</span> ' +
+            '<span style="color:#000000">c</span></p></div>');
+        var w = bereich().querySelector('#fmt-wurzel');
+        if (!w) return { ok: false, detail: 'Wurzel fehlt' };
+        return teileVergleich(B._blocktextLesen(w), [{ text: 'a b c', teile: [{ t: 'a b ' }, { t: 'c', farbe: '#000000' }] }]);
+    }
+
+    // (j) Option grundfarbe ersetzt die berechnete Grundfarbe
+    function formatOptionGrundfarbe() {
+        var html = '<p style="color:#ff0000">rot <span style="color:#000000">schwarz</span></p>';
+        var f = [];
+        var mit = teileFall(html, [{ text: 'rot schwarz', teile: [{ t: 'rot ' }, { t: 'schwarz', farbe: '#000000' }] }],
+            { grundfarbe: '#ff0000' })();
+        if (mit !== true) f.push('mit {grundfarbe:#ff0000}: ' + mit.detail);
+        var ohne = teileFall(html, [{ text: 'rot schwarz', teile: [{ t: 'rot ', farbe: '#ff0000' }, { t: 'schwarz' }] }])();
+        if (ohne !== true) f.push('ohne Option: ' + ohne.detail);
+        return ergebnis(f);
+    }
+
+    // (k) Option nbsp: geschütztes Leerzeichen wie ein Leerzeichen
+    // (zusammengefasst, am Rand entfernt); ohne Option bleibt es wie bisher
+    function formatOptionNbsp() {
+        var NB = String.fromCharCode(160);
+        var html = '<p>a&nbsp;b&nbsp; c</p><p>&nbsp;x&nbsp;</p><p>a&nbsp;<strong>&nbsp;b</strong></p>';
+        var f = [];
+        var mit = teileFall(html, [
+            { text: 'a b c' },
+            { text: 'x' },
+            { text: 'a b', teile: [{ t: 'a ' }, { t: 'b', f: 1 }] }
+        ], { nbsp: true })();
+        if (mit !== true) f.push('mit {nbsp:true}: ' + mit.detail);
+        var ohne = teileFall(html, [
+            { text: 'a' + NB + 'b' + NB + ' c' },
+            { text: NB + 'x' + NB },
+            { text: 'a' + NB + NB + 'b', teile: [{ t: 'a' + NB }, { t: NB + 'b', f: 1 }] }
+        ])();
+        if (ohne !== true) f.push('ohne Option: ' + ohne.detail);
+        return ergebnis(f);
+    }
+
+    // (l) _blocktextAlsText() liefert für (a)-(i) denselben Text wie vor
+    // AP-2.1 (Regressionswächter, schon vor der Umsetzung grün)
+    function formatAlsTextUnveraendert() {
+        var f = [];
+        FORMAT_FAELLE.forEach(function(fall) {
+            oeffnenMit(fall.html);
+            var soll = fall.soll.map(function(a) { return a.text; }).join('\n\n');
+            var v = vergleich(B._blocktextAlsText(), soll);
+            if (v !== true) f.push(fall.name + ': ' + v.detail);
+        });
+        return ergebnis(f);
+    }
+
+    // Regel F6: fett ab font-weight 600 (Glossarbegriffe), 500 nicht;
+    // oblique zählt als kursiv; Unterstreichen wird nicht übernommen
+    function formatRegelF6() {
+        return teileFall('<p><span style="font-weight:600">a</span><span style="font-weight:500">b</span>' +
+            '<span style="font-style:oblique 10deg">c</span><b>d</b>' +
+            '<span class="glossar-term" style="font-weight:600;color:#71230a;text-decoration:underline">Begriff</span></p>',
+        [{ text: 'abcdBegriff', teile: [{ t: 'a', f: 1 }, { t: 'b' }, { t: 'c', k: 1 }, { t: 'd', f: 1 }, { t: 'Begriff', f: 1, farbe: '#71230a' }] }])();
+    }
+
+    // Befund B10 (AP-1.rev): getComputedStyle liefert für color-mix()
+    // color(srgb …) bzw. oklab(…). srgb wird zu #rrggbb, nicht Darstellbares
+    // gibt keine eigene Farbe; durchsichtig (Alpha 0) zählt nicht,
+    // halbdurchsichtig zählt mit der deckenden Farbe.
+    function formatB10Farbformen() {
+        var html = '<p>a <span id="fmt-srgb" style="color:color-mix(in srgb, #ff0000 50%, #0000ff)">m</span> ' +
+            '<span id="fmt-oklab" style="color:color-mix(in oklab, #ff0000 50%, #0000ff)">o</span> ' +
+            '<span style="color:rgba(255, 0, 0, 0)">t</span> <span style="color:rgba(0, 0, 255, 0.5)">h</span></p>';
+        oeffnenMit(html);
+        var f = [];
+        var srgb = getComputedStyle(bereich().querySelector('#fmt-srgb')).color;
+        var oklab = getComputedStyle(bereich().querySelector('#fmt-oklab')).color;
+        if (srgb.indexOf('color(srgb') !== 0) f.push('Vorbedingung: Browser liefert ' + srgb);
+        if (oklab.indexOf('oklab(') !== 0) f.push('Vorbedingung: Browser liefert ' + oklab);
+        var v = teileVergleich(B._blocktextLesen(bereich()), [{ text: 'a m o t h', teile: [
+            { t: 'a ' }, { t: 'm', farbe: '#800080' }, { t: ' o t ' }, { t: 'h', farbe: '#0000ff' }
+        ] }]);
+        if (v !== true) f.push(v.detail);
+        return ergebnis(f);
+    }
+
+    // _blocktextAbsaetze(): Absätze des Blockbereichs als [{text, teile?}]
+    // (ohne art), Texte wie _blocktextAlsText(); ohne Tafel []
+    function formatAbsaetze() {
+        if (typeof B._blocktextAbsaetze !== 'function') return { ok: false, detail: '_blocktextAbsaetze fehlt' };
+        var f = [];
+        if (B.overlay) B.destroy();
+        var leer = B._blocktextAbsaetze();
+        if (JSON.stringify(leer) !== '[]') f.push('ohne Tafel ' + JSON.stringify(leer));
+        oeffnenMit('<h3 class="cbd-block-title">Titel</h3><p>Es <strong>x</strong></p><ul><li>y</li></ul>');
+        var l = B._blocktextAbsaetze();
+        var soll = [
+            { text: 'Titel', teile: [{ t: 'Titel', f: 1 }] },
+            { text: 'Es x', teile: [{ t: 'Es ' }, { t: 'x', f: 1 }] },
+            { text: '• y' }
+        ];
+        if (JSON.stringify(l) !== JSON.stringify(soll)) f.push('ist ' + JSON.stringify(l));
+        var t = (l || []).map(function(a) { return a.text; }).join('\n\n');
+        if (t !== B._blocktextAlsText()) f.push('Text weicht von _blocktextAlsText() ab: ' + sichtbar(t));
+        return ergebnis(f);
+    }
+
+    // Asynchron: Teile aus dem Testmaterial - Verkettung aller t = text,
+    // jedes teile besteht die Prüfung des Elementmodells unverändert
+    // (pruefeModell), und mindestens ein Absatz ist formatiert (Überschriften,
+    // strong, th im Testmaterial)
+    function formatTestmaterial() {
+        var E = window.CBDBoardElemente;
+        var f = [];
+        var formatiert = 0;
+        var kette = Promise.resolve();
+        FIXTURES.forEach(function(name) {
+            kette = kette.then(function() {
+                return holen('fixtures/blocktext/' + name + '.html');
+            }).then(function(html) {
+                oeffnenMit(html);
+                B._blocktextLesen(bereich()).forEach(function(a, i) {
+                    if (!Object.prototype.hasOwnProperty.call(a, 'teile')) return;
+                    formatiert++;
+                    var wo = name + ' Absatz ' + i;
+                    if (!Array.isArray(a.teile) || !a.teile.length) {
+                        f.push(wo + ': teile ' + JSON.stringify(a.teile));
+                        return;
+                    }
+                    var kett = a.teile.map(function(t) { return t.t; }).join('');
+                    if (kett !== a.text) f.push(wo + ': Verkettung ' + sichtbar(kett.slice(0, 60)) + ' statt ' + sichtbar(a.text.slice(0, 60)));
+                    var p = E.pruefeModell({ v: 1, breite: 1000, hoehe: 1000, elemente: [
+                        { id: 'e1', typ: 'text', farbe: '#000000', breite: 2, text: a.text, x: 0, y: 0, teile: a.teile }
+                    ] });
+                    var el2 = p && p.modell.elemente[0];
+                    if (!el2 || JSON.stringify(el2.teile) !== JSON.stringify(a.teile)) f.push(wo + ': Prüfung des Modells verwirft/ändert teile');
+                });
+            });
+        });
+        return kette.then(function() {
+            if (!formatiert) f.push('kein Absatz des Testmaterials mit teile');
+            return ergebnis(f);
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // Formatiert einfügen (PLAN-Blocktext-Formatierung.md, AP-2.3, F7/F14):
+    // blocktextEinfuegen(Array von Absätzen [{text, teile?}]) legt Text-
+    // Elemente mit teile an; Teilfarben werden über lesbareLauffarbe
+    // lesbar gemacht, gemessen wird über _textMass() (fett ist breiter),
+    // der Rest behält die Formatierung (blocktextAufNeueSeite).
+    // ------------------------------------------------------------------
+
+    // Relative Leuchtdichte und Kontrast nach WCAG 2 - eigene Rechnung,
+    // unabhängig vom Modul
+    function leuchtWert(hex) {
+        function lin(i) {
+            var v = parseInt(hex.substr(i, 2), 16) / 255;
+            return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        }
+        return 0.2126 * lin(1) + 0.7152 * lin(3) + 0.0722 * lin(5);
+    }
+
+    function kontrastWert(a, b) {
+        var la = leuchtWert(a);
+        var lb = leuchtWert(b);
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    }
+
+    // Das Elementmodell übersteht die Prüfung des Elementmodells unverändert
+    // (nichts verworfen, kein Feld, auch nicht teile, geändert) - Text der
+    // Abweichung oder ''
+    function modellUnveraendert() {
+        var p = window.CBDBoardElemente.pruefeModell(JSON.parse(JSON.stringify(B.modell)));
+        if (!p) return 'pruefeModell lieferte null';
+        if (p.verworfen) return p.verworfen + ' Element(e) verworfen';
+        var ist = JSON.stringify(p.modell.elemente);
+        var soll = JSON.stringify(B.modell.elemente);
+        return ist === soll ? '' : 'Modell verändert: ' + ist.slice(0, 200) + ' statt ' + soll.slice(0, 200);
+    }
+
+    function kette(teile) {
+        return teile.map(function(t) { return t.t; }).join('');
+    }
+
+    function fmtEinElement() {
+        ctx.oeffnen();
+        var f = [];
+        var teile = [{ t: 'Es ist ' }, { t: 'fett', f: 1 }, { t: '.' }];
+        var erg = B.blocktextEinfuegen([{ text: 'Es ist fett.', teile: teile }]);
+        var t = texte();
+        if (!erg || erg.eingefuegt !== 1 || erg.keinPlatz || erg.rest.length) f.push('Ergebnis ' + JSON.stringify(erg));
+        if (t.length !== 1) return { ok: false, detail: t.length + ' Texte, Ergebnis ' + JSON.stringify(erg) };
+        if (t[0].text !== 'Es ist fett.') f.push('Text ' + JSON.stringify(t[0].text));
+        if (JSON.stringify(t[0].teile) !== JSON.stringify(teile)) f.push('teile ' + JSON.stringify(t[0].teile));
+        if (Object.keys(t[0]).join() !== 'id,typ,farbe,breite,text,x,y,teile') f.push('Schlüssel ' + Object.keys(t[0]).join());
+        var m = modellUnveraendert();
+        if (m) f.push(m);
+        return ergebnis(f);
+    }
+
+    function fmtZeichenketteWieBisher() {
+        ctx.oeffnen();
+        var f = [];
+        B.blocktextEinfuegen('Eins\n\nZwei');
+        texte().forEach(function(t) {
+            if (Object.keys(t).join() !== 'id,typ,farbe,breite,text,x,y') f.push('Schlüssel ' + Object.keys(t).join());
+        });
+        ctx.oeffnen();
+        var erg = B.blocktextEinfuegen(absaetze(60));
+        if (!erg || !erg.rest.length) f.push('kein Rest');
+        else if (!erg.rest.every(function(r) { return typeof r === 'string'; })) f.push('Rest nicht nur Zeichenketten: ' + JSON.stringify(erg.rest[0]));
+        return ergebnis(f);
+    }
+
+    function fmtTeilfarbeLesbar() {
+        ctx.oeffnen();
+        var f = [];
+        var tafel = '#1a472a';
+        B.setBoardColor(tafel);
+        B.setColor('#000000');
+        var teile = [{ t: 'Dunkelrot', farbe: '#71230a' }, { t: ' und ' }, { t: 'blau', farbe: '#0000ff' }];
+        B.blocktextEinfuegen([{ text: 'Dunkelrot und blau', teile: teile }]);
+        var t = texte();
+        if (t.length !== 1 || !t[0].teile || t[0].teile.length !== 3) return { ok: false, detail: 'teile ' + JSON.stringify(t[0] && t[0].teile) };
+        var a = t[0].teile[0].farbe;
+        var c = t[0].teile[2].farbe;
+        if (!a || kontrastWert(a, tafel) < 3) f.push('Dunkelrot ' + a + ' hat Kontrast ' + (a && kontrastWert(a, tafel).toFixed(2)));
+        if (!c || kontrastWert(c, tafel) < 3) f.push('Blau ' + c + ' hat Kontrast ' + (c && kontrastWert(c, tafel).toFixed(2)));
+        if (a && a !== M.lesbareLauffarbe('#71230a', tafel)) f.push('Dunkelrot ' + a + ' statt ' + M.lesbareLauffarbe('#71230a', tafel));
+        if (a) {
+            var r = parseInt(a.substr(1, 2), 16), g = parseInt(a.substr(3, 2), 16), b = parseInt(a.substr(5, 2), 16);
+            if (!(r > g && r > b)) f.push('Farbton verloren: ' + a);
+        }
+        if (t[0].teile[1].farbe !== undefined) f.push('Teil ohne Farbe bekam ' + t[0].teile[1].farbe);
+        if (t[0].farbe !== '#ffffff') f.push('Grundfarbe ' + t[0].farbe);
+        // Idempotent: das Ergebnis noch einmal eingefügt ändert die Farben nicht
+        B.blocktextEinfuegen([{ text: t[0].text, teile: t[0].teile }]);
+        t = texte();
+        if (t.length !== 2 || JSON.stringify(t[1].teile) !== JSON.stringify(t[0].teile)) f.push('zweites Einfügen: ' + JSON.stringify(t[1] && t[1].teile));
+        // Auf weißer Tafel bleibt Dunkelrot, wie es ist
+        B.setBoardColor('#ffffff');
+        B.blocktextEinfuegen([{ text: 'Dunkelrot', teile: [{ t: 'Dunkelrot', farbe: '#71230a' }] }]);
+        t = texte();
+        if (t.length !== 3 || !t[2].teile || t[2].teile[0].farbe !== '#71230a') f.push('weiße Tafel: ' + JSON.stringify(t[2] && t[2].teile));
+        var m = modellUnveraendert();
+        if (m) f.push(m);
+        return ergebnis(f);
+    }
+
+    // Unlesbare Farbangaben (rgb() passt auf FARB_MUSTER, ist aber keine
+    // #rgb/#rrggbb-Angabe für lesbareLauffarbe): farbe entfällt, danach
+    // werden gleiche Nachbarn zusammengelegt, ohne Formatierung kein teile
+    function fmtFarbeUngueltig() {
+        ctx.oeffnen();
+        var f = [];
+        B.blocktextEinfuegen([{ text: 'x y', teile: [{ t: 'x ', farbe: 'rgb(10, 20, 30)' }, { t: 'y', f: 1 }] }]);
+        B.blocktextEinfuegen([{ text: 'nur Farbe', teile: [{ t: 'nur Farbe', farbe: 'rgb(1, 2, 3)' }] }]);
+        B.blocktextEinfuegen([{ text: 'ab', teile: [{ t: 'a', f: 1 }, { t: 'b', f: 1, farbe: 'rgb(1, 2, 3)' }] }]);
+        var t = texte();
+        if (t.length !== 3) return { ok: false, detail: t.length + ' Texte' };
+        if (JSON.stringify(t[0].teile) !== JSON.stringify([{ t: 'x ' }, { t: 'y', f: 1 }])) f.push('(1) ' + JSON.stringify(t[0].teile));
+        if (Object.prototype.hasOwnProperty.call(t[1], 'teile')) f.push('(2) teile ' + JSON.stringify(t[1].teile));
+        if (JSON.stringify(t[2].teile) !== JSON.stringify([{ t: 'ab', f: 1 }])) f.push('(3) ' + JSON.stringify(t[2].teile));
+        var m = modellUnveraendert();
+        if (m) f.push(m);
+        return ergebnis(f);
+    }
+
+    // 60 Absätze mit je einem fetten Wort: Seite 1 und Rest tragen teile,
+    // der Rest geht als Objekte auf Seite 2, dort ebenfalls mit teile
+    function fmtLangUndNeueSeite() {
+        ctx.oeffnen();
+        var f = [];
+        var liste = [];
+        for (var i = 1; i <= 60; i++) {
+            liste.push({
+                text: 'Absatz ' + i + ' mit etwas Text, damit er eine Zeile füllt.',
+                teile: [{ t: 'Absatz ' + i + ' mit etwas ' }, { t: 'Text', f: 1 }, { t: ', damit er eine Zeile füllt.' }]
+            });
+        }
+        var erg = B.blocktextEinfuegen(liste);
+        var t1 = texte();
+        if (!erg || erg.px !== 18 || !erg.rest.length) return { ok: false, detail: 'Ergebnis ohne Rest: ' + JSON.stringify(erg && { px: erg.px, rest: erg.rest.length }) };
+        if (t1.length + erg.rest.length !== 60) f.push('Absätze: ' + t1.length + ' + ' + erg.rest.length);
+        t1.forEach(function(t) {
+            if (!t.teile || kette(t.teile) !== t.text) f.push('Seite 1 ' + t.id + ': teile ' + JSON.stringify(t.teile));
+        });
+        erg.rest.forEach(function(r, i) {
+            if (typeof r !== 'object' || !r.teile || kette(r.teile) !== r.text) f.push('Rest ' + i + ': ' + JSON.stringify(r));
+        });
+        var m1 = modellUnveraendert();
+        if (m1) f.push('Seite 1: ' + m1);
+        var erg2 = B.blocktextAufNeueSeite(erg.rest);
+        if (B.currentPageIndex !== 1 || B.totalPages !== 2) f.push('Seite ' + B.currentPageIndex + ' von ' + B.totalPages);
+        var t2 = texte();
+        if (!erg2 || !erg2.eingefuegt || t2.length !== erg2.eingefuegt) f.push('Seite 2: ' + t2.length + ' Texte, Ergebnis ' + JSON.stringify(erg2 && erg2.eingefuegt));
+        if (t2.length && t2[0].text !== erg.rest[0].text) f.push('Seite 2 beginnt mit ' + JSON.stringify(t2[0].text.slice(0, 40)));
+        t2.forEach(function(t) {
+            if (!t.teile || kette(t.teile) !== t.text) f.push('Seite 2 ' + t.id + ': teile ' + JSON.stringify(t.teile));
+        });
+        var m2 = modellUnveraendert();
+        if (m2) f.push('Seite 2: ' + m2);
+        return ergebnis(f);
+    }
+
+    // Fett misst breiter: Ein Text, der unformatiert in eine Zeile passt,
+    // bricht als fetter Text um - das geht nur, wenn _blocktextVerteilen
+    // mit der Schrift der Teile misst
+    function fmtMisstFett() {
+        ctx.oeffnen();
+        var f = [];
+        var mass = B._textMass();
+        var s = B._sichtbarerBereich();
+        var breite = s.b - 40;
+        // Wörter aus einem Buchstaben, dessen fette Form breiter ist ('W'
+        // ist es in Arial nicht): so wächst der Text in kleinen Schritten,
+        // und es gibt eine Länge, die nur fett nicht mehr in die Zeile passt
+        var text = '';
+        for (var n = 1; n < 400 && !text; n++) {
+            var cand = [];
+            for (var i = 0; i < n; i++) cand.push('b');
+            cand = cand.join(' ');
+            if (mass(cand, 24, { f: 1, k: 0 }) > breite) {
+                if (mass(cand, 24, { f: 0, k: 0 }) <= breite) text = cand;
+                else break;
+            }
+        }
+        if (!text) return { ok: false, detail: 'kein Text, der nur fett umbricht (Breite ' + breite + ')' };
+        B.blocktextEinfuegen([{ text: text }]);
+        B.blocktextEinfuegen([{ text: text, teile: [{ t: text, f: 1 }] }]);
+        var t = texte();
+        if (t.length !== 2) return { ok: false, detail: t.length + ' Texte' };
+        if (t[0].text.indexOf('\n') >= 0) f.push('unformatiert umbrochen: ' + sichtbar(t[0].text.slice(0, 40)));
+        if (t[1].text.indexOf('\n') < 0) f.push('fett nicht umbrochen (Breite ' + Math.round(breite) + ', fett ' + Math.round(mass(text, 24, { f: 1, k: 0 })) + ')');
+        var flaeche = { x: s.x + 20, y: s.y + 20, b: s.b - 40, h: s.h - 40 };
+        if (!innerhalb(B._rahmen(t[1]), flaeche)) f.push('fetter Text außerhalb: ' + rahmenText(B._rahmen(t[1])) + ' von ' + rahmenText(flaeche));
+        return ergebnis(f);
+    }
+
+    // _blocktextVerteilen misst über _textMass() - die Stellvertreter-Probe
+    // (wie in test-board-format.js) sieht jeden Aufruf mit seinem Stil.
+    // Direkt aufgerufen, damit nur das Verteilen misst (das Einfügen
+    // misst danach noch über _rahmen, ebenfalls über _textMass())
+    function fmtMisstUeberTextMass() {
+        ctx.oeffnen();
+        var f = [];
+        var original = B._textMass;
+        var echt = original.call(B);
+        var aufrufe = [];
+        var erg;
+        B._textMass = function() {
+            return function(t, px, stil) {
+                aufrufe.push({ t: t, px: px, f: stil && stil.f ? 1 : 0, k: stil && stil.k ? 1 : 0 });
+                return echt(t, px, stil);
+            };
+        };
+        try {
+            erg = B._blocktextVerteilen([{ text: 'Eins zwei drei', teile: [{ t: 'Eins ' }, { t: 'zwei', f: 1 }, { t: ' drei', k: 1 }] }], []);
+        } finally {
+            B._textMass = original;
+        }
+        if (!erg || erg.bloecke.length !== 1) f.push('Verteilen lieferte ' + JSON.stringify(erg));
+        if (!aufrufe.length) return { ok: false, detail: 'keine Messung über _textMass()' };
+        if (!aufrufe.some(function(a) { return a.f === 1 && a.t === 'zwei'; })) f.push('fett nicht über _textMass() gemessen: ' + JSON.stringify(aufrufe.slice(0, 4)));
+        if (!aufrufe.some(function(a) { return a.k === 1 && a.t === ' drei'; })) f.push('kursiv nicht über _textMass() gemessen');
+        if (!aufrufe.some(function(a) { return a.px === 24; })) f.push('keine Messung bei 24 px');
+        if (B._textMass !== original) f.push('_textMass nicht wiederhergestellt');
+        return ergebnis(f);
+    }
+
+    function fmtUndoUndAuswahl() {
+        ctx.oeffnen();
+        var f = [];
+        var undo = B.undoStapel.length;
+        var erg = B.blocktextEinfuegen([
+            { text: 'Erster Absatz', teile: [{ t: 'Erster ', f: 1 }, { t: 'Absatz' }] },
+            { text: 'Zweiter Absatz' }
+        ]);
+        var t = texte();
+        if (t.length !== 2) return { ok: false, detail: t.length + ' Texte' };
+        if (B.undoStapel.length !== undo + 1) f.push('Undo ' + undo + ' -> ' + B.undoStapel.length);
+        if (B.currentTool !== 'lasso') f.push('Werkzeug ' + B.currentTool);
+        if (B.auswahl.join() !== [t[0].id, t[1].id].join()) f.push('Auswahl ' + B.auswahl.join());
+        if (!erg || erg.ids.join() !== B.auswahl.join()) f.push('ids ' + JSON.stringify(erg && erg.ids));
+        if (!t[0].teile || Object.prototype.hasOwnProperty.call(t[1], 'teile')) f.push('teile: ' + JSON.stringify([t[0].teile, t[1].teile]));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+        if (texte().length) f.push(texte().length + ' Texte nach Strg+Z');
+        return ergebnis(f);
+    }
+
+    // Einträge ohne Text zählen nicht; Zeichenketten im Array gelten als Absatz
+    function fmtArrayRandfaelle() {
+        ctx.oeffnen();
+        var f = [];
+        var undo = B.undoStapel.length;
+        [[], [{ text: '' }], [{ text: '   ' }, { teile: [{ t: 'x', f: 1 }] }, null, 7, '', ' '], undefined, null].forEach(function(eingabe, i) {
+            var erg = B.blocktextEinfuegen(eingabe);
+            if (!erg || erg.eingefuegt !== 0 || erg.keinPlatz || erg.rest.length) f.push('leer ' + i + ': ' + JSON.stringify(erg));
+        });
+        if (el().length || B.undoStapel.length !== undo) f.push('geändert');
+        if (B.currentTool !== 'pen') f.push('Werkzeug ' + B.currentTool);
+        var erg2 = B.blocktextEinfuegen([{ text: '' }, null, 7, { text: 'Echt', teile: [{ t: 'Ec', f: 1 }, { t: 'ht' }] }, '', 'Zweiter']);
+        var t = texte();
+        if (!erg2 || erg2.eingefuegt !== 2 || t.length !== 2) return { ok: false, detail: t.length + ' Texte, Ergebnis ' + JSON.stringify(erg2) };
+        if (t[0].text !== 'Echt' || t[1].text !== 'Zweiter') f.push('Texte ' + JSON.stringify([t[0].text, t[1].text]));
+        if (!t[0].teile || Object.prototype.hasOwnProperty.call(t[1], 'teile')) f.push('teile ' + JSON.stringify([t[0].teile, t[1].teile]));
+        return ergebnis(f);
+    }
+
+    // Kein Platz: nichts geändert, der Rest kommt als Objekte mit teile zurück
+    function fmtKeinPlatz() {
+        ctx.oeffnen();
+        strich(10, 5, 10, B.cssHeight - 5);
+        var vorher = el().slice();
+        var undo = B.undoStapel.length;
+        var a = { text: 'passt nicht', teile: [{ t: 'passt ', f: 1 }, { t: 'nicht' }] };
+        var b = { text: 'auch nicht' };
+        var erg = B.blocktextEinfuegen([a, b]);
+        var f = [];
+        if (!erg || !erg.keinPlatz || erg.eingefuegt !== 0) f.push('Ergebnis ' + JSON.stringify(erg));
+        if (erg && JSON.stringify(erg.rest) !== JSON.stringify([a, b])) f.push('Rest ' + JSON.stringify(erg.rest));
+        if (el().length !== vorher.length || el()[0] !== vorher[0] || B.undoStapel.length !== undo) f.push('Tafel verändert');
+        return ergebnis(f);
+    }
+
+    // Review-Befund G5 mit Objekten: Passt auf einer leeren Seite nichts hin,
+    // entsteht keine Seite; sonst Zeichenketten und Objekte gemischt
+    function fmtNeueSeiteProbe() {
+        oeffnenMit('<p>Eins</p>');
+        var f = [];
+        var a = { text: 'Ein Absatz', teile: [{ t: 'Ein ', f: 1 }, { t: 'Absatz' }] };
+        B.zoom = 20;
+        B.updateCanvasTransform();
+        var erg = B.blocktextAufNeueSeite([a]);
+        if (!erg || !erg.keinPlatz || erg.eingefuegt !== 0) f.push('Ergebnis ' + JSON.stringify(erg));
+        if (B.totalPages !== 1) f.push(B.totalPages + ' Seiten (leere Seite angelegt)');
+        if (erg && JSON.stringify(erg.rest) !== JSON.stringify([a])) f.push('Rest ' + JSON.stringify(erg.rest));
+        B.zoom = 1;
+        B.updateCanvasTransform();
+        var erg2 = B.blocktextAufNeueSeite(['Alpha', { text: 'Beta fett', teile: [{ t: 'Beta ' }, { t: 'fett', f: 1 }] }]);
+        var t = texte();
+        if (!erg2 || erg2.eingefuegt !== 2 || t.length !== 2) return { ok: false, detail: t.length + ' Texte, Ergebnis ' + JSON.stringify(erg2) };
+        if (B.totalPages !== 2) f.push(B.totalPages + ' Seiten');
+        if (t[0].text !== 'Alpha' || Object.prototype.hasOwnProperty.call(t[0], 'teile')) f.push('erster ' + JSON.stringify(t[0]));
+        if (t[1].text !== 'Beta fett' || JSON.stringify(t[1].teile) !== JSON.stringify([{ t: 'Beta ' }, { t: 'fett', f: 1 }])) f.push('zweiter ' + JSON.stringify(t[1].teile));
+        return ergebnis(f);
+    }
+
+    // MAX_TEILE: Wechselt die Formatierung in jedem Zeichen, hat der Block
+    // mehr als 1000 Teile - die Prüfung des Modells würde sie beim Speichern
+    // verwerfen. Der Text bleibt vollständig, das Feld teile entfällt gleich
+    // beim Einfügen (Modell danach unverändert durch die Prüfung)
+    function fmtUeberMaxTeile() {
+        ctx.oeffnen();
+        var f = [];
+        var text = '';
+        var teile = [];
+        for (var i = 0; i < 1200; i++) {
+            var z = (i % 2) ? 'b' : 'a';
+            text += z;
+            teile.push(i % 2 ? { t: z } : { t: z, f: 1 });
+        }
+        var erg = B.blocktextEinfuegen([{ text: text, teile: teile }]);
+        var t = texte();
+        if (!erg || t.length !== 1) return { ok: false, detail: t.length + ' Texte, Ergebnis ' + JSON.stringify(erg && { e: erg.eingefuegt, rest: erg.rest.length }) };
+        if (t[0].text.split('\n').join('') !== text) f.push('Text verändert (' + t[0].text.length + ' Zeichen)');
+        if (t[0].teile && t[0].teile.length > window.CBDBoardElemente.MAX_TEILE) f.push(t[0].teile.length + ' Teile (MAX_TEILE ' + window.CBDBoardElemente.MAX_TEILE + ')');
+        var m = modellUnveraendert();
+        if (m) f.push(m);
+        return ergebnis(f);
+    }
+
+    // Absicherung: Passen die Teile eines Blocks nicht zu seinem Text
+    // (Verkettung !== text) - das Modul liefert das nie, die Prüfung des
+    // Modells würde sie aber verwerfen -, bekommt das Element keine teile;
+    // der Text bleibt. Das Modul wird dafür kurz durch eine Stellvertreter-
+    // Fassung von verteile() ersetzt.
+    function fmtVerkettungAbgesichert() {
+        ctx.oeffnen();
+        var f = [];
+        var original = M.verteile;
+        M.verteile = function() {
+            return { px: 24, rest: [], bloecke: [{ text: 'abc', teile: [{ t: 'x', f: 1 }], x: 20, y: 60, b: 50, h: 29 }] };
+        };
+        var erg;
+        try {
+            erg = B.blocktextEinfuegen([{ text: 'abc' }]);
+        } finally {
+            M.verteile = original;
+        }
+        var t = texte();
+        if (!erg || t.length !== 1) return { ok: false, detail: t.length + ' Texte, Ergebnis ' + JSON.stringify(erg) };
+        if (t[0].text !== 'abc') f.push('Text ' + JSON.stringify(t[0].text));
+        if (Object.prototype.hasOwnProperty.call(t[0], 'teile')) f.push('teile ' + JSON.stringify(t[0].teile));
+        if (M.verteile !== original) f.push('verteile nicht wiederhergestellt');
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
+    // Bearbeitungsfeld (PLAN-Blocktext-Formatierung.md, AP-2.4, F8-F10):
+    // Die Vorschau ist ein formatiert bearbeitbares div mit Formatleiste
+    // (Fett, Kursiv, sechs Stiftfarben, Standard). Gelesen wird es mit
+    // B._textFeldLesen() (= _blocktextLesen mit Grundfarbe des Felds).
+    // Prüfnamen beginnen mit "Bearbeitungsfeld".
+    // ------------------------------------------------------------------
+    var FARBNAMEN = ['Schwarz', 'Weiß', 'Rot', 'Blau', 'Gelb', 'Grün'];
+
+    function formatLeiste() {
+        return document.querySelector('.cbd-board-blocktext-format');
+    }
+
+    function formatKnopf(selektor) {
+        var l = formatLeiste();
+        return l ? l.querySelector(selektor) : null;
+    }
+
+    function farbKnopf(name) {
+        return formatKnopf('.cbd-board-format-farbe[aria-label="' + name + '"]');
+    }
+
+    // '#rrggbb' -> 'rgb(r, g, b)' wie getComputedStyle
+    function rgbVon(hex) {
+        return 'rgb(' + parseInt(hex.substr(1, 2), 16) + ', ' + parseInt(hex.substr(3, 2), 16) + ', ' +
+            parseInt(hex.substr(5, 2), 16) + ')';
+    }
+
+    // Erster Textknoten im Feld t, der wort enthält -> {knoten, start}
+    function textStelle(t, wort) {
+        var w = document.createTreeWalker(t, NodeFilter.SHOW_TEXT, null, false);
+        for (var n = w.nextNode(); n; n = w.nextNode()) {
+            var i = n.nodeValue.indexOf(wort);
+            if (i >= 0) return { knoten: n, start: i };
+        }
+        return null;
+    }
+
+    // Markierung per Range auf wort setzen (wie ein Doppelklick); ende:
+    // eingeklappt direkt hinter wort (Schreibmarke)
+    function markiere(t, wort, ende) {
+        var s = textStelle(t, wort);
+        if (!s) throw new Error('Wort ' + JSON.stringify(wort) + ' nicht im Feld');
+        t.focus();
+        var r = document.createRange();
+        r.setStart(s.knoten, ende ? s.start + wort.length : s.start);
+        r.setEnd(s.knoten, s.start + wort.length);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+    }
+
+    // Berechneter Stil des Elements, in dem wort steht
+    function stilVon(t, wort) {
+        var s = textStelle(t, wort);
+        return s ? getComputedStyle(s.knoten.parentNode) : null;
+    }
+
+    function lesenAls(t) {
+        return JSON.stringify(textUndTeile(B._textFeldLesen(t)));
+    }
+
+    function bfFeldAufbau() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        var f = [];
+        if (!t) return { ok: false, detail: 'kein Feld' };
+        if (t.tagName !== 'DIV' || t.getAttribute('contenteditable') !== 'true') f.push('Feld ist ' + t.tagName + ' contenteditable=' + t.getAttribute('contenteditable'));
+        if (t.getAttribute('role') !== 'textbox' || t.getAttribute('aria-multiline') !== 'true' || !t.getAttribute('aria-label')) f.push('role/aria-multiline/aria-label fehlen');
+        if (t.getAttribute('spellcheck') !== 'false' || t.getAttribute('autocorrect') !== 'off' || t.getAttribute('autocapitalize') !== 'off') f.push('spellcheck/autocorrect/autocapitalize');
+        if (fenster().querySelector('textarea')) f.push('noch ein textarea im Fenster');
+        var st = getComputedStyle(t);
+        if (st.backgroundColor !== rgbVon(B.boardColor)) f.push('Hintergrund ' + st.backgroundColor + ' statt Tafel ' + B.boardColor);
+        var grund = M.lesbareFarbe(B.currentColor, B.boardColor);
+        if (st.color !== rgbVon(grund)) f.push('Schrift ' + st.color + ' statt Einfügefarbe ' + grund);
+        var l = formatLeiste();
+        if (!l || l.getAttribute('role') !== 'toolbar') return { ok: false, detail: f.concat(['keine Leiste mit role toolbar']).join('; ') };
+        if (!fenster().contains(l)) f.push('Leiste nicht im Fenster');
+        if (l.getBoundingClientRect().bottom > t.getBoundingClientRect().top + 0.5) f.push('Leiste nicht über dem Feld');
+        var knoepfe = l.querySelectorAll('button');
+        var namen = Array.prototype.map.call(knoepfe, function(k) { return k.getAttribute('aria-label') || k.textContent; });
+        var soll = ['Fett', 'Kursiv'].concat(FARBNAMEN, ['Standard']);
+        if (namen.join('|') !== soll.join('|')) f.push('Knöpfe ' + namen.join('|'));
+        var farben = Array.prototype.map.call(l.querySelectorAll('.cbd-board-format-farbe'), function(k) { return getComputedStyle(k).backgroundColor; });
+        if (farben.join('|') !== B.presetColors.map(rgbVon).join('|')) f.push('Farbknöpfe ' + farben.join('|'));
+        // Layoutgröße (offsetWidth), nicht getBoundingClientRect: Das Fenster
+        // blendet mit transform: scale(0.98) ein (cbdBoardFadeIn)
+        Array.prototype.forEach.call(knoepfe, function(k) {
+            if (k.offsetWidth < 36 || k.offsetHeight < 36) f.push((k.getAttribute('aria-label') || k.textContent) + ' ' + k.offsetWidth + 'x' + k.offsetHeight);
+            if (k.type !== 'button') f.push('type ' + k.type);
+        });
+        return ergebnis(f);
+    }
+
+    function bfSpansFormatiert() {
+        oeffnenMit('<p>Ein <strong>fettes</strong> und <em>kursives</em> Wort, <span style="color:#0000ff">blau</span> und normal.</p>');
+        var t = vorschauOeffnen();
+        var f = [];
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        var fett = stilVon(t, 'fettes'), kursiv = stilVon(t, 'kursives'), blau = stilVon(t, 'blau'), normal = stilVon(t, 'und normal');
+        if (!fett || !(parseFloat(fett.fontWeight) >= 600)) f.push('fettes: ' + (fett && fett.fontWeight));
+        if (!kursiv || kursiv.fontStyle !== 'italic') f.push('kursives: ' + (kursiv && kursiv.fontStyle));
+        if (!blau || blau.color !== 'rgb(0, 0, 255)') f.push('blau: ' + (blau && blau.color));
+        if (!normal || parseFloat(normal.fontWeight) >= 600 || normal.fontStyle !== 'normal' || normal.color !== getComputedStyle(t).color) {
+            f.push('normal: ' + (normal && [normal.fontWeight, normal.fontStyle, normal.color].join(' ')));
+        }
+        if (kursiv && parseFloat(kursiv.fontWeight) >= 600) f.push('kursives auch fett');
+        return ergebnis(f);
+    }
+
+    // Grüne Tafel: Feld grün, Grundschrift weiß, Glossarfarbe aufgehellt
+    // (lesbareLauffarbe, F7) - so, wie es auf die Tafel kommt
+    function bfGrueneTafel() {
+        oeffnenMit('<p>Ein <span style="color:#71230a">Begriff</span> im Text.</p>');
+        B.setBoardColor('#1a472a');
+        B.setColor('#000000');
+        var t = vorschauOeffnen();
+        var f = [];
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        var st = getComputedStyle(t);
+        if (st.backgroundColor !== 'rgb(26, 71, 42)') f.push('Hintergrund ' + st.backgroundColor);
+        if (st.color !== 'rgb(255, 255, 255)') f.push('Grundschrift ' + st.color);
+        var soll = M.lesbareLauffarbe('#71230a', '#1a472a');
+        var b = stilVon(t, 'Begriff');
+        if (!b || b.color !== rgbVon(soll)) f.push('Begriff ' + (b && b.color) + ' statt ' + rgbVon(soll));
+        if (kontrastWert(soll, '#1a472a') < 3) f.push('Kontrast ' + kontrastWert(soll, '#1a472a'));
+        // Zurückgelesen: die angezeigte (lesbare) Farbe, Grundschrift ohne Farbe
+        var soll2 = JSON.stringify([{ text: 'Ein Begriff im Text.', teile: [{ t: 'Ein ' }, { t: 'Begriff', farbe: soll }, { t: ' im Text.' }] }]);
+        if (lesenAls(t) !== soll2) f.push('gelesen ' + lesenAls(t));
+        return ergebnis(f);
+    }
+
+    // Unverändertes Feld = dieselben Absätze wie der Blockbereich (F10)
+    function bfUnveraendertGleich() {
+        oeffnenMit('<h3>Titel</h3>' +
+            '<p>Es entsteht eine <strong>trans</strong>-Bindung mit <em>kursivem</em> und <span style="color:#0000ff">blauem</span> Text.</p>' +
+            '<ul><li><strong>x</strong> y</li></ul>' +
+            '<p>Zeile 1<br>Zeile <strong>2<br>fett</strong> weiter</p>' +
+            '<p>Ganz normal.</p>' +
+            '<table><tr><td><strong>A</strong></td><td>B</td></tr></table>');
+        var soll = B._blocktextAbsaetze();
+        var t = vorschauOeffnen();
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        var ist = B._textFeldLesen(t);
+        var a = JSON.stringify(textUndTeile(ist));
+        var b = JSON.stringify(textUndTeile(soll));
+        if (soll.length !== 6 || !soll[1].teile) return { ok: false, detail: 'Vorbedingung: ' + b };
+        return a === b ? true : { ok: false, detail: 'Feld ' + a + ' / Block ' + b };
+    }
+
+    function bfFettKursivKnopf() {
+        oeffnenMit('<p>Eins zwei drei</p>');
+        var t = vorschauOeffnen();
+        if (!t || !formatKnopf('.cbd-board-format-fett')) return { ok: false, detail: 'kein Feld/keine Leiste' };
+        markiere(t, 'zwei');
+        formatKnopf('.cbd-board-format-fett').click();
+        markiere(t, 'drei');
+        formatKnopf('.cbd-board-format-kursiv').click();
+        var soll = JSON.stringify([{ text: 'Eins zwei drei', teile: [{ t: 'Eins ' }, { t: 'zwei', f: 1 }, { t: ' ' }, { t: 'drei', k: 1 }] }]);
+        return lesenAls(t) === soll ? true : { ok: false, detail: 'gelesen ' + lesenAls(t) };
+    }
+
+    function bfFarbknopfStandard() {
+        oeffnenMit('<p>Eins zwei drei</p><p>Ein <span style="color:#0000ff">blaues</span> Wort</p>');
+        var t = vorschauOeffnen();
+        if (!t || !farbKnopf('Rot')) return { ok: false, detail: 'kein Feld/kein Knopf Rot' };
+        var f = [];
+        markiere(t, 'zwei');
+        farbKnopf('Rot').click();
+        var ist = B._textFeldLesen(t);
+        var soll1 = JSON.stringify([{ t: 'Eins ' }, { t: 'zwei', farbe: '#ff0000' }, { t: ' drei' }]);
+        if (JSON.stringify(ist[0] && ist[0].teile) !== soll1) f.push('Rot: ' + JSON.stringify(ist[0]));
+        markiere(t, 'zwei');
+        formatKnopf('.cbd-board-format-standard').click();
+        markiere(t, 'blaues');
+        formatKnopf('.cbd-board-format-standard').click();
+        var soll2 = JSON.stringify([{ text: 'Eins zwei drei' }, { text: 'Ein blaues Wort' }]);
+        if (lesenAls(t) !== soll2) f.push('Standard: ' + lesenAls(t));
+        return ergebnis(f);
+    }
+
+    function bfPasteKlartext() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        markiere(t, 'Eins', true);
+        var dt = new DataTransfer();
+        dt.setData('text/html', '<b class="cbd-fremd">Fremd</b><img class="cbd-fremd" src="data:,">');
+        dt.setData('text/plain', ' Fremd');
+        var ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+        t.dispatchEvent(ev);
+        var f = [];
+        if (!ev.defaultPrevented) f.push('paste nicht abgefangen');
+        if (t.querySelector('.cbd-fremd, b, img')) f.push('Markup eingefügt: ' + t.innerHTML.slice(0, 120));
+        if (lesenAls(t) !== JSON.stringify([{ text: 'Eins Fremd' }])) f.push('gelesen ' + lesenAls(t));
+        return ergebnis(f);
+    }
+
+    function bfStrgU() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        var f = [];
+        if (!taste(t, 'u', { ctrlKey: true }).defaultPrevented) f.push('Strg+U nicht verhindert');
+        if (!taste(t, 'u', { metaKey: true }).defaultPrevented) f.push('Cmd+U nicht verhindert');
+        if (taste(t, 'b', { ctrlKey: true }).defaultPrevented) f.push('Strg+B verhindert (bleibt Browser-Standard)');
+        if (!fenster() || !B.overlay) f.push('Fenster oder Tafel geschlossen');
+        return ergebnis(f);
+    }
+
+    function bfZiehenGesperrt() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        var f = [];
+        ['dragover', 'drop'].forEach(function(typ) {
+            var dt = new DataTransfer();
+            dt.setData('text/plain', 'x');
+            var ev = new DragEvent(typ, { bubbles: true, cancelable: true, dataTransfer: dt });
+            t.dispatchEvent(ev);
+            if (!ev.defaultPrevented) f.push(typ + ' nicht verhindert');
+        });
+        return ergebnis(f);
+    }
+
+    // Formatknöpfe nehmen dem Feld weder Fokus noch Markierung
+    function bfKnoepfeHaltenMarkierung() {
+        oeffnenMit('<p>Eins</p>');
+        vorschauOeffnen();
+        var l = formatLeiste();
+        if (!l) return { ok: false, detail: 'keine Leiste' };
+        var f = [];
+        Array.prototype.forEach.call(l.querySelectorAll('button'), function(k) {
+            var p = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse', isPrimary: true });
+            k.dispatchEvent(p);
+            var m = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+            k.dispatchEvent(m);
+            if (!p.defaultPrevented || !m.defaultPrevented) f.push((k.getAttribute('aria-label') || k.textContent) + ': pointerdown ' + p.defaultPrevented + ', mousedown ' + m.defaultPrevented);
+        });
+        return ergebnis(f);
+    }
+
+    // Ohne Markierung im Feld tun die Knöpfe nichts (Schreibmarke im Feld
+    // oder Markierung außerhalb des Felds)
+    function bfOhneMarkierung() {
+        oeffnenMit('<p>Eins zwei</p>');
+        var t = vorschauOeffnen();
+        if (!t || !formatLeiste()) return { ok: false, detail: 'kein Feld/keine Leiste' };
+        var f = [];
+        var vorher = t.innerHTML;
+        function alleKnoepfe() {
+            Array.prototype.forEach.call(formatLeiste().querySelectorAll('button'), function(k) { k.click(); });
+        }
+        markiere(t, 'Eins', true);
+        alleKnoepfe();
+        if (t.innerHTML !== vorher) f.push('mit Schreibmarke geändert: ' + t.innerHTML.slice(0, 120));
+        var p = fenster().querySelector('p');
+        var r = document.createRange();
+        r.selectNodeContents(p);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(r);
+        alleKnoepfe();
+        if (t.innerHTML !== vorher) f.push('mit Markierung außerhalb geändert: ' + t.innerHTML.slice(0, 120));
+        return ergebnis(f);
+    }
+
+    function bfAufDieTafel() {
+        oeffnenMit('<p>Es entsteht eine <strong>trans</strong>-Bindung</p><p>Ohne alles</p>');
+        var t = vorschauOeffnen();
+        if (!t || !farbKnopf('Rot')) return { ok: false, detail: 'kein Feld/kein Knopf Rot' };
+        markiere(t, 'Ohne');
+        farbKnopf('Rot').click();
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var f = [];
+        if (fenster()) f.push('Fenster noch offen');
+        var tx = texte();
+        if (tx.length !== 2) return { ok: false, detail: tx.length + ' Texte' };
+        if (JSON.stringify(tx[0].teile) !== JSON.stringify([{ t: 'Es entsteht eine ' }, { t: 'trans', f: 1 }, { t: '-Bindung' }])) f.push('erster ' + JSON.stringify(tx[0].teile));
+        if (JSON.stringify(tx[1].teile) !== JSON.stringify([{ t: 'Ohne', farbe: '#ff0000' }, { t: ' alles' }])) f.push('zweiter ' + JSON.stringify(tx[1].teile));
+        if (B.currentTool !== 'lasso' || B.auswahl.length !== 2) f.push('Werkzeug ' + B.currentTool + ', Auswahl ' + B.auswahl.length);
+        var m = modellUnveraendert();
+        if (m) f.push(m);
+        return ergebnis(f);
+    }
+
+    // Zeilenwechsel im Feld (Umschalt+Enter = insertLineBreak) bleibt beim
+    // Lesen ein Zeilenwechsel - Chrome/Safari fügen bei white-space:
+    // pre-wrap dafür ein "\n"-Zeichen statt eines <br> ein
+    function bfZeilenwechsel() {
+        oeffnenMit('<p>Eins zwei</p><p>x<br>y</p>');
+        var t = vorschauOeffnen();
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        markiere(t, 'Eins', true);
+        document.execCommand('insertLineBreak');
+        var soll = JSON.stringify([{ text: 'Eins\nzwei' }, { text: 'x\ny' }]);
+        return lesenAls(t) === soll ? true : { ok: false, detail: 'gelesen ' + lesenAls(t) + ', Feld ' + JSON.stringify(t.innerHTML) };
+    }
+
+    // Enter: Vorschau = neuer Absatz (Standard des Browsers), Modus
+    // "bearbeiten" (Phase 3, F12) = Zeilenwechsel; dort alle Absätze in
+    // einem div, Zeilen durch <br> getrennt
+    function bfEnterUndModus() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        var f = [];
+        if (taste(t, 'Enter').defaultPrevented) f.push('Vorschau: Enter verhindert');
+        var teile = B._textFeldBauen([{ text: 'Zeile eins\nZeile zwei', teile: [{ t: 'Zeile ' }, { t: 'eins\nZeile', f: 1 }, { t: ' zwei' }] }],
+            { modus: 'bearbeiten', grundfarbe: '#0000ff', hintergrund: '#ffffff' });
+        var b = teile.feld;
+        document.body.appendChild(b);
+        try {
+            if (b.children.length !== 1 || b.children[0].tagName !== 'DIV' || b.querySelectorAll('br').length !== 1) f.push('Bearbeiten-Aufbau ' + JSON.stringify(b.innerHTML));
+            if (getComputedStyle(b).color !== 'rgb(0, 0, 255)') f.push('Grundschrift ' + getComputedStyle(b).color);
+            var soll = JSON.stringify([{ text: 'Zeile eins\nZeile zwei', teile: [{ t: 'Zeile ' }, { t: 'eins', f: 1 }, { t: '\n' }, { t: 'Zeile', f: 1 }, { t: ' zwei' }] }]);
+            if (lesenAls(b) !== soll) f.push('Bearbeiten gelesen ' + lesenAls(b));
+            markiere(b, ' zw', true); // Schreibmarke mitten in "zwei"
+            var ev = taste(b, 'Enter');
+            if (!ev.defaultPrevented) f.push('Bearbeiten: Enter nicht verhindert');
+            if (b.children.length !== 1) f.push('Bearbeiten: neues div nach Enter');
+            var gelesen = B._textFeldLesen(b);
+            if (gelesen.length !== 1 || gelesen[0].text !== 'Zeile eins\nZeile zw\nei') f.push('Bearbeiten nach Enter ' + JSON.stringify(gelesen));
+            if (taste(b, 'Enter', { shiftKey: true }).defaultPrevented) f.push('Bearbeiten: Umschalt+Enter verhindert');
+        } finally {
+            if (b.parentNode) b.parentNode.removeChild(b);
+        }
+        return ergebnis(f);
+    }
+
+    // Leiste als ein Tab-Halt (role toolbar), Pfeiltasten wandern
+    function bfLeisteTastatur() {
+        oeffnenMit('<p>Eins</p>');
+        vorschauOeffnen();
+        var l = formatLeiste();
+        if (!l) return { ok: false, detail: 'keine Leiste' };
+        var knoepfe = l.querySelectorAll('button');
+        var f = [];
+        var halte = Array.prototype.filter.call(knoepfe, function(k) { return k.tabIndex === 0; });
+        if (halte.length !== 1 || halte[0] !== knoepfe[0]) f.push(halte.length + ' Tab-Halte in der Leiste');
+        knoepfe[0].focus();
+        taste(knoepfe[0], 'ArrowRight');
+        if (document.activeElement !== knoepfe[1] || knoepfe[1].tabIndex !== 0 || knoepfe[0].tabIndex !== -1) f.push('Pfeil rechts');
+        taste(knoepfe[1], 'End');
+        if (document.activeElement !== knoepfe[knoepfe.length - 1]) f.push('Ende');
+        taste(document.activeElement, 'ArrowRight');
+        if (document.activeElement !== knoepfe[0]) f.push('Pfeil rechts am Ende kreist nicht');
+        taste(document.activeElement, 'ArrowLeft');
+        if (document.activeElement !== knoepfe[knoepfe.length - 1]) f.push('Pfeil links am Anfang kreist nicht');
+        return ergebnis(f);
+    }
+
+    // Inhalt nur als Text: Zeichen wie "<" aus dem Block bleiben Text
+    function bfNurText() {
+        oeffnenMit('<p>&lt;b class="cbd-fremd"&gt;x&lt;/b&gt; &amp; <strong>&lt;i class="cbd-fremd"&gt;</strong></p>');
+        var t = vorschauOeffnen();
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        var f = [];
+        if (t.querySelector('.cbd-fremd, b, i')) f.push('Markup erzeugt: ' + t.innerHTML.slice(0, 120));
+        var soll = JSON.stringify([{ text: '<b class="cbd-fremd">x</b> & <i class="cbd-fremd">', teile: [{ t: '<b class="cbd-fremd">x</b> & ' }, { t: '<i class="cbd-fremd">', f: 1 }] }]);
+        if (lesenAls(t) !== soll) f.push('gelesen ' + lesenAls(t));
+        return ergebnis(f);
+    }
+
+    // Asynchron (selectionchange kommt als eigene Aufgabe): Geht die
+    // Markierung beim Antippen eines Knopfs verloren (iPad), gilt die
+    // zuletzt im Feld gemerkte
+    function bfGemerkteMarkierung() {
+        oeffnenMit('<p>Eins zwei drei</p>');
+        var t = vorschauOeffnen();
+        if (!t || !formatKnopf('.cbd-board-format-fett')) return Promise.resolve({ ok: false, detail: 'kein Feld/keine Leiste' });
+        markiere(t, 'zwei');
+        return warte(50).then(function() {
+            window.getSelection().removeAllRanges();
+            return warte(50);
+        }).then(function() {
+            formatKnopf('.cbd-board-format-fett').click();
+            var soll = JSON.stringify([{ text: 'Eins zwei drei', teile: [{ t: 'Eins ' }, { t: 'zwei', f: 1 }, { t: ' drei' }] }]);
+            return lesenAls(t) === soll ? true : { ok: false, detail: 'gelesen ' + lesenAls(t) };
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // AP-2.fix2 (Review-Befunde B1, B2, B5 aus AP-2.rev): Robustheit des
+    // Bearbeitungsfelds. B3 (Sperre als adoptiertes Stylesheet) steht nach
+    // der Gruppe "Darkmode lesen".
+    // ------------------------------------------------------------------
+    var F2_NB = String.fromCharCode(160);
+    var F2_FF = String.fromCharCode(0xFFFD);
+    var F2_H = String.fromCharCode(0xD83D); // High-Surrogat
+    var F2_L = String.fromCharCode(0xDE00); // Low-Surrogat (H + L = Emoji-Paar)
+
+    // Feld über _textFeldBauen bauen, ans Dokument hängen (berechnete Stile),
+    // fn(feld) ausführen, danach Feld und selectionchange-Lauscher entfernen
+    function mitFeld(absaetze, optionen, fn) {
+        var bau = B._textFeldBauen(absaetze, optionen || {});
+        document.body.appendChild(bau.feld);
+        try {
+            return fn(bau.feld);
+        } finally {
+            if (bau.feld.parentNode) bau.feld.parentNode.removeChild(bau.feld);
+            B._textFeldLauscherEntfernen();
+        }
+    }
+
+    // Text des Felds als [{text}] (JSON), wie lesenAls() ohne teile
+    function nurText(t) {
+        return JSON.stringify(B._textFeldLesen(t).map(function(a) { return { text: a.text }; }));
+    }
+
+    // B1: ungültige teile (kein Objekt, t keine Zeichenkette, Verkettung
+    // passt nicht) -> der Absatz erscheint als Klartext, keine Ausnahme.
+    // Vorher: "i < teile.length && teile" las teile.length nach teile = null.
+    function fix2B1UngueltigeTeile() {
+        var f = [];
+        var faelle = [
+            ['null vorn', [null, { t: 'ab' }]],
+            ['null hinten', [{ t: 'a' }, null]],
+            ['t ist keine Zeichenkette', [{ t: 5 }]],
+            ['t hinten keine Zeichenkette', [{ t: 'a' }, { t: 7 }]],
+            ['Zeichenketten statt Teile', ['a', 'b']],
+            ['Verkettung passt nicht (Wächter)', [{ t: 'a' }, { t: 'x' }]]
+        ];
+        ['vorschau', 'bearbeiten'].forEach(function(modus) {
+            faelle.forEach(function(fall) {
+                var name = modus + ', ' + fall[0];
+                try {
+                    mitFeld([{ text: 'ab', teile: fall[1] }], { modus: modus }, function(fe) {
+                        if (fe.textContent !== 'ab') f.push(name + ': Text ' + JSON.stringify(fe.textContent));
+                        if (fe.querySelector('span')) f.push(name + ': formatiertes span trotz ungültiger teile');
+                        if (nurText(fe) !== '[{"text":"ab"}]') f.push(name + ': gelesen ' + nurText(fe));
+                    });
+                } catch (e) {
+                    f.push(name + ': Ausnahme ' + e.name + ': ' + e.message);
+                }
+            });
+        });
+        // Gegenprobe: gültige teile bleiben formatiert
+        mitFeld([{ text: 'ab', teile: [{ t: 'a', f: 1 }, { t: 'b' }] }], {}, function(fe) {
+            var fett = stilVon(fe, 'a');
+            if (!fett || !(parseFloat(fett.fontWeight) >= 600)) f.push('gültige teile: "a" nicht fett');
+        });
+        return ergebnis(f);
+    }
+
+    // B2: geschütztes Leerzeichen (U+00A0) der Quelle bleibt über Vorschau
+    // und "Auf die Tafel" erhalten ("25 °C" bricht nicht um) - wie bis
+    // 3.1.147. Vorher machte _textFeldLesen daraus ein Leerzeichen (nbsp: true).
+    function fix2B2GeschuetztesLeerzeichen() {
+        var f = [];
+        oeffnenMit('<p>25&nbsp;°C</p><p>Wert&nbsp;<strong>fett&nbsp;er</strong> Ende</p>');
+        var soll = [
+            { text: '25' + F2_NB + '°C' },
+            { text: 'Wert' + F2_NB + 'fett' + F2_NB + 'er Ende', teile: [{ t: 'Wert' + F2_NB }, { t: 'fett' + F2_NB + 'er', f: 1 }, { t: ' Ende' }] }
+        ];
+        var sollJson = JSON.stringify(soll);
+        var block = JSON.stringify(textUndTeile(B._blocktextAbsaetze()));
+        if (block !== sollJson) f.push('Vorbedingung Blockbereich: ' + block);
+        var t = vorschauOeffnen();
+        if (!t) return { ok: false, detail: 'kein Feld' };
+        if (t.textContent.indexOf('25' + F2_NB + '°C') < 0) f.push('Feld zeigt U+00A0 nicht: ' + JSON.stringify(t.textContent));
+        var gelesen = JSON.stringify(textUndTeile(B._textFeldLesen(t)));
+        if (gelesen !== sollJson) f.push('_textFeldLesen: ' + gelesen + ' / soll ' + sollJson);
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var tx = texte();
+        if (tx.length !== 2) return { ok: false, detail: f.concat([tx.length + ' Texte']).join('; ') };
+        if (tx[0].text !== '25' + F2_NB + '°C') f.push('Element 1: ' + JSON.stringify(tx[0].text));
+        if (tx[1].text !== 'Wert' + F2_NB + 'fett' + F2_NB + 'er Ende') f.push('Element 2: ' + JSON.stringify(tx[1].text));
+        return ergebnis(f);
+    }
+
+    // B2 (Wächter, auch vor der Umsetzung grün): Ein getipptes Leerzeichen
+    // ist im pre-wrap-Feld U+0020, nie U+00A0; mehrere hintereinander
+    // fasst der Leser zu einem zusammen - die Entscheidung nbsp: false
+    // ändert daran nichts.
+    function fix2B2TippenBleibtU0020() {
+        var f = [];
+        oeffnenMit('<p>Einszwei</p>');
+        var t = vorschauOeffnen();
+        if (!t) return { ok: false, detail: 'kein Feld' };
+        markiere(t, 'Eins', true);
+        document.execCommand('insertText', false, ' ');
+        if (t.textContent.indexOf(F2_NB) >= 0) f.push('Leerzeichen beim Tippen ist U+00A0: ' + JSON.stringify(t.textContent));
+        if (nurText(t) !== JSON.stringify([{ text: 'Eins zwei' }])) f.push('gelesen ' + nurText(t));
+        document.execCommand('insertText', false, '  ');
+        if (t.textContent.indexOf(F2_NB) >= 0) f.push('mehrere Leerzeichen: U+00A0 ' + JSON.stringify(t.textContent));
+        if (nurText(t) !== JSON.stringify([{ text: 'Eins zwei' }])) f.push('mehrere gelesen ' + nurText(t));
+        return ergebnis(f);
+    }
+
+    // B5: einzelne Surrogate (High ohne folgendes Low, Low ohne vorheriges
+    // High) werden beim Lesen zu U+FFFD - sonst scheitert json_decode im
+    // Server und die Klassen-Tafel würde nur als Bild gespeichert. Gültige
+    // Paare (Emoji) bleiben; die Verkettung der Teile ergibt weiter text.
+    function fix2B5LesenSurrogate() {
+        var f = [];
+        var H = F2_H, L = F2_L, FF = F2_FF;
+        var faelle = [
+            ['High allein mitten', 'a' + H + 'b', 'a' + FF + 'b'],
+            ['Low allein mitten', 'a' + L + 'b', 'a' + FF + 'b'],
+            ['High am Ende', 'ab' + H, 'ab' + FF],
+            ['Low am Anfang', L + 'ab', FF + 'ab'],
+            ['gültiges Paar bleibt', 'a' + H + L + 'b', 'a' + H + L + 'b'],
+            ['High, dann gültiges Paar', 'a' + H + H + L, 'a' + FF + H + L],
+            ['gültiges Paar, dann Low', H + L + L, H + L + FF],
+            ['zwei High nacheinander', H + H, FF + FF]
+        ];
+        faelle.forEach(function(fall) {
+            mitFeld([fall[1]], {}, function(fe) {
+                var ist = nurText(fe);
+                var soll = JSON.stringify([{ text: fall[2] }]);
+                if (ist !== soll) f.push(fall[0] + ': ' + ist + ' / soll ' + soll);
+            });
+        });
+        // mit Formatierung: Teile und Text bleiben deckungsgleich
+        function teileFall2(name, absatz, sollText, sollTeile) {
+            mitFeld([absatz], {}, function(fe) {
+                var l = B._textFeldLesen(fe);
+                var a = l[0];
+                if (!a || a.text !== sollText) f.push(name + ': text ' + JSON.stringify(a && a.text) + ' / soll ' + JSON.stringify(sollText));
+                var kette = a && a.teile ? a.teile.map(function(x) { return x.t; }).join('') : (a && a.text);
+                if (a && kette !== a.text) f.push(name + ': Verkettung ' + JSON.stringify(kette) + ' != text');
+                if (JSON.stringify(a && a.teile) !== JSON.stringify(sollTeile)) f.push(name + ': teile ' + JSON.stringify(a && a.teile) + ' / soll ' + JSON.stringify(sollTeile));
+            });
+        }
+        teileFall2('fett mit einzelnem Surrogat',
+            { text: 'a' + H + 'b', teile: [{ t: 'a' + H, f: 1 }, { t: 'b' }] },
+            'a' + FF + 'b', [{ t: 'a' + FF, f: 1 }, { t: 'b' }]);
+        teileFall2('Paar über der Teilgrenze bleibt',
+            { text: 'a' + H + L + 'b', teile: [{ t: 'a' + H, f: 1 }, { t: L + 'b', k: 1 }] },
+            'a' + H + L + 'b', [{ t: 'a' + H, f: 1 }, { t: L + 'b', k: 1 }]);
+        teileFall2('Low am Teilanfang ohne High davor',
+            { text: 'ab' + L + 'c', teile: [{ t: 'ab' }, { t: L + 'c', f: 1 }] },
+            'ab' + FF + 'c', [{ t: 'ab' }, { t: FF + 'c', f: 1 }]);
+        return ergebnis(f);
+    }
+
+    // B5: Einfügen aus der Zwischenablage ersetzt einzelne Surrogate schon
+    // beim Einfügen (die an execCommand('insertText') übergebenen Texte und
+    // das Feld enthalten keine mehr), in beiden Modi
+    function fix2B5Einfuegen() {
+        var f = [];
+        var H = F2_H, L = F2_L, FF = F2_FF;
+        function einfuegen(t, text) {
+            var aufrufe = [];
+            var orig = document.execCommand;
+            document.execCommand = function(befehl, ui, wert) {
+                if (befehl === 'insertText') aufrufe.push(String(wert));
+                return orig.apply(document, arguments);
+            };
+            try {
+                var dt = new DataTransfer();
+                dt.setData('text/plain', text);
+                t.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+            } finally {
+                delete document.execCommand;
+            }
+            return aufrufe;
+        }
+        function einzeln(s) {
+            return /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(s);
+        }
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        if (!t) return { ok: false, detail: 'kein Feld' };
+        markiere(t, 'Eins', true);
+        var a1 = einfuegen(t, 'x' + L + 'y');
+        if (a1.join('|') !== 'x' + FF + 'y') f.push('Vorschau: insertText mit ' + JSON.stringify(a1));
+        if (einzeln(t.textContent)) f.push('Vorschau: Feld enthält ein einzelnes Surrogat');
+        if (nurText(t) !== JSON.stringify([{ text: 'Einsx' + FF + 'y' }])) f.push('Vorschau gelesen ' + nurText(t));
+        // gültiges Emoji-Paar bleibt beim Einfügen
+        var a2 = einfuegen(t, H + L);
+        if (a2.join('|') !== H + L) f.push('Vorschau: Emoji-Paar verändert: ' + JSON.stringify(a2));
+        // Modus "bearbeiten": zeilenweise
+        mitFeld([{ text: 'ab' }], { modus: 'bearbeiten' }, function(b) {
+            markiere(b, 'ab', true);
+            var a3 = einfuegen(b, 'p' + L + 'q\nr' + H);
+            if (a3.join('|') !== 'p' + FF + 'q|r' + FF) f.push('bearbeiten: insertText mit ' + JSON.stringify(a3));
+            if (einzeln(b.textContent)) f.push('bearbeiten: Feld enthält ein einzelnes Surrogat');
+            if (nurText(b) !== JSON.stringify([{ text: 'abp' + FF + 'q\nr' + FF }])) f.push('bearbeiten gelesen ' + nurText(b));
+        });
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
+    // Darkmode lesen (PLAN-Blocktext-Formatierung.md, AP-2.fix1): Der
+    // Blockbereich wird mit den Stilen des Hellmodus gelesen - data-theme
+    // für die Dauer des synchronen Lesens entfernt, danach wieder gesetzt,
+    // ohne CSS-Übergang. Das Bearbeitungsfeld (eigene Inline-Farben) wird
+    // nicht umgeschaltet.
+    // ------------------------------------------------------------------
+    // Prüfstil wie ein Theme: Glossarfarbe und Grundfarbe je Modus, beide
+    // mit Übergang auf color (das Theme hat .glossar-term {transition: all})
+    var DM_STIL = '.pf-dm{color:#71230a;transition:color 2s}' +
+        '[data-theme="dark"] .pf-dm{color:#f0b090}' +
+        '.pf-dm-grund{color:#333333;transition:color 2s}' +
+        '[data-theme="dark"] .pf-dm-grund{color:#e0e0e0}';
+    // "grau" hat fest die Grundfarbe des Hellmodus: im Hellmodus keine
+    // eigene Farbe, mit der Darkmode-Grundfarbe fälschlich '#333333'
+    var DM_HTML = '<div class="cbd-container-content pf-dm-grund"><p>Ein <span class="pf-dm" id="pf-dm-span">Begriff</span>' +
+        ' und <span style="color:#333333">grau</span>.</p></div>';
+    var DM_SOLL = [{ text: 'Ein Begriff und grau.', teile: [{ t: 'Ein ' }, { t: 'Begriff', farbe: '#71230a' }, { t: ' und grau.' }] }];
+    var DM_DUNKEL = 'rgb(240, 176, 144)';
+
+    // Prüfstil zuerst, dann Modus, dann Tafel: neu eingefügte Elemente
+    // haben noch keinen Stil, starten also ohne Übergang
+    function dmVorbereiten(modus) {
+        var st = document.createElement('style');
+        st.id = 'pf-dm-stil';
+        st.textContent = DM_STIL;
+        document.head.appendChild(st);
+        if (modus) document.documentElement.setAttribute('data-theme', modus);
+        else document.documentElement.removeAttribute('data-theme');
+        oeffnenMit(DM_HTML);
+    }
+
+    // fn im Prüfaufbau ausführen; danach Prüfstil, Hilfselemente und
+    // data-theme wie vorher (auch bei Ausnahme)
+    function imDmAufbau(fn) {
+        var html = document.documentElement;
+        var vorher = html.getAttribute('data-theme');
+        try {
+            return fn();
+        } finally {
+            ['pf-dm-stil', 'pf-dm-aussen'].forEach(function(id) {
+                var e = document.getElementById(id);
+                if (e) e.parentNode.removeChild(e);
+            });
+            if (vorher === null) html.removeAttribute('data-theme');
+            else html.setAttribute('data-theme', vorher);
+        }
+    }
+
+    // Beobachter auf data-theme an <html>: zählt die Änderungen (synchron
+    // über takeRecords, ohne auf den Mikrotask zu warten)
+    function themaZaehler() {
+        var mo = new MutationObserver(function() {});
+        mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'], attributeOldValue: true });
+        return {
+            nehmen: function() { return mo.takeRecords(); },
+            aus: function() { mo.disconnect(); }
+        };
+    }
+
+    function dmGelesen(liste) {
+        return JSON.stringify(textUndTeile(liste));
+    }
+
+    // Darkmode: Glossarfarbe und Grundfarbe wie im Hellmodus
+    function dmLiestHellmodus() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var c = getComputedStyle(bereich().querySelector('#pf-dm-span')).color;
+            if (c !== DM_DUNKEL) f.push('Vorbedingung: Darkmode-Farbe ' + c);
+            var v = teileVergleich(B._blocktextAbsaetze(), DM_SOLL);
+            if (v !== true) f.push(v.detail);
+            return ergebnis(f);
+        });
+    }
+
+    // Danach: data-theme wieder dark, berechnete Farbe sofort wieder die
+    // dunkle, kein Übergang - im Blockbereich UND auf der Seite darunter
+    // (das Theme schaltet die ganze Seite), kein <style> bleibt zurück
+    function dmDanachDunkelOhneUebergang() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var aussen = document.createElement('span');
+            aussen.id = 'pf-dm-aussen';
+            aussen.className = 'pf-dm';
+            aussen.textContent = 'Seite';
+            document.body.appendChild(aussen);
+            var span = bereich().querySelector('#pf-dm-span');
+            var paare = [['Blockbereich', span], ['Seite', aussen]];
+            var f = [];
+            paare.forEach(function(p) {
+                var c = getComputedStyle(p[1]).color;
+                if (c !== DM_DUNKEL) f.push('Vorbedingung ' + p[0] + ' ' + c);
+            });
+            var stile = document.querySelectorAll('style').length;
+            var gelesen = dmGelesen(B._blocktextAbsaetze());
+            if (gelesen !== JSON.stringify(DM_SOLL)) f.push('nicht im Hellmodus gelesen: ' + gelesen);
+            var thema = document.documentElement.getAttribute('data-theme');
+            if (thema !== 'dark') f.push('data-theme danach ' + JSON.stringify(thema));
+            paare.forEach(function(p) {
+                // getAnimations() vor getComputedStyle: beide berechnen den
+                // Stil, ein Übergang entstünde beim ersten der beiden Aufrufe
+                if (typeof p[1].getAnimations === 'function') {
+                    var n = p[1].getAnimations().length;
+                    if (n) f.push(p[0] + ': ' + n + ' laufende(r) Übergang/Animation');
+                }
+                var c = getComputedStyle(p[1]).color;
+                if (c !== DM_DUNKEL) f.push(p[0] + ' danach ' + c);
+            });
+            if (document.querySelectorAll('style').length !== stile) f.push('<style>-Anzahl ' + stile + ' -> ' + document.querySelectorAll('style').length);
+            return ergebnis(f);
+        });
+    }
+
+    // Tafel-Inversion (weiße Tafel im Darkmode) bleibt gesetzt und wirksam
+    function dmInversionBleibt() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var cont = B.overlay.querySelector('.cbd-board-canvas-container');
+            if (!cont || !cont.classList.contains('cbd-board-inverted')) return { ok: false, detail: 'Vorbedingung: Tafel nicht invertiert' };
+            var filterVorher = getComputedStyle(cont).filter;
+            var gelesen = dmGelesen(B._blocktextAbsaetze());
+            if (gelesen !== JSON.stringify(DM_SOLL)) f.push('nicht im Hellmodus gelesen: ' + gelesen);
+            if (!cont.classList.contains('cbd-board-inverted')) f.push('cbd-board-inverted fehlt danach');
+            var filterNachher = getComputedStyle(cont).filter;
+            if (filterNachher !== filterVorher || filterNachher.indexOf('invert') < 0) f.push('Filter ' + filterVorher + ' -> ' + filterNachher);
+            return ergebnis(f);
+        });
+    }
+
+    // Gegenprobe Hellmodus: gleiches Ergebnis, data-theme wird nicht
+    // angefasst, kein zusätzliches <style>
+    function dmHellmodusUnberuehrt() {
+        return imDmAufbau(function() {
+            dmVorbereiten(null);
+            var z = themaZaehler();
+            var stile = document.querySelectorAll('style').length;
+            var f = [];
+            try {
+                var v = teileVergleich(B._blocktextAbsaetze(), DM_SOLL);
+                if (v !== true) f.push(v.detail);
+                var r = z.nehmen();
+                if (r.length) f.push(r.length + ' Änderung(en) an data-theme');
+            } finally {
+                z.aus();
+            }
+            if (document.documentElement.hasAttribute('data-theme')) f.push('data-theme gesetzt');
+            if (document.querySelectorAll('style').length !== stile) f.push('<style>-Anzahl geändert');
+            return ergebnis(f);
+        });
+    }
+
+    // Ausnahme beim Lesen: data-theme kommt trotzdem zurück, kein <style>
+    // bleibt; gelesen wurde ohne data-theme
+    function dmAusnahme() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var original = B._blocktextLesen;
+            var waehrend = 'nicht aufgerufen';
+            var stile = document.querySelectorAll('style').length;
+            var geworfen = null;
+            B._blocktextLesen = function() {
+                waehrend = document.documentElement.getAttribute('data-theme');
+                throw new Error('pf-dm-ausnahme');
+            };
+            try {
+                B._blocktextAbsaetze();
+            } catch (e) {
+                geworfen = e;
+            } finally {
+                B._blocktextLesen = original;
+            }
+            if (!geworfen || geworfen.message !== 'pf-dm-ausnahme') f.push('Ausnahme nicht weitergereicht: ' + (geworfen && geworfen.message));
+            if (waehrend !== null) f.push('beim Lesen data-theme ' + JSON.stringify(waehrend));
+            var thema = document.documentElement.getAttribute('data-theme');
+            if (thema !== 'dark') f.push('data-theme danach ' + JSON.stringify(thema));
+            if (document.querySelectorAll('style').length !== stile) f.push('<style> bleibt zurück');
+            return ergebnis(f);
+        });
+    }
+
+    // Nur der Blockbereich wird umgeschaltet: _blocktextAbsaetze() ändert
+    // data-theme genau zweimal (entfernt, wieder gesetzt), _textFeldLesen()
+    // gar nicht
+    function dmNurBlockbereich() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var t = vorschauOeffnen();
+            if (!t) return { ok: false, detail: 'kein Feld' };
+            var z = themaZaehler();
+            try {
+                B._blocktextAbsaetze();
+                var r = z.nehmen();
+                var ablauf = r.map(function(m) { return JSON.stringify(m.oldValue) + '->' + JSON.stringify(m.target.getAttribute('data-theme')); });
+                if (r.length !== 2 || r[0].oldValue !== 'dark' || r[1].oldValue !== null) f.push('_blocktextAbsaetze: ' + r.length + ' Änderung(en) ' + ablauf.join(', '));
+                B._textFeldLesen(t);
+                var r2 = z.nehmen();
+                if (r2.length) f.push('_textFeldLesen: ' + r2.length + ' Änderung(en)');
+            } finally {
+                z.aus();
+            }
+            return ergebnis(f);
+        });
+    }
+
+    // Vorschau im Darkmode (weiße Tafel): Feld zeigt die Hellmodus-Farbe
+    // (#71230a ist auf Weiß lesbar, bleibt also), "grau" ohne eigene Farbe
+    function dmVorschauFarben() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            B.setColor('#000000');
+            var t = vorschauOeffnen();
+            if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+            var f = [];
+            var soll = M.lesbareLauffarbe('#71230a', B.boardColor);
+            var b = stilVon(t, 'Begriff');
+            if (!b || b.color !== rgbVon(soll)) f.push('Begriff ' + (b && b.color) + ' statt ' + rgbVon(soll));
+            var g = stilVon(t, 'grau');
+            if (!g || g.color !== getComputedStyle(t).color) f.push('grau ' + (g && g.color) + ' statt Grundschrift ' + getComputedStyle(t).color);
+            if (lesenAls(t) !== JSON.stringify(DM_SOLL)) f.push('Feld gelesen ' + lesenAls(t));
+            return ergebnis(f);
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // AP-2.fix2, B3: Die Übergangssperre von _imHellmodus ist ein per
+    // adoptedStyleSheets angehängtes Stylesheet (wirkt auch unter einer CSP
+    // ohne 'unsafe-inline' in style-src), Rückfall auf ein <style>-Element.
+    // ------------------------------------------------------------------
+    function fix2KannAdoptieren() {
+        return typeof window.CSSStyleSheet === 'function' && 'adoptedStyleSheets' in document &&
+            typeof window.CSSStyleSheet.prototype.replaceSync === 'function';
+    }
+
+    function fix2Blaetter() {
+        return Array.prototype.slice.call(document.adoptedStyleSheets || []);
+    }
+
+    function fix2GleicheListe(a, b) {
+        if (a.length !== b.length) return false;
+        for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+        return true;
+    }
+
+    // Wie ein <style>-Element unter einer strengen CSP: wird nicht wirksam
+    // (hier: gar nicht erst ins Dokument gehängt)
+    function fix2StyleElementeSperren() {
+        var orte = [document.head, document.documentElement];
+        orte.forEach(function(ort) {
+            ort.appendChild = function(knoten) {
+                if (knoten && knoten.nodeName === 'STYLE') return knoten;
+                return Node.prototype.appendChild.call(this, knoten);
+            };
+        });
+        return function() {
+            orte.forEach(function(ort) { delete ort.appendChild; });
+        };
+    }
+
+    function dmB3OhneStyleElement() {
+        if (!fix2KannAdoptieren()) return { ok: false, detail: 'Browser ohne Constructable Stylesheets - Prüfung nicht anwendbar' };
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var vorher = fix2Blaetter();
+            var freigeben = fix2StyleElementeSperren();
+            var gelesen, stile;
+            try {
+                stile = document.querySelectorAll('style').length;
+                gelesen = dmGelesen(B._blocktextAbsaetze());
+            } finally {
+                freigeben();
+            }
+            if (gelesen !== JSON.stringify(DM_SOLL)) f.push('ohne wirksames <style> nicht im Hellmodus gelesen: ' + gelesen);
+            if (!fix2GleicheListe(vorher, fix2Blaetter())) f.push('adoptedStyleSheets danach ' + fix2Blaetter().length + ' statt ' + vorher.length + ' Blättern');
+            if (document.documentElement.getAttribute('data-theme') !== 'dark') f.push('data-theme danach ' + document.documentElement.getAttribute('data-theme'));
+            var aussen = bereich().querySelector('#pf-dm-span');
+            if (typeof aussen.getAnimations === 'function' && aussen.getAnimations().length) f.push('laufender Übergang danach');
+            if (getComputedStyle(aussen).color !== DM_DUNKEL) f.push('Farbe danach ' + getComputedStyle(aussen).color);
+            return ergebnis(f);
+        });
+    }
+
+    function dmB3AdoptiertWaehrendLesen() {
+        if (!fix2KannAdoptieren()) return { ok: false, detail: 'Browser ohne Constructable Stylesheets - Prüfung nicht anwendbar' };
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var ausgang = fix2Blaetter();
+            var eigenes = new window.CSSStyleSheet(); // schon vorhandenes adoptiertes Blatt der Seite
+            var mitEigenem = ausgang.concat([eigenes]);
+            document.adoptedStyleSheets = mitEigenem;
+            var original = B._blocktextLesen;
+            try {
+                // 1) Normalfall
+                var waehrend = null;
+                B._blocktextLesen = function() {
+                    var l = fix2Blaetter();
+                    waehrend = {
+                        anzahl: l.length,
+                        eigenesNochDa: l.indexOf(eigenes) >= 0,
+                        style: !!document.querySelector('style[data-cbd-hellmodus-lesen]'),
+                        sperre: l.length ? l[l.length - 1] : null
+                    };
+                    return original.apply(this, arguments);
+                };
+                B._blocktextAbsaetze();
+                if (!waehrend) return { ok: false, detail: 'Leser nicht aufgerufen' };
+                if (waehrend.anzahl !== mitEigenem.length + 1) f.push('beim Lesen ' + waehrend.anzahl + ' Blätter statt ' + (mitEigenem.length + 1));
+                if (!waehrend.eigenesNochDa) f.push('vorhandenes Blatt beim Lesen entfernt');
+                if (waehrend.style) f.push('beim Lesen ein <style data-cbd-hellmodus-lesen>-Element');
+                var regeln = waehrend.sperre && waehrend.sperre !== eigenes ? waehrend.sperre.cssRules : null;
+                if (!regeln || regeln.length !== 1 || regeln[0].cssText.indexOf('transition') < 0 || regeln[0].cssText.indexOf('important') < 0) {
+                    f.push('Sperrblatt: ' + (regeln && Array.prototype.map.call(regeln, function(r) { return r.cssText; }).join(' ')));
+                }
+                if (!fix2GleicheListe(mitEigenem, fix2Blaetter())) f.push('danach ' + fix2Blaetter().length + ' Blätter, nicht genau die alte Liste');
+                // 2) Ausnahme im Leser: die alte Liste kommt trotzdem zurück
+                B._blocktextLesen = function() { throw new Error('pf-b3-ausnahme'); };
+                var geworfen = null;
+                try { B._blocktextAbsaetze(); } catch (e) { geworfen = e; }
+                if (!geworfen || geworfen.message !== 'pf-b3-ausnahme') f.push('Ausnahme nicht weitergereicht');
+                if (!fix2GleicheListe(mitEigenem, fix2Blaetter())) f.push('nach Ausnahme ' + fix2Blaetter().length + ' Blätter, nicht genau die alte Liste');
+                if (document.documentElement.getAttribute('data-theme') !== 'dark') f.push('data-theme nach Ausnahme ' + document.documentElement.getAttribute('data-theme'));
+            } finally {
+                B._blocktextLesen = original;
+                document.adoptedStyleSheets = ausgang;
+            }
+            return ergebnis(f);
+        });
+    }
+
+    // Rückfall (Wächter, vor der Umsetzung grün): Gibt es keine
+    // Constructable Stylesheets oder schlagen sie fehl, sperrt ein
+    // <style data-cbd-hellmodus-lesen>-Element die Übergänge und wird
+    // danach entfernt.
+    function dmB3Rueckfall() {
+        var f = [];
+        var originalBlatt = window.CSSStyleSheet;
+        var faelle = [
+            ['CSSStyleSheet nicht konstruierbar',
+                function() { window.CSSStyleSheet = function() { throw new Error('pf-nicht-unterstuetzt'); }; },
+                function() { window.CSSStyleSheet = originalBlatt; }],
+            ['adoptedStyleSheets nicht vorhanden',
+                function() { Object.defineProperty(document, 'adoptedStyleSheets', { value: undefined, configurable: true, writable: true }); },
+                function() { delete document.adoptedStyleSheets; }]
+        ];
+        faelle.forEach(function(fall) {
+            var r = imDmAufbau(function() {
+                dmVorbereiten('dark');
+                var vorher = fix2Blaetter();
+                var original = B._blocktextLesen;
+                var waehrend = null;
+                var gelesen;
+                fall[1]();
+                try {
+                    B._blocktextLesen = function() {
+                        waehrend = !!document.querySelector('style[data-cbd-hellmodus-lesen]');
+                        return original.apply(this, arguments);
+                    };
+                    gelesen = dmGelesen(B._blocktextAbsaetze());
+                } finally {
+                    B._blocktextLesen = original;
+                    fall[2]();
+                }
+                var g = [];
+                if (gelesen !== JSON.stringify(DM_SOLL)) g.push('nicht im Hellmodus gelesen: ' + gelesen);
+                if (waehrend !== true) g.push('beim Lesen kein <style>-Element');
+                if (document.querySelector('style[data-cbd-hellmodus-lesen]')) g.push('<style> bleibt zurück');
+                if (!fix2GleicheListe(vorher, fix2Blaetter())) g.push('adoptedStyleSheets verändert');
+                if (document.documentElement.getAttribute('data-theme') !== 'dark') g.push('data-theme danach ' + document.documentElement.getAttribute('data-theme'));
+                return g;
+            });
+            if (r && r.length) f.push(fall[0] + ': ' + r.join('; '));
+        });
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     window.__zusatzTests = function(c) {
@@ -928,6 +2595,72 @@
         p('G9: auch nach A+ liegt die Leiste nicht auf dem Text', g9NachAPlus);
         p('G9: Zoom 2 und Verschiebung - Leiste frei, Text im Ausschnitt', g9Zoom);
         p('G9: kein Platz für die Leiste -> trotzdem eingefügt, wie bisher bei y 20', g9KeinPlatzFuerLeiste);
+
+        // Formatierung lesen (PLAN-Blocktext-Formatierung.md, AP-2.1)
+        FORMAT_FAELLE.forEach(function(fall) {
+            p('Formatierung lesen ' + fall.name, teileFall(fall.html, fall.soll));
+        });
+        p('Formatierung lesen (d) ohne .cbd-container-content: Grundfarbe = Farbe der Wurzel', formatGrundfarbeWurzel);
+        p('Formatierung lesen (j) Option grundfarbe', formatOptionGrundfarbe);
+        p('Formatierung lesen (k) Option nbsp', formatOptionNbsp);
+        p('Formatierung lesen (l) _blocktextAlsText() für (a)-(i) unverändert', formatAlsTextUnveraendert);
+        p('Formatierung lesen: Regel F6 (Stärke 600 ja, 500 nein, oblique, Glossarbegriff)', formatRegelF6);
+        p('Formatierung lesen (B10): color(srgb …) -> #rrggbb, oklab(…) und Alpha 0 ohne Farbe', formatB10Farbformen);
+        p('Formatierung lesen: _blocktextAbsaetze() als [{text, teile?}], ohne Tafel []', formatAbsaetze);
+        p('Formatierung lesen: BR und Blockgrenzen-Leerzeichen bleiben auch in Fett Klartext', formatKlartextInFormatierung);
+
+        // Formatiert einfügen (PLAN-Blocktext-Formatierung.md, AP-2.3)
+        ctx = c;
+        p('Formatiert einfügen: Array mit teile -> ein Element mit diesen teile, besteht die Modellprüfung', fmtEinElement);
+        p('Formatiert einfügen: Zeichenketten-Aufruf unverändert (kein teile, Rest = Zeichenketten)', fmtZeichenketteWieBisher);
+        p('Formatiert einfügen: grüne Tafel - Teilfarbe Kontrast >= 3, Farbton bleibt, idempotent', fmtTeilfarbeLesbar);
+        p('Formatiert einfügen: unlesbare Teilfarbe entfällt, Nachbarn zusammengelegt, ohne Formatierung kein teile', fmtFarbeUngueltig);
+        p('Formatiert einfügen: 60 formatierte Absätze - Rest mit teile, Seite 2 mit teile', fmtLangUndNeueSeite);
+        p('Formatiert einfügen: fetter Text bricht um, unformatierter nicht (Messung mit Stil)', fmtMisstFett);
+        p('Formatiert einfügen: _blocktextVerteilen misst über _textMass() mit fett/kursiv', fmtMisstUeberTextMass);
+        p('Formatiert einfügen: ein Undo-Schritt, Lasso, Auswahl, Strg+Z', fmtUndoUndAuswahl);
+        p('Formatiert einfügen: Array-Randfälle (leere Einträge, Zeichenkette im Array, kein Array)', fmtArrayRandfaelle);
+        p('Formatiert einfügen: kein Platz -> nichts geändert, Rest als Objekte mit teile', fmtKeinPlatz);
+        p('Formatiert einfügen: blocktextAufNeueSeite mit Objekten (Probe G5, gemischter Rest)', fmtNeueSeiteProbe);
+        p('Formatiert einfügen: über MAX_TEILE bleibt der Text, die Formatierung entfällt, Modell unverändert', fmtUeberMaxTeile);
+        p('Formatiert einfügen: Teile, die nicht zum Text passen, werden nicht gesetzt (Absicherung)', fmtVerkettungAbgesichert);
+
+        // Bearbeitungsfeld (PLAN-Blocktext-Formatierung.md, AP-2.4)
+        p('Bearbeitungsfeld: div[contenteditable] in Tafelfarben, Formatleiste über dem Feld (Fett, Kursiv, sechs Farben, Standard, 36 px)', bfFeldAufbau);
+        p('Bearbeitungsfeld: Vorschau zeigt fett, kursiv und farbig (berechnete Stile)', bfSpansFormatiert);
+        p('Bearbeitungsfeld: grüne Tafel - Feld grün, Grundschrift weiß, Glossarfarbe aufgehellt', bfGrueneTafel);
+        p('Bearbeitungsfeld: _textFeldLesen liefert für unverändertes Feld dieselben Absätze wie _blocktextAbsaetze()', bfUnveraendertGleich);
+        p('Bearbeitungsfeld: Knopf "F" und "K" auf eine Markierung -> f:1 / k:1 beim Lesen', bfFettKursivKnopf);
+        p('Bearbeitungsfeld: Farbknopf Rot -> farbe #ff0000, "Standard" entfernt die Farbe', bfFarbknopfStandard);
+        p('Bearbeitungsfeld: Einfügen aus der Zwischenablage nur als Klartext', bfPasteKlartext);
+        p('Bearbeitungsfeld: Strg+U/Cmd+U verhindert, Strg+B bleibt', bfStrgU);
+        p('Bearbeitungsfeld: Ziehen und Ablegen gesperrt', bfZiehenGesperrt);
+        p('Bearbeitungsfeld: Formatknöpfe verhindern pointerdown und mousedown', bfKnoepfeHaltenMarkierung);
+        p('Bearbeitungsfeld: ohne Markierung im Feld tun die Knöpfe nichts', bfOhneMarkierung);
+        p('Bearbeitungsfeld: "Auf die Tafel" legt Elemente mit teile an', bfAufDieTafel);
+        p('Bearbeitungsfeld: Zeilenwechsel im Feld bleibt beim Lesen ein Zeilenwechsel', bfZeilenwechsel);
+        p('Bearbeitungsfeld: Enter - Vorschau neuer Absatz, Modus "bearbeiten" Zeilenwechsel in einem div', bfEnterUndModus);
+        p('Bearbeitungsfeld: Leiste ein Tab-Halt, Pfeiltasten wandern', bfLeisteTastatur);
+        p('Bearbeitungsfeld: Text aus dem Block bleibt Text (kein Markup)', bfNurText);
+
+        // Darkmode lesen (PLAN-Blocktext-Formatierung.md, AP-2.fix1)
+        p('Darkmode lesen: _blocktextAbsaetze() liefert die Farben des Hellmodus (Glossar, Grundfarbe)', dmLiestHellmodus);
+        p('Darkmode lesen: danach data-theme dark, Farbe sofort dunkel, kein Übergang (Block und Seite), kein <style>', dmDanachDunkelOhneUebergang);
+        p('Darkmode lesen: Tafel-Inversion (weiße Tafel) bleibt gesetzt und wirksam', dmInversionBleibt);
+        p('Darkmode lesen: Hellmodus unverändert - gleiches Ergebnis, data-theme nicht angefasst', dmHellmodusUnberuehrt);
+        p('Darkmode lesen: Ausnahme beim Lesen - data-theme kommt zurück, kein <style> bleibt', dmAusnahme);
+        p('Darkmode lesen: nur der Blockbereich schaltet um (zwei Änderungen), _textFeldLesen nicht', dmNurBlockbereich);
+        p('Darkmode lesen: Vorschau zeigt im Darkmode die Hellmodus-Farbe', dmVorschauFarben);
+
+        // AP-2.fix2 (Review-Befunde B1, B2, B3, B5)
+        p('AP-2.fix2 (B1): ungültige teile im Bearbeitungsfeld -> Klartext statt Ausnahme', fix2B1UngueltigeTeile);
+        p('AP-2.fix2 (B2): geschütztes Leerzeichen bleibt U+00A0 über Vorschau und "Auf die Tafel"', fix2B2GeschuetztesLeerzeichen);
+        p('AP-2.fix2 (B2): getipptes Leerzeichen im Feld bleibt U+0020 (Wächter)', fix2B2TippenBleibtU0020);
+        p('AP-2.fix2 (B5): einzelne Surrogate beim Lesen des Felds -> U+FFFD, Verkettung = text, Paare bleiben', fix2B5LesenSurrogate);
+        p('AP-2.fix2 (B5): Einfügen aus der Zwischenablage ersetzt einzelne Surrogate (beide Modi)', fix2B5Einfuegen);
+        p('Darkmode lesen (B3): Übergangssperre wirkt auch, wenn ein <style>-Element nicht wirkt (adoptedStyleSheets)', dmB3OhneStyleElement);
+        p('Darkmode lesen (B3): Sperre ist beim Lesen ein adoptiertes Blatt (kein <style>), danach exakt die alte Liste, auch nach Ausnahme', dmB3AdoptiertWaehrendLesen);
+        p('Darkmode lesen (B3): Rückfall auf <style>, wenn Constructable Stylesheets fehlen oder scheitern (Wächter)', dmB3Rueckfall);
     };
 
     window.__zusatzTestsAsync = function(c) {
@@ -949,6 +2682,10 @@
                 return c.pruefeAsync('AP-2.fix1 (M2): "Auf neuer Seite einfügen" wartet, bis gespeichert ist', m2SpeichernAbwarten);
             }).then(function() {
                 return c.pruefeAsync('AP-2.fix1 (G2): close() schließt das Fenster sofort', g2CloseSchliesstFenster);
+            }).then(function() {
+                return c.pruefeAsync('Formatierung lesen: Testmaterial - Verkettung der Teile = Text, Modellprüfung behält teile', formatTestmaterial);
+            }).then(function() {
+                return c.pruefeAsync('Bearbeitungsfeld: verlorene Markierung (iPad) - Knopf nutzt die zuletzt im Feld gemerkte', bfGemerkteMarkierung);
             });
         });
     };
