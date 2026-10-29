@@ -189,6 +189,15 @@
     }
 
     /**
+     * Längster Text eines Text-Elements in UTF-16-Einheiten (AP-3.fix1):
+     * dieselbe Grenze wie MAX_TEXT in board-elemente.js (pruefeModell kürzt
+     * beim Laden/Speichern mit substring, dabei ginge die Formatierung
+     * verloren) und mb_substr(…, 0, 5000) in class-cbd-classroom.php.
+     * board-elemente.js gibt MAX_TEXT nicht heraus - bitte beide gleich halten.
+     */
+    var TEXT_MAX_EINHEITEN = 5000;
+
+    /**
      * Teile im Bereich [a, e) eines Texts, dessen Teile teile sind
      * (Positionen in UTF-16-Einheiten), als neue Objekte {t[, f: 1][, k: 1]
      * [, farbe]} - für den Zeilenumbruch in textErsetzen() (AP-3.1). Die
@@ -3941,6 +3950,11 @@
          * beides über _blocktextMitTeilen() (mit dessen Absicherung: mehr als
          * MAX_TEILE Teile -> ohne teile, der Text bleibt).
          *
+         * Obergrenze (AP-3.fix1): höchstens 5000 UTF-16-Einheiten, nie mitten
+         * in einem Surrogatpaar, teile passend zugeschnitten
+         * (_textErsetzenKuerzen) - vor dem Umbruch und danach, weil dieser
+         * Zeilenwechsel in überlange Wörter einfügen kann.
+         *
          * EIN Undo-Schritt, die Auswahl bleibt. Leerer Inhalt ([] oder nur
          * Leerraum) entfernt das Element (ein Undo-Schritt), die ID fällt aus
          * der Auswahl. Laufendes Ziehen/Drehen wird vorher übernommen (wie
@@ -3965,7 +3979,10 @@
             }
             if (stelle < 0 || liste[stelle].typ !== 'text') return false;
             var alt = liste[stelle];
-            var inhalt = this._textErsetzenInhalt(absaetze);
+            // AP-3.fix1: Obergrenze schon vor dem Umbruch (begrenzt dessen
+            // Arbeit) und noch einmal danach (er kann Zeilenwechsel mitten in
+            // einem überlangen Wort einfügen)
+            var inhalt = this._textErsetzenKuerzen(this._textErsetzenInhalt(absaetze));
 
             if (!/\S/.test(inhalt.text)) {
                 this.merkeZustand();
@@ -3976,7 +3993,7 @@
                 return true;
             }
 
-            if (!alt.winkel) inhalt = this._textErsetzenUmbrechen(inhalt, alt);
+            if (!alt.winkel) inhalt = this._textErsetzenKuerzen(this._textErsetzenUmbrechen(inhalt, alt));
             var neu = this._blocktextMitTeilen({ id: alt.id, typ: 'text', farbe: alt.farbe, breite: alt.breite,
                 text: inhalt.text, x: alt.x, y: alt.y }, inhalt.teile);
             if (alt.winkel) neu.winkel = alt.winkel;
@@ -4019,6 +4036,24 @@
                 teile = teile.concat(tt || [{ t: t }]);
             }
             return { text: text, teile: teile };
+        },
+
+        /**
+         * Obergrenze für textErsetzen() (AP-3.fix1, Befund aus AP-3.1):
+         * {text, teile} auf höchstens TEXT_MAX_EINHEITEN (5000) UTF-16-
+         * Einheiten kürzen, nie mitten in einem Surrogatpaar (endet der
+         * Schnitt hinter einem hohen Surrogat, entfällt es), die teile über
+         * textTeileAusschnitt passend zuschneiden. Kürzer oder gleich lang:
+         * dasselbe Objekt. Sonst kürzte pruefeModell den Text beim nächsten
+         * Laden und verwürfe dabei die Formatierung (Verkettung ≠ text).
+         */
+        _textErsetzenKuerzen: function(inhalt) {
+            var text = inhalt.text;
+            if (text.length <= TEXT_MAX_EINHEITEN) return inhalt;
+            var ende = TEXT_MAX_EINHEITEN;
+            var c = text.charCodeAt(ende - 1);
+            if (c >= 0xD800 && c <= 0xDBFF) ende--;
+            return { text: text.slice(0, ende), teile: textTeileAusschnitt(inhalt.teile, 0, ende) };
         },
 
         /**
@@ -4326,8 +4361,13 @@
          * bei genau einem gewählten Text): Die Leiste kann so höchstens
          * niedriger sein als gemessen, nie höher - auf schmalen Anzeigen
          * bricht sie mit dem Knopf früher in eine weitere Zeile um.
+         * AP-3.fix1: mitEinText wählt den Zustand - true (und ohne Argument,
+         * wie seit AP-3.1) mit dem Knopf, false ohne ihn, so wie die Leiste
+         * bei zwei oder mehr gewählten Texten steht. _blocktextVerteilen()
+         * nimmt, was nach dem Einfügen wirklich gilt: ein Block gewählt =
+         * mit Knopf, mehrere = ohne.
          */
-        _auswahlLeisteHoeheText: function() {
+        _auswahlLeisteHoeheText: function(mitEinText) {
             var leiste = this._auswahlLeiste;
             var bereich = this.overlay ? this.overlay.querySelector('.cbd-board-canvas-area') : null;
             if (!leiste || !bereich) return 0;
@@ -4345,7 +4385,8 @@
             leiste.style.visibility = 'hidden';
             leiste.style.display = 'flex';
             leiste.classList.add('cbd-board-auswahl-leiste--text');
-            leiste.classList.add('cbd-board-auswahl-leiste--ein-text'); // AP-3.1
+            // AP-3.1; seit AP-3.fix1 nur noch, wenn die Leiste den Knopf haben soll
+            leiste.classList.toggle('cbd-board-auswahl-leiste--ein-text', mitEinText !== false);
             leiste.classList.remove('cbd-board-auswahl-leiste--drehen');
             leiste.style.maxWidth = this._auswahlLeisteMaxBreite(bereich.getBoundingClientRect().width / skala) + 'px';
             if (anzeige) anzeige.textContent = '200 px'; // breiteste Anzeige
@@ -6243,6 +6284,18 @@
          * oben ihre Höhe frei; bei A+ wächst der Text nach unten, die Leiste
          * bleibt darüber. Passt so gar nichts hin (sehr niedriger
          * Ausschnitt), wird wie bisher ohne diesen Platz verteilt.
+         *
+         * AP-3.fix1 (Befund aus AP-3.1): Wie hoch die Leiste ist, hängt davon
+         * ab, wie viele Blöcke danach gewählt sind. Bei mehreren fehlt der
+         * Knopf "Text bearbeiten" (einzeilig, 1366x768: 40 px), bei genau
+         * einem ist er da (dort zweizeilig, 76 px). Deshalb wird zuerst mit
+         * der Höhe OHNE Knopf verteilt (1366x768: erster Text bei y 60); nur
+         * wenn dabei genau ein Block herauskommt, noch einmal mit der Höhe
+         * MIT Knopf (y 96) - maßgeblich ist die Zahl der Blöcke, nicht der
+         * Absätze (passt nur der erste, lange Absatz zum Teil hin, ist auch
+         * genau ein Block gewählt). Ist der zweite Versuch leer (der Text
+         * passt mit dem Knopf-Platz nicht mehr hin), bleibt es beim ersten;
+         * ist auch der leer, gilt der Rückfall von oben (y 20).
          */
         _blocktextVerteilen: function(absaetze, rahmen) {
             var modul = blocktextModul();
@@ -6250,15 +6303,29 @@
             var optionen = { startPx: 24, minPx: 18, maxZeichen: 5000 };
             var sichtbar = this._sichtbarerBereich();
             var flaeche = modul.flaecheUnter(sichtbar, rahmen, 20);
-            // Leistenhöhe + 10 px (+ 2 px Spiel) in Overlay-px, durch den Zoom
-            // in Modell-px; dazu der 8-px-Rand des Auswahlrahmens
-            var oben = sichtbar.y + Math.ceil((this._auswahlLeisteHoeheText() + 12) / (this.zoom || 1)) + 8;
-            if (flaeche.y < oben) {
-                var mitLeiste = modul.verteile(absaetze, { x: flaeche.x, y: oben, b: flaeche.b,
-                    h: Math.max(0, flaeche.y + flaeche.h - oben) }, mass, optionen);
-                if (mitLeiste.bloecke.length) return mitLeiste;
+            var self = this;
+            var ohneLeiste = null;
+            function schlicht() {
+                if (!ohneLeiste) ohneLeiste = modul.verteile(absaetze, flaeche, mass, optionen);
+                return ohneLeiste;
             }
-            return modul.verteile(absaetze, flaeche, mass, optionen);
+            // Verteilen mit Platz für die Leiste in ihrer Höhe mit oder ohne
+            // Knopf. Leistenhöhe + 10 px (+ 2 px Spiel) in Overlay-px, durch
+            // den Zoom in Modell-px; dazu der 8-px-Rand des Auswahlrahmens.
+            // Steht der freie Bereich ohnehin tiefer, bleibt er, wie er ist.
+            function mitPlatzFuerLeiste(mitEinText) {
+                var oben = sichtbar.y + Math.ceil((self._auswahlLeisteHoeheText(mitEinText) + 12) / (self.zoom || 1)) + 8;
+                if (flaeche.y >= oben) return schlicht();
+                return modul.verteile(absaetze, { x: flaeche.x, y: oben, b: flaeche.b,
+                    h: Math.max(0, flaeche.y + flaeche.h - oben) }, mass, optionen);
+            }
+            var ohneKnopf = mitPlatzFuerLeiste(false);
+            if (ohneKnopf.bloecke.length === 1) {
+                var mitKnopf = mitPlatzFuerLeiste(true);
+                if (mitKnopf.bloecke.length) return mitKnopf;
+            }
+            if (ohneKnopf.bloecke.length) return ohneKnopf;
+            return schlicht();
         },
 
         /**
