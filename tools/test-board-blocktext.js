@@ -17,6 +17,13 @@
  *   asynchron die Teile des Testmaterials (Verkettung = Text, gültig).
  *   Prüfnamen beginnen mit "Formatierung lesen".
  *
+ * Formatiert einfügen (PLAN-Blocktext-Formatierung.md, AP-2.3, F7/F14):
+ *   blocktextEinfuegen(Array von Absätzen [{text, teile?}]) legt Text-
+ *   Elemente mit teile an (Teilfarben über lesbareLauffarbe, Messung über
+ *   _textMass() mit fett/kursiv, ein Undo-Schritt, Modellprüfung ändert
+ *   nichts), blocktextAufNeueSeite() setzt einen formatierten Rest fort.
+ *   Prüfnamen beginnen mit "Formatiert einfügen".
+ *
  * Die Fixture-Prüfungen holen die Dateien per fetch - die Prüfseite muss
  * über den Webserver laufen. Wird von tools/test-board-zeiger.html als
  * letzte Zusatzdatei vor test-board-zeiger.js geladen und hängt sich an die
@@ -1133,6 +1140,330 @@
     }
 
     // ------------------------------------------------------------------
+    // Formatiert einfügen (PLAN-Blocktext-Formatierung.md, AP-2.3, F7/F14):
+    // blocktextEinfuegen(Array von Absätzen [{text, teile?}]) legt Text-
+    // Elemente mit teile an; Teilfarben werden über lesbareLauffarbe
+    // lesbar gemacht, gemessen wird über _textMass() (fett ist breiter),
+    // der Rest behält die Formatierung (blocktextAufNeueSeite).
+    // ------------------------------------------------------------------
+
+    // Relative Leuchtdichte und Kontrast nach WCAG 2 - eigene Rechnung,
+    // unabhängig vom Modul
+    function leuchtWert(hex) {
+        function lin(i) {
+            var v = parseInt(hex.substr(i, 2), 16) / 255;
+            return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+        }
+        return 0.2126 * lin(1) + 0.7152 * lin(3) + 0.0722 * lin(5);
+    }
+
+    function kontrastWert(a, b) {
+        var la = leuchtWert(a);
+        var lb = leuchtWert(b);
+        return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+    }
+
+    // Das Elementmodell übersteht die Prüfung des Elementmodells unverändert
+    // (nichts verworfen, kein Feld, auch nicht teile, geändert) - Text der
+    // Abweichung oder ''
+    function modellUnveraendert() {
+        var p = window.CBDBoardElemente.pruefeModell(JSON.parse(JSON.stringify(B.modell)));
+        if (!p) return 'pruefeModell lieferte null';
+        if (p.verworfen) return p.verworfen + ' Element(e) verworfen';
+        var ist = JSON.stringify(p.modell.elemente);
+        var soll = JSON.stringify(B.modell.elemente);
+        return ist === soll ? '' : 'Modell verändert: ' + ist.slice(0, 200) + ' statt ' + soll.slice(0, 200);
+    }
+
+    function kette(teile) {
+        return teile.map(function(t) { return t.t; }).join('');
+    }
+
+    function fmtEinElement() {
+        ctx.oeffnen();
+        var f = [];
+        var teile = [{ t: 'Es ist ' }, { t: 'fett', f: 1 }, { t: '.' }];
+        var erg = B.blocktextEinfuegen([{ text: 'Es ist fett.', teile: teile }]);
+        var t = texte();
+        if (!erg || erg.eingefuegt !== 1 || erg.keinPlatz || erg.rest.length) f.push('Ergebnis ' + JSON.stringify(erg));
+        if (t.length !== 1) return { ok: false, detail: t.length + ' Texte, Ergebnis ' + JSON.stringify(erg) };
+        if (t[0].text !== 'Es ist fett.') f.push('Text ' + JSON.stringify(t[0].text));
+        if (JSON.stringify(t[0].teile) !== JSON.stringify(teile)) f.push('teile ' + JSON.stringify(t[0].teile));
+        if (Object.keys(t[0]).join() !== 'id,typ,farbe,breite,text,x,y,teile') f.push('Schlüssel ' + Object.keys(t[0]).join());
+        var m = modellUnveraendert();
+        if (m) f.push(m);
+        return ergebnis(f);
+    }
+
+    function fmtZeichenketteWieBisher() {
+        ctx.oeffnen();
+        var f = [];
+        B.blocktextEinfuegen('Eins\n\nZwei');
+        texte().forEach(function(t) {
+            if (Object.keys(t).join() !== 'id,typ,farbe,breite,text,x,y') f.push('Schlüssel ' + Object.keys(t).join());
+        });
+        ctx.oeffnen();
+        var erg = B.blocktextEinfuegen(absaetze(60));
+        if (!erg || !erg.rest.length) f.push('kein Rest');
+        else if (!erg.rest.every(function(r) { return typeof r === 'string'; })) f.push('Rest nicht nur Zeichenketten: ' + JSON.stringify(erg.rest[0]));
+        return ergebnis(f);
+    }
+
+    function fmtTeilfarbeLesbar() {
+        ctx.oeffnen();
+        var f = [];
+        var tafel = '#1a472a';
+        B.setBoardColor(tafel);
+        B.setColor('#000000');
+        var teile = [{ t: 'Dunkelrot', farbe: '#71230a' }, { t: ' und ' }, { t: 'blau', farbe: '#0000ff' }];
+        B.blocktextEinfuegen([{ text: 'Dunkelrot und blau', teile: teile }]);
+        var t = texte();
+        if (t.length !== 1 || !t[0].teile || t[0].teile.length !== 3) return { ok: false, detail: 'teile ' + JSON.stringify(t[0] && t[0].teile) };
+        var a = t[0].teile[0].farbe;
+        var c = t[0].teile[2].farbe;
+        if (!a || kontrastWert(a, tafel) < 3) f.push('Dunkelrot ' + a + ' hat Kontrast ' + (a && kontrastWert(a, tafel).toFixed(2)));
+        if (!c || kontrastWert(c, tafel) < 3) f.push('Blau ' + c + ' hat Kontrast ' + (c && kontrastWert(c, tafel).toFixed(2)));
+        if (a && a !== M.lesbareLauffarbe('#71230a', tafel)) f.push('Dunkelrot ' + a + ' statt ' + M.lesbareLauffarbe('#71230a', tafel));
+        if (a) {
+            var r = parseInt(a.substr(1, 2), 16), g = parseInt(a.substr(3, 2), 16), b = parseInt(a.substr(5, 2), 16);
+            if (!(r > g && r > b)) f.push('Farbton verloren: ' + a);
+        }
+        if (t[0].teile[1].farbe !== undefined) f.push('Teil ohne Farbe bekam ' + t[0].teile[1].farbe);
+        if (t[0].farbe !== '#ffffff') f.push('Grundfarbe ' + t[0].farbe);
+        // Idempotent: das Ergebnis noch einmal eingefügt ändert die Farben nicht
+        B.blocktextEinfuegen([{ text: t[0].text, teile: t[0].teile }]);
+        t = texte();
+        if (t.length !== 2 || JSON.stringify(t[1].teile) !== JSON.stringify(t[0].teile)) f.push('zweites Einfügen: ' + JSON.stringify(t[1] && t[1].teile));
+        // Auf weißer Tafel bleibt Dunkelrot, wie es ist
+        B.setBoardColor('#ffffff');
+        B.blocktextEinfuegen([{ text: 'Dunkelrot', teile: [{ t: 'Dunkelrot', farbe: '#71230a' }] }]);
+        t = texte();
+        if (t.length !== 3 || !t[2].teile || t[2].teile[0].farbe !== '#71230a') f.push('weiße Tafel: ' + JSON.stringify(t[2] && t[2].teile));
+        var m = modellUnveraendert();
+        if (m) f.push(m);
+        return ergebnis(f);
+    }
+
+    // Unlesbare Farbangaben (rgb() passt auf FARB_MUSTER, ist aber keine
+    // #rgb/#rrggbb-Angabe für lesbareLauffarbe): farbe entfällt, danach
+    // werden gleiche Nachbarn zusammengelegt, ohne Formatierung kein teile
+    function fmtFarbeUngueltig() {
+        ctx.oeffnen();
+        var f = [];
+        B.blocktextEinfuegen([{ text: 'x y', teile: [{ t: 'x ', farbe: 'rgb(10, 20, 30)' }, { t: 'y', f: 1 }] }]);
+        B.blocktextEinfuegen([{ text: 'nur Farbe', teile: [{ t: 'nur Farbe', farbe: 'rgb(1, 2, 3)' }] }]);
+        B.blocktextEinfuegen([{ text: 'ab', teile: [{ t: 'a', f: 1 }, { t: 'b', f: 1, farbe: 'rgb(1, 2, 3)' }] }]);
+        var t = texte();
+        if (t.length !== 3) return { ok: false, detail: t.length + ' Texte' };
+        if (JSON.stringify(t[0].teile) !== JSON.stringify([{ t: 'x ' }, { t: 'y', f: 1 }])) f.push('(1) ' + JSON.stringify(t[0].teile));
+        if (Object.prototype.hasOwnProperty.call(t[1], 'teile')) f.push('(2) teile ' + JSON.stringify(t[1].teile));
+        if (JSON.stringify(t[2].teile) !== JSON.stringify([{ t: 'ab', f: 1 }])) f.push('(3) ' + JSON.stringify(t[2].teile));
+        var m = modellUnveraendert();
+        if (m) f.push(m);
+        return ergebnis(f);
+    }
+
+    // 60 Absätze mit je einem fetten Wort: Seite 1 und Rest tragen teile,
+    // der Rest geht als Objekte auf Seite 2, dort ebenfalls mit teile
+    function fmtLangUndNeueSeite() {
+        ctx.oeffnen();
+        var f = [];
+        var liste = [];
+        for (var i = 1; i <= 60; i++) {
+            liste.push({
+                text: 'Absatz ' + i + ' mit etwas Text, damit er eine Zeile füllt.',
+                teile: [{ t: 'Absatz ' + i + ' mit etwas ' }, { t: 'Text', f: 1 }, { t: ', damit er eine Zeile füllt.' }]
+            });
+        }
+        var erg = B.blocktextEinfuegen(liste);
+        var t1 = texte();
+        if (!erg || erg.px !== 18 || !erg.rest.length) return { ok: false, detail: 'Ergebnis ohne Rest: ' + JSON.stringify(erg && { px: erg.px, rest: erg.rest.length }) };
+        if (t1.length + erg.rest.length !== 60) f.push('Absätze: ' + t1.length + ' + ' + erg.rest.length);
+        t1.forEach(function(t) {
+            if (!t.teile || kette(t.teile) !== t.text) f.push('Seite 1 ' + t.id + ': teile ' + JSON.stringify(t.teile));
+        });
+        erg.rest.forEach(function(r, i) {
+            if (typeof r !== 'object' || !r.teile || kette(r.teile) !== r.text) f.push('Rest ' + i + ': ' + JSON.stringify(r));
+        });
+        var m1 = modellUnveraendert();
+        if (m1) f.push('Seite 1: ' + m1);
+        var erg2 = B.blocktextAufNeueSeite(erg.rest);
+        if (B.currentPageIndex !== 1 || B.totalPages !== 2) f.push('Seite ' + B.currentPageIndex + ' von ' + B.totalPages);
+        var t2 = texte();
+        if (!erg2 || !erg2.eingefuegt || t2.length !== erg2.eingefuegt) f.push('Seite 2: ' + t2.length + ' Texte, Ergebnis ' + JSON.stringify(erg2 && erg2.eingefuegt));
+        if (t2.length && t2[0].text !== erg.rest[0].text) f.push('Seite 2 beginnt mit ' + JSON.stringify(t2[0].text.slice(0, 40)));
+        t2.forEach(function(t) {
+            if (!t.teile || kette(t.teile) !== t.text) f.push('Seite 2 ' + t.id + ': teile ' + JSON.stringify(t.teile));
+        });
+        var m2 = modellUnveraendert();
+        if (m2) f.push('Seite 2: ' + m2);
+        return ergebnis(f);
+    }
+
+    // Fett misst breiter: Ein Text, der unformatiert in eine Zeile passt,
+    // bricht als fetter Text um - das geht nur, wenn _blocktextVerteilen
+    // mit der Schrift der Teile misst
+    function fmtMisstFett() {
+        ctx.oeffnen();
+        var f = [];
+        var mass = B._textMass();
+        var s = B._sichtbarerBereich();
+        var breite = s.b - 40;
+        // Wörter aus einem Buchstaben, dessen fette Form breiter ist ('W'
+        // ist es in Arial nicht): so wächst der Text in kleinen Schritten,
+        // und es gibt eine Länge, die nur fett nicht mehr in die Zeile passt
+        var text = '';
+        for (var n = 1; n < 400 && !text; n++) {
+            var cand = [];
+            for (var i = 0; i < n; i++) cand.push('b');
+            cand = cand.join(' ');
+            if (mass(cand, 24, { f: 1, k: 0 }) > breite) {
+                if (mass(cand, 24, { f: 0, k: 0 }) <= breite) text = cand;
+                else break;
+            }
+        }
+        if (!text) return { ok: false, detail: 'kein Text, der nur fett umbricht (Breite ' + breite + ')' };
+        B.blocktextEinfuegen([{ text: text }]);
+        B.blocktextEinfuegen([{ text: text, teile: [{ t: text, f: 1 }] }]);
+        var t = texte();
+        if (t.length !== 2) return { ok: false, detail: t.length + ' Texte' };
+        if (t[0].text.indexOf('\n') >= 0) f.push('unformatiert umbrochen: ' + sichtbar(t[0].text.slice(0, 40)));
+        if (t[1].text.indexOf('\n') < 0) f.push('fett nicht umbrochen (Breite ' + Math.round(breite) + ', fett ' + Math.round(mass(text, 24, { f: 1, k: 0 })) + ')');
+        var flaeche = { x: s.x + 20, y: s.y + 20, b: s.b - 40, h: s.h - 40 };
+        if (!innerhalb(B._rahmen(t[1]), flaeche)) f.push('fetter Text außerhalb: ' + rahmenText(B._rahmen(t[1])) + ' von ' + rahmenText(flaeche));
+        return ergebnis(f);
+    }
+
+    // _blocktextVerteilen misst über _textMass() - die Stellvertreter-Probe
+    // (wie in test-board-format.js) sieht jeden Aufruf mit seinem Stil
+    function fmtMisstUeberTextMass() {
+        ctx.oeffnen();
+        var f = [];
+        var original = B._textMass;
+        var echt = original.call(B);
+        var aufrufe = [];
+        B._textMass = function() {
+            return function(t, px, stil) {
+                aufrufe.push({ t: t, px: px, f: stil && stil.f ? 1 : 0, k: stil && stil.k ? 1 : 0 });
+                return echt(t, px, stil);
+            };
+        };
+        try {
+            B.blocktextEinfuegen([{ text: 'Eins zwei drei', teile: [{ t: 'Eins ' }, { t: 'zwei', f: 1 }, { t: ' drei', k: 1 }] }]);
+        } finally {
+            B._textMass = original;
+        }
+        if (!aufrufe.length) return { ok: false, detail: 'keine Messung über _textMass()' };
+        if (!aufrufe.some(function(a) { return a.f === 1 && a.t === 'zwei'; })) f.push('fett nicht über _textMass() gemessen: ' + JSON.stringify(aufrufe.slice(0, 4)));
+        if (!aufrufe.some(function(a) { return a.k === 1 && a.t === ' drei'; })) f.push('kursiv nicht über _textMass() gemessen');
+        if (!aufrufe.some(function(a) { return a.px === 24; })) f.push('keine Messung bei 24 px');
+        if (B._textMass !== original) f.push('_textMass nicht wiederhergestellt');
+        return ergebnis(f);
+    }
+
+    function fmtUndoUndAuswahl() {
+        ctx.oeffnen();
+        var f = [];
+        var undo = B.undoStapel.length;
+        var erg = B.blocktextEinfuegen([
+            { text: 'Erster Absatz', teile: [{ t: 'Erster ', f: 1 }, { t: 'Absatz' }] },
+            { text: 'Zweiter Absatz' }
+        ]);
+        var t = texte();
+        if (t.length !== 2) return { ok: false, detail: t.length + ' Texte' };
+        if (B.undoStapel.length !== undo + 1) f.push('Undo ' + undo + ' -> ' + B.undoStapel.length);
+        if (B.currentTool !== 'lasso') f.push('Werkzeug ' + B.currentTool);
+        if (B.auswahl.join() !== [t[0].id, t[1].id].join()) f.push('Auswahl ' + B.auswahl.join());
+        if (!erg || erg.ids.join() !== B.auswahl.join()) f.push('ids ' + JSON.stringify(erg && erg.ids));
+        if (!t[0].teile || Object.prototype.hasOwnProperty.call(t[1], 'teile')) f.push('teile: ' + JSON.stringify([t[0].teile, t[1].teile]));
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+        if (texte().length) f.push(texte().length + ' Texte nach Strg+Z');
+        return ergebnis(f);
+    }
+
+    // Einträge ohne Text zählen nicht; Zeichenketten im Array gelten als Absatz
+    function fmtArrayRandfaelle() {
+        ctx.oeffnen();
+        var f = [];
+        var undo = B.undoStapel.length;
+        [[], [{ text: '' }], [{ text: '   ' }, { teile: [{ t: 'x', f: 1 }] }, null, 7, '', ' '], undefined, null].forEach(function(eingabe, i) {
+            var erg = B.blocktextEinfuegen(eingabe);
+            if (!erg || erg.eingefuegt !== 0 || erg.keinPlatz || erg.rest.length) f.push('leer ' + i + ': ' + JSON.stringify(erg));
+        });
+        if (el().length || B.undoStapel.length !== undo) f.push('geändert');
+        if (B.currentTool !== 'pen') f.push('Werkzeug ' + B.currentTool);
+        var erg2 = B.blocktextEinfuegen([{ text: '' }, null, 7, { text: 'Echt', teile: [{ t: 'Ec', f: 1 }, { t: 'ht' }] }, '', 'Zweiter']);
+        var t = texte();
+        if (!erg2 || erg2.eingefuegt !== 2 || t.length !== 2) return { ok: false, detail: t.length + ' Texte, Ergebnis ' + JSON.stringify(erg2) };
+        if (t[0].text !== 'Echt' || t[1].text !== 'Zweiter') f.push('Texte ' + JSON.stringify([t[0].text, t[1].text]));
+        if (!t[0].teile || Object.prototype.hasOwnProperty.call(t[1], 'teile')) f.push('teile ' + JSON.stringify([t[0].teile, t[1].teile]));
+        return ergebnis(f);
+    }
+
+    // Kein Platz: nichts geändert, der Rest kommt als Objekte mit teile zurück
+    function fmtKeinPlatz() {
+        ctx.oeffnen();
+        strich(10, 5, 10, B.cssHeight - 5);
+        var vorher = el().slice();
+        var undo = B.undoStapel.length;
+        var a = { text: 'passt nicht', teile: [{ t: 'passt ', f: 1 }, { t: 'nicht' }] };
+        var b = { text: 'auch nicht' };
+        var erg = B.blocktextEinfuegen([a, b]);
+        var f = [];
+        if (!erg || !erg.keinPlatz || erg.eingefuegt !== 0) f.push('Ergebnis ' + JSON.stringify(erg));
+        if (erg && JSON.stringify(erg.rest) !== JSON.stringify([a, b])) f.push('Rest ' + JSON.stringify(erg.rest));
+        if (el().length !== vorher.length || el()[0] !== vorher[0] || B.undoStapel.length !== undo) f.push('Tafel verändert');
+        return ergebnis(f);
+    }
+
+    // Review-Befund G5 mit Objekten: Passt auf einer leeren Seite nichts hin,
+    // entsteht keine Seite; sonst Zeichenketten und Objekte gemischt
+    function fmtNeueSeiteProbe() {
+        oeffnenMit('<p>Eins</p>');
+        var f = [];
+        var a = { text: 'Ein Absatz', teile: [{ t: 'Ein ', f: 1 }, { t: 'Absatz' }] };
+        B.zoom = 20;
+        B.updateCanvasTransform();
+        var erg = B.blocktextAufNeueSeite([a]);
+        if (!erg || !erg.keinPlatz || erg.eingefuegt !== 0) f.push('Ergebnis ' + JSON.stringify(erg));
+        if (B.totalPages !== 1) f.push(B.totalPages + ' Seiten (leere Seite angelegt)');
+        if (erg && JSON.stringify(erg.rest) !== JSON.stringify([a])) f.push('Rest ' + JSON.stringify(erg.rest));
+        B.zoom = 1;
+        B.updateCanvasTransform();
+        var erg2 = B.blocktextAufNeueSeite(['Alpha', { text: 'Beta fett', teile: [{ t: 'Beta ' }, { t: 'fett', f: 1 }] }]);
+        var t = texte();
+        if (!erg2 || erg2.eingefuegt !== 2 || t.length !== 2) return { ok: false, detail: t.length + ' Texte, Ergebnis ' + JSON.stringify(erg2) };
+        if (B.totalPages !== 2) f.push(B.totalPages + ' Seiten');
+        if (t[0].text !== 'Alpha' || Object.prototype.hasOwnProperty.call(t[0], 'teile')) f.push('erster ' + JSON.stringify(t[0]));
+        if (t[1].text !== 'Beta fett' || JSON.stringify(t[1].teile) !== JSON.stringify([{ t: 'Beta ' }, { t: 'fett', f: 1 }])) f.push('zweiter ' + JSON.stringify(t[1].teile));
+        return ergebnis(f);
+    }
+
+    // MAX_TEILE: Wechselt die Formatierung in jedem Zeichen, hat der Block
+    // mehr als 1000 Teile - die Prüfung des Modells würde sie beim Speichern
+    // verwerfen. Der Text bleibt vollständig, das Feld teile entfällt gleich
+    // beim Einfügen (Modell danach unverändert durch die Prüfung)
+    function fmtUeberMaxTeile() {
+        ctx.oeffnen();
+        var f = [];
+        var text = '';
+        var teile = [];
+        for (var i = 0; i < 1200; i++) {
+            var z = (i % 2) ? 'b' : 'a';
+            text += z;
+            teile.push(i % 2 ? { t: z } : { t: z, f: 1 });
+        }
+        var erg = B.blocktextEinfuegen([{ text: text, teile: teile }]);
+        var t = texte();
+        if (!erg || t.length !== 1) return { ok: false, detail: t.length + ' Texte, Ergebnis ' + JSON.stringify(erg && { e: erg.eingefuegt, rest: erg.rest.length }) };
+        if (t[0].text.split('\n').join('') !== text) f.push('Text verändert (' + t[0].text.length + ' Zeichen)');
+        if (t[0].teile && t[0].teile.length > window.CBDBoardElemente.MAX_TEILE) f.push(t[0].teile.length + ' Teile (MAX_TEILE ' + window.CBDBoardElemente.MAX_TEILE + ')');
+        var m = modellUnveraendert();
+        if (m) f.push(m);
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     window.__zusatzTests = function(c) {
@@ -1223,6 +1554,21 @@
         p('Formatierung lesen (B10): color(srgb …) -> #rrggbb, oklab(…) und Alpha 0 ohne Farbe', formatB10Farbformen);
         p('Formatierung lesen: _blocktextAbsaetze() als [{text, teile?}], ohne Tafel []', formatAbsaetze);
         p('Formatierung lesen: BR und Blockgrenzen-Leerzeichen bleiben auch in Fett Klartext', formatKlartextInFormatierung);
+
+        // Formatiert einfügen (PLAN-Blocktext-Formatierung.md, AP-2.3)
+        ctx = c;
+        p('Formatiert einfügen: Array mit teile -> ein Element mit diesen teile, besteht die Modellprüfung', fmtEinElement);
+        p('Formatiert einfügen: Zeichenketten-Aufruf unverändert (kein teile, Rest = Zeichenketten)', fmtZeichenketteWieBisher);
+        p('Formatiert einfügen: grüne Tafel - Teilfarbe Kontrast >= 3, Farbton bleibt, idempotent', fmtTeilfarbeLesbar);
+        p('Formatiert einfügen: unlesbare Teilfarbe entfällt, Nachbarn zusammengelegt, ohne Formatierung kein teile', fmtFarbeUngueltig);
+        p('Formatiert einfügen: 60 formatierte Absätze - Rest mit teile, Seite 2 mit teile', fmtLangUndNeueSeite);
+        p('Formatiert einfügen: fetter Text bricht um, unformatierter nicht (Messung mit Stil)', fmtMisstFett);
+        p('Formatiert einfügen: _blocktextVerteilen misst über _textMass() mit fett/kursiv', fmtMisstUeberTextMass);
+        p('Formatiert einfügen: ein Undo-Schritt, Lasso, Auswahl, Strg+Z', fmtUndoUndAuswahl);
+        p('Formatiert einfügen: Array-Randfälle (leere Einträge, Zeichenkette im Array, kein Array)', fmtArrayRandfaelle);
+        p('Formatiert einfügen: kein Platz -> nichts geändert, Rest als Objekte mit teile', fmtKeinPlatz);
+        p('Formatiert einfügen: blocktextAufNeueSeite mit Objekten (Probe G5, gemischter Rest)', fmtNeueSeiteProbe);
+        p('Formatiert einfügen: über MAX_TEILE bleibt der Text, die Formatierung entfällt, Modell unverändert', fmtUeberMaxTeile);
     };
 
     window.__zusatzTestsAsync = function(c) {
