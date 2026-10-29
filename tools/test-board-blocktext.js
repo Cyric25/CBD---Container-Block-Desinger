@@ -1335,13 +1335,16 @@
     }
 
     // _blocktextVerteilen misst über _textMass() - die Stellvertreter-Probe
-    // (wie in test-board-format.js) sieht jeden Aufruf mit seinem Stil
+    // (wie in test-board-format.js) sieht jeden Aufruf mit seinem Stil.
+    // Direkt aufgerufen, damit nur das Verteilen misst (das Einfügen
+    // misst danach noch über _rahmen, ebenfalls über _textMass())
     function fmtMisstUeberTextMass() {
         ctx.oeffnen();
         var f = [];
         var original = B._textMass;
         var echt = original.call(B);
         var aufrufe = [];
+        var erg;
         B._textMass = function() {
             return function(t, px, stil) {
                 aufrufe.push({ t: t, px: px, f: stil && stil.f ? 1 : 0, k: stil && stil.k ? 1 : 0 });
@@ -1349,10 +1352,11 @@
             };
         };
         try {
-            B.blocktextEinfuegen([{ text: 'Eins zwei drei', teile: [{ t: 'Eins ' }, { t: 'zwei', f: 1 }, { t: ' drei', k: 1 }] }]);
+            erg = B._blocktextVerteilen([{ text: 'Eins zwei drei', teile: [{ t: 'Eins ' }, { t: 'zwei', f: 1 }, { t: ' drei', k: 1 }] }], []);
         } finally {
             B._textMass = original;
         }
+        if (!erg || erg.bloecke.length !== 1) f.push('Verteilen lieferte ' + JSON.stringify(erg));
         if (!aufrufe.length) return { ok: false, detail: 'keine Messung über _textMass()' };
         if (!aufrufe.some(function(a) { return a.f === 1 && a.t === 'zwei'; })) f.push('fett nicht über _textMass() gemessen: ' + JSON.stringify(aufrufe.slice(0, 4)));
         if (!aufrufe.some(function(a) { return a.k === 1 && a.t === ' drei'; })) f.push('kursiv nicht über _textMass() gemessen');
@@ -1463,6 +1467,32 @@
         return ergebnis(f);
     }
 
+    // Absicherung: Passen die Teile eines Blocks nicht zu seinem Text
+    // (Verkettung !== text) - das Modul liefert das nie, die Prüfung des
+    // Modells würde sie aber verwerfen -, bekommt das Element keine teile;
+    // der Text bleibt. Das Modul wird dafür kurz durch eine Stellvertreter-
+    // Fassung von verteile() ersetzt.
+    function fmtVerkettungAbgesichert() {
+        ctx.oeffnen();
+        var f = [];
+        var original = M.verteile;
+        M.verteile = function() {
+            return { px: 24, rest: [], bloecke: [{ text: 'abc', teile: [{ t: 'x', f: 1 }], x: 20, y: 60, b: 50, h: 29 }] };
+        };
+        var erg;
+        try {
+            erg = B.blocktextEinfuegen([{ text: 'abc' }]);
+        } finally {
+            M.verteile = original;
+        }
+        var t = texte();
+        if (!erg || t.length !== 1) return { ok: false, detail: t.length + ' Texte, Ergebnis ' + JSON.stringify(erg) };
+        if (t[0].text !== 'abc') f.push('Text ' + JSON.stringify(t[0].text));
+        if (Object.prototype.hasOwnProperty.call(t[0], 'teile')) f.push('teile ' + JSON.stringify(t[0].teile));
+        if (M.verteile !== original) f.push('verteile nicht wiederhergestellt');
+        return ergebnis(f);
+    }
+
     // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
@@ -1569,6 +1599,7 @@
         p('Formatiert einfügen: kein Platz -> nichts geändert, Rest als Objekte mit teile', fmtKeinPlatz);
         p('Formatiert einfügen: blocktextAufNeueSeite mit Objekten (Probe G5, gemischter Rest)', fmtNeueSeiteProbe);
         p('Formatiert einfügen: über MAX_TEILE bleibt der Text, die Formatierung entfällt, Modell unverändert', fmtUeberMaxTeile);
+        p('Formatiert einfügen: Teile, die nicht zum Text passen, werden nicht gesetzt (Absicherung)', fmtVerkettungAbgesichert);
     };
 
     window.__zusatzTestsAsync = function(c) {
