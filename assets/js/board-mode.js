@@ -223,6 +223,64 @@
         return aus;
     }
 
+    /**
+     * Teilgrenzen mitten in einem Surrogatpaar (AP-3.fix2, Review AP-3.rev,
+     * Befund B2) für textErsetzen(): Endet ein Teil mit einem hohen Surrogat
+     * (0xD800-0xDBFF) und beginnt der nächste nicht leere mit einem tiefen
+     * (0xDC00-0xDFFF), rückt die Grenze eine Einheit nach hinten - das tiefe
+     * Surrogat kommt zum Teil des hohen, ein dadurch leerer Teil entfällt.
+     * Sonst stünde in zwei t je ein einzelnes Surrogat: JSON.stringify
+     * schreibt es als \ud83d, PHP json_decode lehnt das ab, die
+     * Klassen-Tafel würde nur als Bild gespeichert (Familie AP-1.rev B1).
+     * Die Verkettung bleibt der Text. Ohne solche Grenze: dasselbe Array;
+     * sonst neue Objekte (Kopien aller Schlüssel). Benachbarte gleiche Teile
+     * legt danach _blocktextMitTeilen zusammen (teileZusammenlegen) - hier
+     * nicht, das lieferte bei reinem Klartext [] statt der Teile.
+     */
+    function textTeileOhneGeteiltePaare(teile) {
+        var aus = [];
+        var verschoben = false;
+        var vorher = -1; // Index in aus des letzten nicht leeren Teils
+        for (var i = 0; i < teile.length; i++) {
+            var kopie = {};
+            for (var schluessel in teile[i]) {
+                if (Object.prototype.hasOwnProperty.call(teile[i], schluessel)) kopie[schluessel] = teile[i][schluessel];
+            }
+            var t = kopie.t;
+            var c = t.length ? t.charCodeAt(0) : 0;
+            if (vorher >= 0 && c >= 0xDC00 && c <= 0xDFFF) {
+                var v = aus[vorher].t;
+                var h = v.charCodeAt(v.length - 1);
+                if (h >= 0xD800 && h <= 0xDBFF) {
+                    aus[vorher].t = v + t.charAt(0);
+                    kopie.t = t = t.slice(1);
+                    verschoben = true;
+                    if (!t.length) continue;
+                }
+            }
+            aus.push(kopie);
+            if (t.length) vorher = aus.length - 1;
+        }
+        return verschoben ? aus : teile;
+    }
+
+    /**
+     * Breite einer Zeile (teile ohne "\n") in Schrift px, je Teil fett/kursiv
+     * gemessen - wie CBDBoardElemente.rahmen() eine Zeile misst (ohne
+     * Messfunktion 0,6 em je Zeichen). Für die Umbruchregel F12a, R2
+     * (AP-3.fix2).
+     */
+    function textZeilenBreite(teile, px, mass) {
+        var w = 0;
+        for (var i = 0; i < teile.length; i++) {
+            var teil = teile[i];
+            w += typeof mass === 'function'
+                ? mass(teil.t, px, { f: teil.f ? 1 : 0, k: teil.k ? 1 : 0 })
+                : teil.t.length * px * 0.6;
+        }
+        return w;
+    }
+
     // Leerraum eines gelesenen Absatzes bereinigen - zeichenweise auf Text
     // UND Stil-Liste zugleich (AP-2.1). Ergebnis-Text exakt wie die frueheren
     // regulaeren Ausdruecke in _blocktextLesen() (bis 3.1.147):
@@ -3938,14 +3996,18 @@
          * "\n" zu EINEM Text verbunden (das "\n" ist ein Klartext-Teil);
          * Einträge ohne sichtbaren Text zählen nicht (wie bei
          * blocktextEinfuegen). Unbrauchbare teile (kein Array, ein Eintrag
-         * ohne Zeichenketten-t, Verkettung ≠ text) -> der Absatz als Klartext.
+         * ohne Zeichenketten-t, Verkettung ≠ text) -> der Absatz als Klartext;
+         * eine Teilgrenze mitten in einem Surrogatpaar rückt eine Einheit
+         * nach hinten (AP-3.fix2, Befund B2).
          *
          * Das Element bleibt unter derselben ID an derselben Stelle der
-         * Liste; x, y, breite, winkel und farbe bleiben. Umbruch (F12): nur
-         * bei unverdrehten Texten werden Zeilen, die über den rechten Rand
-         * des SICHTBAREN Ausschnitts minus 20 px ragen, mit umbrechenTeile in
-         * der Schrift des Elements umbrochen; vorhandene Zeilenwechsel und
-         * passende Zeilen bleiben unverändert. Teilfarben gehen durch
+         * Liste; x, y, breite, winkel und farbe bleiben. Umbruch (F12a,
+         * AP-3.fix2, _textErsetzenUmbrechen): nur bei unverdrehten Texten,
+         * nur neue oder geänderte Zeilen, die über den rechten Rand des
+         * SICHTBAREN Ausschnitts selbst ragen - auf diesen Rand minus 20 px,
+         * mit umbrechenTeile in der Schrift des Elements, und nicht, wenn
+         * dafür weniger als 8 × Schrift-px bleiben; vorhandene Zeilenwechsel
+         * und alle übrigen Zeilen bleiben unverändert. Teilfarben gehen durch
          * lesbareLauffarbe(…, Tafelfarbe) (F7), danach teileZusammenlegen -
          * beides über _blocktextMitTeilen() (mit dessen Absicherung: mehr als
          * MAX_TEILE Teile -> ohne teile, der Text bleibt).
@@ -4010,7 +4072,10 @@
 
         /**
          * Absätze -> {text, teile} für textErsetzen(): mit "\n" verbunden,
-         * teile vollständig (Klartext als {t}), Verkettung === text.
+         * teile vollständig (Klartext als {t}), Verkettung === text. Eine
+         * Teilgrenze mitten in einem Surrogatpaar rückt eine Einheit nach
+         * hinten (textTeileOhneGeteiltePaare, AP-3.fix2, Befund B2) - danach
+         * schneiden Kürzen und Umbruch nur noch an Paargrenzen.
          */
         _textErsetzenInhalt: function(absaetze) {
             var text = '';
@@ -4025,6 +4090,7 @@
                 } else if (a !== null && typeof a === 'object' && typeof a.text === 'string') {
                     t = a.text;
                     tt = textTeileBrauchbar(a.teile, t);
+                    if (tt) tt = textTeileOhneGeteiltePaare(tt);
                 }
                 if (t === null || !/\S/.test(t)) continue;
                 if (!erster) {
@@ -4057,22 +4123,41 @@
         },
 
         /**
-         * Umbruchregel F12 für textErsetzen(): Grenze = rechter Rand des
-         * sichtbaren Ausschnitts (_sichtbarerBereich, Modell-px) minus 20 px,
-         * ab el.x. Jede Zeile (an "\n") für sich: Passt sie (umbrechenTeile
-         * liefert eine Zeile), bleibt sie unverändert, auch mit Leerzeichen
-         * am Ende; sonst ersetzen die umbrochenen Zeilen sie (das Leerzeichen
-         * an einer Umbruchstelle wird ein "\n", Klartext-Teil). Gemessen in
-         * der Schrift des Elements, je Teil fett/kursiv (_textMass). Liegt
-         * der Rand links von el.x (Grenze <= 0), bleibt alles, wie es ist.
+         * Umbruchregel F12a für textErsetzen() (AP-3.fix2, Review AP-3.rev,
+         * Befund B1; Entscheidung des Orchestrators - vorher F12: jede Zeile
+         * über Rand − 20 px). Ziel: der Text bleibt sichtbar, nichts wird
+         * unnötig verändert. Grenze = rechter Rand des sichtbaren Ausschnitts
+         * (_sichtbarerBereich, Modell-px) minus 20 px, ab el.x. Jede Zeile
+         * (an "\n") für sich; umbrochen wird sie nur, wenn
+         *   R1 ihr Text NICHT unverändert als Zeile im bisherigen el.text
+         *      vorkommt - bloßes Formatieren bricht nichts um, auch keine
+         *      Zeile, die schon vorher über den Rand ragte (z. B. nach A+),
+         *   R2 sie in der Schrift des Elements, je Teil fett/kursiv gemessen
+         *      (_textMass), über den Rand SELBST ragt (el.x + Breite > Rand) -
+         *      eine Zeile, die im 20-px-Randstreifen endet, ist ganz sichtbar
+         *      und bleibt; dann auf die Grenze (umbrechenTeile),
+         *   R3 die Grenze mindestens 8 × Schrift-px ist - darunter (Element
+         *      knapp am oder rechts vom Rand) entstünde eine schmale Spalte
+         *      mit zerteilten Wörtern; dann bleibt alles, wie es ist (das
+         *      deckt auch Grenze <= 0 ab).
+         * Umbrochene Zeilen ersetzen die Zeile (das Leerzeichen an einer
+         * Umbruchstelle wird ein "\n", Klartext-Teil); liefert umbrechenTeile
+         * nur eine Zeile, bleibt sie unverändert, auch mit Leerzeichen am
+         * Ende. Der Betreiber kann F12a bei der Abnahme anders entscheiden -
+         * die Regel steht nur hier.
          */
         _textErsetzenUmbrechen: function(inhalt, el) {
             var sichtbar = this._sichtbarerBereich();
-            var grenze = sichtbar.x + sichtbar.b - 20 - el.x;
-            if (!(grenze > 0)) return inhalt;
-            var modul = blocktextModul();
+            var rand = sichtbar.x + sichtbar.b;
+            var grenze = rand - 20 - el.x;
             var px = elementeModul().schriftPx(el.breite);
+            if (!(grenze >= 8 * px)) return inhalt; // R3
+            var modul = blocktextModul();
             var mass = this._textMass();
+            // R1: Zeilen des bisherigen Texts (Präfix: kein Schlüssel wie "__proto__")
+            var bisher = Object.create(null);
+            var alteZeilen = typeof el.text === 'string' ? el.text.split('\n') : [];
+            for (var a = 0; a < alteZeilen.length; a++) bisher['z' + alteZeilen[a]] = true;
             var zeilen = inhalt.text.split('\n');
             var text = '';
             var teile = [];
@@ -4086,7 +4171,9 @@
                     text += '\n';
                     teile.push({ t: '\n' });
                 }
-                var stuecke = zeile === '' ? [] : modul.umbrechenTeile({ text: zeile, teile: zt }, grenze, px, mass);
+                var stuecke = (zeile === '' || bisher['z' + zeile] ||        // R1
+                    el.x + textZeilenBreite(zt, px, mass) <= rand)           // R2
+                    ? [] : modul.umbrechenTeile({ text: zeile, teile: zt }, grenze, px, mass);
                 if (stuecke.length < 2) {
                     text += zeile;
                     teile = teile.concat(zt);
