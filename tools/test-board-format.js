@@ -857,7 +857,10 @@
      * _auswahlLeisteHoeheText() (Folge-AP G9, Platz über eingefügtem Text)
      * misst konservativ MIT dem Knopf "Text bearbeiten" (Klasse --ein-text).
      * Gesucht wird eine Höchstbreite, bei der der Knopf die Leiste um eine
-     * Zeile höher macht; dort muss die Messung die höhere Leiste liefern.
+     * Zeile höher macht; dort muss die Messung die höhere Leiste liefern -
+     * auch wenn die Leiste gerade OHNE den Knopf steht (zwei Texte gewählt;
+     * so beim Einfügen über "Text auf die Tafel", die Klasse hängt dann
+     * nicht schon an der Leiste).
      */
     function leistenHoeheMitKnopf() {
         ctx.oeffnen();
@@ -880,31 +883,37 @@
             return h;
         }
         var a = einsetzen(neuesText({ x: 100, y: 200, text: 'Eins' }));
-        lassoUm(a);
-        if (B.auswahl.join() !== a) return { ok: false, detail: 'Testaufbau: Text nicht gewählt' };
+        einsetzen(neuesText({ x: 100, y: 300, text: 'Zwei' }));
         var w = 0;
         for (var b = 200; b <= 1400 && !w; b += 10) {
             if (hoehe(b, true) > hoehe(b, false)) w = b;
         }
         if (!w) return { ok: false, detail: 'Testaufbau: keine Breite, bei der der Knopf die Leiste höher macht' };
         var echt = B._auswahlLeisteMaxBreite;
-        var soll, ohne, ist, gezeigt, klassenVorher, klassenNachher;
+        var soll, ohne, ist, klassenVorher, klassenNachher, gezeigt, istEin;
         B._auswahlLeisteMaxBreite = function() { return w; };
         try {
-            B._auswahlLeisteAusrichten();
+            // zwei Texte gewählt: Leiste steht ohne "Text bearbeiten"
+            lasso(60, 160, 300, 360);
+            if (B.auswahl.length !== 2) return { ok: false, detail: 'Testaufbau: zwei Texte nicht gewählt (' + B.auswahl.join() + ')' };
             soll = hoehe(w, true);
             ohne = hoehe(w, false);
-            gezeigt = l.offsetHeight;
             klassenVorher = l.className;
             ist = B._auswahlLeisteHoeheText();
             klassenNachher = l.className;
+            // ein Text gewählt: die gezeigte Leiste ist nie höher als gemessen
+            lassoUm(a);
+            gezeigt = l.offsetHeight;
+            istEin = B._auswahlLeisteHoeheText();
         } finally {
             B._auswahlLeisteMaxBreite = echt;
         }
+        if (klassenVorher.indexOf('--ein-text') >= 0) f.push('Testaufbau: Klasse --ein-text bei zwei Texten');
         if (!(soll > ohne)) f.push('Testaufbau: an der Leistenlage macht der Knopf sie nicht höher (' + soll + '/' + ohne + ')');
         if (ist !== soll) f.push('_auswahlLeisteHoeheText() ' + ist + ' px statt ' + soll + ' px (mit "Text bearbeiten", Höchstbreite ' + w + ' px; ohne Knopf ' + ohne + ' px)');
-        if (!(ist >= gezeigt)) f.push('gemessen ' + ist + ' px, gezeigte Leiste bei einem Text ' + gezeigt + ' px');
         if (klassenNachher !== klassenVorher) f.push('Klassen danach "' + klassenNachher + '" statt "' + klassenVorher + '"');
+        if (B.auswahl.join() !== a) f.push('Testaufbau: ein Text nicht gewählt');
+        else if (!(istEin >= gezeigt)) f.push('gemessen ' + istEin + ' px, gezeigte Leiste bei einem Text ' + gezeigt + ' px');
         return ergebnis(f);
     }
 
