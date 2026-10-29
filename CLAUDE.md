@@ -3559,30 +3559,68 @@ hätten die Kopfleiste fälschlich hell gemacht.
 
 **Automatische Invertierung der Zeichenfläche:** Eine „Eigene Notiz" ist
 eine Rastergrafik (`<canvas>`-Ebenen). Im Darkmode invertiert die
-Zeichenfläche automatisch per CSS-Filter (`filter: invert(1)` auf
-`.cbd-board-canvas-container`, gesteuert von
-`board-mode.js::updateDarkModeInversion()`) — **aber nur**, wenn die Tafel
-auf der weißen Standardfarbe steht (`this.boardColor === '#ffffff'`). Eine
-bewusst gewählte Grün- oder Schwarz-Tafel bleibt unangetastet.
+Zeichenfläche automatisch per CSS-Filter (`.cbd-board-inverted` auf
+`.cbd-board-canvas-container`, gesetzt von
+`board-mode.js::updateDarkModeInversion()`; der Filter selbst steht in
+`board-mode.css` und ist seit Entscheidung F13 **`invert(1)
+hue-rotate(180deg)`**, bis 3.1.147 reines `invert(1)`, siehe unten) —
+**aber nur**, wenn die Tafel auf der weißen Standardfarbe steht
+(`this.boardColor === '#ffffff'`). Eine bewusst gewählte Grün- oder
+Schwarz-Tafel bleibt unangetastet.
 
-**Bewusst akzeptierte Nebenwirkung, vom Nutzer nach Rückfrage bestätigt
-(2026-08-25):** Der Filter ist eine reine Farbinvertierung ohne
-Hue-Erhalt (z. B. Rot→Cyan, Blau→Gelb) und wirkt auf **alle** Ebenen des
-Wrappers gemeinsam — Hintergrund, Gitter **und** Zeichnung, nicht nur die
-eigentlich riskanten Schwarz-/Weiß-Töne. Die Stiftfarbpalette
+**Farbtonerhaltend seit F13 (Vorhaben `PLAN-Blocktext-Formatierung.md`,
+Phase 1, AP-1.4, 2026-10-29):** Der Filter ist `invert(1)
+hue-rotate(180deg)`. Hell und Dunkel bleiben vertauscht (Schwarz wird
+Weiß, die weiße Tafel schwarz), aber der **Farbton bleibt erhalten**: ein
+roter Strich (`#ff0000`) erscheint rötlich (gemessen ≈ `rgb(255,148,147)`),
+ein blauer (`#0000ff`) bläulich (≈ `rgb(215,215,255)`). Rechnerisch
+ergäben sich (255,146,146) bzw. (218,218,255). Dunkle Farben erscheinen
+weiterhin **hell** (Dunkelrot als helles Rosa) — nur der Farbton bleibt,
+nicht die Helligkeit. Das gilt für alle Striche und Texte, ohne dass
+`zeichneModell()` etwas davon wüsste. Die gespeicherten Farben und das PNG
+(und damit die Schüleransicht, Klassenpuls, PDF) sind nicht betroffen:
+reiner Anzeigefilter.
+
+**Frühere Fassung (2026-08-25, bis 3.1.147):** reines `invert(1)` ohne
+Farbton-Erhalt (Rot→Cyan, Blau→Gelb). Diese Nebenwirkung hatte der Nutzer
+damals nach Rückfrage bewusst akzeptiert; der Betreiber hat sie am
+2026-10-29 mit F13 abgelöst. Geblieben ist: Der Filter wirkt auf **alle**
+Ebenen des Wrappers gemeinsam — Hintergrund, Gitter **und** Zeichnung, nicht
+nur die eigentlich riskanten Schwarz-/Weiß-Töne. Die Stiftfarbpalette
 (`.cbd-board-preset-colors`) sitzt strukturell außerhalb von
 `.cbd-board-canvas-container` (in der Werkzeugleiste) und wird deshalb
-selbst **nie** invertiert: Sie zeigt weiterhin die echte, gewählte Farbe,
-während ein damit gezeichneter Strich auf der Tafel invertiert erscheint —
+selbst **nie** gefiltert: Sie zeigt weiterhin die echte, gewählte Farbe,
+während ein damit gezeichneter Strich auf der Tafel hell erscheint —
 Palette-Vorschau und tatsächliches Zeichenergebnis laufen bei farbigen
-Stiften (nicht bei Schwarz/Weiß) auseinander. Bei der Rückfrage wurden
-zwei Alternativen erwogen (nur Hintergrund/Gitter invertieren — bricht dann
-aber den eigentlichen Schwarz-auf-Schwarz-Kernfall, den dieses Feature
-lösen soll; Farbpalette im Darkmode auf Schwarz/Weiß einschränken) und
-bewusst verworfen zugunsten des bestehenden, einfacheren Verhaltens. Der
-Filter wirkt rein auf die Darstellung; die in `localStorage`/serverseitig
-gespeicherten Pixel bleiben unverändert, betrifft also gleichermaßen neu
-gezeichnete wie bereits vorher gespeicherte Notizen.
+Stiften (nicht bei Schwarz/Weiß) in der **Helligkeit** auseinander, nicht
+mehr im Farbton. Bei der damaligen Rückfrage wurden zwei Alternativen
+erwogen (nur Hintergrund/Gitter invertieren — bricht dann aber den
+eigentlichen Schwarz-auf-Schwarz-Kernfall, den dieses Feature lösen soll;
+Farbpalette im Darkmode auf Schwarz/Weiß einschränken) und verworfen.
+
+**Auswahlebene, Umkehrfilter und seine Grenze:** Die Auswahlebene im
+Container (`.cbd-board-canvas-auswahl`, Lassolinie, Rahmen, Drehanzeige)
+wendet die Umkehrung an: `hue-rotate(180deg) invert(1)` (CSS reiht Filter
+von links nach rechts aneinander, die Umkehrung steht deshalb in
+gespiegelter Reihenfolge). Nachgerechnet ist diese Reihenfolge rechnerisch
+**nicht** zwingend — `hue-rotate` hält die Grauachse fest und vertauscht
+mit `invert(1)`, beide Reihenfolgen liefern dasselbe; die gespiegelte Form
+ist die, die man beim Lesen sofort als Umkehrung erkennt. **Beide Regeln
+müssen als Paar gepflegt werden.** Die Netto-Identität beider Filter gilt
+aber nur **ohne Klemmen**: Jede Filterfunktion klemmt ihr Ergebnis auf
+0 bis 1, `hue-rotate` liefert bei gesättigten Farben Werte außerhalb davon,
+und die Umkehrung macht das nicht rückgängig. Die Akzentfarbe der Auswahl
+erscheint im Darkmode bei weißer Tafel deshalb **leicht entsättigt**:
+`#e24614` (226, 70, 20) wird zu etwa (211, 81, 31) (gerechnet, nicht
+gemessen), `#2196f3` bleibt exakt (Review-Befund B6, Kommentar im CSS seit
+AP-1.fix1). Orange bleibt also Orange, nur etwas blasser.
+
+**Theme-Bilder bleiben ohne Farbton-Erhalt:** Der Darkmode des Themes
+invertiert Inhaltsbilder weiter nur mit `invert(1)` (anderes Repo,
+`Theme/CLAUDE.md`, Punkt G4, unverändert). Die dortige Begründung, das
+sei „bewusst konsistent mit dem … Tafelbild-Feature", stimmt seit F13 nicht
+mehr: Die Tafel erhält den Farbton, Theme-Bilder nicht. Bewusst nicht
+nachgezogen (Scope; vermerkt in `Website/DOKUMENTATION.md`).
 
 **Bekannte, nicht behobene Einschränkung:** Der Darkmode-Toggle des Themes
 (`Theme/header.php`) setzt `data-theme` ohne Seiten-Reload. Die reinen
@@ -3999,7 +4037,9 @@ Verbindlich im Plan, Abschnitt 4 „Elementmodell v1": `{"v":1,"breite":…,
 Zeilenhöhe 1,2, `textBaseline 'top'`) und `bild` (`daten` = PNG-data-URL, `x`,
 `y`, `b`, `h`). Koordinaten in CSS-Pixeln der Zeichenfläche, auf zwei
 Nachkommastellen gerundet; IDs `e<Zahl>`. Unbekannte Felder fallen beim Prüfen
-weg, ein ungültiges Element verwirft nur sich selbst.
+weg, ein ungültiges Element verwirft nur sich selbst (Ausnahme: ein
+ungültiges optionales Feld `teile` verwirft nur dieses Feld, das Element
+bleibt).
 
 **Seit 3.1.143: optionales Feld `winkel`** bei `text` und `bild` (Lasso-Drehen,
 Abschnitt „Drehen und Duplizieren" unten): Grad, Drehung um die linke obere
@@ -4013,6 +4053,15 @@ Server `CBD_Classroom::elemente_winkel()`, gleiche Regel). Striche haben kein
 stünden in der Elementliste dann waagrecht, das PNG (maßgeblich, E7) zeigt sie
 aber weiter gedreht, bis dort neu gespeichert wird.
 
+**Seit Phase 1 von `PLAN-Blocktext-Formatierung.md` (2026-10-29, nach `main`
+gemergt, noch nicht ausgeliefert – das ZIP folgt mit Phase 2, geplant
+3.1.148): optionales Feld `teile`** am Text-Element — fett, kursiv und
+eigene Farbe für Abschnitte des Texts. Format
+und Prüfregel stehen im eigenen Abschnitt „Formatierter Text: das Feld
+`teile`" unten. Gemeint ist nur die Datenhaltung und die Darstellung auf der
+Tafel; erzeugt wird `teile` erst von Phase 2 („Text auf die Tafel") und
+Phase 3 („Text bearbeiten") desselben Vorhabens.
+
 **Das PNG bleibt die maßgebliche Darstellung (E7).** Schüleransicht,
 Live-Aktualisierung (Klassenpuls), Blockanzeige und PDF-Export lesen
 ausschließlich das PNG (`drawing_data` bzw. `localStorage['cbd-board-<id>']`)
@@ -4025,15 +4074,20 @@ liest nur das PNG, nie `-elemente`/`elemente_data`.
 
 - `assets/js/board-elemente.js` – reines, DOM-freies Modul
   `window.CBDBoardElemente` (Prüfen, Umwandeln, Rahmen, Lasso-Test, Verschieben,
-  Radieren, Skalieren, Serialisieren, `abdruck`/`verpacke`/`entpacke`). Lädt
-  vor `board-mode.js` (`class-cbd-style-loader.php`). **Kein Zugriff auf
-  Dokument, `localStorage` oder Canvas – auch nicht in Kommentaren**, der
-  Harnisch prüft den Quelltext darauf.
+  Radieren, Skalieren, Serialisieren, `abdruck`/`verpacke`/`entpacke`; seit
+  Phase 1 des Vorhabens „Formatierter Text" außerdem das Feld `teile` mit
+  `schrift`, `zeilenTeile`, `teileZusammenlegen`). Lädt vor `board-mode.js`
+  (`class-cbd-style-loader.php`). **Kein Zugriff auf Dokument,
+  `localStorage` oder Canvas – auch nicht in Kommentaren**, der Harnisch
+  prüft den Quelltext darauf.
 - `assets/js/board-mode.js` – Zustand `this.modell`, `this.undoStapel`,
-  `zeichneModell()` (Alias `redrawAllStrokes()`), Speichern/Laden.
-- `includes/class-cbd-classroom.php` – `pruefe_elemente_json()`,
-  `elemente_huelle()`, `elemente_aus_huelle()`, `ajax_save_drawing()`,
-  `ajax_load_drawing()`.
+  `zeichneModell()` (Alias `redrawAllStrokes()`), Speichern/Laden, die eine
+  Messfunktion `_textMass()` (siehe „Formatierter Text: das Feld `teile`").
+- `includes/class-cbd-classroom.php` – `pruefe_elemente_json()` (mit
+  `elemente_winkel()` und `elemente_teile()`), `elemente_huelle()`,
+  `elemente_aus_huelle()`, `ajax_save_drawing()`, `ajax_load_drawing()`.
+- `assets/css/board-mode.css` – seit F13 auch die beiden Darkmode-Filter der
+  Tafel (Abschnitt „Tafelmodus im Darkmode").
 - `assets/js/personal-notes-manager.js` – Export/Import/Löschen/Zählung.
 
 ### Speicherorte
@@ -4169,15 +4223,22 @@ gespeichertes PNG behält seine Liste (sie passt ja). Verloren ginge nur die
 Einzelbearbeitbarkeit der in der Zwischenzeit gezeichneten Striche – sie sind
 dann Teil des Bild-Elements.
 
+**Rückweg bei optionalen Feldern (`winkel`, `teile`):** Eine ältere Version
+lässt ein ihr unbekanntes optionales Feld beim Prüfen still fallen; das
+Element bleibt. Beim Rückweg auf 3.1.147 verliert ein formatierter Text
+deshalb beim Laden (Browser) bzw. beim nächsten Speichern (Server) nur die
+Formatierung (`teile`), der `text` bleibt vollständig (F1). Einzelheiten im
+Abschnitt „Formatierter Text: das Feld `teile`".
+
 ### Prüfharnische (nicht im ZIP – `tools/` fehlt in der Positivliste)
 
 | Aufruf | Prüft | Stand |
 |---|---|---|
-| `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | 266 Prüfungen (seit 3.1.143 inkl. Gruppe 11 Drehen/Kopieren/`winkel`, seit 3.1.144 Gruppe 12 Textgröße) |
-| `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall, `winkel` (G), Textgröße (H) | 130 Prüfungen |
+| `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | **363 Prüfungen**, Stand Ende Phase 1 des Vorhabens „Formatierter Text" (266 bis 3.1.147, davon seit 3.1.143 Gruppe 11 Drehen/Kopieren/`winkel`, seit 3.1.144 Gruppe 12 Textgröße; dazu 97 aus Gruppe 13 „teile") |
+| `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall, `winkel` (G), Textgröße (H), `teile` (I) | **239 Prüfungen**, Stand Ende Phase 1 (130 in A–H bis 3.1.147, dazu 109 aus Abschnitt I „teile", dieselbe Fallliste wie die JS-Gruppe 13) |
 | `node tools/test-notizen-manager-js.js` | `personal-notes-manager.js` (Mini-DOM im `vm`) | 34 Prüfungen |
 | `node tools/test-board-blocktext-js.js` | Modul `board-blocktext.js` ohne Browser (Blocktext auf die Tafel, seit 2026-10-28): Formelumwandlung inkl. Bestandslauf über `tools/fixtures/blocktext/formeln.json`, Absätze, Umbruch, Verteilung, Farbe | 242 Prüfungen (seit AP-2.fix1) |
-| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **218 Prüfungen**, Stand 3.1.147 (160 bis 3.1.145, davon 12 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; dazu 58 aus `test-board-blocktext.js`, davon 4 seit dem Folge-AP G9; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4). Muss über den Webserver laufen (Fixtures per `fetch`), Wartezeit eher 15–20 s |
+| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **232 Prüfungen**, Stand Ende Phase 1 des Vorhabens „Formatierter Text" (218 bis 3.1.147; dazu 14 aus `test-board-format.js`, 13 aus AP-1.3 und eine aus AP-1.fix1; die Datei lädt nach `test-board-textgroesse.js` und vor `test-board-blocktext.js`). Die 218 setzen sich so zusammen: 160 bis 3.1.145, davon 12 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; dazu 58 aus `test-board-blocktext.js`, davon 4 seit dem Folge-AP G9; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4). Muss über den Webserver laufen (Fixtures per `fetch`), Wartezeit eher 15–20 s |
 | `php tools/check-php74.php` | PHP-7.4-Kompatibilität | muss OK sein |
 
 Prüfseite: Viewport VOR dem Laden auf ~1366×768, nach dem Laden ca. 10 s
@@ -4185,6 +4246,15 @@ warten und `window.__zusammenfassung` direkt lesen. **`window.__laufen()`
 NICHT aufrufen** – es startet die Prüfungen ein zweites Mal im selben
 Dokument und liefert verfälschte Zahlen (Befund AP-4.doc).
 Cache-Falle: nach dem Kopieren geänderter Skripte `fetch(…, {cache:'reload'})`.
+**Seltener Ausreißer im ausgeblendeten Browser-Bereich (Fernsteuerung):**
+„AP-5.1: ESC ohne Auswahl schließt die Tafel wie bisher" meldet gelegentlich
+eine Zeitüberschreitung von 2000 ms, mit dem Folgefehler „AP-5.2:
+Zwischenstand folgt dem Ziehen … getBoundingClientRect von null" (dann 230 /
+232 statt 232 / 232; in AP-1.fix1 einmal in vier Läufen, beim Neuladen mit
+neuem Abfrageparameter nicht wiederholt). Beide Prüfungen haben nichts mit
+Text zu tun; vermutete Ursache ist Zeitempfindlichkeit im ausgeblendeten
+Bereich. **Bei einem einzelnen Ausreißer neu laden, nicht den Code
+verdächtigen** – tritt er wiederholt auf, untersuchen.
 Die Mutationsprobe des Moduls (Kopie per Umgebungsvariable
 `CBD_ELEMENTE_DATEI`) hat alle wesentlichen Mutationen erkannt.
 
@@ -4193,7 +4263,10 @@ Die Mutationsprobe des Moduls (Kopie per Umgebungsvariable
 1. **G2 Textkürzung:** JS kürzt Texte nach UTF-16-Einheiten, PHP nach
    Codepoints; ein bei 5000 halbiertes Surrogatpaar (Emoji an der Grenze)
    lässt `json_decode` scheitern → ganze Liste `elemente_verworfen`, PNG
-   bleibt. Nur bei Texten über 5000 Zeichen.
+   bleibt. Nur bei Texten über 5000 Zeichen. Seit dem Feld `teile` kommt
+   hinzu, dass der Server bei Emoji-Texten über 5000 Einheiten `teile`
+   behält, der Browser sie beim Laden verwirft (Review AP-1.rev, B2; Abschnitt
+   „Formatierter Text: das Feld `teile`", „Bekannte Einschränkungen").
 2. **G3 (vorbestehend, nicht Phase 4):** `removeFromCache()` nutzt immer
    `'cbd-board-' + containerId` ohne Seitensuffix und ohne `stableContainerId`
    – „Zeichnung löschen" auf Seite N trifft den Schlüssel von Seite 0.
@@ -4246,8 +4319,11 @@ Pixeldichte-Logik. Lassolinie und Auswahlrahmen (Vereinigung der Rahmen
 + 8 px, gestrichelt `[6,4]`, `--color-ui-surface`, Rückfall `#e24614`)
 landen nur dort – **nie im PNG**, das aus `drawingCanvas` entsteht.
 `zeichneModell()` fasst die Auswahl-Ebene nicht an. Darkmode: Bei weißer
-Tafel invertiert der Container per `filter:invert(1)`; die Auswahl-Ebene
-invertiert sich ein zweites Mal, damit Rahmen/Linie orange bleiben.
+Tafel filtert der Container mit `invert(1) hue-rotate(180deg)` (F13,
+farbtonerhaltend); die Auswahl-Ebene wendet die Umkehrung
+`hue-rotate(180deg) invert(1)` an, damit Rahmen/Linie orange bleiben
+(leicht entsättigt: `#e24614` erscheint als ≈ (211, 81, 31), Klemmen der
+Filterfunktionen) — Einzelheiten im Abschnitt „Tafelmodus im Darkmode".
 
 **Auswahlleiste** `div.cbd-board-auswahl-leiste` mit „Löschen“ und „Auswahl
 aufheben“: letztes Kind des **Overlays**, nicht der Zeichenfläche (dort
@@ -4353,7 +4429,7 @@ Elemente pflegt `_geladeneVornEinfuegen()` auch in `_drehen.basis`.
 
 **Wie gedreht wird (`board-elemente.js`):** Striche: jeder Punkt um den
 Drehpunkt. Text und Bild: die linke obere Ecke wird gedreht und `winkel`
-wächst um denselben Wert; `zeichneModell()` zeichnet sie mit
+wächst um denselben Wert (`teile` eines Texts bleiben unverändert); `zeichneModell()` zeichnet sie mit
 `translate(x, y)` + `rotate(winkel)`. Beides zusammen ist exakt die Drehung um
 den Drehpunkt, mehrfaches Drehen setzt sich ohne Fehler zusammen (4 × 90° →
 Ausgangslage ohne `winkel`). `rahmen()` liefert für gedrehte Texte/Bilder das
@@ -4399,7 +4475,8 @@ richtung)` setzt `breite = (px − 16) / 4` — ein Vielfaches von 0,25, das
 `serialisiere()` (2 Stellen) und der Server exakt behalten (Gruppe H in
 `test-board-elemente.php`). Jeder Text wächst mit seiner **eigenen** Schrift,
 die Verhältnisse bleiben also, bis einer an eine Grenze stößt. Linke obere
-Ecke und `winkel` bleiben; Striche, Bilder und nicht gewählte Texte bleiben
+Ecke, `winkel` und (seit Phase 1 des Vorhabens „Formatierter Text") `teile`
+bleiben; Striche, Bilder und nicht gewählte Texte bleiben
 dieselben Objekte. Eine Schrift jenseits der Grenze (z. B. nach der
 Streckung E13) bleibt in dieser Richtung, wie sie ist.
 
@@ -4510,7 +4587,7 @@ verbindet die Texte von `.cbd-board-content` mit Leerzeilen.
 - **Farbe (E10):** `lesbareFarbe(currentColor, boardColor)` – nach dem Öffnen
   ist der Stift Schwarz, auf grüner/schwarzer Tafel wird daraus Weiß.
   Darkmode mit weißer Tafel: gespeichert Schwarz, angezeigt hell (die
-  Zeichenfläche wird invertiert).
+  Zeichenfläche wird invertiert, seit F13 farbtonerhaltend).
 - **Undo (E11):** EIN `merkeZustand()` je Seite, neue Liste per `concat`.
   Danach `auswahlAufheben()`, `setTool('lasso')`, Werkzeugknopf der Leiste
   nachgezogen (`setTool` selbst stellt ihn nicht um), `auswahl` = neue IDs.
@@ -4705,6 +4782,216 @@ festgenagelt (G3).
 2 Bestandslauf, 3–8 Schnittstelle und AP-1.3-Funktionen, 9 Befunde des
 Reviews Phase 1, 10 `flaecheUnter` nach Review Phase 2); Mutationsproben
 über `CBD_BLOCKTEXT_DATEI`.
+
+### Formatierter Text: das Feld `teile` (Plan `PLAN-Blocktext-Formatierung.md`, Phase 1, abgeschlossen 2026-10-29)
+
+Das Vorhaben „Formatierter Text auf der Tafel und ‚Text bearbeiten'": Beim
+Übernehmen eines Blocktexts auf die Tafel bleiben **fett, kursiv und Farbe**
+erhalten (Phase 2), und ein einzelner Text lässt sich nachträglich bearbeiten
+(Phase 3). **Phase 1, hier beschrieben, legt nur das Fundament:** Datenformat,
+Prüfung in Browser und Server, Zeichnen und Messen, Darkmode. Die Bedienung
+ist unverändert; `teile` entstehen bis Phase 2 nur durch Konsoleneingaben und
+Tests. Stand: Phase 1 ist auf `main`, aber **nicht ausgeliefert** (kein ZIP,
+`CBD_VERSION` bleibt 3.1.147); sichtbar wird die Funktion erst mit dem ZIP
+der Phase 2 (geplant 3.1.148).
+
+#### Das Format (Entscheidungen F1–F5)
+
+Text-Element: `{id, typ:'text', farbe, breite, text, x, y [, teile] [, winkel]}`
+mit `teile: [{t, f?, k?, farbe?}]`:
+
+- `t` – der Abschnitt, eine nicht leere Zeichenkette (darf `\n` enthalten),
+- `f` – fehlt oder genau `1` (fett), `k` – fehlt oder genau `1` (kursiv),
+- `farbe` – fehlt oder passt auf das Farbmuster (`#rgb`, `#rrggbb`,
+  `rgb()`/`rgba()`); fehlt sie, gilt die Farbe des Elements.
+
+**`text` bleibt immer vollständig erhalten (F1)** und ist die maßgebliche
+Fassung; `teile` gliedert denselben Text nur. Deshalb bleibt das Format
+`v: 1` (wie beim optionalen `winkel`), und ein Modell **ohne** `teile` wird
+byte-gleich zu 3.1.147 geschrieben (belegt: 500 Zufallsmodelle, 9142
+Vergleiche `main` ↔ Branch ohne Abweichung; im Harnisch Fall j).
+
+**Prüfregel (F2/F3), in Browser und Server dieselbe:**
+
+1. Die **Verkettung aller `t` ist genau der (auf 5000 Zeichen gekürzte)
+   `text`.** Reiner Stringvergleich, kein Zählen von Zeichenpositionen –
+   JavaScript zählt UTF-16-Einheiten, PHP Codepunkte; ein Stringvergleich ist
+   in beiden Sprachen gleich. Ein gekürzter Text passt deshalb nicht mehr zu
+   seinen Teilen und verliert nur die Formatierung.
+2. Jeder Teil: `t` nicht leere Zeichenkette; `f`/`k` fehlen oder sind genau
+   die Ganzzahl 1 (nicht `true`, `2`, `'1'`, `0`); `farbe` fehlt oder passt
+   auf das Farbmuster; unbekannte Schlüssel entfallen. **„Fehlt" heißt:
+   Schlüssel nicht vorhanden** (JS `=== undefined`, PHP `array_key_exists()`),
+   ein vorhandenes `null` ist ungültig.
+3. Höchstens `MAX_TEILE` = 1000 Teile, mindestens einer.
+4. Mindestens ein Teil trägt `f`, `k` oder `farbe` – sonst ist es Klartext
+   und das Feld entfällt („ohne Formatierung kein Feld").
+5. Ein ungültiger Teil, eine falsche Verkettung, ein Nicht-Array oder eine
+   leere Liste verwirft **nur das Feld `teile`**, nie das Element; es wird
+   nie repariert.
+
+**Dieselbe Regel steht an zwei Stellen – bei Änderung beide nachziehen:**
+`pruefeTeile(teile, text)` in `assets/js/board-elemente.js` (intern, von
+`pruefeElement()` gerufen, also von `pruefeModell`/`deserialisiere`) und
+`CBD_Classroom::elemente_teile($teile, $text, $farb_muster)` in
+`includes/class-cbd-classroom.php` (private, statisch, von
+`pruefe_elemente_json()` gerufen; Konstante `ELEMENTE_MAX_TEILE` = 1000).
+Beide tragen den Kommentar „Gleiche Regel wie …"; beide Harnische führen
+dieselbe Fallliste (JS Gruppe 13, PHP Gruppe I). PHP prüft die Teilfarbe mit
+dem Modifikator `D`, sonst ließe `$` einen angehängten Zeilenwechsel durch,
+den JavaScript ohne m-Flag ablehnt. Der Server prüft gegen den schon auf 5000
+Zeichen gekürzten Text und verkettet mit frühem Abbruch (Speicherspitze).
+
+**Schlüsselreihenfolge:** Element `id, typ, farbe, breite, text, x, y, teile,
+winkel`, Teil `t, f, k, farbe` – in Browser und Server gleich, damit die
+Ausgabe byte-gleich bleibt. Der interne Helfer `mitTeile(el, teile)` hängt
+`teile` an (nur bei nicht leerem Array, als Kopie nur mit `t`/`f`/`k`/`farbe`),
+Aufruf immer `mitWinkel(mitTeile(…), winkel)`. **`board-elemente.js` baut
+Elemente an mehreren Stellen Feld für Feld neu – jede Stelle, die ein
+Text-Element neu baut, muss `teile` mitnehmen,** sonst verschwindet die
+Formatierung still (z. B. nach A+): `pruefeElement()`, `versetzt()` (genutzt
+von `verschiebe`, `kopiere`, `drehe`), `textGroesse()`, `skaliere()`,
+`serialisiere()`. Wer eine neue Funktion schreibt, die Text-Elemente neu
+baut, ergänzt sie dort und in Gruppe 13 des Harnischs.
+
+**Neue öffentliche Funktionen von `CBDBoardElemente`:**
+
+| Funktion | Ergebnis |
+|---|---|
+| `MAX_TEILE` | 1000 |
+| `schrift(px, f, k)` | `'[italic ][bold ]<px>px sans-serif'` (Canvas-`font`; italic steht vor bold); `schrift(24, 1, 1)` → `'italic bold 24px sans-serif'` |
+| `zeilenTeile(el)` | je Zeile (`\n`) eine Liste `[{t, f:0\|1, k:0\|1, farbe}]`; `farbe` aufgelöst (`teil.farbe` sonst `el.farbe`); Teile über einen Zeilenwechsel werden geteilt; leere Zeile → `[]`; ohne `teile` ein Teil je Zeile; **ungültige `teile` gelten wie fehlende** (gezeichnet wird genau, was Speichern und Laden übrig ließen); Zeilenzahl immer `text.split('\n').length`; Kosten O(Textlänge) je Aufruf |
+| `teileZusammenlegen(teile)` | **nur fürs Erzeugen (F4, die Prüfung legt nie zusammen):** neues Array, leere/fehlende `t` entfallen, `f`/`k` wahr → 1 bzw. entfallen, ungültige `farbe` entfällt, benachbarte gleiche `(f, k, farbe)` werden verbunden, nur Klartext → `[]`; `MAX_TEILE` wird hier **nicht** durchgesetzt (Erzeuger bleiben unter 1000 Teilen, sonst verliert der Text beim Prüfen seine Formatierung) |
+
+**Messsignatur:** `rahmen(el, ctxMass)` ruft die Messfunktion jetzt als
+`ctxMass(text, px, {f: 0|1, k: 0|1})`; die Breite einer Zeile ist die Summe
+ihrer Teile, jeder in seinem Stil gemessen (fett und kursiv sind breiter).
+Ohne Messfunktion bleibt es bei 0,6 × px je Zeichen; leere Zeilen werden nicht
+mehr gemessen (Breite 0, Ergebnis gleich wie vorher). Ältere Messfunktionen
+mit zwei Parametern laufen weiter und messen fett/kursiv dann in normaler
+Schrift.
+
+#### Zeichnen und Messen in `board-mode.js` (AP-1.3, AP-1.fix1)
+
+- **Eine Messfunktion: `_textMass()`.** Liefert `function(text, px, stil)`,
+  setzt `this.drawingCtx.font = CBDBoardElemente.schrift(px, stil.f, stil.k)`
+  und misst mit `measureText`; ohne Zeichenebene `null` (das Modul schätzt
+  dann). `_rahmen(el)` (mit dem Zwischenspeicher `_rahmenCache`, der an der
+  Objektidentität hängt – jede Änderung baut neue Objekte, das passt) und
+  `_lassoAbschliessen()` messen **nur noch darüber**; alle übrigen
+  Rahmen-Nutzer (Strich-Radierer, Punkt-Radierer, `_textInKreisNaehe`,
+  Auswahlrahmen, Blocktext) gehen über `_rahmen`. `_textMass()` ist als
+  eigene Eigenschaft ersetzbar (die Stellvertreter-Probe der Prüfseite tut
+  das). Noch nicht umgestellt: `_blocktextVerteilen()` misst bis Phase 2
+  (AP-2.3) weiter selbst in normaler Schrift.
+- **`zeichneModell()`, Pass 4 (Text):** je Element `px = schriftPx(breite)`,
+  `textBaseline 'top'`, Drehung wie bisher (`translate(x, y)` + `rotate`);
+  je Zeile `i` aus `zeilenTeile(el)` je Teil `ctx.font = schrift(px, f, k)`,
+  `ctx.fillStyle = teil.farbe`, ein `ctx.fillText(teil.t, zx, ty + i * px *
+  1.2)`, danach rückt das laufende `zx` um die mit derselben Schrift
+  gemessene Breite des Teils vor. **Gemessen wird nur, wenn in derselben
+  Zeile noch ein Teil folgt** (`ti + 1 < zeilen[li].length`, Review-Befund B5):
+  Ein Text ohne `teile` – jede bestehende Tafel – ist eine Zeile = ein Teil
+  und misst beim Zeichnen gar nicht. Ohne die Bedingung kostete das
+  zusätzliche `measureText` je Zeile und Bild bei 240 Zeilen 1,8 → 2,6–3,0 ms,
+  im Ziehen und Drehen je Frame. **Wer in Pass 4 etwas ergänzt, muss die
+  Bedingung beibehalten;** die Prüfung `zeichnenMisstNurFolgendeTeile` in
+  `tools/test-board-format.js` schlägt sonst an (A Text ohne `teile`,
+  drei Zeilen → 0 Aufrufe; B eine Zeile aus drei Teilen → 2; C ein Teil über
+  den Zeilenwechsel → 2).
+- **Ohne `teile` pixelgleich zu 3.1.147** (Prüfung gegen die alte
+  Zeichenroutine, auch gedreht); einzige Abweichung: leere Zeilen rufen keinen
+  `fillText('')` mehr auf (ohne Wirkung).
+- **Alle Lasso-Aktionen behalten `teile`:** A−/A+, Verschieben (Maus), Drehen,
+  Duplizieren (die Kopie mit neuer ID), Strg+Z (nach vier Rückgängig ist das
+  Original dieselbe Referenz), lokales Speichern und Wiederöffnen (danach wird
+  formatiert gezeichnet), Strich- und Punkt-Radierer (löschen ein formatiertes
+  Element wie ein unformatiertes) – alles in `test-board-format.js`.
+- **Leistung** (Richtwerte aus dem Review, im ausgeblendeten Browser-Bereich
+  gemessen): 60 Absätze / 240 Zeilen 1,8 ms vor Phase 1; mit 20 Teilen je
+  Absatz 7,6 ms, mit 100 Teilen je Absatz 24 ms; 5000 Zeichen in 1000 Teilen
+  5,0 ms (`zeilenTeile` allein 0,22 ms). `zeichneModell()` prüft `teile`
+  bei jedem Aufruf über `zeilenTeile` → `pruefeTeile` (O(Textlänge) je
+  Element; Elemente ohne `teile` überspringen das) – im Ziehen/Drehen je Frame,
+  bei sehr langen formatierten Texten im Auge behalten.
+- **Falle für künftige Pixelprüfungen:** Chrome schaltet eine Zeichenfläche
+  nach wiederholtem `getImageData` auf Software-Zeichnen um; die
+  Kantenglättung der Schrift ändert sich dabei um bis zu 85 Stufen (fünf
+  Durchläufe derselben Routine: der zweite weicht um 23 Bytes ab, der dritte
+  bis fünfte um 2057, untereinander bit-gleich). Pixelvergleiche in
+  `test-board-format.js` wiederholen das Paar deshalb bis zu fünfmal und
+  bewerten das erste übereinstimmende.
+
+#### Rückweg auf 3.1.147 (F1)
+
+Eine ältere Version (3.1.147 oder früher) kennt `teile` nicht: Der Browser
+(`pruefeElement()`) verwirft das Feld beim Laden, der Server
+(`pruefe_elemente_json()`) beim nächsten Speichern – **der `text` bleibt
+vollständig, nur die Formatierung entfällt.** Das PNG ist maßgeblich (E7) und
+zeigt Fett und Farbe weiter, bis in der älteren Version neu gespeichert wird;
+danach ist die Formatierung auch dort weg. Kein Datenbankschema ändert sich,
+es ist weder ein Rückbau noch eine SQL-Anweisung nötig (wie beim Rückweg von
+`winkel`). Wird danach 3.1.148 erneut eingespielt, ist die verlorene
+Formatierung nicht wiederherstellbar (der Text bleibt erhalten).
+
+#### Bekannte Einschränkungen (Review AP-1.rev, alle gering)
+
+- **B2 – Kürzung nach UTF-16 statt Codepunkten:** JavaScript kürzt `text`
+  auf 5000 UTF-16-Einheiten, PHP auf 5000 Codepunkte. Bei mehr als 5000
+  Zeichen mit Emoji behält der Server `text` und `teile` (sie passen zu den
+  ersten 5000 Codepunkten), der Browser kürzt beim Laden früher, die
+  Verkettung passt nicht mehr und `teile` wird verworfen. Zusätzlich kann
+  `substring` ein Surrogatpaar zerschneiden (Folge wie in „Bekannte, bewusst
+  offene Punkte", Punkt 1). Erreichbar nur über das Text-Werkzeug (hat kein
+  `maxlength`) mit über 5000 Zeichen. Kandidat für ein späteres AP:
+  Kürzung nach Codepunkten bzw. eine Obergrenze im Text-Werkzeug.
+- **B1 – Teilung mitten im Surrogatpaar (Vorgabe für Phase 2):** Teile, deren
+  Grenze ein Surrogatpaar zerschneidet (`[{t:'a\ud83d',f:1},{t:'\ude00b'}]`),
+  nimmt der Browser an; PHP-`json_decode` lehnt die einzelnen Hälften ab
+  (`JSON_ERROR_UTF16`) und `pruefe_elemente_json()` liefert `false` – die
+  **ganze Elementliste** der Klassen-Tafel entfällt, nur das PNG bleibt.
+  Heute erzeugt kein Code solche Teile; die Erzeuger der Phase 2
+  (`umbrechenTeile`, `umbrechen`, `teileNachZeichen`) müssen deshalb nur an
+  Codepunkt-Grenzen teilen (in AP-2.2 des Plans aufgenommen).
+- **B3 – Unicode-Leerraum in `rgb()`:** JavaScript-`\s` erkennt ihn, PCRE
+  ohne Modifikator `u` nicht; vorbestehend gleich bei der Farbe des Elements.
+  Real nicht erreichbar, weil `getComputedStyle` und die Stiftfarben
+  ASCII liefern.
+- **B4 – nur bei handgebauten Eingaben:** `f`/`k` als JSON `1.0`/`1E0`
+  (JavaScript liest die Zahl 1, PHP einen `float` und verwirft), `teile` als
+  JSON-Objekt mit den Schlüsseln `"0"`, `"1"` … (PHP dekodiert es als Array
+  und nimmt es, der Browser verwirft es mit `Array.isArray`). Kein echter
+  Client erzeugt das; keine Maßnahme.
+- **Erzeuger-Hinweis (B10, AP-2.1):** `getComputedStyle` kann für
+  `color-mix()` `color(srgb …)` oder `oklab(…)` liefern, das nicht aufs
+  Farbmuster passt; `teileZusammenlegen` lässt eine solche Farbe still
+  entfallen. Phase 2 normalisiert Farben deshalb auf `#rrggbb`.
+- **Darkmode:** Dunkle Teilfarben erscheinen im Darkmode bei weißer Tafel
+  hell (Rot als Rosa, Blau als Hellblau), der Farbton bleibt (F13, Abschnitt
+  „Tafelmodus im Darkmode"). Die geplante `lesbareLauffarbe` rechnet gegen die
+  gespeicherte Farbe und braucht keine Darkmode-Sonderbehandlung.
+
+#### Prüfungen und Abnahme (Phase 1)
+
+- `node tools/test-board-elemente-js.js`: **363** (Gruppe 13 „teile": 97);
+  `php tools/test-board-elemente.php`: **239** OK (Gruppen A–H 130,
+  Gruppe I „teile": 109; unter PHP 8.5 und 8.3 mit der All-inkl-ini).
+  Mutationsproben: 21 von 21 Mutationen der JS-Gruppe 13 erkannt, 19 von 21
+  der PHP-Gruppe I (die zwei übrigen sind gleichwertig), 6 von 6 Mutationen
+  an `board-mode.js` (AP-1.3) und zwei weitere für Pass 4 (AP-1.fix1), alle
+  erkannt.
+- Prüfseite `tools/test-board-zeiger.html`: **232 / 232** (218 + 14 aus
+  `tools/test-board-format.js`: 13 aus AP-1.3, eine aus AP-1.fix1).
+- Gleichheit JS ↔ PHP: Wegwerf-Vergleich (506 Fälle: 94 Grenzfälle, 400
+  Zufallszerlegungen, 12 handgebaute JSON-Texte) über den Weg
+  `JSON.stringify` → `addslashes` → echte `pruefe_elemente_json()` →
+  `deserialisiere()`: 494 gleich, die 12 abweichenden sind B1–B4 oben.
+  Integrationstest des Rundlaufs JS → Server → JS: alle Elemente
+  inhaltsgleich, erneut serialisiert byte-gleich.
+- Mit echter Maus auf der Testinstallation (Seite 876): formatiertes Element
+  wird fett/kursiv/farbig gezeichnet, Lasso wählt es, Ziehen, A+ und
+  Duplizieren behalten `teile`; Darkmode nach F13 (Rot rötlich, Blau
+  bläulich, Lasso-Rahmen orange). **Abnahme am Smartboard/iPad steht aus.**
 
 ### Raster: Kästchen und Zeilen (Rückmeldung 2026-10-27, Plugin 3.1.143)
 
