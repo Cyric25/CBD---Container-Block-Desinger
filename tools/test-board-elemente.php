@@ -975,5 +975,42 @@ check('I34 Speichern über ajax_save_drawing(): teile und winkel stehen in der g
     && $modell_gespeichert['elemente'][0]['teile'] === $gut && 15 === $modell_gespeichert['elemente'][0]['winkel'],
     $modell_gespeichert);
 
+// Nachtrag: Fälle, in denen das Verketten mit Umwandlung (Zahl -> Zeichenkette)
+// genau den Text ergäbe. Nur die Typprüfung von t verwirft sie – I18 (t Zahl)
+// allein würde auch ein Programm ohne Typprüfung bestehen, weil dort die
+// Verkettung schon aus anderem Grund nicht passt.
+$r = teile_r(teile_el(array(array('t' => 'Es ist ', 'f' => 1), array('t' => 5), array('t' => '.')), array(), 'Es ist 5.'));
+check('I35 t = 5 (Umwandlung ergäbe den Text): teile fehlt, Element bleibt', ohne_teile_aber_intakt($r, 'Es ist 5.'), $r);
+$r = teile_r(teile_el(array(array('t' => 'a', 'f' => 1), array('t' => true)), array(), 'a1'));
+check('I36 t = true (Umwandlung ergäbe den Text): teile fehlt, Element bleibt', ohne_teile_aber_intakt($r, 'a1'), $r);
+$r = teile_r(teile_el(array(array('t' => 'Es ist fett', 'f' => 1), null, array('t' => '.'))));
+check('I37 ein Eintrag ist null: teile fehlt, Element bleibt', ohne_teile_aber_intakt($r), $r);
+
+// Nachtrag aus der Mutationsprobe: I22 bis I26 stehen oben unverändert. In
+// I22/I24/I25 trägt allein der geprüfte Wert die Formatierung; ein Programm,
+// das einen ungültigen Wert wie "fehlt" behandelt (z. B. isset() statt
+// array_key_exists()), verwürfe teile dort trotzdem – weil dann gar nichts
+// mehr formatiert wäre. Hier trägt ein zweiter Teil die Formatierung, sodass
+// nur die Prüfung des Werts selbst den Ausschlag gibt.
+foreach (array('f' => 'k', 'k' => 'f') as $schluessel => $begleiter) {
+    foreach (array('true' => true, '2' => 2, '"1"' => '1', '0' => 0, 'false' => false, 'null' => null, '1.5' => 1.5, '[1]' => array(1)) as $name => $wert) {
+        $teile = array(array('t' => 'Es ist ', $begleiter => 1), array('t' => 'fett', $schluessel => $wert), array('t' => '.'));
+        $r = teile_r(teile_el($teile));
+        check("I38 $schluessel = $name neben gültigem $begleiter = 1: teile fehlt, Element bleibt", ohne_teile_aber_intakt($r), $r);
+    }
+}
+foreach (array('rot', '#12', '', 'Zahl' => 5, 'true' => true, 'false' => false, 'null' => null, 'Array' => array('#000000'), 'Zeilenwechsel' => "#000000\n") as $name => $f) {
+    $r = teile_r(teile_el(array(array('t' => 'Es ', 'f' => 1), array('t' => 'ist fett.', 'farbe' => $f))));
+    check('I39 ungültige farbe (' . json_encode($f) . ') neben gültigem f = 1: teile fehlt, Element bleibt', ohne_teile_aber_intakt($r), $r);
+}
+
+// Zeichenfolgen gleicher Länge, die PHP bei lockerem Vergleich (==) für gleich
+// hielte ("100" == "1e2", "0.1" == ".10"): Die Verkettung wird streng verglichen.
+foreach (array('100' => '1e2', '0.1' => '.10') as $text => $teil_text) {
+    $r = teile_r(teile_el(array(array('t' => $teil_text, 'f' => 1)), array(), (string) $text));
+    check('I40 Verkettung ' . json_encode($teil_text) . ' ≠ text ' . json_encode((string) $text) . ' (nur lockerer Vergleich hielte sie für gleich): teile fehlt',
+        ohne_teile_aber_intakt($r, (string) $text), $r);
+}
+
 echo "\nErgebnis: {$GLOBALS['oks']} OK, {$GLOBALS['fails']} FAIL\n";
 exit($GLOBALS['fails'] > 0 ? 1 : 0);
