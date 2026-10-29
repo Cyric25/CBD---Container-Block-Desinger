@@ -430,6 +430,10 @@
         var oben = b.getBoundingClientRect().top;
         var r2 = knopf.getBoundingClientRect();
         if (r2.top < oben - 0.5 || r2.bottom > b.getBoundingClientRect().bottom) f.push('nach Scrollen bei ' + Math.round(r2.top) + ', Bereich ab ' + Math.round(oben));
+        // Die Leiste deckt den Innenabstand ab: Ihre Oberkante liegt an der
+        // Innenkante des Rahmens, nicht darunter (kein Text scheint durch)
+        var lo = leiste.getBoundingClientRect().top;
+        if (Math.abs(lo - (oben + b.clientTop)) > 1) f.push('Leiste klebt bei ' + Math.round(lo) + ' statt ' + Math.round(oben + b.clientTop));
         var vorher = getComputedStyle(knopf).fontSize;
         var regler = B.fontSize;
         B.setFontSize(300);

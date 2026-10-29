@@ -212,6 +212,9 @@ html.cbd-board-offen .sidebar-toggle-btn {
     /* #7149: senkrechtes Scrollen per Finger trotz touch-action:none am Overlay */
     touch-action: pan-y;
     padding: 24px;
+    /* Oberer Innenabstand für die klebende Blocktext-Leiste (AP-2.3) - in
+       den @media-Regeln unten zusammen mit padding mitziehen */
+    --cbd-board-inhalt-rand-oben: 24px;
     border-right: 2px solid var(--color-sidebar-border, #e0e0e0);
     background: #fafafa; /* kein exakter AP-1.1-Treffer (naher, aber nicht identischer Grauton) */
 }
@@ -1243,13 +1246,19 @@ html.cbd-board-offen .sidebar-toggle-btn {
    em-Schrift (100-300 %) - die Leiste soll dabei gleich groß bleiben.
    ============================================= */
 
+/* Klebt am oberen RAND des Bereichs, nicht an dessen Innenabstand: sticky
+   rechnet ab der Innenkante, mit top: 0 schiene gescrollter Text im
+   Innenabstand über der Leiste durch. Negatives top/margin in Höhe des
+   Innenabstands (--cbd-board-inhalt-rand-oben) und ebenso viel padding oben
+   lassen den Knopf an derselben Stelle. */
 .cbd-board-blocktext-leiste {
     position: sticky;
-    top: 0;
+    top: calc(-1 * var(--cbd-board-inhalt-rand-oben, 24px));
     z-index: 2;
     display: flex;
     justify-content: flex-end;
-    padding: 6px 0;
+    margin-top: calc(-1 * var(--cbd-board-inhalt-rand-oben, 24px));
+    padding: calc(var(--cbd-board-inhalt-rand-oben, 24px) + 6px) 0 6px 0;
     margin-bottom: 8px;
     /* Fläche des Blockbereichs (#fafafa, im Darkmode dessen eigene Regel)
        - ein eigener Wert stünde als heller Streifen im Bereich */
@@ -1602,6 +1611,7 @@ html.cbd-board-offen .sidebar-toggle-btn {
         border-right: none;
         border-bottom: 2px solid var(--color-sidebar-border, #e0e0e0);
         padding: 16px;
+        --cbd-board-inhalt-rand-oben: 16px;
     }
 
     .cbd-board-toolbar {
@@ -1705,6 +1715,7 @@ html.cbd-board-offen .sidebar-toggle-btn {
 
     .cbd-board-content {
         padding: 8px 12px;
+        --cbd-board-inhalt-rand-oben: 8px;
     }
 }
 
