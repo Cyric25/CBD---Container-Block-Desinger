@@ -1797,6 +1797,261 @@
     }
 
     // ------------------------------------------------------------------
+    // AP-3.fix1 (Befunde aus AP-3.1): (1) Der Platz über dem eingefügten
+    // Text richtet sich nach der Auswahlleiste, wie sie NACH dem Einfügen
+    // aussieht: mehrere Blöcke gewählt = Leiste ohne den Knopf "Text
+    // bearbeiten" (einzeilig), genau ein Block = Leiste mit dem Knopf (bei
+    // schmaler Fläche zweizeilig). (2) textErsetzen() kürzt auf höchstens
+    // 5000 UTF-16-Einheiten (MAX_TEXT des Elementmodells), nie mitten in
+    // einem Surrogatpaar, und schneidet teile passend zu.
+    // Die Leistenhöhen werden über eine gestubbte Höchstbreite
+    // (_auswahlLeisteMaxBreite) eingestellt, die Prüfungen hängen also nicht
+    // von der Fenstergröße ab.
+    // ------------------------------------------------------------------
+
+    /** Höhe der Auswahlleiste bei Höchstbreite w, mit oder ohne Klasse --ein-text (wie _auswahlLeisteHoeheText misst). */
+    function leistenHoehe(w, einText) {
+        var l = leiste();
+        var anzeige = l.querySelector('.cbd-board-auswahl-textgroesse');
+        var vorher = { css: l.style.cssText, klassen: l.className, anzeige: anzeige ? anzeige.textContent : '' };
+        l.style.visibility = 'hidden';
+        l.style.display = 'flex';
+        l.style.maxWidth = w + 'px';
+        l.className = 'cbd-board-auswahl-leiste cbd-board-auswahl-leiste--text' + (einText ? ' cbd-board-auswahl-leiste--ein-text' : '');
+        if (anzeige) anzeige.textContent = '200 px';
+        var h = l.offsetHeight;
+        l.style.cssText = vorher.css;
+        l.className = vorher.klassen;
+        if (anzeige) anzeige.textContent = vorher.anzeige;
+        return h;
+    }
+
+    /** Kleinste Höchstbreite, bei der die Leiste OHNE den Knopf einzeilig, MIT ihm aber höher ist; 0, wenn es keine gibt. */
+    function leistenBreiteMitKnopfHoeher() {
+        var einzeilig = leistenHoehe(1400, false);
+        for (var b = 200; b <= 1400; b += 10) {
+            if (leistenHoehe(b, false) === einzeilig && leistenHoehe(b, true) > einzeilig) return b;
+        }
+        return 0;
+    }
+
+    /** Stellvertreter für die Höchstbreite der Leiste; liefert die Funktion zum Zurückstellen. */
+    function leistenBreiteSetzen(w) {
+        var echt = B._auswahlLeisteMaxBreite;
+        B._auswahlLeisteMaxBreite = function() { return w; };
+        return function() { B._auswahlLeisteMaxBreite = echt; };
+    }
+
+    /** Sichtbaren Ausschnitt festlegen (Stellvertreter); liefert die Funktion zum Zurückstellen. */
+    function ausschnittSetzen(a) {
+        var echt = B._sichtbarerBereich;
+        B._sichtbarerBereich = function() { return a; };
+        return function() { B._sichtbarerBereich = echt; };
+    }
+
+    /** y, bei dem "Text auf die Tafel" beginnt, wenn über dem Text die Leistenhöhe h frei bleiben soll (Regel aus _blocktextVerteilen). */
+    function textBeginnBei(h) {
+        var s = B._sichtbarerBereich();
+        return s.y + Math.ceil((h + 12) / (B.zoom || 1)) + 8;
+    }
+
+    /** Liegt die sichtbare Leiste ganz über dem Auswahlrahmen? Meldung in f. */
+    function leisteUeberDemRahmen(f, wann) {
+        var l = leiste();
+        if (!sichtbar(l)) {
+            f.push(wann + ': Leiste nicht sichtbar');
+            return;
+        }
+        var lr = l.getBoundingClientRect();
+        var r = B.auswahlRahmen();
+        var cv = B.drawingCanvas.getBoundingClientRect();
+        var oben = cv.top + r.y * (cv.height / B.cssHeight);
+        if (lr.bottom > oben + 1) f.push(wann + ': Leiste endet bei ' + Math.round(lr.bottom) + ', Rahmen beginnt bei ' + Math.round(oben));
+    }
+
+    /** Aufbau der Leistenprüfungen: Tafel öffnen, Breite suchen und stubben; {w, hMit, hOhne, zurueck} oder {fehler}. */
+    function leistenAufbau() {
+        ctx.oeffnen();
+        if (!knopf('text-bearbeiten')) return { fehler: 'Knopf [data-aktion="text-bearbeiten"] fehlt' };
+        var w = leistenBreiteMitKnopfHoeher();
+        if (!w) return { fehler: 'Testaufbau: keine Breite, bei der die Leiste ohne den Knopf einzeilig, mit ihm höher ist' };
+        return { w: w, hMit: leistenHoehe(w, true), hOhne: leistenHoehe(w, false), zurueck: leistenBreiteSetzen(w) };
+    }
+
+    function fix1LeistenplatzMehrereAbsaetze() {
+        var a = leistenAufbau();
+        if (a.fehler) return { ok: false, detail: a.fehler };
+        var f = [];
+        try {
+            // drei Absätze = drei Blöcke gewählt: die Leiste hat keinen Knopf "Text bearbeiten"
+            var r = B.blocktextEinfuegen([{ text: 'Erster Absatz' }, { text: 'Zweiter Absatz' }, { text: 'Dritter Absatz' }]);
+            if (!r || r.eingefuegt !== 3) return { ok: false, detail: 'Testaufbau: Einfügen ergibt ' + JSON.stringify(r && { eingefuegt: r.eingefuegt, rest: r.rest.length, keinPlatz: r.keinPlatz }) };
+            var soll = textBeginnBei(a.hOhne);
+            if (texte()[0].y !== soll) f.push('erster Text bei y ' + texte()[0].y + ' statt ' + soll + ' (Höhe ohne Knopf ' + a.hOhne + ' px, mit Knopf ' + a.hMit + ' px)');
+            if (leiste().offsetHeight !== a.hOhne) f.push('Leiste nach dem Einfügen ' + leiste().offsetHeight + ' px statt ' + a.hOhne + ' px');
+            leisteUeberDemRahmen(f, 'mehrere Absätze');
+        } finally {
+            a.zurueck();
+        }
+        return ergebnis(f);
+    }
+
+    function fix1LeistenplatzEinAbsatz() {
+        var a = leistenAufbau();
+        if (a.fehler) return { ok: false, detail: a.fehler };
+        var f = [];
+        try {
+            // ein Absatz = ein Block gewählt: die Leiste hat den Knopf und ist höher
+            var r = B.blocktextEinfuegen([{ text: 'Ein einzelner Absatz' }]);
+            if (!r || r.eingefuegt !== 1) return { ok: false, detail: 'Testaufbau: Einfügen ergibt ' + JSON.stringify(r && { eingefuegt: r.eingefuegt, rest: r.rest.length, keinPlatz: r.keinPlatz }) };
+            var soll = textBeginnBei(a.hMit);
+            if (texte()[0].y !== soll) f.push('Text bei y ' + texte()[0].y + ' statt ' + soll + ' (Höhe mit Knopf ' + a.hMit + ' px, ohne Knopf ' + a.hOhne + ' px)');
+            if (leiste().offsetHeight !== a.hMit) f.push('Leiste nach dem Einfügen ' + leiste().offsetHeight + ' px statt ' + a.hMit + ' px');
+            leisteUeberDemRahmen(f, 'ein Absatz');
+        } finally {
+            a.zurueck();
+        }
+        return ergebnis(f);
+    }
+
+    function fix1LeistenplatzEinBlockAusMehrerenAbsaetzen() {
+        // Maßgeblich ist die Zahl der eingefügten BLÖCKE, nicht die der
+        // Absätze: Passt nur der erste (lange) Absatz zum Teil hin, ist
+        // ebenfalls genau ein Block gewählt, und der Rest wartet
+        var a = leistenAufbau();
+        if (a.fehler) return { ok: false, detail: a.fehler };
+        var f = [];
+        var zurueckA = ausschnittSetzen({ x: 0, y: 0, b: 600, h: 200 });
+        try {
+            var r = B.blocktextEinfuegen([{ text: langeZeile().text }, { text: 'Zweiter Absatz' }]);
+            if (!r || r.eingefuegt !== 1 || !r.rest.length) {
+                return { ok: false, detail: 'Testaufbau: erwartet ein Block mit Rest, Ergebnis ' + JSON.stringify(r && { eingefuegt: r.eingefuegt, rest: r.rest.length, keinPlatz: r.keinPlatz }) };
+            }
+            var soll = textBeginnBei(a.hMit);
+            if (texte()[0].y !== soll) f.push('Text bei y ' + texte()[0].y + ' statt ' + soll + ' (Höhe mit Knopf ' + a.hMit + ' px, ohne Knopf ' + a.hOhne + ' px)');
+        } finally {
+            zurueckA();
+            a.zurueck();
+        }
+        return ergebnis(f);
+    }
+
+    function fix1LeistenplatzKnapp() {
+        // Ausschnitt so niedrig, dass der Text mit dem Platz für die Leiste
+        // OHNE Knopf noch hinpasst, mit dem Knopf aber nichts mehr: dann gilt
+        // das Ergebnis ohne Knopf (Rückfall vor dem Rückfall ganz ohne Platz,
+        // der in G9 "kein Platz für die Leiste" geprüft ist)
+        var a = leistenAufbau();
+        if (a.fehler) return { ok: false, detail: a.fehler };
+        var f = [];
+        var zurueckA = ausschnittSetzen({ x: 0, y: 0, b: 600, h: 120 });
+        try {
+            var r = B.blocktextEinfuegen('Eine Zeile');
+            if (!r || r.keinPlatz || r.eingefuegt !== 1) return { ok: false, detail: 'Testaufbau: Ergebnis ' + JSON.stringify(r && { eingefuegt: r.eingefuegt, rest: r.rest.length, keinPlatz: r.keinPlatz }) };
+            var soll = textBeginnBei(a.hOhne);
+            if (texte()[0].y !== soll) f.push('Text bei y ' + texte()[0].y + ' statt ' + soll + ' (Höhe ohne Knopf ' + a.hOhne + ' px; mit Knopf ' + textBeginnBei(a.hMit) + ' bzw. ohne Platz 20)');
+        } finally {
+            zurueckA();
+            a.zurueck();
+        }
+        return ergebnis(f);
+    }
+
+    function fix1LeistenHoeheParameter() {
+        var a = leistenAufbau();
+        if (a.fehler) return { ok: false, detail: a.fehler };
+        var f = [];
+        try {
+            var l = leiste();
+            var klassen = l.className;
+            var mit = B._auswahlLeisteHoeheText(true);
+            var ohne = B._auswahlLeisteHoeheText(false);
+            var standard = B._auswahlLeisteHoeheText();
+            if (mit !== a.hMit) f.push('(true): ' + mit + ' px statt ' + a.hMit + ' px');
+            if (ohne !== a.hOhne) f.push('(false): ' + ohne + ' px statt ' + a.hOhne + ' px');
+            // ohne Argument wie bisher: konservativ mit dem Knopf
+            if (standard !== a.hMit) f.push('ohne Argument: ' + standard + ' px statt ' + a.hMit + ' px (wie mit Knopf)');
+            if (l.className !== klassen) f.push('Klassen danach "' + l.className + '" statt "' + klassen + '"');
+            if (!(a.hMit > a.hOhne)) f.push('Testaufbau: Höhe mit Knopf ' + a.hMit + ' nicht größer als ohne ' + a.hOhne);
+        } finally {
+            a.zurueck();
+        }
+        return ergebnis(f);
+    }
+
+    function fix1TextErsetzenObergrenze() {
+        ctx.oeffnen();
+        var f = [];
+        var e = neuesText({ x: 40, y: 60, breite: 2, text: 'Alt', farbe: '#1565c0' });
+        var id = einsetzen(e);
+        var HOCH = '\uD83D', TIEF = '\uDE00'; // Emoji U+1F600
+        var woerter = new Array(1000).join('Wort '); // 999 mal "Wort " = 4995 Einheiten
+        var undo0 = B.undoStapel.length;
+
+        // pruefeModell lässt das Element unverändert, teile passen zum Text
+        function pruefen(wann, n) {
+            if (!n) {
+                f.push(wann + ': Element fehlt');
+                return;
+            }
+            var p = E.pruefeModell(B.modell);
+            var i = el().indexOf(n);
+            if (!p || !p.modell || JSON.stringify(p.modell.elemente[i]) !== JSON.stringify(n)) f.push(wann + ': pruefeModell ändert das Element');
+            if (n.text.length > 5000) f.push(wann + ': ' + n.text.length + ' Einheiten > 5000');
+            var c = n.text.charCodeAt(n.text.length - 1);
+            if (c >= 0xD800 && c <= 0xDBFF) f.push(wann + ': endet mit einem einzelnen Surrogat');
+            if (n.teile !== undefined && n.teile.map(function(t) { return t.t; }).join('') !== n.text) f.push(wann + ': Verkettung der teile ist nicht der text');
+        }
+
+        // a) 5003 Einheiten, formatiert, Emoji bei 4999/5000 (Schnitt MITTEN im Paar) -> Schnitt davor
+        var a = woerter + 'abcd' + HOCH + TIEF + 'ef';
+        if (a.length !== 5003) return { ok: false, detail: 'Testaufbau: Länge ' + a.length };
+        var r = B.textErsetzen(id, [{ text: a, teile: [{ t: woerter }, { t: 'abcd' + HOCH + TIEF + 'ef', f: 1, farbe: '#ff0000' }] }]);
+        var n = element(id);
+        if (r !== true) f.push('a) Rückgabe ' + r + ' statt true');
+        pruefen('a)', n);
+        if (n) {
+            if (n.text.replace(/\n/g, ' ') !== woerter + 'abcd') f.push('a) Text endet nicht bei "abcd" (Länge ' + n.text.length + ')');
+            var stil = stilJeZeichen(n.text, n.teile);
+            if (stil[stil.length - 1] !== '1|0|#ff0000' || stil[0] !== '0|0|') f.push('a) Formatierung am Rand: Anfang ' + stil[0] + ', Ende ' + stil[stil.length - 1]);
+        }
+        if (B.undoStapel.length !== undo0 + 1) f.push('a) Undo-Schritte ' + (B.undoStapel.length - undo0) + ' statt 1');
+
+        // b) Emoji bei 4998/4999: das Paar liegt noch ganz in 5000 -> es bleibt
+        var b = woerter + 'abc' + HOCH + TIEF + 'efgh';
+        r = B.textErsetzen(id, [{ text: b, teile: [{ t: woerter }, { t: 'abc' + HOCH + TIEF + 'efgh', k: 1 }] }]);
+        n = element(id);
+        pruefen('b)', n);
+        if (n && (n.text.length !== 5000 || n.text.slice(-2) !== HOCH + TIEF)) f.push('b) Länge ' + n.text.length + ', Ende nicht das Emoji');
+
+        // c) Klartext mit 6000 Einheiten: gekürzt, weiter ohne Feld teile
+        r = B.textErsetzen(id, [new Array(1201).join('Wort ')]);
+        n = element(id);
+        pruefen('c)', n);
+        // (der Umbruch darf Leerraum am Zeilenende entfernen: nicht mehr als wenige Einheiten weniger)
+        if (n && (n.text.length < 4990 || n.teile !== undefined)) f.push('c) Länge ' + n.text.length + ', teile ' + teileText(n));
+
+        // d) ein Wort aus 5003 Zeichen: der Umbruch fügt Zeilenwechsel ein, danach gilt die Grenze erneut
+        r = B.textErsetzen(id, [{ text: new Array(5004).join('a'), teile: [{ t: new Array(2501).join('a') }, { t: new Array(2504).join('a'), f: 1 }] }]);
+        n = element(id);
+        pruefen('d)', n);
+        if (n && n.text.indexOf('\n') < 0) f.push('d) kein Umbruch - Testaufbau');
+
+        // e) gedreht: kein Umbruch, nur die Grenze
+        var g = neuesText({ x: 300, y: 300, text: 'Dreh', winkel: 20 });
+        var gid = einsetzen(g);
+        r = B.textErsetzen(gid, [{ text: woerter + 'xyz1234', teile: [{ t: woerter }, { t: 'xyz1234', f: 1 }] }]);
+        n = element(gid);
+        pruefen('e)', n);
+        if (n && (n.text.length !== 5000 || n.winkel !== 20 || n.text.indexOf('\n') >= 0)) f.push('e) Länge ' + n.text.length + ', winkel ' + n.winkel);
+
+        // Strg+Z macht den letzten Schritt rückgängig (ein Schritt je Aufruf)
+        strgZ();
+        if (element(gid) !== g) f.push('Strg+Z: nicht das Ausgangselement des gedrehten Texts');
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     var vorherAsync = window.__zusatzTestsAsync;
@@ -1853,5 +2108,12 @@
         p('AP-3.2: Tab-Falle des Fensters (Feld erstes, "Übernehmen" letztes Ziel)', tbTabFalle);
         p('AP-3.2: grüne Tafel - Feld grün, Teilfarben lesbar, stabil beim Übernehmen', tbGrueneTafel);
         p('AP-3.2: Fenster schließt bei destroy(), Seitenwechsel, aufgehobener Auswahl; "Übernehmen" ohne Ziel ändert nichts', tbSchliesstBeiTafelSeiteAuswahl);
+        // PLAN-Blocktext-Formatierung.md, AP-3.fix1
+        p('AP-3.fix1: mehrere Absätze eingefügt - Text beginnt unter der Leiste OHNE den Knopf "Text bearbeiten"', fix1LeistenplatzMehrereAbsaetze);
+        p('AP-3.fix1: ein Absatz eingefügt - Text beginnt unter der Leiste MIT dem Knopf (höher)', fix1LeistenplatzEinAbsatz);
+        p('AP-3.fix1: mehrere Absätze, aber nur ein Block passt - Platz für die Leiste mit Knopf', fix1LeistenplatzEinBlockAusMehrerenAbsaetzen);
+        p('AP-3.fix1: Leiste mit Knopf passt nicht mehr hin - Ergebnis mit Platz für die Leiste ohne Knopf', fix1LeistenplatzKnapp);
+        p('AP-3.fix1: _auswahlLeisteHoeheText(mitEinText) misst mit oder ohne Knopf, ohne Argument mit Knopf', fix1LeistenHoeheParameter);
+        p('AP-3.fix1: textErsetzen kürzt auf 5000 Einheiten, nie im Surrogatpaar, teile passend, pruefeModell ändert nichts', fix1TextErsetzenObergrenze);
     };
 })();
