@@ -12,9 +12,28 @@
  * „node tools/test-board-blocktext-js.js" fuehrt diese Datei in einem leeren
  * vm-Kontext aus und prueft den Quelltext auf die Namen dieser Schnittstellen
  * — auch in Kommentaren. Textbreiten misst der Aufrufer: Er uebergibt eine
- * Messfunktion mass(text, px) -> Breite in Pixeln (im Browser measureText).
+ * Messfunktion mass(text, px, stil) -> Breite in Pixeln (im Browser
+ * measureText). stil = {f: 0|1, k: 0|1} (fett, kursiv; seit AP-2.2 von
+ * PLAN-Blocktext-Formatierung.md); eine aeltere Messfunktion mit zwei
+ * Parametern laeuft weiter und misst dann alles in normaler Schrift.
  *
- * Schnittstelle (Plan, Abschnitt 4) - genau diese sechs Funktionen:
+ * Absatz (seit AP-2.2): eine Zeichenkette ODER ein Objekt {text, teile?}
+ * mit teile = [{t, f?, k?, farbe?}] im Format des Text-Elements
+ * (board-elemente.js, Feld teile; Verkettung aller t === text).
+ * Zeichenketten verhalten sich genau wie vor AP-2.2. Bei Objekten wird
+ * jeder Abschnitt in seiner Schrift gemessen (fett ist breiter), die Teile
+ * laufen beim Umbruch mit, und der Rest eines geteilten Absatzes behaelt
+ * seine Formatierung. Unbrauchbare teile (kein Array, Verkettung != text)
+ * gelten als Klartext; repariert wird nichts.
+ *
+ * Surrogatpaare (Emoji) werden nirgends getrennt - weder beim
+ * zeichenweisen Teilen zu breiter Woerter noch beim Teilen nach
+ * maxZeichen noch an Teilgrenzen (Review AP-1.rev, Befund B1: ein halbes
+ * Paar laesst PHP-json_decode scheitern, dann verwirft der Server die ganze
+ * Elementliste einer Klassen-Tafel).
+ *
+ * Schnittstelle (PLAN-Blocktext-Formatierung.md, Abschnitt 4) - genau
+ * diese acht Funktionen (die ersten sechs aus „Blocktext auf die Tafel"):
  *   latexZuText(latex, protokoll) -> string                         (AP-1.2)
  *     Verwandelt LaTeX-Quelltext (Attribut data-latex der Formeln) in
  *     lesbaren Unicode-Text, z. B. „\text{Ag}^+ + e^- \rightleftharpoons
@@ -25,18 +44,33 @@
  *     Trennt an Leerzeilen; einzelne Zeilenwechsel bleiben im Absatz.
  *   umbrechen(text, maxBreite, px, mass) -> [zeile]                 (AP-1.3)
  *     Bricht an Leerzeichen auf maxBreite um, vorhandene \n bleiben, zu
- *     breite Woerter werden zeichenweise geteilt.
+ *     breite Woerter werden zeichenweise (je Codepunkt) geteilt.
+ *   umbrechenTeile(absatz, maxBreite, px, mass)            (Formatierung AP-2.2)
+ *     -> [{text: zeile, teile: [{t, f?, k?, farbe?}]}]
+ *     Wie umbrechen (gleiche Wortgrenzen und Sonderfaelle), aber fuer einen
+ *     Absatz (Zeichenkette oder Objekt); gemessen wird je Abschnitt mit
+ *     mass(t, px, {f, k}). teile je Zeile: Verkettung === zeile, benachbarte
+ *     gleiche Teile verbunden (wie teileZusammenlegen in board-elemente.js,
+ *     aber ein Klartext-Teil bleibt stehen: [{t: zeile}]); leere Zeile -> [].
  *   verteile(absaetze, flaeche, mass, optionen)                     (AP-1.3)
- *     -> {px, bloecke: [{text, x, y, b, h}], rest: [string]}
+ *     -> {px, bloecke: [{text, teile?, x, y, b, h}], rest: [Absatz]}
  *     Schrift 24 -> 18 px, bis alles in flaeche {x, y, b, h} passt; sonst
  *     auffuellen und Rest zurueckgeben (ein geteilter Absatz als restlicher
  *     Quelltext ohne weiche Umbrueche). Je Absatz ein Block (Zeilen mit \n),
- *     Abstand Math.round(0,6 * px), Bloecke hoechstens 5000 Zeichen.
+ *     Abstand Math.round(0,6 * px), Bloecke hoechstens 5000 Zeichen. Seit
+ *     AP-2.2 auch mit Absatz-Objekten: Ein Block traegt teile (Verkettung
+ *     === text, ein eingefuegtes \n gehoert zum vorigen Teil) nur, wenn er
+ *     Formatierung enthaelt; rest steht in der Form der Eingabe
+ *     (Zeichenkette bleibt Zeichenkette, Objekt wird {text[, teile]}).
  *   flaecheUnter(sichtbar, rahmenListe, rand) -> {x, y, b, h}       (AP-1.3)
  *     Freier Platz unter vorhandenem Inhalt im sichtbaren Bereich (Inhalt
  *     ganz unterhalb des Bereichs zaehlt nicht, AP-2.fix1).
  *   lesbareFarbe(stift, tafel) -> '#rrggbb'                         (AP-1.3)
  *     Stiftfarbe bei mindestens 3:1 Kontrast (WCAG), sonst Weiss/Schwarz.
+ *   lesbareLauffarbe(farbe, tafel) -> '#rrggbb' | null     (Formatierung AP-2.2)
+ *     Teilfarbe (F7): bei Kontrast < 3 in 5-%-Schritten mit Weiss (dunkle
+ *     Tafel) bzw. Schwarz (helle Tafel) mischen, bis Kontrast >= 3 - der
+ *     Farbton bleibt erkennbar. Idempotent; ungueltige Farbe -> null.
  *
  * Alle Funktionen sind frei von Seiteneffekten; Eingaben werden nie
  * veraendert. Listen werden mit Array.isArray erkannt (nicht instanceof),
@@ -863,12 +897,16 @@
         return ohneEndLeer(s.slice(a));
     }
 
-    /** Anzahl der Nicht-Leerraum-Zeichen in einer Zeilenliste. */
+    /**
+     * Anzahl der Nicht-Leerraum-Zeichen in einer Zeilenliste (Zeichenketten
+     * oder Zeilen {text, teile} aus umbrechenTeile).
+     */
     function zeichenOhneLeer(zeilen) {
         var n = 0;
         for (var i = 0; i < zeilen.length; i++) {
-            for (var j = 0; j < zeilen[i].length; j++) {
-                if (!istLeer(zeilen[i].charAt(j))) {
+            var z = typeof zeilen[i] === 'string' ? zeilen[i] : zeilen[i].text;
+            for (var j = 0; j < z.length; j++) {
+                if (!istLeer(z.charAt(j))) {
                     n++;
                 }
             }
@@ -877,12 +915,13 @@
     }
 
     /**
-     * Quelltext ab dem (k+1)-ten Nicht-Leerraum-Zeichen, ohne fuehrenden
-     * Leerraum. umbrechen() entfernt nur Leerraum (an Bruchstellen und
-     * Zeilenenden), die platzierten Zeilen enthalten also genau die ersten k
-     * Nicht-Leerraum-Zeichen des Absatzes in Originalreihenfolge.
+     * Position im Quelltext hinter dem k-ten Nicht-Leerraum-Zeichen und dem
+     * darauf folgenden Leerraum. umbrechen() und umbrechenTeile() entfernen
+     * nur Leerraum (an Bruchstellen und Zeilenenden), die platzierten Zeilen
+     * enthalten also genau die ersten k Nicht-Leerraum-Zeichen des Absatzes
+     * in Originalreihenfolge.
      */
-    function restAb(text, k) {
+    function restIndex(text, k) {
         var i = 0;
         var gezaehlt = 0;
         while (i < text.length && gezaehlt < k) {
@@ -894,12 +933,274 @@
         while (i < text.length && istLeer(text.charAt(i))) {
             i++;
         }
-        return text.slice(i);
+        return i;
+    }
+
+    /** Quelltext ab dem (k+1)-ten Nicht-Leerraum-Zeichen, ohne fuehrenden Leerraum. */
+    function restAb(text, k) {
+        return text.slice(restIndex(text, k));
     }
 
     /** Ersatz, falls der Aufrufer keine Messfunktion uebergibt. */
     function schaetzMass(t, px) {
         return t.length * px * 0.55;
+    }
+
+    // ---------------------------------------------------------------------
+    // Absaetze mit Formatierung (PLAN-Blocktext-Formatierung.md, AP-2.2)
+    //   Ein Absatz-Objekt {text, teile?} wird intern „normiert": Jede
+    //   UTF-16-Einheit des Texts traegt eine Stil-Nummer (Index in liste,
+    //   gleiche Stile teilen eine Nummer). Gemessen wird je Abschnitt
+    //   gleichen Stils mit mass(t, px, {f, k}); die Teile einer Zeile oder
+    //   eines Blocks entstehen aus denselben Abschnitten und sind dadurch
+    //   schon zusammengelegt. Das entspricht der Messung von rahmen() in
+    //   board-elemente.js (Summe je Teil), so stimmt die Blockbreite mit dem
+    //   spaeteren Rahmen des Text-Elements ueberein.
+    // ---------------------------------------------------------------------
+
+    // Gleiche Regel wie FARB_MUSTER in board-elemente.js (und serverseitig
+    // in CBD_Classroom::pruefe_elemente_json()). Hier nur, damit eine
+    // unbrauchbare Teilfarbe wie in teileZusammenlegen() still entfaellt -
+    // die Pruefung verwuerfe sonst beim Speichern die gesamte Formatierung.
+    var FARB_MUSTER = /^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}|rgba?\(\s*[0-9.]+\s*,\s*[0-9.]+\s*,\s*[0-9.]+\s*(,\s*[0-9.]+\s*)?\))$/;
+
+    function istObjektWert(v) {
+        return v !== null && typeof v === 'object' && !Array.isArray(v);
+    }
+
+    /**
+     * true, wenn eine Grenze vor Index i ein Surrogatpaar trennen wuerde
+     * (s[i - 1] High-, s[i] Low-Surrogat). Review AP-1.rev, Befund B1.
+     */
+    function trenntPaar(s, i) {
+        if (i <= 0 || i >= s.length) {
+            return false;
+        }
+        var hoch = s.charCodeAt(i - 1);
+        var tief = s.charCodeAt(i);
+        return hoch >= 0xD800 && hoch <= 0xDBFF && tief >= 0xDC00 && tief <= 0xDFFF;
+    }
+
+    /** Laenge des Zeichens ab Index i in UTF-16-Einheiten: 2 fuer ein Surrogatpaar, sonst 1. */
+    function zeichenLaenge(s, i) {
+        return trenntPaar(s, i + 1) ? 2 : 1;
+    }
+
+    /** Klartext-Absatz in normierter Form (stile null = alles ein Klartext-Abschnitt). */
+    function klartext(text) {
+        return { text: text, stile: null, liste: [] };
+    }
+
+    /**
+     * Absatz -> {text, stile, liste} oder null (kein brauchbarer Absatz:
+     * keine Zeichenkette/kein Objekt, text fehlt oder ist leer).
+     * teile werden genutzt, wenn sie ein Array aus Objekten mit
+     * Zeichenketten-t sind und ihre Verkettung genau text ist; sonst gilt
+     * der Absatz als Klartext. f/k werden wie in teileZusammenlegen() zu 0/1,
+     * eine Farbe ausserhalb FARB_MUSTER entfaellt, leere t tragen nichts bei.
+     * Ein Low-Surrogat erbt den Stil seines High-Surrogats - so trennt auch
+     * eine Teilgrenze mitten im Paar (Eingabe) das Paar in der Ausgabe nicht.
+     */
+    function absatzNormieren(absatz) {
+        if (typeof absatz === 'string') {
+            return absatz === '' ? null : klartext(absatz);
+        }
+        if (!istObjektWert(absatz) || typeof absatz.text !== 'string' || absatz.text === '') {
+            return null;
+        }
+        var text = absatz.text;
+        var teile = absatz.teile;
+        var i;
+        if (!Array.isArray(teile)) {
+            return klartext(text);
+        }
+        var kette = '';
+        for (i = 0; i < teile.length; i++) {
+            if (!istObjektWert(teile[i]) || typeof teile[i].t !== 'string') {
+                return klartext(text);
+            }
+            kette += teile[i].t;
+            // frueh abbrechen, statt einen ueberlangen Text weiter aufzubauen
+            if (kette.length > text.length) {
+                return klartext(text);
+            }
+        }
+        if (kette !== text) {
+            return klartext(text);
+        }
+        var liste = [];
+        var nummer = {};
+        var stile = [];
+        for (i = 0; i < teile.length; i++) {
+            var teil = teile[i];
+            var f = teil.f ? 1 : 0;
+            var k = teil.k ? 1 : 0;
+            var farbe = (typeof teil.farbe === 'string' && FARB_MUSTER.test(teil.farbe)) ? teil.farbe : '';
+            var schluessel = f + '|' + k + '|' + farbe;
+            if (!nummer.hasOwnProperty(schluessel)) {
+                nummer[schluessel] = liste.length;
+                liste.push({ f: f, k: k, farbe: farbe });
+            }
+            for (var j = 0; j < teil.t.length; j++) {
+                stile.push(nummer[schluessel]);
+            }
+        }
+        for (i = 1; i < text.length; i++) {
+            if (trenntPaar(text, i)) {
+                stile[i] = stile[i - 1];
+            }
+        }
+        return { text: text, stile: stile, liste: liste };
+    }
+
+    /** \r\n und einzelnes \r -> \n wie in umbrechen(); die Stile laufen mit. */
+    function zeilenwechselNormieren(n) {
+        if (n.text.indexOf('\r') < 0) {
+            return n;
+        }
+        var text = '';
+        var stile = n.stile ? [] : null;
+        for (var i = 0; i < n.text.length; i++) {
+            var c = n.text.charAt(i);
+            if (c === '\r') {
+                if (n.text.charAt(i + 1) === '\n') {
+                    continue;
+                }
+                c = '\n';
+            }
+            text += c;
+            if (stile) {
+                stile.push(n.stile[i]);
+            }
+        }
+        return { text: text, stile: stile, liste: n.liste };
+    }
+
+    /**
+     * Ruft tu(von, bis, stil) fuer jeden Abschnitt gleichen Stils in
+     * n.text[a, e) auf; stil ist {f, k, farbe} oder null (Klartext).
+     */
+    function jeAbschnitt(n, a, e, tu) {
+        var i = a;
+        while (i < e) {
+            var nr = n.stile ? n.stile[i] : -1;
+            var j = i + 1;
+            while (j < e && (n.stile ? n.stile[j] : -1) === nr) {
+                j++;
+            }
+            tu(i, j, nr < 0 ? null : n.liste[nr]);
+            i = j;
+        }
+    }
+
+    /** Teil {t[, f][, k][, farbe]} - Schluessel wie in teileZusammenlegen(). */
+    function teilObjekt(t, stil) {
+        var teil = { t: t };
+        if (stil) {
+            if (stil.f) {
+                teil.f = 1;
+            }
+            if (stil.k) {
+                teil.k = 1;
+            }
+            if (stil.farbe) {
+                teil.farbe = stil.farbe;
+            }
+        }
+        return teil;
+    }
+
+    /** Messstil {f: 0|1, k: 0|1} eines Stils oder Teils (null = normal). */
+    function messStil(stil) {
+        return { f: stil && stil.f ? 1 : 0, k: stil && stil.k ? 1 : 0 };
+    }
+
+    /** Teile von n.text[a, e): je Abschnitt gleichen Stils ein Teil. */
+    function teileVon(n, a, e) {
+        var aus = [];
+        jeAbschnitt(n, a, e, function (von, bis, stil) {
+            aus.push(teilObjekt(n.text.slice(von, bis), stil));
+        });
+        return aus;
+    }
+
+    /**
+     * Breite von n.text[a, e): Summe der Abschnitte, jeder in seiner Schrift.
+     * cache (optional, {bis: [], w: []} je Umbruch und Schriftgroesse)
+     * merkt sich je Abschnittsanfang das zuletzt gemessene Ende und die
+     * Breite: Beim Umbruch waechst ein Kandidat Wort fuer Wort, die vorderen
+     * Abschnitte bleiben gleich und wuerden sonst bei jedem Kandidaten neu
+     * gemessen (im Browser je Abschnitt Schrift setzen plus measureText).
+     * Gleiche Werte, rund ein Viertel der Aufrufe.
+     */
+    function breiteVon(n, a, e, px, mass, cache) {
+        var b = 0;
+        jeAbschnitt(n, a, e, function (von, bis, stil) {
+            if (cache && cache.bis[von] === bis) {
+                b += cache.w[von];
+                return;
+            }
+            var w = mass(n.text.slice(von, bis), px, messStil(stil));
+            if (cache) {
+                cache.bis[von] = bis;
+                cache.w[von] = w;
+            }
+            b += w;
+        });
+        return b;
+    }
+
+    /** true, wenn ein Teil fett, kursiv oder farbig ist. */
+    function istFormatiert(teile) {
+        for (var i = 0; i < teile.length; i++) {
+            if (teile[i].f || teile[i].k || teile[i].farbe) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function gleicherStil(a, b) {
+        return (a.f || 0) === (b.f || 0) && (a.k || 0) === (b.k || 0) && (a.farbe || '') === (b.farbe || '');
+    }
+
+    /** Teil anhaengen; mit gleichem Stil wie der letzte wird er mit ihm verbunden. */
+    function teilAnhaengen(liste, teil) {
+        var letzter = liste.length ? liste[liste.length - 1] : null;
+        if (letzter && gleicherStil(letzter, teil)) {
+            letzter.t += teil.t;
+        } else {
+            liste.push(teilObjekt(teil.t, teil));
+        }
+    }
+
+    /** Teile im Bereich [a, e) einer Teil-Liste (Positionen in UTF-16-Einheiten). */
+    function teileAusschnitt(teile, a, e) {
+        var aus = [];
+        var pos = 0;
+        for (var i = 0; i < teile.length && pos < e; i++) {
+            var t = teile[i].t;
+            var von = Math.max(a, pos);
+            var bis = Math.min(e, pos + t.length);
+            if (bis > von) {
+                aus.push(teilObjekt(t.slice(von - pos, bis - pos), teile[i]));
+            }
+            pos += t.length;
+        }
+        return aus;
+    }
+
+    /**
+     * Absatz-Objekt fuer „rest" ab Position a des (rohen) Texts:
+     * {text[, teile]} - teile nur, wenn der Abschnitt Formatierung enthaelt.
+     */
+    function absatzAusgabe(n, a) {
+        var aus = { text: n.text.slice(a) };
+        var teile = teileVon(n, a, n.text.length);
+        if (istFormatiert(teile)) {
+            aus.teile = teile;
+        }
+        return aus;
     }
 
     /**
@@ -925,106 +1226,224 @@
         return aus;
     }
 
-    /** Eine harte Zeile umbrechen; haengt die Zeilen an „aus" an. */
-    function umbrecheZeile(zeile, grenze, px, mass, aus) {
-        if (mass(zeile, px) <= grenze) {
-            aus.push(ohneEndLeer(zeile));
+    /** Ende des Bereichs s[a, e) ohne Leerraum am Ende (Bereich statt Teilzeichenkette). */
+    function endeOhneLeer(s, a, e) {
+        while (e > a && istLeer(s.charAt(e - 1))) {
+            e--;
+        }
+        return e;
+    }
+
+    /**
+     * Eine harte Zeile s[za, ze) umbrechen; haengt jede Zeile als
+     * Bereichspaar (Anfang, Ende) an „aus" an. messe(a, e) liefert die
+     * Breite von s[a, e).
+     *
+     * Bis AP-2.2 arbeitete diese Regel auf Teilzeichenketten
+     * (umbrecheZeile); sie ist unveraendert: Bruch an einzelnen
+     * Leerzeichen (wie zeile.split(' ')), Leerraum an Bruchstellen und am
+     * Zeilenende entfaellt, ein Wort breiter als die Zeile wird zeichenweise
+     * geteilt und sein letzter Teil bleibt offen. Jeder Kandidat ist ein
+     * zusammenhaengender Abschnitt der Zeile (akt + ' ' + wort folgt im
+     * Text direkt aufeinander), deshalb genuegen Bereiche - und ein Absatz
+     * mit Teilen kann je Abschnitt in seiner Schrift gemessen werden. Die
+     * Messfunktion wird mit denselben Texten in derselben Reihenfolge
+     * gerufen wie vorher.
+     *
+     * Einzige Aenderung (Review AP-1.rev, Befund B1): „zeichenweise" heisst
+     * je Codepunkt, ein Surrogatpaar (Emoji) wird nie getrennt.
+     */
+    function umbrecheBereich(s, za, ze, grenze, messe, aus) {
+        if (messe(za, ze) <= grenze) {
+            aus.push(za, endeOhneLeer(s, za, ze));
             return;
         }
-        var woerter = zeile.split(' ');
-        var akt = '';
-        for (var w = 0; w < woerter.length; w++) {
-            var wort = woerter[w];
-            var kandidat = akt === '' ? wort : akt + ' ' + wort;
-            if (mass(kandidat, px) <= grenze) {
-                akt = kandidat;
+        // Woerter wie zeile.split(' '): Bereiche zwischen einzelnen Leerzeichen.
+        var woerter = [];
+        var wa = za;
+        for (var p = za; p <= ze; p++) {
+            if (p === ze || s.charAt(p) === ' ') {
+                woerter.push(wa, p);
+                wa = p + 1;
+            }
+        }
+        // akt = s[aktA, aktE); leer, wenn aktA === aktE. Ist akt nicht leer,
+        // steht direkt dahinter das Leerzeichen vor dem naechsten Wort.
+        var aktA = za;
+        var aktE = za;
+        for (var w = 0; w < woerter.length; w += 2) {
+            var a = woerter[w];
+            var e = woerter[w + 1];
+            var ka = aktA === aktE ? a : aktA;
+            if (messe(ka, e) <= grenze) {
+                aktA = ka;
+                aktE = e;
                 continue;
             }
             // Umbruchstelle: Leerzeichen dort entfallen.
-            if (ohneEndLeer(akt) !== '') {
-                aus.push(ohneEndLeer(akt));
+            var ende = endeOhneLeer(s, aktA, aktE);
+            if (ende > aktA) {
+                aus.push(aktA, ende);
             }
-            akt = '';
-            if (wort === '') {
+            aktA = e;
+            aktE = e;
+            if (a === e) {
                 continue;
             }
-            if (mass(wort, px) <= grenze) {
-                akt = wort;
+            if (messe(a, e) <= grenze) {
+                aktA = a;
                 continue;
             }
-            // Ein Wort, breiter als die Zeile: zeichenweise teilen. Der letzte
+            // Ein Wort, breiter als die Zeile: je Codepunkt teilen. Der letzte
             // Teil bleibt offen, das naechste Wort darf anschliessen.
-            var stueck = '';
-            for (var c = 0; c < wort.length; c++) {
-                var zeichen = wort.charAt(c);
-                if (stueck !== '' && mass(stueck + zeichen, px) > grenze) {
-                    aus.push(stueck);
-                    stueck = '';
+            var sa = a;
+            for (var c = a; c < e; c += zeichenLaenge(s, c)) {
+                if (c > sa && messe(sa, c + zeichenLaenge(s, c)) > grenze) {
+                    aus.push(sa, c);
+                    sa = c;
                 }
-                stueck += zeichen;
             }
-            akt = stueck;
+            aktA = sa;
         }
-        if (ohneEndLeer(akt) !== '') {
-            aus.push(ohneEndLeer(akt));
+        var rest = endeOhneLeer(s, aktA, aktE);
+        if (rest > aktA) {
+            aus.push(aktA, rest);
         }
+    }
+
+    /** Text (Zeilenwechsel schon \n) an \n und auf grenze umbrechen -> Bereichspaare. */
+    function bereicheUmbrechen(s, grenze, messe) {
+        var aus = [];
+        var a = 0;
+        for (;;) {
+            var e = s.indexOf('\n', a);
+            if (e < 0) {
+                e = s.length;
+            }
+            umbrecheBereich(s, a, e, grenze, messe, aus);
+            if (e >= s.length) {
+                return aus;
+            }
+            a = e + 1;
+        }
+    }
+
+    function grenzeAus(maxBreite) {
+        return (typeof maxBreite === 'number' && maxBreite > 0) ? maxBreite : Infinity;
     }
 
     /**
      * Text auf eine Breite umbrechen -> Zeilen. Vorhandene \n bleiben
      * Zeilenwechsel; gebrochen wird an Leerzeichen so, dass
-     * mass(zeile, px) <= maxBreite; ein zu breites Wort wird zeichenweise
-     * geteilt. mass(text, px) liefert die Breite in Pixeln.
+     * mass(zeile, px) <= maxBreite; ein zu breites Wort wird je Codepunkt
+     * geteilt. mass(text, px) liefert die Breite in Pixeln (hier immer mit
+     * zwei Werten gerufen, wie vor AP-2.2).
      */
     function umbrechen(text, maxBreite, px, mass) {
         if (typeof text !== 'string' || text === '') {
             return [];
         }
         var m = typeof mass === 'function' ? mass : schaetzMass;
-        var grenze = (typeof maxBreite === 'number' && maxBreite > 0) ? maxBreite : Infinity;
-        var harte = text.replace(/\r\n?/g, '\n').split('\n');
+        var s = text.replace(/\r\n?/g, '\n');
+        var bereiche = bereicheUmbrechen(s, grenzeAus(maxBreite), function (a, e) {
+            return m(s.slice(a, e), px);
+        });
         var aus = [];
-        for (var i = 0; i < harte.length; i++) {
-            umbrecheZeile(harte[i], grenze, px, m, aus);
+        for (var i = 0; i < bereiche.length; i += 2) {
+            aus.push(s.slice(bereiche[i], bereiche[i + 1]));
         }
         return aus;
     }
 
-    /** Zeilen eines Absatzes in Teile von hoechstens max Zeichen (mit \n). */
+    /** Normierten Absatz (Zeilenwechsel schon \n) umbrechen -> [{text, teile}]. */
+    function zeilenMitTeilen(n, maxBreite, px, mass) {
+        var m = typeof mass === 'function' ? mass : schaetzMass;
+        var cache = { bis: [], w: [] };
+        var bereiche = bereicheUmbrechen(n.text, grenzeAus(maxBreite), function (a, e) {
+            return breiteVon(n, a, e, px, m, cache);
+        });
+        var aus = [];
+        for (var i = 0; i < bereiche.length; i += 2) {
+            aus.push({
+                text: n.text.slice(bereiche[i], bereiche[i + 1]),
+                teile: teileVon(n, bereiche[i], bereiche[i + 1])
+            });
+        }
+        return aus;
+    }
+
+    /**
+     * Absatz (Zeichenkette oder {text, teile?}) auf eine Breite umbrechen ->
+     * [{text: zeile, teile}]. Wortgrenzen und Sonderfaelle wie umbrechen();
+     * gemessen wird je Abschnitt gleichen Stils mit mass(t, px, {f, k}).
+     * teile je Zeile: Verkettung === zeile, benachbarte gleiche Teile
+     * verbunden, Klartext als [{t: zeile}], leere Zeile -> []. Unbrauchbare
+     * Eingabe -> [].
+     */
+    function umbrechenTeile(absatz, maxBreite, px, mass) {
+        var n = absatzNormieren(absatz);
+        if (!n) {
+            return [];
+        }
+        return zeilenMitTeilen(zeilenwechselNormieren(n), maxBreite, px, mass);
+    }
+
+    /**
+     * Zeilen eines Absatzes (Zeichenketten) in Gruppen von hoechstens max
+     * Zeichen (mit \n) -> [[{z: Zeilennummer, a, e}]] (Bereich der Zeile).
+     * Eine einzelne Zeile ueber max wird in Stuecke von max Zeichen geteilt -
+     * eine Grenze mitten in einem Surrogatpaar rueckt eine Einheit vor
+     * (Review AP-1.rev, Befund B1); nur bei max = 1 rueckt sie dahinter, das
+     * Stueck hat dann 2 Einheiten.
+     */
     function teileNachZeichen(zeilen, max) {
-        var teile = [];
+        var gruppen = [];
         var akt = [];
         var laenge = 0;
         for (var i = 0; i < zeilen.length; i++) {
             var z = zeilen[i];
             if (z.length > max) {
                 if (akt.length) {
-                    teile.push(akt);
+                    gruppen.push(akt);
                     akt = [];
                     laenge = 0;
                 }
-                for (var s = 0; s < z.length; s += max) {
-                    teile.push([z.slice(s, s + max)]);
+                var s = 0;
+                while (s < z.length) {
+                    var e = Math.min(s + max, z.length);
+                    if (trenntPaar(z, e)) {
+                        e = e - 1 > s ? e - 1 : e + 1;
+                    }
+                    gruppen.push([{ z: i, a: s, e: e }]);
+                    s = e;
                 }
                 continue;
             }
             var neu = akt.length ? laenge + 1 + z.length : z.length;
             if (neu > max) {
-                teile.push(akt);
-                akt = [z];
+                gruppen.push(akt);
+                akt = [{ z: i, a: 0, e: z.length }];
                 laenge = z.length;
             } else {
-                akt.push(z);
+                akt.push({ z: i, a: 0, e: z.length });
                 laenge = neu;
             }
         }
         if (akt.length) {
-            teile.push(akt);
+            gruppen.push(akt);
         }
-        return teile;
+        return gruppen;
     }
 
-    /** Zeilenlisten -> Bloecke {text, x, y, b, h}, fortlaufend ab flaeche.y. */
+    /**
+     * Zeilenlisten -> Bloecke {text, [teile,] x, y, b, h}, fortlaufend ab
+     * flaeche.y. Eine Zeilenliste besteht aus Zeichenketten (Absatz als
+     * Zeichenkette, gemessen mit mass(zeile, px) wie vor AP-2.2) oder aus
+     * Zeilen {text, teile} (Absatz-Objekt): Dann ist die Breite einer Zeile
+     * die Summe ihrer Teile, jeder in seiner Schrift, und der Block traegt
+     * teile, wenn er Formatierung enthaelt - Verkettung === text, das \n
+     * zwischen zwei Zeilen gehoert zum vorigen Teil.
+     */
     function zuBloecken(zeilenListe, f, px, mass, maxZeichen) {
         var zh = ZEILENHOEHE * px;
         var abstand = Math.round(ABSATZ_ABSTAND * px);
@@ -1034,26 +1453,78 @@
             if (i > 0) {
                 y += abstand;
             }
-            // Ueberlange Absaetze: Teile direkt untereinander, ohne Abstand.
-            var teile = teileNachZeichen(zeilenListe[i], maxZeichen);
-            for (var t = 0; t < teile.length; t++) {
-                var zeilen = teile[t];
-                var b = 0;
-                for (var z = 0; z < zeilen.length; z++) {
-                    b = Math.max(b, mass(zeilen[z], px));
+            var zeilen = zeilenListe[i];
+            var mitTeilen = zeilen.length > 0 && typeof zeilen[0] !== 'string';
+            var texte = zeilen;
+            if (mitTeilen) {
+                texte = [];
+                for (var zt = 0; zt < zeilen.length; zt++) {
+                    texte.push(zeilen[zt].text);
                 }
-                var h = zeilen.length * zh;
-                aus.push({ text: zeilen.join('\n'), x: f.x, y: y, b: b, h: h });
+            }
+            // Ueberlange Absaetze: Teile direkt untereinander, ohne Abstand.
+            var gruppen = teileNachZeichen(texte, maxZeichen);
+            for (var g = 0; g < gruppen.length; g++) {
+                var gruppe = gruppen[g];
+                var stuecke = [];
+                var blockTeile = [];
+                var b = 0;
+                for (var z = 0; z < gruppe.length; z++) {
+                    var q = gruppe[z];
+                    var stueck = texte[q.z].slice(q.a, q.e);
+                    stuecke.push(stueck);
+                    if (!mitTeilen) {
+                        b = Math.max(b, mass(stueck, px));
+                        continue;
+                    }
+                    var zeilenTeile = teileAusschnitt(zeilen[q.z].teile, q.a, q.e);
+                    var breite = 0;
+                    if (z > 0) {
+                        if (blockTeile.length) {
+                            blockTeile[blockTeile.length - 1].t += '\n';
+                        } else {
+                            blockTeile.push({ t: '\n' });
+                        }
+                    }
+                    for (var p = 0; p < zeilenTeile.length; p++) {
+                        breite += mass(zeilenTeile[p].t, px, messStil(zeilenTeile[p]));
+                        teilAnhaengen(blockTeile, zeilenTeile[p]);
+                    }
+                    b = Math.max(b, breite);
+                }
+                var h = gruppe.length * zh;
+                var block = { text: stuecke.join('\n') };
+                if (mitTeilen && istFormatiert(blockTeile)) {
+                    block.teile = blockTeile;
+                }
+                block.x = f.x;
+                block.y = y;
+                block.b = b;
+                block.h = h;
+                aus.push(block);
                 y += h;
             }
         }
         return aus;
     }
 
+    /** Zeilen eines Listeneintrags von verteile(): Zeichenkette oder normiertes Objekt. */
+    function zeilenVon(eintrag, breite, px, mass) {
+        if (typeof eintrag === 'string') {
+            return umbrechen(eintrag, breite, px, mass);
+        }
+        return zeilenMitTeilen(eintrag.umbruch, breite, px, mass);
+    }
+
+    /** Eintrag von verteile() unveraendert fuer „rest": Zeichenkette oder {text[, teile]}. */
+    function restEintrag(eintrag) {
+        return typeof eintrag === 'string' ? eintrag : absatzAusgabe(eintrag.roh, 0);
+    }
+
     /**
      * Absaetze in einer Flaeche {x, y, b, h} anordnen.
      * optionen: {startPx: 24, minPx: 18, maxZeichen: 5000}.
-     * Rueckgabe {px, bloecke: [{text, x, y, b, h}], rest: [string]}.
+     * Rueckgabe {px, bloecke: [{text, teile?, x, y, b, h}], rest: [Absatz]}.
      * Die Schrift sinkt in Schritten von 1 px von startPx bis minPx, bis
      * alles passt. Passt es auch mit minPx nicht, wird von oben aufgefuellt;
      * ein teilweise passender Absatz wird an einer Zeilengrenze geteilt. Der
@@ -1061,6 +1532,14 @@
      * Quelltext dieses Absatzes (ohne die weichen Umbrueche dieser Flaeche,
      * harte \n bleiben; AP-1.fix1), danach folgen die uebrigen Absaetze
      * unveraendert.
+     *
+     * Absaetze duerfen seit AP-2.2 auch Objekte {text, teile?} sein (siehe
+     * Kopfkommentar). Ein Objekt mit leerem oder fehlendem text wird
+     * ignoriert wie eine leere Zeichenkette. Bloecke tragen teile nur mit
+     * Formatierung. „rest" steht in der Form der Eingabe: Zeichenketten
+     * bleiben Zeichenketten, Objekte kommen als neues Objekt {text[, teile]}
+     * zurueck (beim geteilten Absatz ab der Teilungsstelle, nach derselben
+     * Regel wie bei Zeichenketten; teile nur, wenn der Rest formatiert ist).
      */
     function verteile(absaetze, flaeche, mass, optionen) {
         var o = optionen || {};
@@ -1068,11 +1547,22 @@
         var minPx = Math.min(startPx, Math.round(zahl(o.minPx, VORGABE_MIN_PX)));
         var maxZeichen = Math.max(1, Math.floor(zahl(o.maxZeichen, VORGABE_MAX_ZEICHEN)));
         var m = typeof mass === 'function' ? mass : schaetzMass;
+        // Eintraege: Zeichenkette (Weg wie vor AP-2.2) oder {roh, umbruch} -
+        // roh = normierter Absatz mit Originaltext (fuer den Rest), umbruch =
+        // derselbe mit Zeilenwechseln als \n (fuer den Umbruch).
         var liste = [];
         if (Array.isArray(absaetze)) {
             for (var a = 0; a < absaetze.length; a++) {
-                if (typeof absaetze[a] === 'string' && absaetze[a] !== '') {
-                    liste.push(absaetze[a]);
+                var eintrag = absaetze[a];
+                if (typeof eintrag === 'string') {
+                    if (eintrag !== '') {
+                        liste.push(eintrag);
+                    }
+                    continue;
+                }
+                var n = absatzNormieren(eintrag);
+                if (n) {
+                    liste.push({ roh: n, umbruch: zeilenwechselNormieren(n) });
                 }
             }
         }
@@ -1089,7 +1579,7 @@
             gesetzt = [];
             var hoehe = 0;
             for (i = 0; i < liste.length; i++) {
-                gesetzt.push(umbrechen(liste[i], f.b, px, m));
+                gesetzt.push(zeilenVon(liste[i], f.b, px, m));
                 hoehe += (i > 0 ? abstand : 0) + gesetzt[i].length * zh;
             }
             if (hoehe <= f.h + EPS) {
@@ -1105,7 +1595,7 @@
         var rest = [];
         var belegt = 0;
         for (i = 0; i < liste.length; i++) {
-            var zeilen = umbrechen(liste[i], f.b, px, m);
+            var zeilen = zeilenVon(liste[i], f.b, px, m);
             var oben = platziert.length ? belegt + abstand : 0;
             var passen = Math.floor((f.h - oben) / zh + EPS);
             if (passen >= zeilen.length) {
@@ -1120,12 +1610,17 @@
                 // Treppenumbruch, und harte \n waeren nicht mehr erkennbar
                 // (Review AP-1.rev, M1; AP-1.fix1).
                 platziert.push(zeilen.slice(0, passen));
-                rest.push(restAb(liste[i], zeichenOhneLeer(zeilen.slice(0, passen))));
+                var gesetzteZeichen = zeichenOhneLeer(zeilen.slice(0, passen));
+                if (typeof liste[i] === 'string') {
+                    rest.push(restAb(liste[i], gesetzteZeichen));
+                } else {
+                    rest.push(absatzAusgabe(liste[i].roh, restIndex(liste[i].roh.text, gesetzteZeichen)));
+                }
             } else {
-                rest.push(liste[i]);
+                rest.push(restEintrag(liste[i]));
             }
             for (var k = i + 1; k < liste.length; k++) {
-                rest.push(liste[k]);
+                rest.push(restEintrag(liste[k]));
             }
             break;
         }
@@ -1204,6 +1699,48 @@
         return kontrast('#ffffff', t) >= kontrast('#000000', t) ? '#ffffff' : '#000000';
     }
 
+    function hexZweistellig(wert) {
+        return (wert < 16 ? '0' : '') + wert.toString(16);
+    }
+
+    /**
+     * Teilfarbe lesbar machen (PLAN-Blocktext-Formatierung.md, F7): Hat
+     * farbe zur Tafel mindestens 3:1 Kontrast, bleibt sie (als '#rrggbb'
+     * klein). Sonst wird sie je Kanal mit Weiss (dunkle Tafel) bzw. Schwarz
+     * (helle Tafel) gemischt - farbe + (ziel - farbe) * s, gerundet, mit
+     * s = 0,05, 0,10, ..., 1 -, bis der Kontrast >= 3 ist. „Dunkel" heisst:
+     * Weiss hat zur Tafel mindestens so viel Kontrast wie Schwarz. So bleibt
+     * Dunkelrot auf gruener Tafel rot (aufgehellt) statt wie bei
+     * lesbareFarbe() weiss zu werden. Idempotent (ein Ergebnis hat schon
+     * Kontrast >= 3). Ungueltige farbe (nicht '#rgb'/'#rrggbb') -> null,
+     * ungueltige tafel gilt als Weiss. Bei s = 1 ist das Ziel erreicht:
+     * Weiss oder Schwarz hat zu jeder Farbe mindestens Wurzel(21) > 4,5.
+     */
+    function lesbareLauffarbe(farbe, tafel) {
+        var f = hexFarbe(farbe);
+        if (!f) {
+            return null;
+        }
+        var t = hexFarbe(tafel) || '#ffffff';
+        if (kontrast(f, t) >= 3) {
+            return f;
+        }
+        var ziel = kontrast('#ffffff', t) >= kontrast('#000000', t) ? 255 : 0;
+        var kanaele = [parseInt(f.substr(1, 2), 16), parseInt(f.substr(3, 2), 16), parseInt(f.substr(5, 2), 16)];
+        for (var stufe = 1; stufe <= 20; stufe++) {
+            // stufe / 20 statt aufaddierter 0,05: keine Rundungsdrift
+            var s = stufe / 20;
+            var neu = '#';
+            for (var k = 0; k < 3; k++) {
+                neu += hexZweistellig(Math.round(kanaele[k] + (ziel - kanaele[k]) * s));
+            }
+            if (kontrast(neu, t) >= 3) {
+                return neu;
+            }
+        }
+        return ziel === 255 ? '#ffffff' : '#000000';
+    }
+
     // =====================================================================
     // Oeffentlich
     // =====================================================================
@@ -1233,8 +1770,10 @@
         latexZuText: latexZuText,
         absaetzeAusText: absaetzeAusText,
         umbrechen: umbrechen,
+        umbrechenTeile: umbrechenTeile,
         verteile: verteile,
         flaecheUnter: flaecheUnter,
-        lesbareFarbe: lesbareFarbe
+        lesbareFarbe: lesbareFarbe,
+        lesbareLauffarbe: lesbareLauffarbe
     };
 })(window);
