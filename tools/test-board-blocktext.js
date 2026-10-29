@@ -35,6 +35,14 @@
  *   feldText()/feldSetzen() statt textarea.value (geplante Umstellung F8).
  *   Prüfnamen beginnen mit "Bearbeitungsfeld".
  *
+ * Darkmode lesen (PLAN-Blocktext-Formatierung.md, AP-2.fix1): Im Darkmode
+ *   (data-theme an <html>) liest _blocktextAbsaetze() den Blockbereich mit
+ *   den Stilen des Hellmodus; danach ist data-theme wieder gesetzt, die
+ *   Farben sind sofort wieder die dunklen, kein CSS-Übergang läuft, die
+ *   Tafel-Inversion bleibt; Hellmodus, Ausnahme beim Lesen und
+ *   _textFeldLesen (schaltet nicht um). Prüfnamen beginnen mit
+ *   "Darkmode lesen".
+ *
  * Die Fixture-Prüfungen holen die Dateien per fetch - die Prüfseite muss
  * über den Webserver laufen. Wird von tools/test-board-zeiger.html als
  * letzte Zusatzdatei vor test-board-zeiger.js geladen und hängt sich an die
@@ -1919,6 +1927,234 @@
     }
 
     // ------------------------------------------------------------------
+    // Darkmode lesen (PLAN-Blocktext-Formatierung.md, AP-2.fix1): Der
+    // Blockbereich wird mit den Stilen des Hellmodus gelesen - data-theme
+    // für die Dauer des synchronen Lesens entfernt, danach wieder gesetzt,
+    // ohne CSS-Übergang. Das Bearbeitungsfeld (eigene Inline-Farben) wird
+    // nicht umgeschaltet.
+    // ------------------------------------------------------------------
+    // Prüfstil wie ein Theme: Glossarfarbe und Grundfarbe je Modus, beide
+    // mit Übergang auf color (das Theme hat .glossar-term {transition: all})
+    var DM_STIL = '.pf-dm{color:#71230a;transition:color 2s}' +
+        '[data-theme="dark"] .pf-dm{color:#f0b090}' +
+        '.pf-dm-grund{color:#333333;transition:color 2s}' +
+        '[data-theme="dark"] .pf-dm-grund{color:#e0e0e0}';
+    // "grau" hat fest die Grundfarbe des Hellmodus: im Hellmodus keine
+    // eigene Farbe, mit der Darkmode-Grundfarbe fälschlich '#333333'
+    var DM_HTML = '<div class="cbd-container-content pf-dm-grund"><p>Ein <span class="pf-dm" id="pf-dm-span">Begriff</span>' +
+        ' und <span style="color:#333333">grau</span>.</p></div>';
+    var DM_SOLL = [{ text: 'Ein Begriff und grau.', teile: [{ t: 'Ein ' }, { t: 'Begriff', farbe: '#71230a' }, { t: ' und grau.' }] }];
+    var DM_DUNKEL = 'rgb(240, 176, 144)';
+
+    // Prüfstil zuerst, dann Modus, dann Tafel: neu eingefügte Elemente
+    // haben noch keinen Stil, starten also ohne Übergang
+    function dmVorbereiten(modus) {
+        var st = document.createElement('style');
+        st.id = 'pf-dm-stil';
+        st.textContent = DM_STIL;
+        document.head.appendChild(st);
+        if (modus) document.documentElement.setAttribute('data-theme', modus);
+        else document.documentElement.removeAttribute('data-theme');
+        oeffnenMit(DM_HTML);
+    }
+
+    // fn im Prüfaufbau ausführen; danach Prüfstil, Hilfselemente und
+    // data-theme wie vorher (auch bei Ausnahme)
+    function imDmAufbau(fn) {
+        var html = document.documentElement;
+        var vorher = html.getAttribute('data-theme');
+        try {
+            return fn();
+        } finally {
+            ['pf-dm-stil', 'pf-dm-aussen'].forEach(function(id) {
+                var e = document.getElementById(id);
+                if (e) e.parentNode.removeChild(e);
+            });
+            if (vorher === null) html.removeAttribute('data-theme');
+            else html.setAttribute('data-theme', vorher);
+        }
+    }
+
+    // Beobachter auf data-theme an <html>: zählt die Änderungen (synchron
+    // über takeRecords, ohne auf den Mikrotask zu warten)
+    function themaZaehler() {
+        var mo = new MutationObserver(function() {});
+        mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'], attributeOldValue: true });
+        return {
+            nehmen: function() { return mo.takeRecords(); },
+            aus: function() { mo.disconnect(); }
+        };
+    }
+
+    function dmGelesen(liste) {
+        return JSON.stringify(textUndTeile(liste));
+    }
+
+    // Darkmode: Glossarfarbe und Grundfarbe wie im Hellmodus
+    function dmLiestHellmodus() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var c = getComputedStyle(bereich().querySelector('#pf-dm-span')).color;
+            if (c !== DM_DUNKEL) f.push('Vorbedingung: Darkmode-Farbe ' + c);
+            var v = teileVergleich(B._blocktextAbsaetze(), DM_SOLL);
+            if (v !== true) f.push(v.detail);
+            return ergebnis(f);
+        });
+    }
+
+    // Danach: data-theme wieder dark, berechnete Farbe sofort wieder die
+    // dunkle, kein Übergang - im Blockbereich UND auf der Seite darunter
+    // (das Theme schaltet die ganze Seite), kein <style> bleibt zurück
+    function dmDanachDunkelOhneUebergang() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var aussen = document.createElement('span');
+            aussen.id = 'pf-dm-aussen';
+            aussen.className = 'pf-dm';
+            aussen.textContent = 'Seite';
+            document.body.appendChild(aussen);
+            var span = bereich().querySelector('#pf-dm-span');
+            var paare = [['Blockbereich', span], ['Seite', aussen]];
+            var f = [];
+            paare.forEach(function(p) {
+                var c = getComputedStyle(p[1]).color;
+                if (c !== DM_DUNKEL) f.push('Vorbedingung ' + p[0] + ' ' + c);
+            });
+            var stile = document.querySelectorAll('style').length;
+            var gelesen = dmGelesen(B._blocktextAbsaetze());
+            if (gelesen !== JSON.stringify(DM_SOLL)) f.push('nicht im Hellmodus gelesen: ' + gelesen);
+            var thema = document.documentElement.getAttribute('data-theme');
+            if (thema !== 'dark') f.push('data-theme danach ' + JSON.stringify(thema));
+            paare.forEach(function(p) {
+                // getAnimations() vor getComputedStyle: beide berechnen den
+                // Stil, ein Übergang entstünde beim ersten der beiden Aufrufe
+                if (typeof p[1].getAnimations === 'function') {
+                    var n = p[1].getAnimations().length;
+                    if (n) f.push(p[0] + ': ' + n + ' laufende(r) Übergang/Animation');
+                }
+                var c = getComputedStyle(p[1]).color;
+                if (c !== DM_DUNKEL) f.push(p[0] + ' danach ' + c);
+            });
+            if (document.querySelectorAll('style').length !== stile) f.push('<style>-Anzahl ' + stile + ' -> ' + document.querySelectorAll('style').length);
+            return ergebnis(f);
+        });
+    }
+
+    // Tafel-Inversion (weiße Tafel im Darkmode) bleibt gesetzt und wirksam
+    function dmInversionBleibt() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var cont = B.overlay.querySelector('.cbd-board-canvas-container');
+            if (!cont || !cont.classList.contains('cbd-board-inverted')) return { ok: false, detail: 'Vorbedingung: Tafel nicht invertiert' };
+            var filterVorher = getComputedStyle(cont).filter;
+            var gelesen = dmGelesen(B._blocktextAbsaetze());
+            if (gelesen !== JSON.stringify(DM_SOLL)) f.push('nicht im Hellmodus gelesen: ' + gelesen);
+            if (!cont.classList.contains('cbd-board-inverted')) f.push('cbd-board-inverted fehlt danach');
+            var filterNachher = getComputedStyle(cont).filter;
+            if (filterNachher !== filterVorher || filterNachher.indexOf('invert') < 0) f.push('Filter ' + filterVorher + ' -> ' + filterNachher);
+            return ergebnis(f);
+        });
+    }
+
+    // Gegenprobe Hellmodus: gleiches Ergebnis, data-theme wird nicht
+    // angefasst, kein zusätzliches <style>
+    function dmHellmodusUnberuehrt() {
+        return imDmAufbau(function() {
+            dmVorbereiten(null);
+            var z = themaZaehler();
+            var stile = document.querySelectorAll('style').length;
+            var f = [];
+            try {
+                var v = teileVergleich(B._blocktextAbsaetze(), DM_SOLL);
+                if (v !== true) f.push(v.detail);
+                var r = z.nehmen();
+                if (r.length) f.push(r.length + ' Änderung(en) an data-theme');
+            } finally {
+                z.aus();
+            }
+            if (document.documentElement.hasAttribute('data-theme')) f.push('data-theme gesetzt');
+            if (document.querySelectorAll('style').length !== stile) f.push('<style>-Anzahl geändert');
+            return ergebnis(f);
+        });
+    }
+
+    // Ausnahme beim Lesen: data-theme kommt trotzdem zurück, kein <style>
+    // bleibt; gelesen wurde ohne data-theme
+    function dmAusnahme() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var original = B._blocktextLesen;
+            var waehrend = 'nicht aufgerufen';
+            var stile = document.querySelectorAll('style').length;
+            var geworfen = null;
+            B._blocktextLesen = function() {
+                waehrend = document.documentElement.getAttribute('data-theme');
+                throw new Error('pf-dm-ausnahme');
+            };
+            try {
+                B._blocktextAbsaetze();
+            } catch (e) {
+                geworfen = e;
+            } finally {
+                B._blocktextLesen = original;
+            }
+            if (!geworfen || geworfen.message !== 'pf-dm-ausnahme') f.push('Ausnahme nicht weitergereicht: ' + (geworfen && geworfen.message));
+            if (waehrend !== null) f.push('beim Lesen data-theme ' + JSON.stringify(waehrend));
+            var thema = document.documentElement.getAttribute('data-theme');
+            if (thema !== 'dark') f.push('data-theme danach ' + JSON.stringify(thema));
+            if (document.querySelectorAll('style').length !== stile) f.push('<style> bleibt zurück');
+            return ergebnis(f);
+        });
+    }
+
+    // Nur der Blockbereich wird umgeschaltet: _blocktextAbsaetze() ändert
+    // data-theme genau zweimal (entfernt, wieder gesetzt), _textFeldLesen()
+    // gar nicht
+    function dmNurBlockbereich() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var t = vorschauOeffnen();
+            if (!t) return { ok: false, detail: 'kein Feld' };
+            var z = themaZaehler();
+            try {
+                B._blocktextAbsaetze();
+                var r = z.nehmen();
+                var ablauf = r.map(function(m) { return JSON.stringify(m.oldValue) + '->' + JSON.stringify(m.target.getAttribute('data-theme')); });
+                if (r.length !== 2 || r[0].oldValue !== 'dark' || r[1].oldValue !== null) f.push('_blocktextAbsaetze: ' + r.length + ' Änderung(en) ' + ablauf.join(', '));
+                B._textFeldLesen(t);
+                var r2 = z.nehmen();
+                if (r2.length) f.push('_textFeldLesen: ' + r2.length + ' Änderung(en)');
+            } finally {
+                z.aus();
+            }
+            return ergebnis(f);
+        });
+    }
+
+    // Vorschau im Darkmode (weiße Tafel): Feld zeigt die Hellmodus-Farbe
+    // (#71230a ist auf Weiß lesbar, bleibt also), "grau" ohne eigene Farbe
+    function dmVorschauFarben() {
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            B.setColor('#000000');
+            var t = vorschauOeffnen();
+            if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+            var f = [];
+            var soll = M.lesbareLauffarbe('#71230a', B.boardColor);
+            var b = stilVon(t, 'Begriff');
+            if (!b || b.color !== rgbVon(soll)) f.push('Begriff ' + (b && b.color) + ' statt ' + rgbVon(soll));
+            var g = stilVon(t, 'grau');
+            if (!g || g.color !== getComputedStyle(t).color) f.push('grau ' + (g && g.color) + ' statt Grundschrift ' + getComputedStyle(t).color);
+            if (lesenAls(t) !== JSON.stringify(DM_SOLL)) f.push('Feld gelesen ' + lesenAls(t));
+            return ergebnis(f);
+        });
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     window.__zusatzTests = function(c) {
@@ -2043,6 +2279,15 @@
         p('Bearbeitungsfeld: Enter - Vorschau neuer Absatz, Modus "bearbeiten" Zeilenwechsel in einem div', bfEnterUndModus);
         p('Bearbeitungsfeld: Leiste ein Tab-Halt, Pfeiltasten wandern', bfLeisteTastatur);
         p('Bearbeitungsfeld: Text aus dem Block bleibt Text (kein Markup)', bfNurText);
+
+        // Darkmode lesen (PLAN-Blocktext-Formatierung.md, AP-2.fix1)
+        p('Darkmode lesen: _blocktextAbsaetze() liefert die Farben des Hellmodus (Glossar, Grundfarbe)', dmLiestHellmodus);
+        p('Darkmode lesen: danach data-theme dark, Farbe sofort dunkel, kein Übergang (Block und Seite), kein <style>', dmDanachDunkelOhneUebergang);
+        p('Darkmode lesen: Tafel-Inversion (weiße Tafel) bleibt gesetzt und wirksam', dmInversionBleibt);
+        p('Darkmode lesen: Hellmodus unverändert - gleiches Ergebnis, data-theme nicht angefasst', dmHellmodusUnberuehrt);
+        p('Darkmode lesen: Ausnahme beim Lesen - data-theme kommt zurück, kein <style> bleibt', dmAusnahme);
+        p('Darkmode lesen: nur der Blockbereich schaltet um (zwei Änderungen), _textFeldLesen nicht', dmNurBlockbereich);
+        p('Darkmode lesen: Vorschau zeigt im Darkmode die Hellmodus-Farbe', dmVorschauFarben);
     };
 
     window.__zusatzTestsAsync = function(c) {
