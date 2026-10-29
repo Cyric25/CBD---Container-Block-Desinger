@@ -39,6 +39,12 @@
     Prüfungen in test-board-drehen.js, nach test-board-standard.js geladen.
     3.1.144: Textgröße der Auswahl (A−/A+) - Prüfungen in
     test-board-textgroesse.js, nach test-board-drehen.js geladen.
+    Blocktext auf die Tafel (PLAN-Blocktext-auf-Tafel.md, Phase 2): Modul
+    ../assets/js/board-blocktext.js direkt nach board-elemente.js (wie auf
+    der Website vor board-mode.js); Prüfungen in test-board-blocktext.js als
+    letzte Zusatzdatei vor test-board-zeiger.js. Die Fixture-Prüfungen holen
+    tools/fixtures/blocktext/*.html per fetch - die Seite muss dafür über den
+    Webserver laufen, nicht als file://.
 -->
 <link rel="stylesheet" href="../assets/css/board-mode.css">
 <style>
@@ -64,6 +70,7 @@
 
 <script src="test-board-zeiger-zaehler.js"></script>
 <script src="../assets/js/board-elemente.js"></script>
+<script src="../assets/js/board-blocktext.js"></script>
 <script src="../assets/js/board-mode.js"></script>
 <script src="test-board-modell.js"></script>
 <script src="test-board-speichern.js"></script>
@@ -71,6 +78,7 @@
 <script src="test-board-standard.js"></script>
 <script src="test-board-drehen.js"></script>
 <script src="test-board-textgroesse.js"></script>
+<script src="test-board-blocktext.js"></script>
 <script src="test-board-zeiger.js"></script>
 <script src="test-board-layout.js"></script>
 </body>

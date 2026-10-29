@@ -2,9 +2,10 @@
  * Blocktext auf die Tafel — reines Text- und Geometriemodul
  * (Plan „Blocktext auf die Tafel", Phase 1, Architektur E5).
  *
- * Setzt „window.CBDBoardBlocktext". Wird ab Phase 2 von „board-mode.js"
- * genutzt und dann in „class-cbd-style-loader.php" VOR „cbd-board-mode"
- * eingereiht. Bis dahin ist die Datei nirgends eingebunden.
+ * Setzt „window.CBDBoardBlocktext". Genutzt von „board-mode.js" (seit
+ * Phase 2: Lesen des Blockbereichs, Einfuegen auf die Tafel), eingereiht in
+ * „class-cbd-style-loader.php" als „cbd-board-blocktext" VOR
+ * „cbd-board-mode".
  *
  * BITTE DOM-FREI LASSEN: Kein Zugriff auf das Dokument, den
  * Browser-Speicher oder Zeichenflaechen. Der Harnisch
@@ -32,7 +33,8 @@
  *     Quelltext ohne weiche Umbrueche). Je Absatz ein Block (Zeilen mit \n),
  *     Abstand Math.round(0,6 * px), Bloecke hoechstens 5000 Zeichen.
  *   flaecheUnter(sichtbar, rahmenListe, rand) -> {x, y, b, h}       (AP-1.3)
- *     Freier Platz unter vorhandenem Inhalt im sichtbaren Bereich.
+ *     Freier Platz unter vorhandenem Inhalt im sichtbaren Bereich (Inhalt
+ *     ganz unterhalb des Bereichs zaehlt nicht, AP-2.fix1).
  *   lesbareFarbe(stift, tafel) -> '#rrggbb'                         (AP-1.3)
  *     Stiftfarbe bei mindestens 3:1 Kontrast (WCAG), sonst Weiss/Schwarz.
  *
@@ -1134,7 +1136,11 @@
      * Freie Flaeche unter vorhandenem Inhalt im sichtbaren Bereich.
      * sichtbar und rahmenListe in Modell-Koordinaten {x, y, b, h}; zaehlt
      * nur Rahmen, die sich waagrecht mit dem sichtbaren Bereich
-     * ueberschneiden. Rueckgabe {x, y, b, h}, h nie negativ.
+     * ueberschneiden und oberhalb seiner Unterkante beginnen - was ganz
+     * darunter liegt, ist nicht zu sehen und wird nicht ueberdeckt (bis
+     * AP-2.fix1 zaehlte es mit; bei Zoom > 1 hiess es dann "kein Platz",
+     * obwohl der Ausschnitt leer war, Review-Befund G4).
+     * Rueckgabe {x, y, b, h}, h nie negativ.
      */
     function flaecheUnter(sichtbar, rahmenListe, rand) {
         var s = sichtbar || {};
@@ -1147,7 +1153,7 @@
                 if (!q || !isFinite(q.x) || !isFinite(q.y) || !isFinite(q.b) || !isFinite(q.h)) {
                     continue;
                 }
-                if (q.x < s.x + s.b && q.x + q.b > s.x) {
+                if (q.x < s.x + s.b && q.x + q.b > s.x && q.y < s.y + s.h) {
                     y = Math.max(y, q.y + q.h + r);
                 }
             }
