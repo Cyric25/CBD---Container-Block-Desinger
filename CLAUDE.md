@@ -4177,7 +4177,7 @@ dann Teil des Bild-Elements.
 | `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall, `winkel` (G), Textgröße (H) | 130 Prüfungen |
 | `node tools/test-notizen-manager-js.js` | `personal-notes-manager.js` (Mini-DOM im `vm`) | 34 Prüfungen |
 | `node tools/test-board-blocktext-js.js` | Modul `board-blocktext.js` ohne Browser (Blocktext auf die Tafel, seit 2026-10-28): Formelumwandlung inkl. Bestandslauf über `tools/fixtures/blocktext/formeln.json`, Absätze, Umbruch, Verteilung, Farbe | 242 Prüfungen (seit AP-2.fix1) |
-| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **214 Prüfungen**, Stand 3.1.146 (160 bis 3.1.145, davon 12 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; dazu 54 aus `test-board-blocktext.js`; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4). Muss über den Webserver laufen (Fixtures per `fetch`), Wartezeit eher 15–20 s |
+| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **218 Prüfungen**, Stand 3.1.147 (160 bis 3.1.145, davon 12 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; dazu 58 aus `test-board-blocktext.js`, davon 4 seit dem Folge-AP G9; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4). Muss über den Webserver laufen (Fixtures per `fetch`), Wartezeit eher 15–20 s |
 | `php tools/check-php74.php` | PHP-7.4-Kompatibilität | muss OK sein |
 
 Prüfseite: Viewport VOR dem Laden auf ~1366×768, nach dem Laden ca. 10 s
@@ -4426,7 +4426,7 @@ Prüfseite, nach `test-board-drehen.js` geladen), Gruppe 12 in
 Testinstallation geprüft (28 → 34 px). **Abnahme am Smartboard/iPad steht
 aus.**
 
-### Blocktext auf die Tafel (Plan `Plan_Archiv/PLAN-Blocktext-auf-Tafel.md`, abgeschlossen 2026-10-29, Plugin 3.1.146)
+### Blocktext auf die Tafel (Plan `Plan_Archiv/PLAN-Blocktext-auf-Tafel.md`, abgeschlossen 2026-10-29, Plugin 3.1.146; Folge-AP G9 in 3.1.147)
 
 Wunsch der Schüler: den Text des geöffneten Blocks als Text-Elemente auf die
 eigene Tafel kopieren. Phase 1 lieferte das DOM-freie Modul
@@ -4488,6 +4488,21 @@ verbindet die Texte von `.cbd-board-content` mit Leerzeilen.
   unter allem, was im Ausschnitt steht, 20 px Rand; eigene Notizen werden
   nicht überdeckt. Inhalt ganz unterhalb des Ausschnitts zählt nicht
   (AP-2.fix1; bei Zoom > 1 hieß es sonst „kein Platz").
+- **Platz für die Auswahlleiste (Folge-AP G9, 3.1.147):** Der Text beginnt
+  mindestens `sichtbar.y + ⌈(Leistenhöhe + 12) / zoom⌉ + 8` tief – so passt
+  die Lasso-Auswahlleiste über den Rahmen (8 px Rand, 6 px Abstand, 4 px zum
+  Flächenrand, Regeln in `_auswahlLeisteAusrichten`). Vorher stand der Text
+  bei 20 px; füllte er die Seite, fand die Leiste weder darüber noch darunter
+  Platz und legte sich über die ersten Zeilen. Oben statt unten, weil A+ den
+  Text nach unten wachsen lässt – die Leiste bleibt darüber. Die Höhe misst
+  `_auswahlLeisteHoeheText()` unsichtbar in der Textansicht (mit A−/A+,
+  Anzeige „200 px", Höchstbreite über `_auswahlLeisteMaxBreite()` wie beim
+  Ausrichten) und stellt danach Stil, Klassen und Anzeige wieder her; auf
+  schmalen Anzeigen ist die Leiste zweizeilig (gemessen 76 statt 40 px).
+  **Rückfall:** Passt mit diesem Platz gar nichts hin (sehr niedriger
+  Ausschnitt), wird wie bisher ab 20 px verteilt. Preis: eine bis zwei
+  Zeilen weniger je Seite (1366×768: erster Text bei 60 statt 20 px;
+  375×812: bei 96 px).
 - **Schrift (E3):** `verteile(…, {startPx: 24, minPx: 18, maxZeichen: 5000})`
   über `_blocktextVerteilen()`; `breite = (px − 16) / 4`. Der Umbruch auf die
   sichtbare Breite steht als `\n` im Text (E8, kein neues Elementfeld) – A±
@@ -4552,9 +4567,14 @@ das Textfeld schrumpft zuerst (bei 1141×253: 61 px, Knöpfe sichtbar).
 
 #### Prüfungen und Abnahme
 
-- Prüfseite `tools/test-board-zeiger.html`: **214 / 214**, davon 54 aus
-  `tools/test-board-blocktext.js` (Leseregeln, die acht Testmaterial-Paare
-  zeichengenau, Einfügen, Knopf und Fenster, Befunde des Reviews).
+- Prüfseite `tools/test-board-zeiger.html`: **218 / 218** (3.1.147), davon 58
+  aus `tools/test-board-blocktext.js` (Leseregeln, die acht Testmaterial-Paare
+  zeichengenau, Einfügen, Knopf und Fenster, Befunde des Reviews, vier
+  G9-Prüfungen: Leiste frei nach langem Text, nach A+, bei Zoom 2; Rückfall
+  bei sehr niedrigem Ausschnitt).
+- G9 zusätzlich mit echten Klicks auf Seite 876 geprüft: 1366×768 (Seite
+  voll, Rest auf neuer Seite, zweimal A+), 375×812 und 1141×253 (Leiste
+  zweizeilig) – die Leiste lag jedes Mal über dem Text.
 - `node tools/test-board-blocktext-js.js`: **242** (Gruppe 10: `flaecheUnter`).
 - Mit echten Klicks, Tasten, Maus und Doppelklicks auf den Seiten 876, 5652,
   2323 durchgespielt; Fenstergrößen 1366×768, 1024×768, 820×1180, 375×812,
@@ -4573,9 +4593,12 @@ das Textfeld schrumpft zuerst (bei 1141×253: 61 px, Knöpfe sichtbar).
   `data-latex` zerfällt; ein sichtbares Kind unter `visibility:hidden` geht
   verloren; per `height:0`/`clip`/Verschieben Verstecktes wird gelesen (G8,
   G6 – in keinem Container vorhanden).
-- Füllt die Auswahl fast die ganze Höhe, legt sich die Lasso-Auswahlleiste
-  über die ersten Zeilen (`_auswahlLeisteAusrichten`: oben kein Platz, unten
-  kein Platz → oben in der Fläche; G9). Kandidat für ein Folge-AP.
+- G9 (Auswahlleiste über den ersten eingefügten Zeilen) ist seit 3.1.147
+  behoben, siehe „Platz für die Auswahlleiste" oben. Die allgemeine Regel in
+  `_auswahlLeisteAusrichten` ist unverändert: Wählt man per Lasso eine
+  Auswahl, die fast die ganze Höhe füllt, oder schiebt eingefügten Text an
+  den oberen Rand, liegt die Leiste weiter oben in der Fläche über der
+  Auswahl. Ebenso im Rückfall bei sehr niedrigem Ausschnitt.
 - Laufzeit: normaler Text rund 0,8 s je Seite bei 100 000 Zeichen; ein Wort
   aus 100 000 Zeichen ohne Leerzeichen blockiert 2,4 s (G10).
 - Klassen-Tafel: Schließen direkt nach „Auf neuer Seite einfügen" kann das

@@ -3724,7 +3724,7 @@
             // 3.1.144: nie breiter als die Zeichenfläche - sonst bricht die
             // Leiste in eine zweite Zeile um (flex-wrap, board-mode.css),
             // statt rechts über den Rand zu ragen (schmale Anzeigen, iPad hoch)
-            leiste.style.maxWidth = Math.max(160, Math.floor(bR - bL - 8)) + 'px';
+            leiste.style.maxWidth = this._auswahlLeisteMaxBreite(bR - bL) + 'px';
             var lb = leiste.offsetWidth, lh = leiste.offsetHeight, abstand = 6;
             var top = oben - abstand - lh;
             if (top < bO + 4) {
@@ -3735,6 +3735,47 @@
             if (left < bL + 4) left = bL + 4;
             leiste.style.left = Math.round(left) + 'px';
             leiste.style.top = Math.round(top) + 'px';
+        },
+
+        /** Höchstbreite der Auswahlleiste bei gegebener Flächenbreite (Overlay-px). */
+        _auswahlLeisteMaxBreite: function(flaechenBreite) {
+            return Math.max(160, Math.floor(flaechenBreite - 8));
+        },
+
+        /**
+         * Höhe der Auswahlleiste, wie sie bei gewählten Texten erscheint (mit
+         * A−/A+, auf die Breite der Zeichenfläche begrenzt), in Overlay-px;
+         * 0 ohne Leiste. Misst unsichtbar und stellt danach alles wieder her
+         * (Folge-AP G9, für _blocktextVerteilen).
+         */
+        _auswahlLeisteHoeheText: function() {
+            var leiste = this._auswahlLeiste;
+            var bereich = this.overlay ? this.overlay.querySelector('.cbd-board-canvas-area') : null;
+            if (!leiste || !bereich) return 0;
+            var ov = this.overlay.getBoundingClientRect();
+            var skala = this.overlay.offsetWidth ? ov.width / this.overlay.offsetWidth : 1;
+            if (!skala) skala = 1;
+            var anzeige = leiste.querySelector('.cbd-board-auswahl-textgroesse');
+            var vorher = {
+                display: leiste.style.display,
+                visibility: leiste.style.visibility,
+                maxWidth: leiste.style.maxWidth,
+                klassen: leiste.className,
+                anzeige: anzeige ? anzeige.textContent : ''
+            };
+            leiste.style.visibility = 'hidden';
+            leiste.style.display = 'flex';
+            leiste.classList.add('cbd-board-auswahl-leiste--text');
+            leiste.classList.remove('cbd-board-auswahl-leiste--drehen');
+            leiste.style.maxWidth = this._auswahlLeisteMaxBreite(bereich.getBoundingClientRect().width / skala) + 'px';
+            if (anzeige) anzeige.textContent = '200 px'; // breiteste Anzeige
+            var hoehe = leiste.offsetHeight;
+            leiste.style.display = vorher.display;
+            leiste.style.visibility = vorher.visibility;
+            leiste.style.maxWidth = vorher.maxWidth;
+            leiste.className = vorher.klassen;
+            if (anzeige) anzeige.textContent = vorher.anzeige;
+            return hoehe;
         },
 
         onKeyDown: function(e) {
@@ -5262,7 +5303,8 @@
          *
          * Platzierung (E9): unter allem, was im sichtbaren Ausschnitt schon
          * auf der Seite steht, 20 px Rand - eigene Notizen werden nicht
-         * überdeckt. Schrift 24 px, bis 18 px verkleinert, bis alles passt;
+         * überdeckt; oben mindestens so tief, dass die Auswahlleiste über
+         * den Text passt (G9, _blocktextVerteilen). Schrift 24 px, bis 18 px verkleinert, bis alles passt;
          * was dann nicht passt, kommt als "rest" zurück (Absätze als
          * Quelltext, für blocktextAufNeueSeite).
          *
@@ -5326,6 +5368,15 @@
          * Absätze im sichtbaren Ausschnitt unter den gegebenen Rahmen
          * verteilen (24 -> 18 px, höchstens 5000 Zeichen je Block); Breiten
          * mit der Zeichenebene gemessen wie in _rahmen().
+         *
+         * Folge-AP G9: Nach dem Einfügen ist alles gewählt, und die
+         * Auswahlleiste gehört über den Rahmen (8 px Rand, 6 px Abstand,
+         * 4 px zum Flächenrand, _auswahlLeisteAusrichten). Stand der Text
+         * oben am Rand und reichte fast bis unten, fand sie weder darüber
+         * noch darunter Platz und lag über den ersten Zeilen. Deshalb bleibt
+         * oben ihre Höhe frei; bei A+ wächst der Text nach unten, die Leiste
+         * bleibt darüber. Passt so gar nichts hin (sehr niedriger
+         * Ausschnitt), wird wie bisher ohne diesen Platz verteilt.
          */
         _blocktextVerteilen: function(absaetze, rahmen) {
             var modul = blocktextModul();
@@ -5334,8 +5385,18 @@
                 ctx.font = px + 'px sans-serif';
                 return ctx.measureText(t).width;
             };
-            var flaeche = modul.flaecheUnter(this._sichtbarerBereich(), rahmen, 20);
-            return modul.verteile(absaetze, flaeche, mass, { startPx: 24, minPx: 18, maxZeichen: 5000 });
+            var optionen = { startPx: 24, minPx: 18, maxZeichen: 5000 };
+            var sichtbar = this._sichtbarerBereich();
+            var flaeche = modul.flaecheUnter(sichtbar, rahmen, 20);
+            // Leistenhöhe + 10 px (+ 2 px Spiel) in Overlay-px, durch den Zoom
+            // in Modell-px; dazu der 8-px-Rand des Auswahlrahmens
+            var oben = sichtbar.y + Math.ceil((this._auswahlLeisteHoeheText() + 12) / (this.zoom || 1)) + 8;
+            if (flaeche.y < oben) {
+                var mitLeiste = modul.verteile(absaetze, { x: flaeche.x, y: oben, b: flaeche.b,
+                    h: Math.max(0, flaeche.y + flaeche.h - oben) }, mass, optionen);
+                if (mitLeiste.bloecke.length) return mitLeiste;
+            }
+            return modul.verteile(absaetze, flaeche, mass, optionen);
         },
 
         /**
