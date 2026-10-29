@@ -419,6 +419,38 @@
         return document.querySelector('.cbd-board-blocktext-feld');
     }
 
+    // Bearbeitungsfeld der Vorschau (PLAN-Blocktext-Formatierung.md, AP-2.4,
+    // F8): ein formatiert bearbeitbares div statt des früheren Textfelds.
+    // feldText(): Texte der Absätze aus B._textFeldLesen() mit Leerzeile
+    // verbunden (wie früher feld().value); feldSetzen(absaetze): Inhalt über
+    // DOM-Methoden ersetzen, je Absatz ein div (wie früher feld().value = …).
+    function feldText() {
+        return B._textFeldLesen(feld()).map(function(a) { return a.text; }).join('\n\n');
+    }
+
+    function feldSetzen(absaetze) {
+        var fe = feld();
+        while (fe.firstChild) fe.removeChild(fe.firstChild);
+        absaetze.forEach(function(a) {
+            var d = document.createElement('div');
+            d.textContent = a;
+            fe.appendChild(d);
+        });
+    }
+
+    // Text vor der Schreibmarke im Feld t ('' = Marke am Anfang) oder null,
+    // wenn die Auswahl nicht eingeklappt im Feld steht
+    function textVorMarke(t) {
+        var sel = window.getSelection();
+        if (!sel || sel.rangeCount !== 1 || !sel.isCollapsed) return null;
+        var r = sel.getRangeAt(0);
+        if (!t.contains(r.startContainer)) return null;
+        var vor = document.createRange();
+        vor.setStart(t, 0);
+        vor.setEnd(r.startContainer, r.startOffset);
+        return vor.toString();
+    }
+
     function taste(ziel, key, extra) {
         var init = { key: key, bubbles: true, cancelable: true };
         for (var k in (extra || {})) init[k] = extra[k];
@@ -472,9 +504,13 @@
         var t = vorschauOeffnen();
         if (!fenster()) return { ok: false, detail: 'kein Fenster' };
         if (!t) return { ok: false, detail: 'kein Textfeld' };
-        if (t.value !== 'Eins\n\nZwei') f.push('Inhalt ' + JSON.stringify(t.value));
+        // AP-2.4 (F8): Inhalt über _textFeldLesen, Schreibmarke über die
+        // Auswahl des Dokuments (am Anfang des Felds, eingeklappt)
+        var inhalt = feldText();
+        if (inhalt !== 'Eins\n\nZwei') f.push('Inhalt ' + JSON.stringify(inhalt));
         if (document.activeElement !== t) f.push('Fokus auf ' + (document.activeElement && document.activeElement.className));
-        if (t.selectionStart !== 0 || t.selectionEnd !== 0) f.push('Schreibmarke ' + t.selectionStart + '-' + t.selectionEnd);
+        var vorMarke = textVorMarke(t);
+        if (vorMarke !== '') f.push('Schreibmarke nicht eingeklappt am Anfang (Text davor ' + JSON.stringify(vorMarke) + ')');
         if (fenster().parentNode !== document.body) f.push('Fenster nicht am body');
         if (!fenster().querySelector('.cbd-board-blocktext-einfuegen')) f.push('kein Knopf "Auf die Tafel"');
         return ergebnis(f);
@@ -525,8 +561,8 @@
 
     function gekuerztEinfuegen() {
         oeffnenMit('<p>Eins</p><p>Zwei</p><p>Drei</p>');
-        var t = vorschauOeffnen();
-        t.value = 'Eins\n\nDrei';
+        vorschauOeffnen();
+        feldSetzen(['Eins', 'Drei']); // AP-2.4 (F8): Feld statt t.value
         fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
         var f = [];
         if (fenster()) f.push('Fenster noch offen');
@@ -621,12 +657,12 @@
 
     function klickNebenFenster() {
         oeffnenMit('<p>Eins</p>');
-        var t = vorschauOeffnen();
-        t.value = 'gekürzt';
+        vorschauOeffnen();
+        feldSetzen(['gekürzt']); // AP-2.4 (F8): Feld statt t.value
         var fe = fenster();
         fe.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
         var f = [];
-        if (!fenster() || feld().value !== 'gekürzt') f.push('Klick neben das Fenster schließt es');
+        if (!fenster() || feldText() !== 'gekürzt') f.push('Klick neben das Fenster schließt es');
         // Tasten bei Fokus außerhalb des Fensters wirken nicht auf die Tafel
         document.body.focus();
         taste(document.body, 'Escape');
