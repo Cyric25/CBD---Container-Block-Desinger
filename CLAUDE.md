@@ -4882,8 +4882,11 @@ Schrift.
   Rahmen-Nutzer (Strich-Radierer, Punkt-Radierer, `_textInKreisNaehe`,
   Auswahlrahmen, Blocktext) gehen über `_rahmen`. `_textMass()` ist als
   eigene Eigenschaft ersetzbar (die Stellvertreter-Probe der Prüfseite tut
-  das). Noch nicht umgestellt: `_blocktextVerteilen()` misst bis Phase 2
-  (AP-2.3) weiter selbst in normaler Schrift.
+  das). Seit AP-2.3 misst auch `_blocktextVerteilen()` („Text auf die
+  Tafel") nur noch darüber – mit Stil, sodass ein fetter oder kursiver Teil
+  beim Umbruch und Verteilen in seiner Schrift gemessen wird; nur das
+  laufende x in Pass 4 (nächster Punkt) misst weiter selbst, mit derselben
+  Schrift.
 - **`zeichneModell()`, Pass 4 (Text):** je Element `px = schriftPx(breite)`,
   `textBaseline 'top'`, Drehung wie bisher (`translate(x, y)` + `rotate`);
   je Zeile `i` aus `zeilenTeile(el)` je Teil `ctx.font = schrift(px, f, k)`,
