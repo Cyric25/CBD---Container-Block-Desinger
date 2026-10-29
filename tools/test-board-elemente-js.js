@@ -871,4 +871,312 @@ console.log('\nGruppe 12: textGroesse / textGroessen / naechsteSchrift (3.1.144)
 	gleich('12.31 textGroessen: leere Auswahl', E.textGroessen(m, []), { anzahl: 0, min: null, max: null });
 })();
 
+// =========================================================================
+// Gruppe 13: teile (Formatierung) - Plan „Formatierter Text auf der Tafel",
+// AP-1.1, Entscheidungen F1-F5. Optionales Feld teile: [{t, f?, k?, farbe?}]
+// neben dem unveraenderten text. Die Faelle a-h entsprechen Gruppe D in
+// tools/test-board-elemente.php (Server-Pruefung, AP-1.2).
+// =========================================================================
+console.log('\nGruppe 13: teile (Formatierung)');
+(function () {
+	const nah = (a, b) => Math.abs(a - b) < 1e-9;
+	/** Aufruf, der bei fehlender Funktion nicht abbricht, sondern rot meldet. */
+	function versuch(fn) {
+		try { return fn(); } catch (e) { return 'Fehler: ' + e.message; }
+	}
+	const schrift = (px, f, k) => versuch(() => E.schrift(px, f, k));
+	const zeilenTeile = el => versuch(() => E.zeilenTeile(el));
+	const teileZusammenlegen = teile => versuch(() => E.teileZusammenlegen(teile));
+
+	['schrift', 'zeilenTeile', 'teileZusammenlegen'].forEach(function (n) {
+		pruefe('13.0 Schnittstelle: ' + n + ' ist Funktion', typeof E[n] === 'function');
+	});
+
+	// o. Obergrenze
+	gleich('13.o MAX_TEILE === 1000', E.MAX_TEILE, 1000);
+
+	const TEILE = [{ t: 'Es ist ' }, { t: 'fett', f: 1 }, { t: '.' }];
+	const BASIS = { id: 'e1', typ: 'text', farbe: '#000000', breite: 2, text: 'Es ist fett.', x: 10, y: 20, teile: TEILE };
+
+	function ohneTeile(el) {
+		const k = kopie(el);
+		delete k.teile;
+		return k;
+	}
+	/** Grundelement mit anderen teile (und optional anderem text). */
+	function mitTeilen(teile, text) {
+		const el = kopie(BASIS);
+		el.teile = teile;
+		if (text !== undefined) el.text = text;
+		return el;
+	}
+	function geprueft(el) {
+		return E.pruefeModell(mitElement(el));
+	}
+	/** Erwartung: teile fehlt, Element bleibt sonst unveraendert, verworfen bleibt 0. */
+	function teileFehlt(name, el) {
+		const soll = ohneTeile(el);
+		const r = geprueft(el);
+		gleich(name, r && [r.modell.elemente.length, r.verworfen, r.modell.elemente[0]], [1, 0, soll]);
+	}
+
+	// a. gueltige teile bleiben inhaltsgleich, unbekannte Teil-Schluessel entfallen
+	let r = geprueft(kopie(BASIS));
+	gleich('13.a1 gueltige teile bleiben erhalten (Element inhaltsgleich, teile nach y)', r && r.modell.elemente[0], BASIS);
+	gleich('13.a2 gueltige teile: verworfen = 0', r && r.verworfen, 0);
+	const eingabe = kopie(BASIS);
+	r = geprueft(eingabe);
+	pruefe('13.a3 geprueftes teile ist ein neues Array mit neuen Teil-Objekten',
+		!!(r && r.modell.elemente[0].teile && r.modell.elemente[0].teile !== eingabe.teile
+			&& r.modell.elemente[0].teile[1] !== eingabe.teile[1]));
+	gleich('13.a4 Eingabe unveraendert', eingabe, BASIS);
+	r = geprueft(mitTeilen([{ t: 'Es ist ' }, { t: 'fett', f: 1, geheim: 'x' }, { t: '.', x: 1 }]));
+	gleich('13.a5 unbekannter Schluessel in einem Teil ({t:".", x:1}) entfernt', r && r.modell.elemente[0].teile, TEILE);
+	gleich('13.a6 ... Element bleibt, nicht verworfen', r && [r.modell.elemente.length, r.verworfen], [1, 0]);
+	const gemischt = [{ t: 'Es ', k: 1 }, { t: 'ist ', farbe: '#71230a' }, { t: 'fett', f: 1, k: 1, farbe: 'rgb(1, 2, 3)' }, { t: '.' }];
+	r = geprueft(mitTeilen(kopie(gemischt)));
+	gleich('13.a7 f, k und farbe gemischt bleiben erhalten', r && r.modell.elemente[0].teile, gemischt);
+	const zeilen = [{ t: 'a' }, { t: 'b\nc', f: 1 }, { t: 'd' }];
+	r = geprueft(mitTeilen(kopie(zeilen), 'ab\ncd'));
+	gleich('13.a8 Teil mit Zeilenwechsel im t bleibt erhalten', r && r.modell.elemente[0].teile, zeilen);
+	r = geprueft(Object.assign(kopie(BASIS), { winkel: 45 }));
+	gleich('13.a9 teile und winkel: Schluesselreihenfolge id, typ, farbe, breite, text, x, y, teile, winkel',
+		r && Object.keys(r.modell.elemente[0]), ['id', 'typ', 'farbe', 'breite', 'text', 'x', 'y', 'teile', 'winkel']);
+
+	// b. Verkettung der t != text
+	teileFehlt('13.b1 Verkettung der t != text -> teile fehlt, Element sonst unveraendert',
+		mitTeilen([{ t: 'Es ist ' }, { t: 'fett', f: 1 }, { t: '!' }]));
+	teileFehlt('13.b2 Verkettung zu kurz -> teile fehlt', mitTeilen([{ t: 'Es ist ' }, { t: 'fett', f: 1 }]));
+	teileFehlt('13.b3 Verkettung zu lang -> teile fehlt', mitTeilen([{ t: 'Es ist ' }, { t: 'fett', f: 1 }, { t: '..' }]));
+
+	// c. kein Array, leer, mehr als MAX_TEILE
+	[
+		['eine Zeichenkette', 'Es ist fett.'],
+		['ein Objekt', { t: 'Es ist fett.', f: 1 }],
+		['null', null],
+		['eine Zahl', 5],
+		['ein leeres Array', []]
+	].forEach(function (fall, i) {
+		teileFehlt('13.c' + (i + 1) + ' teile ist ' + fall[0] + ' -> teile fehlt', mitTeilen(fall[1]));
+	});
+	function viele(n) {
+		const t = [];
+		for (let i = 0; i < n; i++) t.push({ t: 'a', f: 1 });
+		return t;
+	}
+	teileFehlt('13.c6 1001 Teile (> MAX_TEILE) -> teile fehlt', mitTeilen(viele(1001), new Array(1002).join('a')));
+	r = geprueft(mitTeilen(viele(1000), new Array(1001).join('a')));
+	gleich('13.c7 genau 1000 Teile bleiben erhalten', r && r.modell.elemente[0].teile && r.modell.elemente[0].teile.length, 1000);
+
+	// d. Teil ohne t, mit t '' oder t keine Zeichenkette (auch: Teil kein Objekt)
+	[
+		['ohne t', [{ t: 'Es ist ' }, { f: 1 }, { t: 'fett', f: 1 }, { t: '.' }]],
+		['mit t ""', [{ t: 'Es ist ' }, { t: '', f: 1 }, { t: 'fett', f: 1 }, { t: '.' }]],
+		['mit t als Array', [{ t: 'Es ist ' }, { t: ['fett'], f: 1 }, { t: '.' }]],
+		['mit t null', [{ t: 'Es ist ' }, { t: null }, { t: 'fett', f: 1 }, { t: '.' }]],
+		['der kein Objekt ist (Zeichenkette)', [{ t: 'Es ist ', f: 1 }, 'fett', { t: '.' }]],
+		['der null ist', [{ t: 'Es ist fett', f: 1 }, null, { t: '.' }]],
+		['der ein Array ist', [{ t: 'Es ist ', f: 1 }, ['fett'], { t: '.' }]]
+	].forEach(function (fall, i) {
+		teileFehlt('13.d' + (i + 1) + ' ein Teil ' + fall[0] + ' -> teile fehlt', mitTeilen(fall[1]));
+	});
+	// Zahl als t: Verkettung mit Umwandlung ergaebe genau den Text
+	teileFehlt('13.d8 ein Teil mit t als Zahl -> teile fehlt',
+		mitTeilen([{ t: 'Es ist ', f: 1 }, { t: 5 }, { t: '.' }], 'Es ist 5.'));
+
+	// e. f bzw. k mit true, 2, '1' oder 0 (ein anderer Teil bleibt formatiert)
+	[true, 2, '1', 0].forEach(function (wert, i) {
+		teileFehlt('13.e' + (i + 1) + ' f = ' + JSON.stringify(wert) + ' -> teile fehlt',
+			mitTeilen([{ t: 'Es ist ', k: 1 }, { t: 'fett', f: wert }, { t: '.' }]));
+		teileFehlt('13.e' + (i + 5) + ' k = ' + JSON.stringify(wert) + ' -> teile fehlt',
+			mitTeilen([{ t: 'Es ist ', f: 1 }, { t: 'fett', k: wert }, { t: '.' }]));
+	});
+
+	// f. farbe muss auf FARB_MUSTER passen
+	['rot', '#12', 'red; x', '', 5].forEach(function (wert, i) {
+		teileFehlt('13.f' + (i + 1) + ' farbe ' + JSON.stringify(wert) + ' -> teile fehlt',
+			mitTeilen([{ t: 'Es ist ' }, { t: 'fett', f: 1, farbe: wert }, { t: '.' }]));
+	});
+	['#71230a', 'rgb(1, 2, 3)'].forEach(function (wert, i) {
+		const teile = [{ t: 'Es ist ' }, { t: 'fett', farbe: wert }, { t: '.' }];
+		r = geprueft(mitTeilen(kopie(teile)));
+		gleich('13.f' + (i + 6) + ' farbe ' + JSON.stringify(wert) + ' ist gueltig (auch ohne f/k)',
+			r && r.modell.elemente[0].teile, teile);
+	});
+
+	// g. ohne jede Formatierung entfaellt teile
+	teileFehlt('13.g1 alle Teile ohne f, k, farbe -> teile fehlt', mitTeilen([{ t: 'Es ist ' }, { t: 'fett' }, { t: '.' }]));
+	teileFehlt('13.g2 nur unbekannte Schluessel -> teile fehlt', mitTeilen([{ t: 'Es ist ', fett: 1 }, { t: 'fett.', x: 1 }]));
+	teileFehlt('13.g3 ein einziger Klartext-Teil -> teile fehlt', mitTeilen([{ t: 'Es ist fett.' }]));
+
+	// h. Kuerzen auf 5000 Zeichen: teile passen danach nicht mehr
+	const a5000 = new Array(5001).join('a');
+	r = geprueft(mitTeilen([{ t: a5000, f: 1 }, { t: 'b' }], a5000 + 'b'));
+	gleich('13.h1 Text mit 5001 Zeichen und passenden teile -> text auf 5000 gekuerzt, teile fehlt',
+		r && [r.modell.elemente.length, r.verworfen, r.modell.elemente[0].text.length, 'teile' in r.modell.elemente[0]],
+		[1, 0, 5000, false]);
+	r = geprueft(mitTeilen([{ t: a5000.slice(1), f: 1 }, { t: 'a' }], a5000));
+	gleich('13.h2 Text mit genau 5000 Zeichen behaelt passende teile',
+		r && r.modell.elemente[0].teile && r.modell.elemente[0].teile.length, 2);
+
+	// i. Lasso-Aktionen behalten teile
+	const T2 = [{ t: 'a', farbe: '#00ff00' }, { t: 'b\nc', f: 1 }, { t: 'd', k: 1 }];
+	const M = {
+		v: 1, breite: 1200, hoehe: 800, elemente: [
+			kopie(BASIS),
+			{ id: 'e2', typ: 'text', farbe: '#c00', breite: 1, text: 'ab\ncd', x: 50, y: 60, teile: kopie(T2), winkel: 30 }
+		]
+	};
+	const MV = kopie(M);
+	const v = E.verschiebe(M, ['e1', 'e2'], 5, -5);
+	gleich('13.i1 verschiebe behaelt teile', v.elemente.map(e => e.teile), [TEILE, T2]);
+	const k = E.kopiere(M, ['e1', 'e2'], 10, 10);
+	gleich('13.i2 kopiere: Kopien mit neuer ID und inhaltsgleichen teile',
+		k.modell.elemente.slice(2).map(e => [e.id, e.teile]), [['e3', TEILE], ['e4', T2]]);
+	pruefe('13.i3 kopiere: teile der Kopie ist ein eigenes Array mit eigenen Teil-Objekten',
+		!!(k.modell.elemente[2].teile && k.modell.elemente[2].teile !== M.elemente[0].teile
+			&& k.modell.elemente[2].teile[1] !== M.elemente[0].teile[1]));
+	const d = E.drehe(M, ['e1', 'e2'], 0, 0, 30);
+	gleich('13.i4 drehe behaelt teile', d.elemente.map(e => e.teile), [TEILE, T2]);
+	gleich('13.i5 drehe: Schluesselreihenfolge ... y, teile, winkel', Object.keys(d.elemente[0]),
+		['id', 'typ', 'farbe', 'breite', 'text', 'x', 'y', 'teile', 'winkel']);
+	const g = E.textGroesse(M, ['e1', 'e2'], 1);
+	gleich('13.i6 textGroesse behaelt teile', [g.geaendert, g.modell.elemente.map(e => e.teile)], [2, [TEILE, T2]]);
+	gleich('13.i7 textGroesse: Schluesselreihenfolge ... y, teile, winkel', Object.keys(g.modell.elemente[1]),
+		['id', 'typ', 'farbe', 'breite', 'text', 'x', 'y', 'teile', 'winkel']);
+	const s = E.skaliere(M, 600, 1600);
+	gleich('13.i8 skaliere behaelt teile', s.elemente.map(e => e.teile), [TEILE, T2]);
+	gleich('13.i9 Lasso-Aktionen veraendern die Eingabe nicht', M, MV);
+	const kp = E.pruefeModell(k.modell);
+	gleich('13.i10 kopiertes Modell besteht pruefeModell mit allen teile',
+		kp && [kp.verworfen, kp.modell.elemente.map(e => !!e.teile)], [0, [true, true, true, true]]);
+
+	// j. serialisiere / deserialisiere
+	const json = E.serialisiere(M);
+	let o = null;
+	try { o = JSON.parse(json); } catch (e) { /* bleibt null */ }
+	gleich('13.j1 serialisiere schreibt teile', o && o.elemente.map(e => e.teile), [TEILE, T2]);
+	gleich('13.j2 serialisiere: Schluesselreihenfolge ... y, teile, winkel', o && Object.keys(o.elemente[1]),
+		['id', 'typ', 'farbe', 'breite', 'text', 'x', 'y', 'teile', 'winkel']);
+	const rund = E.deserialisiere(json);
+	gleich('13.j3 Rundreise serialisiere -> deserialisiere mit teile inhaltsgleich', rund && [rund.verworfen, rund.modell], [0, M]);
+	const fremd = kopie(M);
+	fremd.elemente[0].teile[0].x = 1;
+	let of = null;
+	try { of = JSON.parse(E.serialisiere(fremd)); } catch (e) { /* bleibt null */ }
+	gleich('13.j4 serialisiere schreibt je Teil nur t, f, k, farbe', of && of.elemente[0].teile && of.elemente[0].teile[0], { t: 'Es ist ' });
+	// Byte-Vergleich mit 3.1.147: Ausgabe von serialisiere() vor AP-1.1 fuer dieses Modell
+	const OHNE = {
+		v: 1, breite: 1200, hoehe: 800, elemente: [
+			{ id: 'e1', typ: 'strich', werkzeug: 'pen', farbe: '#000000', breite: 3, punkte: [[10.5, 20], [12, 22.25]] },
+			{ id: 'e2', typ: 'text', farbe: '#1565c0', breite: 3, text: 'Na⁺ + Cl⁻\nzweite', x: 40, y: 300 },
+			{ id: 'e3', typ: 'text', farbe: '#000000', breite: 2, text: 'Es ist fett.', x: 10.004, y: 20, winkel: 12.3456 },
+			{ id: 'e4', typ: 'bild', daten: 'data:image/png;base64,iVBORw0KGgo=', x: 0, y: 0, b: 12, h: 8 }
+		]
+	};
+	const HEUTE = '{"v":1,"breite":1200,"hoehe":800,"elemente":['
+		+ '{"id":"e1","typ":"strich","werkzeug":"pen","farbe":"#000000","breite":3,"punkte":[[10.5,20],[12,22.25]]},'
+		+ '{"id":"e2","typ":"text","farbe":"#1565c0","breite":3,"text":"Na⁺ + Cl⁻\\nzweite","x":40,"y":300},'
+		+ '{"id":"e3","typ":"text","farbe":"#000000","breite":2,"text":"Es ist fett.","x":10,"y":20,"winkel":12.35},'
+		+ '{"id":"e4","typ":"bild","daten":"data:image/png;base64,iVBORw0KGgo=","x":0,"y":0,"b":12,"h":8}]}';
+	gleich('13.j5 Modell ohne teile serialisiert byte-gleich zu 3.1.147', E.serialisiere(OHNE), HEUTE);
+	pruefe('13.j6 ... die Zeichenkette enthaelt kein "teile"', E.serialisiere(OHNE).indexOf('teile') === -1);
+	const OHNE_P = E.pruefeModell(kopie(OHNE));
+	gleich('13.j7 ... auch nach pruefeModell byte-gleich', OHNE_P && E.serialisiere(OHNE_P.modell), HEUTE);
+
+	// k. zeilenTeile
+	const ZT = { id: 'e1', typ: 'text', farbe: '#000000', breite: 1, text: 'ab\ncd', x: 0, y: 0,
+		teile: [{ t: 'a' }, { t: 'b\nc', f: 1 }, { t: 'd' }] };
+	const ZTV = kopie(ZT);
+	gleich('13.k1 zeilenTeile: Teil ueber den Zeilenwechsel wird geteilt, farbe aufgeloest', zeilenTeile(ZT), [
+		[{ t: 'a', f: 0, k: 0, farbe: '#000000' }, { t: 'b', f: 1, k: 0, farbe: '#000000' }],
+		[{ t: 'c', f: 1, k: 0, farbe: '#000000' }, { t: 'd', f: 0, k: 0, farbe: '#000000' }]
+	]);
+	gleich('13.k2 zeilenTeile veraendert das Element nicht', ZT, ZTV);
+	function textEl(text, teile) {
+		const el = { id: 'e1', typ: 'text', farbe: '#123456', breite: 1, text: text, x: 0, y: 0 };
+		if (teile) el.teile = teile;
+		return el;
+	}
+	gleich('13.k3 ohne teile: je Zeile ein Teil mit farbe = el.farbe', zeilenTeile(textEl('ab\ncd')), [
+		[{ t: 'ab', f: 0, k: 0, farbe: '#123456' }], [{ t: 'cd', f: 0, k: 0, farbe: '#123456' }]
+	]);
+	gleich('13.k4 leere Zeile -> [] an ihrer Stelle (ohne teile)', zeilenTeile(textEl('a\n\nb')), [
+		[{ t: 'a', f: 0, k: 0, farbe: '#123456' }], [], [{ t: 'b', f: 0, k: 0, farbe: '#123456' }]
+	]);
+	gleich('13.k5 leere Zeile -> [] an ihrer Stelle (mit teile)',
+		zeilenTeile(textEl('a\n\nb', [{ t: 'a\n', f: 1 }, { t: '\nb' }])), [
+			[{ t: 'a', f: 1, k: 0, farbe: '#123456' }], [], [{ t: 'b', f: 0, k: 0, farbe: '#123456' }]
+		]);
+	gleich('13.k6 Teil mit eigener farbe behaelt sie, kursiver Teil k = 1',
+		zeilenTeile(textEl('Es ist fett.', [{ t: 'Es ist ', k: 1 }, { t: 'fett', f: 1, farbe: '#ff0000' }, { t: '.' }])), [[
+			{ t: 'Es ist ', f: 0, k: 1, farbe: '#123456' },
+			{ t: 'fett', f: 1, k: 0, farbe: '#ff0000' },
+			{ t: '.', f: 0, k: 0, farbe: '#123456' }
+		]]);
+	gleich('13.k7 leerer Text -> eine leere Zeile', zeilenTeile(textEl('')), [[]]);
+	gleich('13.k8 Zeilenwechsel am Ende -> leere letzte Zeile', zeilenTeile(textEl('a\n')),
+		[[{ t: 'a', f: 0, k: 0, farbe: '#123456' }], []]);
+
+	// l. schrift
+	gleich('13.l1 schrift(24, 0, 0)', schrift(24, 0, 0), '24px sans-serif');
+	gleich('13.l2 schrift(24, 1, 0)', schrift(24, 1, 0), 'bold 24px sans-serif');
+	gleich('13.l3 schrift(24, 0, 1)', schrift(24, 0, 1), 'italic 24px sans-serif');
+	gleich('13.l4 schrift(24, 1, 1)', schrift(24, 1, 1), 'italic bold 24px sans-serif');
+
+	// m. rahmen misst je Teil mit Stil
+	const breiter = function (t, px, stil) { return t.length * px * (stil && stil.f ? 0.7 : 0.5); };
+	// Schrift 24 px: 'Es ist ' 7*24*0,5 = 84; 'fett' fett 4*24*0,7 = 67,2; '.' 12 -> 163,2; Hoehe 1,2*24 = 28,8
+	let rm = E.rahmen(BASIS, breiter);
+	pruefe('13.m1 Breite = Summe der Teile (fett breiter gemessen)',
+		nah(rm.b, 163.2) && nah(rm.h, 28.8) && rm.x === 10 && rm.y === 20, JSON.stringify(rm));
+	// Schrift 20 px: Zeile 1 'abcd' 4*20*0,5 = 40; Zeile 2 'xyz' fett 3*20*0,7 = 42
+	rm = E.rahmen({ id: 'e1', typ: 'text', farbe: '#000000', breite: 1, text: 'abcd\nxyz', x: 0, y: 0,
+		teile: [{ t: 'abcd\n' }, { t: 'xyz', f: 1 }] }, breiter);
+	pruefe('13.m2 breiteste Zeile nach Summe ihrer Teile (fette Zeile mit weniger Zeichen gewinnt)',
+		nah(rm.b, 42) && nah(rm.h, 48), JSON.stringify(rm));
+	const aufrufe = [];
+	E.rahmen(BASIS, function (t, px, stil) { aufrufe.push([t, px, stil]); return 0; });
+	gleich('13.m3 Messfunktion bekommt (t, px, {f, k}) je Teil', aufrufe,
+		[['Es ist ', 24, { f: 0, k: 0 }], ['fett', 24, { f: 1, k: 0 }], ['.', 24, { f: 0, k: 0 }]]);
+	const aufrufeK = [];
+	E.rahmen(mitTeilen([{ t: 'Es ist ', k: 1 }, { t: 'fett', f: 1, k: 1 }, { t: '.' }]),
+		function (t, px, stil) { aufrufeK.push([t, px, stil]); return 0; });
+	gleich('13.m4 kursive Teile: stil.k = 1', aufrufeK,
+		[['Es ist ', 24, { f: 0, k: 1 }], ['fett', 24, { f: 1, k: 1 }], ['.', 24, { f: 0, k: 0 }]]);
+	const aufrufeOhne = [];
+	E.rahmen({ id: 'e1', typ: 'text', farbe: '#000', breite: 1, text: 'ab\nabcd', x: 5, y: 7 },
+		function (t, px, stil) { aufrufeOhne.push([t, px, stil]); return 0; });
+	gleich('13.m5 Text ohne teile: eine Zeile = ein Aufruf mit {f:0, k:0}', aufrufeOhne,
+		[['ab', 20, { f: 0, k: 0 }], ['abcd', 20, { f: 0, k: 0 }]]);
+	rm = E.rahmen({ id: 'e1', typ: 'text', farbe: '#000', breite: 1, text: 'ab\nabcd', x: 5, y: 7 }, breiter);
+	gleich('13.m6 Text ohne teile misst wie bisher', rm, { x: 5, y: 7, b: 40, h: 48 });
+	rm = E.rahmen(BASIS);
+	pruefe('13.m7 ohne Messfunktion 0,6 x Schrift je Zeichen wie bisher (12 x 24 x 0,6)',
+		nah(rm.b, 12 * 24 * 0.6) && nah(rm.h, 28.8), JSON.stringify(rm));
+
+	// n. teileZusammenlegen
+	const vorN = [{ t: 'a' }, { t: 'b' }, { t: '', f: 1 }, { t: 'c', f: 1 }, { t: 'd', f: 1, farbe: '#ff0000' }];
+	const vorNKopie = kopie(vorN);
+	gleich('13.n1 leere t entfernt, gleiche Nachbarn verbunden', teileZusammenlegen(vorN),
+		[{ t: 'ab' }, { t: 'c', f: 1 }, { t: 'd', f: 1, farbe: '#ff0000' }]);
+	gleich('13.n2 Eingabe unveraendert', vorN, vorNKopie);
+	gleich('13.n3 nur Klartext -> []', teileZusammenlegen([{ t: 'a' }, { t: 'b' }]), []);
+	gleich('13.n4 f: true -> f: 1, f: 0 / false entfaellt',
+		teileZusammenlegen([{ t: 'a', f: true }, { t: 'b', f: 0 }, { t: 'c', f: false, k: 1 }]),
+		[{ t: 'a', f: 1 }, { t: 'b' }, { t: 'c', k: 1 }]);
+	gleich('13.n5 k: true -> k: 1', teileZusammenlegen([{ t: 'a', k: true }]), [{ t: 'a', k: 1 }]);
+	gleich('13.n6 nach dem Vereinheitlichen gleiche Nachbarn verbunden (f: true und f: 1)',
+		teileZusammenlegen([{ t: 'a', f: true }, { t: 'b', f: 1 }]), [{ t: 'ab', f: 1 }]);
+	gleich('13.n7 leerer Teil zwischen gleichen Teilen: Nachbarn verbunden',
+		teileZusammenlegen([{ t: 'a', f: 1 }, { t: '' }, { t: 'b', f: 1 }, { t: 'c' }]), [{ t: 'ab', f: 1 }, { t: 'c' }]);
+	gleich('13.n8 verschiedene farbe wird nicht verbunden',
+		teileZusammenlegen([{ t: 'a', farbe: '#ff0000' }, { t: 'b', farbe: '#0000ff' }]),
+		[{ t: 'a', farbe: '#ff0000' }, { t: 'b', farbe: '#0000ff' }]);
+	gleich('13.n9 leeres Array -> []', teileZusammenlegen([]), []);
+	const zl = teileZusammenlegen([{ t: 'Es ' }, { t: 'ist ' }, { t: 'fett', f: true }, { t: '.' }]);
+	r = geprueft(mitTeilen(zl));
+	gleich('13.n10 Ergebnis besteht die Pruefung', r && r.modell.elemente[0].teile, TEILE);
+})();
+
 ende();
