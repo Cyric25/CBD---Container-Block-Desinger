@@ -2044,6 +2044,12 @@
         n = element(gid);
         pruefen('e)', n);
         if (n && (n.text.length !== 5000 || n.winkel !== 20 || n.text.indexOf('\n') >= 0)) f.push('e) Länge ' + n.text.length + ', winkel ' + n.winkel);
+        // teile mitgekürzt: ohne Umbruch (gedreht) fiele eine ungekürzte Liste
+        // nicht auf, sie ließe nur still die Formatierung entfallen
+        if (n) {
+            var stilE = stilJeZeichen(n.text, n.teile);
+            if (n.teile === undefined || stilE[stilE.length - 1] !== '1|0|' || stilE[0] !== '0|0|') f.push('e) teile nicht passend zugeschnitten: ' + teileText(n).slice(0, 60) + '…');
+        }
 
         // Strg+Z macht den letzten Schritt rückgängig (ein Schritt je Aufruf)
         strgZ();
