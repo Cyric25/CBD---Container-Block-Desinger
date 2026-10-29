@@ -4176,8 +4176,8 @@ dann Teil des Bild-Elements.
 | `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | 266 Prüfungen (seit 3.1.143 inkl. Gruppe 11 Drehen/Kopieren/`winkel`, seit 3.1.144 Gruppe 12 Textgröße) |
 | `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall, `winkel` (G), Textgröße (H) | 130 Prüfungen |
 | `node tools/test-notizen-manager-js.js` | `personal-notes-manager.js` (Mini-DOM im `vm`) | 34 Prüfungen |
-| `node tools/test-board-blocktext-js.js` | Modul `board-blocktext.js` ohne Browser (Blocktext auf die Tafel, seit 2026-10-28): Formelumwandlung inkl. Bestandslauf über `tools/fixtures/blocktext/formeln.json`, Absätze, Umbruch, Verteilung, Farbe | 239 Prüfungen |
-| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **160 Prüfungen**, Stand 3.1.145 (davon 12 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4) |
+| `node tools/test-board-blocktext-js.js` | Modul `board-blocktext.js` ohne Browser (Blocktext auf die Tafel, seit 2026-10-28): Formelumwandlung inkl. Bestandslauf über `tools/fixtures/blocktext/formeln.json`, Absätze, Umbruch, Verteilung, Farbe | 242 Prüfungen (seit AP-2.fix1) |
+| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **214 Prüfungen**, Stand 3.1.146 (160 bis 3.1.145, davon 12 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; dazu 54 aus `test-board-blocktext.js`; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4). Muss über den Webserver laufen (Fixtures per `fetch`), Wartezeit eher 15–20 s |
 | `php tools/check-php74.php` | PHP-7.4-Kompatibilität | muss OK sein |
 
 Prüfseite: Viewport VOR dem Laden auf ~1366×768, nach dem Laden ca. 10 s
@@ -4426,17 +4426,163 @@ Prüfseite, nach `test-board-drehen.js` geladen), Gruppe 12 in
 Testinstallation geprüft (28 → 34 px). **Abnahme am Smartboard/iPad steht
 aus.**
 
-### Blocktext auf die Tafel (Plan `PLAN-Blocktext-auf-Tafel.md`, Phase 1 seit 2026-10-28)
+### Blocktext auf die Tafel (Plan `Plan_Archiv/PLAN-Blocktext-auf-Tafel.md`, abgeschlossen 2026-10-29, Plugin 3.1.146)
 
 Wunsch der Schüler: den Text des geöffneten Blocks als Text-Elemente auf die
-eigene Tafel kopieren. Geplant ist ein Knopf „Text auf die Tafel" oben im
-linken Blockbereich mit Vorschau zum Kürzen; eingefügt wird je Absatz ein
-Text-Element (Schrift 24 → 18 px, Rest auf Nachfrage auf neuer Seite).
-**Phase 1 (dieser Stand) liefert nur die Grundlagen: das DOM-freie Modul und
-Testmaterial. Das Modul ist noch NICHT eingereiht – das Plugin verhält sich
-unverändert.** Phase 2 (Lesen des Blockbereichs in `board-mode.js`,
-Einfügen, Knopf, Vorschau, Einreihen in `class-cbd-style-loader.php` vor
-`cbd-board-mode`) folgt nach dem Plan.
+eigene Tafel kopieren. Phase 1 lieferte das DOM-freie Modul
+`board-blocktext.js` und Testmaterial, Phase 2 die Funktion in der Tafel.
+
+#### Bedienung
+
+Oben im linken Blockbereich klebt eine Leiste mit dem Knopf **„Text auf die
+Tafel"** (`.cbd-board-blocktext-leiste` > `button.cbd-board-blocktext-knopf`,
+Dashicon `clipboard`). Er öffnet die **Vorschau**: ein Fenster mit dem
+sichtbaren Text des Blocks in einem Textfeld („Lösche, was du nicht brauchst.
+Leere Zeilen trennen die Textblöcke."). Hier wird gekürzt und geändert –
+Markieren im Blockbereich selbst bleibt seit #7149 gesperrt. **„Auf die
+Tafel"** setzt jeden Absatz als eigenes Text-Element unter den vorhandenen
+Inhalt der aktuellen Seite; danach ist das Lasso aktiv und alles Eingefügte
+ausgewählt (verschieben, A−/A+, drehen sofort möglich). Passt nicht alles,
+fragt ein zweites Fenster: „N Textblöcke passen nicht mehr auf diese Seite."
+→ **„Weglassen"** oder **„Auf neuer Seite einfügen"** (wiederholt sich, bis
+alles steht). Ohne sichtbaren Text: Hinweis und nur „Schließen".
+
+#### Lesen des Blockbereichs: `_blocktextLesen(wurzel)` (`board-mode.js`)
+
+Tiefensuche über `childNodes`, liefert `[{art, text}]` (`art`: `titel`,
+`ueberschrift`, `absatz`, `liste`, `zeile`, `formel`). `_blocktextAlsText()`
+verbindet die Texte von `.cbd-board-content` mit Leerzeilen.
+
+- **Nur Sichtbares** (Architektur E7): `hidden`, `aria-hidden="true"`,
+  berechnet `display:none` oder `visibility:hidden` fallen samt Inhalt weg.
+  Grund: Quiz-Blöcke verstecken Lösungen per `display:none` – sie dürfen nicht
+  auf die Tafel. `opacity:0` zählt **nicht** (Einblend-Animation der
+  Formeln). Von einem geschlossenen `<details>` nur `SUMMARY` (AP-2.fix1).
+  Gemessen: Quiz-Seite 5304 liest 227 Zeichen, `textContent` des Bereichs
+  hätte 3119 bis 20 000.
+- **Übersprungen samt Inhalt:** Tags in `BLOCKTEXT_WEG_TAGS` (u. a. `SCRIPT`,
+  `BUTTON`, `INPUT`, `SELECT`, `TEXTAREA`, `SVG`, `CANVAS`, `IMG`, `VIDEO`,
+  `IFRAME`) und Klassen in `BLOCKTEXT_WEG_KLASSEN` (`cbd-action-buttons`,
+  `cbd-class-drawing-section`, `cbd-drawing-overlay`, `cbd-drawing-toggle`,
+  `cbd-board-blocktext-leiste`, `screen-reader-text`). **Ausnahme:** ein
+  `BUTTON` in `H1`–`H6` – die Zeilentitel des Accordion-Blocks stehen in
+  `h3 > button`.
+- **Formeln:** `.cbd-latex-formula[data-latex]` → `latexZuText()`, ohne ins
+  KaTeX-Innenleben zu steigen (`.katex-mathml` würde den Text doppeln);
+  `.cbd-latex-display` wird ein eigener Absatz.
+- **Absatzgrenzen** bei jedem Element, dessen berechnetes `display` nicht mit
+  `inline` beginnt und nicht `contents` ist; `.cbd-block-title`, `H1`–`H6`,
+  `LI`, `TR` sind immer eigene Absätze. `BR` → `\n`. Listen „• " bzw.
+  „n. " (mit `start`); ein Absatz im Listenpunkt behält das Zeichen.
+  **Tabellenzeile = ein Absatz**, Zellen mit „ | " verbunden; Blockelemente
+  in einer Zelle trennen nur mit Leerzeichen. ASCII-Leerraum wird
+  zusammengefasst (in `PRE` bleiben Zeilenwechsel), geschützte Leerzeichen
+  bleiben.
+- Braucht einen im Dokument hängenden Bereich (`getComputedStyle`).
+
+#### Einfügen: `blocktextEinfuegen(text)` / `blocktextAufNeueSeite(rest)`
+
+- `_sichtbarerBereich()`: Größe von `.cbd-board-canvas-area`, um
+  `panX`/`panY`/`zoom` zurückgerechnet, auf die Zeichenfläche begrenzt.
+- **Platzierung (E9):** `flaecheUnter(sichtbar, Rahmen aller Elemente, 20)` –
+  unter allem, was im Ausschnitt steht, 20 px Rand; eigene Notizen werden
+  nicht überdeckt. Inhalt ganz unterhalb des Ausschnitts zählt nicht
+  (AP-2.fix1; bei Zoom > 1 hieß es sonst „kein Platz").
+- **Schrift (E3):** `verteile(…, {startPx: 24, minPx: 18, maxZeichen: 5000})`
+  über `_blocktextVerteilen()`; `breite = (px − 16) / 4`. Der Umbruch auf die
+  sichtbare Breite steht als `\n` im Text (E8, kein neues Elementfeld) – A±
+  bricht deshalb **nicht** neu um.
+- **Farbe (E10):** `lesbareFarbe(currentColor, boardColor)` – nach dem Öffnen
+  ist der Stift Schwarz, auf grüner/schwarzer Tafel wird daraus Weiß.
+  Darkmode mit weißer Tafel: gespeichert Schwarz, angezeigt hell (die
+  Zeichenfläche wird invertiert).
+- **Undo (E11):** EIN `merkeZustand()` je Seite, neue Liste per `concat`.
+  Danach `auswahlAufheben()`, `setTool('lasso')`, Werkzeugknopf der Leiste
+  nachgezogen (`setTool` selbst stellt ihn nicht um), `auswahl` = neue IDs.
+- Laufendes Ziehen/Drehen wird vorher übernommen.
+- Rückgabe `{eingefuegt, rest, keinPlatz[, px, ids]}`; `keinPlatz` ändert
+  nichts. `blocktextAufNeueSeite(rest)`: `addPage()`, dann wie oben – aber
+  nur, wenn auf einer **leeren** Seite im Ausschnitt etwas Platz hat (sonst
+  `keinPlatz` ohne neue Seite, AP-2.fix1); leerer Rest legt keine Seite an.
+
+#### Die Fenster: Tastatur, Klickschutz, Speichern
+
+Muster von `showClearConfirm()` (`div.cbd-board-confirm-overlay` >
+`div.cbd-board-confirm-dialog` am `body`, z-index 1000001), Bausteine
+`_blocktextFensterBauen`, `_blocktextFensterKnopf`,
+`_blocktextFensterSchliessen(rueckfokus)`; höchstens eines, Verweis
+`this._blocktextFenster`, aufgeräumt in `close()`, `destroy()` und
+`_openOverlay()`.
+
+- **`keydown` am Fenster ruft IMMER `stopPropagation()`.** Der Tafel-Handler
+  `onKeyDown()` hängt am `document`: Escape schlösse sonst die ganze Tafel,
+  Strg+Z machte auf der Tafel rückgängig, Entf/Rücktaste/Strg+D wirkten auf
+  die Lasso-Auswahl. Escape schließt nur das Fenster. **Zweite Sicherung:**
+  `onKeyDown()` steigt aus, solange ein Blocktext-Fenster offen ist (Fokus per
+  Tab außerhalb). Tab kreist im Fenster; nach Abbrechen/Weglassen/Schließen/
+  Escape kehrt der Fokus auf den Knopf zurück. Gehaltene Taste auf einem
+  Knopf (`e.repeat`) wirkt nicht.
+- Kein Schließen per Klick neben das Fenster (gekürzter Text ginge verloren).
+- **Klickschutz (AP-2.fix1):** 400 ms nach „Auf die Tafel"/„Auf neuer Seite
+  einfügen" liegt `div.cbd-board-blocktext-schild` (durchsichtig,
+  z-index 1000002) über allem. Ohne ihn traf der zweite Klick eines
+  Doppelklicks den Knopf der sofort erscheinenden Folge-Rückfrage (zwei neue
+  Seiten – Seiten lassen sich nicht löschen) oder die Zeichenfläche mit
+  aktivem Lasso (Auswahl weg).
+- **Speichern abwarten (AP-2.fix1):** Speichert die Klassen-Tafel noch
+  (`isSaving`), wartet „Auf neuer Seite einfügen" („Wird gespeichert …", alle
+  150 ms, höchstens 15 s). `saveToServer()` überspringt während der Sperre
+  still – `addPage()` hätte sonst die gerade befüllte Seite nicht
+  gespeichert.
+
+#### Knopfleiste: sticky und px
+
+Erstes Kind von `.cbd-board-content` (per `insertBefore`, der Inhalt wird
+nicht neu geparst), **nicht** ein drittes Kind von `.cbd-board-split` – das
+bräche die Handy- und Querformat-Regeln (E4). `position: sticky`, feste
+13 px (der Regler „Textgröße" setzt am Bereich `em`), `background: inherit`
+(Fläche des Bereichs, hell wie dunkel). **sticky rechnet ab der Innenkante:**
+mit `top: 0` schien gescrollter Text im Innenabstand über der Leiste durch.
+Deshalb steht neben jedem `padding` von `.cbd-board-content` (Grundregel,
+`max-width: 768px`, `max-height: 500px`) die Variable
+`--cbd-board-inhalt-rand-oben` (24/16/8 px); die Leiste nimmt sie als
+negatives `top`/`margin-top` und als `padding` oben. **Wer das `padding`
+ändert, muss die Variable mitziehen.** Fenster: höchstens Bildschirmhöhe,
+das Textfeld schrumpft zuerst (bei 1141×253: 61 px, Knöpfe sichtbar).
+
+#### Prüfungen und Abnahme
+
+- Prüfseite `tools/test-board-zeiger.html`: **214 / 214**, davon 54 aus
+  `tools/test-board-blocktext.js` (Leseregeln, die acht Testmaterial-Paare
+  zeichengenau, Einfügen, Knopf und Fenster, Befunde des Reviews).
+- `node tools/test-board-blocktext-js.js`: **242** (Gruppe 10: `flaecheUnter`).
+- Mit echten Klicks, Tasten, Maus und Doppelklicks auf den Seiten 876, 5652,
+  2323 durchgespielt; Fenstergrößen 1366×768, 1024×768, 820×1180, 375×812,
+  1141×253; grüne Tafel, Darkmode, Rest auf neuer Seite mit Seitenwechsel.
+- **Offen:** Abnahme am Smartboard und iPad (Bildschirmtastatur im Textfeld,
+  Antippen, mit Stift weiterschreiben) und auf einer echten Klassen-Tafel
+  (Speichern abwarten nur mit simuliertem `isSaving` geprüft).
+
+#### Bekannte Einschränkungen (Nicht-Ziele und Review AP-2.rev)
+
+- Keine gesetzten Formeln, keine Bilder, keine Bedienelemente; Tabellen nur
+  als Textzeilen; Accordion-Zeilen nur mit ihrem Titel (in der Tafel nicht
+  aufklappbar); keine Hervorhebung von Überschriften.
+- HTML-`<sub>`/`<sup>` verlieren die Stellung (`x<sup>2</sup>` → „x2", G7;
+  2 Seiten). `<ol reversed>`, `<li value>` ignoriert; MathML ohne
+  `data-latex` zerfällt; ein sichtbares Kind unter `visibility:hidden` geht
+  verloren; per `height:0`/`clip`/Verschieben Verstecktes wird gelesen (G8,
+  G6 – in keinem Container vorhanden).
+- Füllt die Auswahl fast die ganze Höhe, legt sich die Lasso-Auswahlleiste
+  über die ersten Zeilen (`_auswahlLeisteAusrichten`: oben kein Platz, unten
+  kein Platz → oben in der Fläche; G9). Kandidat für ein Folge-AP.
+- Laufzeit: normaler Text rund 0,8 s je Seite bei 100 000 Zeichen; ein Wort
+  aus 100 000 Zeichen ohne Leerzeichen blockiert 2,4 s (G10).
+- Klassen-Tafel: Schließen direkt nach „Auf neuer Seite einfügen" kann das
+  Speichern der letzten Seite weiter überspringen – vorbestehend, siehe
+  „Bekannte, bewusst offene Punkte", Punkt 3 (Warteschlange als Folge-AP).
+- Testumgebung: Tafel aus der Konsole mit `{stableContainerId: …}` öffnen
+  (sonst speichert sie unter der seitenabhängigen `cbd-container-N`).
 
 #### Modul `board-blocktext.js`
 
@@ -4452,7 +4598,7 @@ Textbreiten misst der Aufrufer über `mass(text, px)` (im Browser
 | `absaetzeAusText(text)` | `[string]` | Trennung an Leerzeilen, einzelne `\n` bleiben, getrimmt |
 | `umbrechen(text, maxBreite, px, mass)` | `[zeile]` | an Leerzeichen; harte `\n` bleiben; zu breites Wort zeichenweise |
 | `verteile(absaetze, flaeche, mass, optionen)` | `{px, bloecke:[{text,x,y,b,h}], rest}` | Schrift `startPx` 24 → `minPx` 18 in 1-px-Schritten, bis alles passt; Zeilenhöhe `1.2*px`, Absatzabstand `Math.round(0.6*px)`; sonst Auffüllen, Teilung an Zeilengrenze; Blöcke ≤ 5000 Zeichen (Teile direkt untereinander) |
-| `flaecheUnter(sichtbar, rahmenListe, rand)` | `{x,y,b,h}` | unter der Unterkante aller Rahmen, die den sichtbaren Bereich waagrecht schneiden; `h` nie negativ |
+| `flaecheUnter(sichtbar, rahmenListe, rand)` | `{x,y,b,h}` | unter der Unterkante aller Rahmen, die den sichtbaren Bereich waagrecht schneiden und oberhalb seiner Unterkante beginnen (seit AP-2.fix1); `h` nie negativ |
 | `lesbareFarbe(stift, tafel)` | `'#rrggbb'` | Stift, wenn Kontrast ≥ 3:1 (WCAG); sonst Weiß/Schwarz; ungültiger Stift = Schwarz, ungültige Tafel = Weiß |
 
 **Rest eines geteilten Absatzes (AP-1.fix1):** `rest[0]` ist der
@@ -4510,7 +4656,7 @@ ausgeglichenen Klammern (`{{F:C_{40}}}` kommt vor). Vor dem Vergleich
 Formeln aus Blocktiteln stehen in `post_content` JSON-maskiert
 (Backslash als `\`+`u005c`) – beim Erheben zurückgewandelt.
 
-**Befunde der Bestandsaufnahme, wichtig für Phase 2:** Accordion-Zeilen
+**Befunde der Bestandsaufnahme (Phase 1, in Phase 2 umgesetzt):** Accordion-Zeilen
 lassen sich in der Tafel NICHT aufklappen (die Kopie trägt
 `data-mb-accordion-init`, das Blockskript startet nicht neu) – kopierbar
 sind nur die Zeilentitel, die in `h3 > button` stehen (deshalb: Knopf in
@@ -4531,10 +4677,11 @@ Surrogatpaare und kombinierende Zeichen (G6). Harnisch-Lücken:
 `teileNachZeichen`-Grenze ±1 und `MAX_TIEFE` werden von keiner Prüfung
 festgenagelt (G3).
 
-**Prüfungen:** `node tools/test-board-blocktext-js.js` – **239 Prüfungen**
+**Prüfungen:** `node tools/test-board-blocktext-js.js` – **242 Prüfungen**
 (Gruppe 0 DOM-frei/ES5, 1/1b `latexZuText` inkl. 18 bösartiger Eingaben,
 2 Bestandslauf, 3–8 Schnittstelle und AP-1.3-Funktionen, 9 Befunde des
-Reviews); Mutationsproben über `CBD_BLOCKTEXT_DATEI`.
+Reviews Phase 1, 10 `flaecheUnter` nach Review Phase 2); Mutationsproben
+über `CBD_BLOCKTEXT_DATEI`.
 
 ### Raster: Kästchen und Zeilen (Rückmeldung 2026-10-27, Plugin 3.1.143)
 
