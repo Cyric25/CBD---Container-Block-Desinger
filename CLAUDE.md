@@ -4066,8 +4066,9 @@ Server `CBD_Classroom::elemente_winkel()`, gleiche Regel). Striche haben kein
 stünden in der Elementliste dann waagrecht, das PNG (maßgeblich, E7) zeigt sie
 aber weiter gedreht, bis dort neu gespeichert wird.
 
-**Seit Plugin 3.1.148 (Phasen 1 und 2 von `PLAN-Blocktext-Formatierung.md`,
-2026-10-29): optionales Feld `teile`** am Text-Element — fett, kursiv und
+**Ausgeliefert mit Plugin 3.1.148 (Phasen 1 und 2 von
+`PLAN-Blocktext-Formatierung.md`, 2026-10-29): optionales Feld `teile`** am
+Text-Element — fett, kursiv und
 eigene Farbe für Abschnitte des Texts. Format und Prüfregel stehen im
 eigenen Abschnitt „Formatierter Text: das Feld `teile`" unten. Phase 1
 lieferte Datenhaltung und Darstellung auf der Tafel, Phase 2 den ersten
@@ -4922,9 +4923,12 @@ die Vorschau ist ein formatiert bearbeitbares Feld mit Formatleiste, der Rest
 auf einer neuen Seite behält die Formatierung. Die Abschnitte bis „Rückweg
 auf 3.1.147" beschreiben das Fundament (Phase 1); danach folgen die
 Unterabschnitte der Phase 2 und die gemeinsame Liste der bekannten
-Einschränkungen. **Stand:** Phase 1 und 2 sind auf `main`; das ZIP
-`dist/container-block-designer-3.1.148.zip` (gebaut mit `npm run build`)
-enthält beide. Den Live-Upload macht der Betreiber; die Abnahme am echten
+Einschränkungen. **Stand: ausgeliefert mit 3.1.148.** Phase 1 und 2 sind auf
+`main` (Merge der Phase 2: `771e887`, Versionserhöhung: `1ba03d8`); das ZIP
+`dist/container-block-designer-3.1.148.zip` (49,1 MB, gebaut mit `npm run
+build`) enthält beide und ist geprüft (Version in der Hauptdatei, die Dateien
+der Phasen 1 und 2 byte-gleich zum Repo, kein `tools/`, `--no-dev`-Autoloader
+ohne Fatal). Den Live-Upload macht der Betreiber; die Abnahme am echten
 Gerät steht aus (Unterabschnitt „Betreiber-Abnahme").
 
 #### Das Format (Entscheidungen F1–F5)
