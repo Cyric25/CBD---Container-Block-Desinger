@@ -459,8 +459,12 @@ gleich('ein Rahmen unten im Bild: y darunter', versuche(function () { return B.f
 	{ x: 120, y: 370, b: 760, h: 260 });
 gleich('Rahmen rechts ausserhalb: ignoriert', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 950, y: 300, b: 100, h: 50 }], 20); }),
 	{ x: 120, y: 70, b: 760, h: 560 });
-gleich('Rahmen unterhalb des sichtbaren Bereichs: h 0', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 200, y: 700, b: 100, h: 50 }], 20); }),
-	{ x: 120, y: 770, b: 760, h: 0 });
+// Bis AP-2.fix1 lautete diese Erwartung { y: 770, h: 0 } ("h 0"): Ein Rahmen
+// ganz unterhalb des Ausschnitts schob die Flaeche hinaus. Review AP-2.rev,
+// Befund G4: bei Zoom > 1 hiess es dann "kein Platz", obwohl der sichtbare
+// Ausschnitt leer war. Vorgabe geaendert (Plan, AP-2.fix1 Schritt 6).
+gleich('Rahmen unterhalb des sichtbaren Bereichs: ignoriert (AP-2.fix1, G4)', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 200, y: 700, b: 100, h: 50 }], 20); }),
+	{ x: 120, y: 70, b: 760, h: 560 });
 gleich('Rahmen oberhalb: Oberkante bleibt', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 200, y: 0, b: 100, h: 20 }], 20); }),
 	{ x: 120, y: 70, b: 760, h: 560 });
 gleich('Rahmen ragt von links hinein: zaehlt', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 50, y: 100, b: 60, h: 100 }], 20); }),
@@ -518,5 +522,17 @@ gleich('G3: catch-Rueckfall bei eingefrorenem Protokoll',
 	pruefe('G2: umbrechen mit 20 000 Leerzeichen unter 200 ms (' + d2 + ' ms)', d2 < 200);
 	pruefe('G2: umbrechen liefert eine Zeile', Array.isArray(u) && u.length === 1 && u[0].length === 20002);
 })();
+
+// =========================================================================
+// Gruppe 10: AP-2.fix1 (Review AP-2.rev, Befund G4)
+// =========================================================================
+console.log('\nGruppe 10: flaecheUnter zaehlt nur, was im Ausschnitt beginnt');
+gleich('G4: Rahmen genau an der Unterkante beginnend: ignoriert', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 200, y: 650, b: 100, h: 50 }], 20); }),
+	{ x: 120, y: 70, b: 760, h: 560 });
+gleich('G4: Rahmen ragt von oben in den Ausschnitt: zaehlt', versuche(function () { return B.flaecheUnter(SICHT, [{ x: 200, y: 640, b: 100, h: 50 }], 20); }),
+	{ x: 120, y: 710, b: 760, h: 0 });
+gleich('G4: Zoom 2 - Strich unterhalb der Ansicht, Ausschnitt leer', versuche(function () {
+	return B.flaecheUnter({ x: 0, y: 0, b: 341, h: 330 }, [{ x: 10, y: 331, b: 200, h: 4 }], 20);
+}), { x: 20, y: 20, b: 301, h: 290 });
 
 ende();

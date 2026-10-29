@@ -615,6 +615,147 @@
         return ergebnis(f);
     }
 
+    // ------------------------------------------------------------------
+    // AP-2.fix1: Befunde aus AP-2.rev
+    // ------------------------------------------------------------------
+    function schild() {
+        return document.querySelector('.cbd-board-blocktext-schild');
+    }
+
+    // Trifft ein Zeigerklick an der Mitte von el den Klickschutz?
+    function schildFaengt(el) {
+        var r = el.getBoundingClientRect();
+        var oben = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+        return !!oben && oben === schild();
+    }
+
+    function warte(ms) {
+        return new Promise(function(fertig) { setTimeout(fertig, ms); });
+    }
+
+    function m1KlickschutzRueckfrage() {
+        oeffnenMit(langerInhalt(60));
+        vorschauOeffnen();
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var f = [];
+        var rf = fenster();
+        if (!rf) return { ok: false, detail: 'keine Rückfrage' };
+        if (!schild()) return { ok: false, detail: 'kein Klickschutz nach "Auf die Tafel"' };
+        if (!schildFaengt(rf.querySelector('.cbd-board-blocktext-neue-seite'))) f.push('Knopf der Rückfrage nicht abgedeckt');
+        rf.querySelector('.cbd-board-blocktext-neue-seite').click();
+        var rf2 = fenster();
+        if (!schild()) f.push('kein Klickschutz nach "Auf neuer Seite einfügen"');
+        else if (rf2 && !schildFaengt(rf2.querySelector('.cbd-board-blocktext-neue-seite'))) f.push('Knopf der zweiten Rückfrage nicht abgedeckt');
+        if (B.totalPages !== 2) f.push(B.totalPages + ' Seiten');
+        return warte(450).then(function() {
+            if (schild()) f.push('Klickschutz nach 450 ms noch da');
+            return ergebnis(f);
+        });
+    }
+
+    function g3KlickschutzOhneRest() {
+        oeffnenMit('<p>Eins</p><p>Zwei</p>');
+        vorschauOeffnen();
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var f = [];
+        if (fenster()) f.push('Fenster offen');
+        if (!schild()) return { ok: false, detail: 'kein Klickschutz' };
+        if (!schildFaengt(B.drawingCanvas)) f.push('Zeichenfläche nicht abgedeckt');
+        var ids = B.auswahl.join();
+        return warte(450).then(function() {
+            if (schild()) f.push('Klickschutz nach 450 ms noch da');
+            if (B.auswahl.join() !== ids || !ids) f.push('Auswahl ' + B.auswahl.join());
+            return ergebnis(f);
+        });
+    }
+
+    function gehalteneTaste() {
+        oeffnenMit(langerInhalt(60));
+        vorschauOeffnen();
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var knopf = fenster() && fenster().querySelector('.cbd-board-blocktext-neue-seite');
+        if (!knopf) return { ok: false, detail: 'keine Rückfrage' };
+        var ev = taste(knopf, 'Enter', { repeat: true });
+        var f = [];
+        if (!ev.defaultPrevented) f.push('gehaltenes Enter nicht abgefangen');
+        if (taste(knopf, 'Enter').defaultPrevented) f.push('einfaches Enter abgefangen');
+        return ergebnis(f);
+    }
+
+    function m2SpeichernAbwarten() {
+        oeffnenMit(langerInhalt(60));
+        vorschauOeffnen();
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var knopf = fenster() && fenster().querySelector('.cbd-board-blocktext-neue-seite');
+        if (!knopf) return { ok: false, detail: 'keine Rückfrage' };
+        var f = [];
+        B.isSaving = true; // wie ein noch laufendes saveToServer()
+        knopf.click();
+        if (B.totalPages !== 1) f.push('Seite angelegt, während gespeichert wird');
+        if (!knopf.disabled || knopf.textContent.indexOf('gespeichert') < 0) f.push('Knopf ' + (knopf.disabled ? 'gesperrt' : 'frei') + ', ' + JSON.stringify(knopf.textContent));
+        return warte(400).then(function() {
+            if (B.totalPages !== 1) f.push('nach 400 ms trotz Sperre Seite angelegt');
+            B.isSaving = false;
+            return warte(400);
+        }).then(function() {
+            if (B.totalPages !== 2 || !texte().length) f.push('nach dem Speichern: ' + B.totalPages + ' Seiten, ' + texte().length + ' Texte');
+            return ergebnis(f);
+        });
+    }
+
+    function g5KeineLeereSeite() {
+        oeffnenMit('<p>Eins</p>');
+        var f = [];
+        B.zoom = 20;
+        B.updateCanvasTransform();
+        var erg = B.blocktextAufNeueSeite(['Ein Absatz']);
+        if (!erg || !erg.keinPlatz || erg.eingefuegt !== 0) f.push('Ergebnis ' + JSON.stringify(erg));
+        if (B.totalPages !== 1) f.push(B.totalPages + ' Seiten (leere Seite angelegt)');
+        if (erg && erg.rest.join() !== 'Ein Absatz') f.push('Rest ' + JSON.stringify(erg.rest));
+        return ergebnis(f);
+    }
+
+    // Asynchron: close() zerstört die Tafel erst nach 200 ms per Zeitgeber -
+    // der muss innerhalb dieser Prüfung ablaufen, sonst träfe er die nächste
+    function g2CloseSchliesstFenster() {
+        oeffnenMit('<p>Eins</p>');
+        vorschauOeffnen();
+        B.close();
+        var offen = !!fenster();
+        return warte(350).then(function() {
+            return offen ? { ok: false, detail: 'Fenster bleibt während der Schließ-Animation' } : true;
+        });
+    }
+
+    function g1Fokus() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        var f = [];
+        var knoepfe = fenster().querySelectorAll('button');
+        var letzter = knoepfe[knoepfe.length - 1];
+        letzter.focus();
+        var ev = taste(letzter, 'Tab');
+        if (!ev.defaultPrevented || document.activeElement !== t) f.push('Tab am Ende kreist nicht (Fokus ' + (document.activeElement && document.activeElement.className) + ')');
+        t.focus();
+        var ev2 = taste(t, 'Tab', { shiftKey: true });
+        if (!ev2.defaultPrevented || document.activeElement !== letzter) f.push('Umschalt+Tab am Anfang kreist nicht');
+        var ev3 = taste(t, 'Tab');
+        if (ev3.defaultPrevented) f.push('Tab mitten im Fenster abgefangen');
+        taste(t, 'Escape');
+        var knopf = B.overlay.querySelector('.cbd-board-blocktext-knopf');
+        if (document.activeElement !== knopf) f.push('Fokus nach Escape auf ' + (document.activeElement && (document.activeElement.className || document.activeElement.tagName)));
+        vorschauOeffnen();
+        fenster().querySelector('.cbd-board-confirm-cancel').click();
+        if (document.activeElement !== knopf) f.push('Fokus nach "Abbrechen" nicht auf dem Knopf');
+        return ergebnis(f);
+    }
+
+    function g6Details() {
+        oeffnenMit('<details><summary>Frage</summary><p>Geheime Lösung</p></details>' +
+            '<details open><summary>Offen</summary><p>Sichtbar</p></details>');
+        return vergleich(B._blocktextAlsText(), 'Frage\n\nOffen\n\nSichtbar');
+    }
+
     function knopfleisteUnsichtbar() {
         // Leiste aus AP-2.3 (Klasse) und Aktionsleiste fallen weg, auch wenn
         // sie im Blockbereich stehen
@@ -688,6 +829,12 @@
         p('Blocktext-Vorschau: Block ohne Text -> Hinweis und nur "Schließen"', leererBlock);
         p('Blocktext-Vorschau: destroy() entfernt das Fenster, neues Öffnen ohne Fenster', destroyMitFenster);
         p('Blocktext-Vorschau: Klick neben das Fenster schließt nicht, Escape außerhalb schließt die Tafel nicht', klickNebenFenster);
+
+        // AP-2.fix1
+        p('AP-2.fix1 (G5): neue Seite nur, wenn auf einer leeren Seite Platz ist', g5KeineLeereSeite);
+        p('AP-2.fix1 (G1): Tab kreist im Fenster, Fokus danach zurück auf den Knopf', g1Fokus);
+        p('AP-2.fix1 (G6): geschlossenes <details> nur mit Überschrift', g6Details);
+        p('AP-2.fix1 (M1): gehaltenes Enter in der Rückfrage wirkt nicht', gehalteneTaste);
     };
 
     window.__zusatzTestsAsync = function(c) {
@@ -699,7 +846,17 @@
                     return c.pruefeAsync('Blocktext: ' + name, fixturePruefung(name));
                 });
             });
-            return kette;
+            // AP-2.fix1: Klickschutz und Speichern abwarten brauchen Zeit
+            return kette.then(function() {
+                ctx = c;
+                return c.pruefeAsync('AP-2.fix1 (M1): Klickschutz deckt die Rückfrage ab, verschwindet nach 400 ms', m1KlickschutzRueckfrage);
+            }).then(function() {
+                return c.pruefeAsync('AP-2.fix1 (G3): Klickschutz nach "Auf die Tafel" ohne Rest, Auswahl bleibt', g3KlickschutzOhneRest);
+            }).then(function() {
+                return c.pruefeAsync('AP-2.fix1 (M2): "Auf neuer Seite einfügen" wartet, bis gespeichert ist', m2SpeichernAbwarten);
+            }).then(function() {
+                return c.pruefeAsync('AP-2.fix1 (G2): close() schließt das Fenster sofort', g2CloseSchliesstFenster);
+            });
         });
     };
 })();
