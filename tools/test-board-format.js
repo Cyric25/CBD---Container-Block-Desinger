@@ -29,6 +29,12 @@
  *     Auswahl bleibt, Absätze mit \n, Umbruch am sichtbaren Rand (nur
  *     unverdreht), Teilfarben lesbar, leerer Inhalt entfernt, laufende
  *     Gesten werden beendet
+ *   - AP-3.2 (Phase 3, F8/F11/F12): Fenster "Text bearbeiten" -
+ *     auswahlTextBearbeiten() öffnet den Text im Bearbeitungsfeld
+ *     (Modus 'bearbeiten') samt Formatleiste, "Übernehmen" ruft
+ *     textErsetzen(), "Abbrechen"/Escape ändern nichts, Enter = Zeilenwechsel,
+ *     Tastatur im Feld wirkt nicht auf die Tafel, Fenster schließt bei
+ *     destroy()/close()/Seitenwechsel/aufgehobener Auswahl
  *
  * Wird von tools/test-board-zeiger.html NACH test-board-textgroesse.js und
  * VOR test-board-blocktext.js geladen und hängt sich an den Haken
@@ -1185,8 +1191,623 @@
     }
 
     // ------------------------------------------------------------------
+    // AP-3.2: Fenster "Text bearbeiten" (F8, F11, F12). Der Knopf der
+    // Auswahlleiste ruft auswahlTextBearbeiten(); das Fenster zeigt den Text
+    // des gewählten Elements im Bearbeitungsfeld (_textFeldBauen, Modus
+    // 'bearbeiten') mit Formatleiste, "Übernehmen" ruft textErsetzen().
+    // ------------------------------------------------------------------
+    var TB_MELDUNG = 'Ändere den Text. Markiere Wörter, um sie fett, kursiv oder farbig zu machen.';
+
+    function tbFenster() {
+        return document.querySelector('.cbd-board-text-bearbeiten');
+    }
+
+    function tbFeld() {
+        var w = tbFenster();
+        return w ? w.querySelector('.cbd-board-blocktext-feld') : null;
+    }
+
+    /** Knopf unten im Fenster ("Abbrechen", "Übernehmen") nach Beschriftung. */
+    function tbKnopf(beschriftung) {
+        var w = tbFenster();
+        if (!w) return null;
+        var k = w.querySelectorAll('.cbd-board-confirm-actions button');
+        for (var i = 0; i < k.length; i++) if (k[i].textContent === beschriftung) return k[i];
+        return null;
+    }
+
+    function tbFormatKnopf(selektor) {
+        var w = tbFenster();
+        return w ? w.querySelector('.cbd-board-blocktext-format ' + selektor) : null;
+    }
+
+    /** Text wählen (Lasso) und mit dem ECHTEN Klick auf den Knopf der Leiste bearbeiten. */
+    function tbOeffnen(id) {
+        lassoUm(id);
+        if (B.auswahl.join() !== id) throw new Error('Testaufbau: Text nicht gewählt (' + B.auswahl.join() + ')');
+        var k = knopf('text-bearbeiten');
+        if (!k) throw new Error('Knopf "Text bearbeiten" fehlt');
+        k.click();
+        return tbFeld();
+    }
+
+    function tasteAn(ziel, key, extra) {
+        var init = { key: key, bubbles: true, cancelable: true };
+        for (var k in (extra || {})) init[k] = extra[k];
+        var ev = new KeyboardEvent('keydown', init);
+        ziel.dispatchEvent(ev);
+        return ev;
+    }
+
+    /** Erster Textknoten im Feld, der wort enthält -> {knoten, start}. */
+    function tbTextStelle(feld, wort) {
+        var w = document.createTreeWalker(feld, NodeFilter.SHOW_TEXT, null, false);
+        for (var n = w.nextNode(); n; n = w.nextNode()) {
+            var i = n.nodeValue.indexOf(wort);
+            if (i >= 0) return { knoten: n, start: i };
+        }
+        return null;
+    }
+
+    /** Markierung per Range auf wort (ende: eingeklappt hinter wort) - wie ein Doppelklick. */
+    function tbMarkiere(feld, wort, ende) {
+        var s = tbTextStelle(feld, wort);
+        if (!s) throw new Error('Wort ' + JSON.stringify(wort) + ' nicht im Feld');
+        feld.focus();
+        var r = document.createRange();
+        r.setStart(s.knoten, ende ? s.start + wort.length : s.start);
+        r.setEnd(s.knoten, s.start + wort.length);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+    }
+
+    /** Berechneter Stil des Elements, in dem wort steht. */
+    function tbStil(feld, wort) {
+        var s = tbTextStelle(feld, wort);
+        return s ? getComputedStyle(s.knoten.parentNode) : null;
+    }
+
+    function tbRgb(hex) {
+        return 'rgb(' + parseInt(hex.substr(1, 2), 16) + ', ' + parseInt(hex.substr(3, 2), 16) + ', ' + parseInt(hex.substr(5, 2), 16) + ')';
+    }
+
+    /** Text am Ende des Felds anhängen, über DOM (Plan AP-3.2, Prüfungen). */
+    function tbAnhaengen(feld, text) {
+        feld.firstChild.appendChild(document.createTextNode(text));
+    }
+
+    function tbSchildDa() {
+        return !!document.querySelector('.cbd-board-blocktext-schild');
+    }
+
+    var TB_TEILE = [{ t: 'Alt ' }, { t: 'fett ', f: 1 }, { t: 'kursiv ', k: 1 }, { t: 'rot', farbe: '#ff0000' }];
+    var TB_TEXT = 'Alt fett kursiv rot';
+
+    // Das Fenster zeigt den Text samt Formatierung, Formatleiste, Knöpfe,
+    // Schreibmarke am ENDE, Fokus im Feld; das Öffnen ändert nichts.
+    function tbFensterZeigtText() {
+        ctx.oeffnen();
+        var f = [];
+        var e = neuesText({ x: 120, y: 140, breite: 3, text: TB_TEXT, farbe: '#1565c0', teile: TB_TEILE });
+        var id = einsetzen(e);
+        if (tbFenster()) return { ok: false, detail: 'Testaufbau: Fenster schon offen' };
+        var liste = el().slice();
+        var undo0 = B.undoStapel.length;
+        var feld = tbOeffnen(id);
+        var w = tbFenster();
+        if (!w || !feld) return { ok: false, detail: 'kein Fenster .cbd-board-text-bearbeiten mit Feld nach dem Klick' };
+        if (!w.classList.contains('cbd-board-blocktext-overlay')) f.push('Fenster ohne Klasse cbd-board-blocktext-overlay');
+        var h = w.querySelector('h4'), p = w.querySelector('p');
+        if (!h || h.textContent !== 'Text bearbeiten') f.push('Titel ' + (h && JSON.stringify(h.textContent)));
+        if (!p || p.textContent !== TB_MELDUNG) f.push('Meldung ' + (p && JSON.stringify(p.textContent)));
+        var dialog = w.querySelector('.cbd-board-confirm-dialog');
+        if (!dialog || dialog.getAttribute('role') !== 'dialog' || dialog.getAttribute('aria-modal') !== 'true') f.push('Dialog ohne role/aria-modal');
+        if (feld.getAttribute('contenteditable') !== 'true' || feld.getAttribute('data-modus') !== 'bearbeiten') f.push('Feld nicht im Modus bearbeiten');
+        if (feld.getAttribute('aria-label') !== 'Text bearbeiten') f.push('aria-label ' + feld.getAttribute('aria-label'));
+        if (feld.children.length !== 1 || feld.children[0].tagName !== 'DIV') f.push('Feld hat ' + feld.children.length + ' Kinder statt einem div');
+        // Der Text so, wie er auf die Tafel kommt: Tafelfarbe, Farbe des Elements, Stile
+        var cs = getComputedStyle(feld);
+        if (cs.backgroundColor !== tbRgb('#ffffff')) f.push('Hintergrund ' + cs.backgroundColor);
+        if (cs.color !== tbRgb('#1565c0')) f.push('Grundschrift ' + cs.color + ' statt der Farbe des Elements');
+        var fett = tbStil(feld, 'fett '), kursiv = tbStil(feld, 'kursiv '), rot = tbStil(feld, 'rot');
+        if (!fett || fett.fontWeight !== '700') f.push('"fett" nicht fett (' + (fett && fett.fontWeight) + ')');
+        if (!kursiv || kursiv.fontStyle !== 'italic') f.push('"kursiv" nicht kursiv (' + (kursiv && kursiv.fontStyle) + ')');
+        if (!rot || rot.color !== tbRgb('#ff0000')) f.push('"rot" nicht rot (' + (rot && rot.color) + ')');
+        var alt = tbStil(feld, 'Alt ');
+        if (alt && (alt.fontWeight !== '400' || alt.fontStyle !== 'normal')) f.push('"Alt" formatiert');
+        if (JSON.stringify(B._textFeldLesen(feld)) !== JSON.stringify([{ text: TB_TEXT, teile: TB_TEILE }])) {
+            f.push('gelesen ' + JSON.stringify(B._textFeldLesen(feld)));
+        }
+        // Formatleiste: F, K, sechs Stiftfarben, Standard - über dem Feld
+        var leisteEl = w.querySelector('.cbd-board-blocktext-format');
+        if (!leisteEl || leisteEl.querySelectorAll('button').length !== 9) f.push('Formatleiste mit ' + (leisteEl ? leisteEl.querySelectorAll('button').length : 0) + ' Knöpfen statt 9');
+        else if (leisteEl.getBoundingClientRect().bottom > feld.getBoundingClientRect().top + 1) f.push('Formatleiste nicht über dem Feld');
+        // Knöpfe
+        var ab = tbKnopf('Abbrechen'), ue = tbKnopf('Übernehmen');
+        if (!ab || !ue) f.push('Knöpfe: Abbrechen ' + !!ab + ', Übernehmen ' + !!ue);
+        else if (ab.compareDocumentPosition(ue) !== Node.DOCUMENT_POSITION_FOLLOWING) f.push('Reihenfolge der Knöpfe');
+        // Fokus im Feld, Schreibmarke eingeklappt am ENDE des Texts
+        if (document.activeElement !== feld) f.push('Fokus nicht im Feld');
+        var sel = window.getSelection();
+        if (!sel || sel.rangeCount !== 1 || !sel.isCollapsed || !feld.contains(sel.anchorNode)) {
+            f.push('Schreibmarke nicht eingeklappt im Feld');
+        } else {
+            var r = document.createRange();
+            r.setStart(feld, 0);
+            r.setEnd(sel.anchorNode, sel.anchorOffset);
+            if (r.toString() !== TB_TEXT) f.push('Schreibmarke nach ' + JSON.stringify(r.toString()) + ', nicht am Ende');
+        }
+        // Das Öffnen ändert nichts
+        if (el().length !== liste.length || el().some(function(x, i) { return x !== liste[i]; })) f.push('Öffnen ändert die Elemente');
+        if (B.undoStapel.length !== undo0) f.push('Öffnen legt einen Undo-Schritt an');
+        if (B.auswahl.join() !== id) f.push('Auswahl ' + B.auswahl.join());
+        return ergebnis(f);
+    }
+
+    // "Übernehmen": Änderung im Feld (DOM), Wort rot färben, ein Wort
+    // ergänzen -> Element unter derselben ID, Lage/Größe/Drehung/Farbe
+    // bleiben, ein Undo-Schritt, Auswahl bleibt, Klickschutz, Fokus nicht auf
+    // einem Knopf, Doppelklick wirkt einmal, Strg+Z stellt den alten Text her.
+    function tbUebernehmen() {
+        ctx.oeffnen();
+        var f = [];
+        var davor = einsetzen(neuesText({ x: 420, y: 420, text: 'Davor' }));
+        var e = neuesText({ x: 120, y: 140, breite: 3, text: TB_TEXT, farbe: '#1565c0', winkel: 15, teile: TB_TEILE });
+        var id = einsetzen(e);
+        strich(300, 560, 420, 560);
+        var feld = tbOeffnen(id);
+        if (!feld) return { ok: false, detail: 'Fenster öffnet nicht' };
+        var liste = el().slice();
+        var i0 = liste.indexOf(e);
+        var undo0 = B.undoStapel.length;
+        tbAnhaengen(feld, ' neu');
+        tbMarkiere(feld, 'fett');
+        var rotKnopf = tbFormatKnopf('.cbd-board-format-farbe[aria-label="Rot"]');
+        if (!rotKnopf) return { ok: false, detail: 'Testaufbau: Farbknopf Rot fehlt' };
+        rotKnopf.click();
+        var ue = tbKnopf('Übernehmen');
+        if (!ue) return { ok: false, detail: 'Knopf "Übernehmen" fehlt' };
+        ue.click();
+        ue.click(); // schneller Doppelklick: wirkt nur einmal
+        var n = element(id);
+        if (!n) return { ok: false, detail: 'Element mit derselben ID fehlt danach' };
+        if (n === e) return { ok: false, detail: 'Element unverändert' };
+        if (el().length !== liste.length) f.push(el().length + ' Elemente statt ' + liste.length);
+        if (el().indexOf(n) !== i0) f.push('Stelle in der Liste ' + el().indexOf(n) + ' statt ' + i0);
+        if (n.text !== TB_TEXT + ' neu') f.push('text ' + JSON.stringify(n.text));
+        ['x', 'y', 'breite', 'winkel', 'farbe'].forEach(function(k) {
+            if (n[k] !== e[k]) f.push(k + ' ' + n[k] + ' statt ' + e[k]);
+        });
+        var stil = stilJeZeichen(n.text, n.teile);
+        function stilVon(wort) {
+            var p = n.text.indexOf(wort);
+            return p < 0 ? '?' : stil.slice(p, p + wort.length).filter(function(s, i, a) { return a.indexOf(s) === i; }).join(',');
+        }
+        if (stilVon('fett') !== '1|0|#ff0000') f.push('"fett" ' + stilVon('fett') + ' statt 1|0|#ff0000 (fett und rot)');
+        if (stilVon('kursiv') !== '0|1|') f.push('"kursiv" ' + stilVon('kursiv'));
+        if (stilVon('rot') !== '0|0|#ff0000') f.push('"rot" ' + stilVon('rot'));
+        if (stilVon(' neu') !== '0|0|') f.push('"neu" ' + stilVon(' neu'));
+        el().forEach(function(x, i) {
+            if (i !== i0 && x !== liste[i]) f.push('anderes Element an Stelle ' + i + ' geändert');
+        });
+        if (B.undoStapel.length !== undo0 + 1) f.push('Undo-Schritte ' + (B.undoStapel.length - undo0) + ' statt 1');
+        if (B.auswahl.join() !== id) f.push('Auswahl ' + B.auswahl.join());
+        if (tbFenster()) f.push('Fenster nach "Übernehmen" noch offen');
+        if (!tbSchildDa()) f.push('kein Klickschutz nach "Übernehmen"');
+        var aktiv = document.activeElement;
+        if (aktiv && (aktiv.tagName === 'BUTTON' || (aktiv.closest && aktiv.closest('.cbd-board-blocktext-overlay')))) {
+            f.push('Fokus auf ' + aktiv.tagName + '.' + aktiv.className + ' statt auf der Zeichenfläche');
+        }
+        if (B._textFeldLauscher) f.push('selectionchange-Lauscher bleibt');
+        if (!element(davor)) f.push('anderer Text fehlt');
+        strgZ();
+        if (element(id) !== e) f.push('Strg+Z stellt das alte Element nicht her');
+        return ergebnis(f);
+    }
+
+    // "Abbrechen" und Escape (auch nach Änderungen im Feld) ändern nichts:
+    // kein Undo-Eintrag, Auswahl bleibt, die Tafel bleibt offen (Escape am
+    // Feld hebt NICHT die Auswahl auf und schließt NICHT die Tafel), der
+    // Fokus kehrt auf den Knopf "Text bearbeiten" zurück.
+    function tbAbbrechenUndEscape() {
+        ctx.oeffnen();
+        var f = [];
+        var e = neuesText({ x: 120, y: 140, breite: 3, text: TB_TEXT, farbe: '#1565c0', teile: TB_TEILE });
+        var id = einsetzen(e);
+        var liste = el().slice();
+        var undo0 = B.undoStapel.length;
+        ['Abbrechen', 'Escape am Feld', 'Escape am Knopf'].forEach(function(weg) {
+            var feld = tbOeffnen(id);
+            if (!feld) {
+                f.push(weg + ': Fenster öffnet nicht');
+                return;
+            }
+            tbAnhaengen(feld, ' geändert');
+            tbMarkiere(feld, 'Alt');
+            tbFormatKnopf('.cbd-board-format-fett').click();
+            if (weg === 'Abbrechen') {
+                tbKnopf('Abbrechen').click();
+            } else if (weg === 'Escape am Feld') {
+                if (!tasteAn(feld, 'Escape').defaultPrevented) f.push(weg + ': Escape nicht behandelt');
+            } else {
+                var ue = tbKnopf('Übernehmen');
+                ue.focus();
+                tasteAn(ue, 'Escape');
+            }
+            if (tbFenster()) f.push(weg + ': Fenster noch offen');
+            if (!B.overlay) {
+                f.push(weg + ': Tafel geschlossen');
+                return;
+            }
+            if (el().length !== liste.length || el().some(function(x, i) { return x !== liste[i]; })) f.push(weg + ': Elemente geändert');
+            if (B.undoStapel.length !== undo0) f.push(weg + ': Undo-Schritte ' + (B.undoStapel.length - undo0));
+            if (B.auswahl.join() !== id) f.push(weg + ': Auswahl ' + B.auswahl.join());
+            var k = knopf('text-bearbeiten');
+            if (!sichtbar(k)) f.push(weg + ': Knopf "Text bearbeiten" nicht mehr sichtbar');
+            else if (document.activeElement !== k) f.push(weg + ': Fokus nicht auf "Text bearbeiten" (' + (document.activeElement && document.activeElement.tagName) + ')');
+            if (B._textFeldLauscher) f.push(weg + ': selectionchange-Lauscher bleibt');
+            if (tbSchildDa()) f.push(weg + ': Klickschutz nach Abbrechen');
+        });
+        return ergebnis(f);
+    }
+
+    // Enter im Feld = Zeilenwechsel, kein neues div. In Chrome/Safari fügt
+    // insertLineBreak im pre-wrap-Feld ein "\n"-Zeichen ein (AP-2.4), kein
+    // <br> - geprüft wird deshalb über _textFeldLesen (Zeilenwechsel im Text,
+    // ein Absatz). Die Schreibmarke steht beim Öffnen am Ende: Weitertippen
+    // hängt an die Zeile an, nicht in einen neuen Block.
+    function tbEnter() {
+        ctx.oeffnen();
+        var f = [];
+        var id = einsetzen(neuesText({ x: 120, y: 140, text: 'Abcd' }));
+        var feld = tbOeffnen(id);
+        if (!feld) return { ok: false, detail: 'Fenster öffnet nicht' };
+        // 1. Tippen an der Marke, die beim Öffnen am Ende stand
+        document.execCommand('insertText', false, '!');
+        var l1 = B._textFeldLesen(feld);
+        if (feld.children.length !== 1 || l1.length !== 1 || l1[0].text !== 'Abcd!') f.push('Tippen am Ende: ' + JSON.stringify(l1) + ', ' + feld.children.length + ' Kinder');
+        // 2. Enter mitten im Wort
+        tbMarkiere(feld, 'Ab', true);
+        var ev = tasteAn(feld, 'Enter');
+        if (!ev.defaultPrevented) f.push('Enter nicht verhindert');
+        if (feld.children.length !== 1) f.push('Enter erzeugt ein neues div (' + feld.children.length + ' Kinder)');
+        var l2 = B._textFeldLesen(feld);
+        if (l2.length !== 1 || l2[0].text !== 'Ab\ncd!') f.push('nach Enter gelesen ' + JSON.stringify(l2));
+        // 3. Enter ans Ende, dann weitertippen
+        tbMarkiere(feld, 'cd!', true);
+        tasteAn(feld, 'Enter');
+        document.execCommand('insertText', false, 'e');
+        var l3 = B._textFeldLesen(feld);
+        if (l3.length !== 1 || l3[0].text !== 'Ab\ncd!\ne') f.push('Enter am Ende, dann tippen: ' + JSON.stringify(l3));
+        tbKnopf('Übernehmen').click();
+        var n = element(id);
+        if (!n || n.text !== 'Ab\ncd!\ne') f.push('Element ' + JSON.stringify(n && n.text));
+        else if (E.zeilenTeile(n).length !== 3) f.push(E.zeilenTeile(n).length + ' Zeilen statt 3');
+        return ergebnis(f);
+    }
+
+    // Tastatur im Feld und im Fenster wirkt nicht auf die Tafel: Entf,
+    // Rücktaste, Strg+Z, Strg+D (am Feld, an einem Knopf, am document bei
+    // Fokus außerhalb des Fensters). Das Fenster bleibt offen.
+    function tbTastaturWirktNichtAufDieTafel() {
+        ctx.oeffnen();
+        var f = [];
+        var id = einsetzen(neuesText({ x: 120, y: 140, text: 'Alt' }));
+        einsetzen(neuesText({ x: 120, y: 400, text: 'Anderes' }));
+        var feld = tbOeffnen(id);
+        if (!feld) return { ok: false, detail: 'Fenster öffnet nicht' };
+        var liste = el().slice();
+        var undo0 = B.undoStapel.length;
+        var faelle = [['Delete', {}], ['Backspace', {}], ['z', { ctrlKey: true }], ['d', { ctrlKey: true }]];
+        [['am Feld', feld], ['am Knopf', tbKnopf('Übernehmen')], ['am document', document]].forEach(function(ziel) {
+            faelle.forEach(function(fall) {
+                tasteAn(ziel[1], fall[0], fall[1]);
+                var was = fall[0] + (fall[1].ctrlKey ? ' (Strg)' : '') + ' ' + ziel[0];
+                if (!B.overlay) f.push(was + ': Tafel geschlossen');
+                if (el().length !== liste.length || el().some(function(x, i) { return x !== liste[i]; })) f.push(was + ': Elemente geändert');
+                if (B.undoStapel.length !== undo0) f.push(was + ': Undo-Stapel geändert');
+                if (B.auswahl.join() !== id) f.push(was + ': Auswahl ' + B.auswahl.join());
+                if (!tbFenster()) f.push(was + ': Fenster geschlossen');
+            });
+        });
+        return ergebnis(f);
+    }
+
+    // Ein mit dem Text-Werkzeug geschriebener Text (ohne teile) lässt sich
+    // formatieren (F8/Nicht-Ziel "Kein Formatieren im Text-Werkzeug"); ein
+    // Undo-Schritt, Strg+Z stellt den Text OHNE teile wieder her.
+    function tbTextWerkzeugText() {
+        ctx.oeffnen();
+        var f = [];
+        B.setTool('text');
+        B.setColor('#000000');
+        ctx.zeiger('pointerdown', 1, 'mouse', 140, 160);
+        var eingabe = document.querySelector('.cbd-board-text-input');
+        if (!eingabe) return { ok: false, detail: 'Testaufbau: kein Textfeld des Text-Werkzeugs' };
+        eingabe.value = 'Hallo Welt';
+        eingabe.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        var e = el()[el().length - 1];
+        if (!e || e.typ !== 'text' || e.text !== 'Hallo Welt' || e.teile !== undefined) {
+            return { ok: false, detail: 'Testaufbau: Element des Text-Werkzeugs ' + JSON.stringify(e) };
+        }
+        var id = e.id;
+        var feld = tbOeffnen(id);
+        if (!feld) return { ok: false, detail: 'Fenster öffnet nicht' };
+        if (feld.querySelector('span')) f.push('Klartext zeigt formatierte Teile');
+        tbMarkiere(feld, 'Welt');
+        tbFormatKnopf('.cbd-board-format-fett').click();
+        var undo0 = B.undoStapel.length;
+        tbKnopf('Übernehmen').click();
+        var n = element(id);
+        if (!n || n === e) return { ok: false, detail: 'Element nicht ersetzt' };
+        if (n.text !== 'Hallo Welt') f.push('text ' + JSON.stringify(n.text));
+        if (teileText(n) !== JSON.stringify([{ t: 'Hallo ' }, { t: 'Welt', f: 1 }])) f.push('teile ' + teileText(n));
+        if (n.farbe !== e.farbe || n.breite !== e.breite || n.x !== e.x || n.y !== e.y) f.push('Lage/Größe/Farbe verändert');
+        if (B.undoStapel.length !== undo0 + 1) f.push('Undo-Schritte ' + (B.undoStapel.length - undo0) + ' statt 1');
+        // gezeichnet: "Welt" in fett
+        var welt = zeichnenMitschreiben().filter(function(x) { return x.t === 'Welt'; })[0];
+        var soll = normSchrift(E.schrift(E.schriftPx(n.breite), 1, 0));
+        if (!welt || welt.font !== soll) f.push('"Welt" gezeichnet mit ' + (welt && welt.font) + ' statt ' + soll);
+        strgZ();
+        if (element(id) !== e || e.teile !== undefined) f.push('Strg+Z stellt den Klartext nicht her');
+        return ergebnis(f);
+    }
+
+    // Ohne eigene Änderung ändert "Übernehmen" nichts: kein Undo-Eintrag, das
+    // Element bleibt dasselbe Objekt - auch wenn der Text Leerzeichen trägt,
+    // die das Lesen des Felds zusammenfasst (zwei Leerzeichen).
+    function tbUebernehmenOhneAenderung() {
+        ctx.oeffnen();
+        var f = [];
+        var e = neuesText({ x: 120, y: 140, text: 'a  b  ', teile: [{ t: 'a  ' }, { t: 'b  ', f: 1 }] });
+        var id = einsetzen(e);
+        var feld = tbOeffnen(id);
+        if (!feld) return { ok: false, detail: 'Fenster öffnet nicht' };
+        var undo0 = B.undoStapel.length;
+        tbKnopf('Übernehmen').click();
+        if (tbFenster()) f.push('Fenster bleibt offen');
+        if (element(id) !== e) f.push('Element ersetzt (text ' + JSON.stringify(element(id) && element(id).text) + ')');
+        if (B.undoStapel.length !== undo0) f.push('Undo-Schritte ' + (B.undoStapel.length - undo0) + ' statt 0');
+        if (B.auswahl.join() !== id) f.push('Auswahl ' + B.auswahl.join());
+        return ergebnis(f);
+    }
+
+    // Leerer Text: Element entfernt (F11), ein Undo-Schritt, Auswahl leer,
+    // Strg+Z holt es zurück
+    function tbLeererTextEntfernt() {
+        ctx.oeffnen();
+        var f = [];
+        var e = einsetzenElement({ x: 120, y: 140, text: 'Weg damit', teile: [{ t: 'Weg ' }, { t: 'damit', f: 1 }] });
+        var bleibt = einsetzen(neuesText({ x: 120, y: 400, text: 'bleibt' }));
+        var feld = tbOeffnen(e.id);
+        if (!feld) return { ok: false, detail: 'Fenster öffnet nicht' };
+        while (feld.firstChild) feld.removeChild(feld.firstChild);
+        var d = document.createElement('div');
+        d.appendChild(document.createElement('br'));
+        feld.appendChild(d);
+        var undo0 = B.undoStapel.length;
+        tbKnopf('Übernehmen').click();
+        if (tbFenster()) f.push('Fenster bleibt offen');
+        if (element(e.id)) f.push('Element nicht entfernt');
+        if (!element(bleibt)) f.push('anderes Element entfernt');
+        if (B.undoStapel.length !== undo0 + 1) f.push('Undo-Schritte ' + (B.undoStapel.length - undo0) + ' statt 1');
+        if (B.auswahl.length) f.push('Auswahl ' + B.auswahl.join());
+        if (sichtbar(leiste())) f.push('Auswahlleiste noch sichtbar');
+        strgZ();
+        if (element(e.id) !== e) f.push('Strg+Z holt das Element nicht zurück');
+        return ergebnis(f);
+    }
+
+    /** Text-Element mit den Angaben o einsetzen; liefert das Element selbst. */
+    function einsetzenElement(o) {
+        var e = neuesText(o);
+        einsetzen(e);
+        return e;
+    }
+
+    // Umbruch beim Übernehmen (F12): lange Zeile, die über den Rand des
+    // sichtbaren Ausschnitts (minus 20 px) ragt, wird umbrochen; die per Enter
+    // geschriebene Zeile bleibt
+    function tbUmbruchBeimUebernehmen() {
+        ctx.oeffnen();
+        var f = [];
+        var x = 100;
+        var id = einsetzen(neuesText({ x: x, y: 60, breite: 2, text: 'Kurz' }));
+        var feld = tbOeffnen(id);
+        if (!feld) return { ok: false, detail: 'Fenster öffnet nicht' };
+        tasteAn(feld, 'Enter');
+        var woerter = [];
+        for (var i = 0; i < 40; i++) woerter.push('Wort' + i);
+        document.execCommand('insertText', false, woerter.join(' '));
+        tbKnopf('Übernehmen').click();
+        var n = element(id);
+        if (!n) return { ok: false, detail: 'Element fehlt' };
+        var s = B._sichtbarerBereich();
+        var grenze = s.x + s.b - 20 - x;
+        var zeilen = n.text.split('\n');
+        if (zeilen[0] !== 'Kurz') f.push('erste Zeile ' + JSON.stringify(zeilen[0]));
+        if (zeilen.length < 3) f.push('nicht umbrochen: ' + zeilen.length + ' Zeilen bei Grenze ' + grenze.toFixed(0) + ' px');
+        zeilenBreiten(n).forEach(function(w, k) {
+            if (w > grenze + 0.01) f.push('Zeile ' + k + ': ' + w.toFixed(1) + ' px > ' + grenze.toFixed(1) + ' px');
+        });
+        if (n.text.replace(/\n/g, ' ') !== 'Kurz ' + woerter.join(' ')) f.push('Wörter verändert');
+        return ergebnis(f);
+    }
+
+    // Nur bei genau einem gewählten Text (F11): sonst öffnet nichts
+    function tbNurBeiEinemText() {
+        ctx.oeffnen();
+        var f = [];
+        if (typeof B.auswahlTextBearbeiten !== 'function') return { ok: false, detail: 'B.auswahlTextBearbeiten fehlt' };
+        var a = einsetzen(neuesText({ x: 100, y: 100, text: 'Eins' }));
+        einsetzen(neuesText({ x: 100, y: 220, text: 'Zwei' }));
+        var s = strich(320, 400, 460, 400);
+        B.auswahlAufheben();
+        B.auswahlTextBearbeiten();
+        if (tbFenster()) f.push('öffnet ohne Auswahl');
+        lasso(60, 60, 260, 300);
+        if (B.auswahl.length !== 2) return { ok: false, detail: 'Testaufbau: zwei Texte nicht gewählt' };
+        B.auswahlTextBearbeiten();
+        if (tbFenster()) f.push('öffnet bei zwei Texten');
+        lassoUm(s);
+        if (B.auswahl.join() !== s) return { ok: false, detail: 'Testaufbau: Strich nicht gewählt' };
+        B.auswahlTextBearbeiten();
+        if (tbFenster()) f.push('öffnet bei einem Strich');
+        lasso(60, 60, 500, 430);
+        if (B.auswahl.length !== 3) return { ok: false, detail: 'Testaufbau: drei Elemente nicht gewählt' };
+        B.auswahlTextBearbeiten();
+        if (tbFenster()) f.push('öffnet bei Text + Text + Strich');
+        lassoUm(a);
+        B.auswahlTextBearbeiten();
+        if (!tbFenster()) f.push('öffnet bei genau einem Text nicht');
+        return ergebnis(f);
+    }
+
+    // Tab-Falle des neuen Fensters: Feld ist das erste, "Übernehmen" das
+    // letzte Ziel; Tab vom letzten Knopf führt ins Feld, Umschalt+Tab vom Feld
+    // auf den letzten Knopf
+    function tbTabFalle() {
+        ctx.oeffnen();
+        var f = [];
+        var id = einsetzen(neuesText({ x: 120, y: 140, text: 'Alt' }));
+        var feld = tbOeffnen(id);
+        if (!feld) return { ok: false, detail: 'Fenster öffnet nicht' };
+        var ue = tbKnopf('Übernehmen');
+        ue.focus();
+        var ev = tasteAn(ue, 'Tab');
+        if (!ev.defaultPrevented || document.activeElement !== feld) f.push('Tab von "Übernehmen" führt nicht ins Feld');
+        ev = tasteAn(feld, 'Tab', { shiftKey: true });
+        if (!ev.defaultPrevented || document.activeElement !== ue) f.push('Umschalt+Tab vom Feld führt nicht auf "Übernehmen"');
+        return ergebnis(f);
+    }
+
+    // Grüne Tafel: Feld grün, Grundschrift = Farbe des Elements, Teilfarben
+    // schon aufgehellt (F7); ohne eigene Änderung bleibt das Element, mit
+    // Änderung ist die aufgehellte Farbe stabil (idempotent)
+    function tbGrueneTafel() {
+        ctx.oeffnen();
+        var f = [];
+        var gruen = '#1a472a';
+        B.setBoardColor(gruen);
+        var dunkel = '#71230a';
+        var hell = U.lesbareLauffarbe(dunkel, gruen);
+        if (hell === dunkel) return { ok: false, detail: 'Testaufbau: Dunkelrot auf Grün schon lesbar' };
+        var e = neuesText({ x: 120, y: 140, text: 'hell dunkel', farbe: '#ffffff', teile: [{ t: 'hell ' }, { t: 'dunkel', farbe: hell }] });
+        var id = einsetzen(e);
+        var feld = tbOeffnen(id);
+        if (!feld) return { ok: false, detail: 'Fenster öffnet nicht' };
+        var cs = getComputedStyle(feld);
+        if (cs.backgroundColor !== tbRgb(gruen)) f.push('Hintergrund ' + cs.backgroundColor);
+        if (cs.color !== tbRgb('#ffffff')) f.push('Grundschrift ' + cs.color);
+        var d = tbStil(feld, 'dunkel');
+        if (!d || d.color !== tbRgb(hell)) f.push('Teilfarbe ' + (d && d.color) + ' statt ' + tbRgb(hell));
+        tbAnhaengen(feld, ' x');
+        tbKnopf('Übernehmen').click();
+        var n = element(id);
+        if (!n || n.text !== 'hell dunkel x') return { ok: false, detail: 'Element ' + JSON.stringify(n && n.text) };
+        var st = stilJeZeichen(n.text, n.teile);
+        var p = n.text.indexOf('dunkel');
+        if (st[p] !== '0|0|' + hell) f.push('Farbe von "dunkel" ' + st[p] + ' statt ' + hell);
+        if (n.farbe !== '#ffffff') f.push('farbe ' + n.farbe);
+        return ergebnis(f);
+    }
+
+    // Fenster schließt ohne Änderung, wenn die Tafel zerstört wird, die Seite
+    // wechselt (addPage/goToPage) oder die Auswahl aufgehoben wird. Das
+    // Schließen der Tafel über close() prüft die asynchrone Prüfung unten.
+    function tbSchliesstBeiTafelSeiteAuswahl() {
+        var f = [];
+        function aufbau() {
+            ctx.oeffnen();
+            var e = neuesText({ x: 120, y: 140, text: 'Alt' });
+            var id = einsetzen(e);
+            var feld = tbOeffnen(id);
+            if (!feld) throw new Error('Fenster öffnet nicht');
+            tbAnhaengen(feld, ' neu');
+            return { e: e, id: id };
+        }
+        // destroy()
+        var a = aufbau();
+        B.destroy();
+        if (tbFenster()) f.push('destroy(): Fenster bleibt');
+        if (B._textFeldLauscher) f.push('destroy(): Lauscher bleibt');
+        // Seite wechseln
+        a = aufbau();
+        B.addPage();
+        if (tbFenster()) f.push('addPage(): Fenster bleibt');
+        if (B._textFeldLauscher) f.push('addPage(): Lauscher bleibt');
+        B.goToPage(0);
+        if (element(a.id) !== a.e) f.push('addPage()/goToPage(): Element von Seite 1 verändert');
+        // goToPage bei offenem Fenster
+        ctx.oeffnen();
+        var e2 = neuesText({ x: 120, y: 140, text: 'Alt' });
+        var id2 = einsetzen(e2);
+        B.addPage();
+        B.goToPage(0);
+        lassoUm(id2);
+        knopf('text-bearbeiten').click();
+        if (!tbFenster()) return { ok: false, detail: 'Testaufbau: Fenster öffnet nach Seitenwechsel nicht' };
+        B.goToPage(1);
+        if (tbFenster()) f.push('goToPage(): Fenster bleibt');
+        B.goToPage(0);
+        if (element(id2) !== e2) f.push('goToPage(): Element verändert');
+        // Auswahl aufgehoben
+        a = aufbau();
+        var undo0 = B.undoStapel.length;
+        B.auswahlAufheben();
+        if (tbFenster()) f.push('auswahlAufheben(): Fenster bleibt');
+        if (element(a.id) !== a.e || B.undoStapel.length !== undo0) f.push('auswahlAufheben(): Tafel verändert');
+        // Auswahl und Element verschwinden ohne auswahlAufheben(): "Übernehmen" ändert nichts
+        a = aufbau();
+        var liste = el().slice();
+        undo0 = B.undoStapel.length;
+        B.auswahl = [];
+        tbKnopf('Übernehmen').click();
+        if (tbFenster()) f.push('ohne Auswahl: Fenster bleibt nach "Übernehmen"');
+        if (el().length !== liste.length || el().some(function(x, i) { return x !== liste[i]; }) || B.undoStapel.length !== undo0) {
+            f.push('ohne Auswahl: "Übernehmen" ändert die Tafel');
+        }
+        a = aufbau();
+        undo0 = B.undoStapel.length;
+        B.modell.elemente = el().filter(function(x) { return x.id !== a.id; });
+        tbKnopf('Übernehmen').click();
+        if (tbFenster()) f.push('ohne Element: Fenster bleibt nach "Übernehmen"');
+        if (el().length !== 0 || B.undoStapel.length !== undo0) f.push('ohne Element: "Übernehmen" ändert die Tafel');
+        return ergebnis(f);
+    }
+
+    // close() schließt das Fenster sofort, nicht erst mit destroy() 200 ms
+    // später (wie beim Fenster "Text auf die Tafel", AP-2.fix1 G2)
+    function tbCloseSchliesstFenster() {
+        ctx.oeffnen();
+        var e = neuesText({ x: 120, y: 140, text: 'Alt' });
+        var id = einsetzen(e);
+        var feld = tbOeffnen(id);
+        if (!feld) return { ok: false, detail: 'Fenster öffnet nicht' };
+        tbAnhaengen(feld, ' neu');
+        B.close();
+        var offen = !!tbFenster();
+        return new Promise(function(fertig) { setTimeout(fertig, 350); }).then(function() {
+            if (offen) return { ok: false, detail: 'Fenster bleibt während der Schließ-Animation' };
+            if (tbFenster()) return { ok: false, detail: 'Fenster nach dem Schließen' };
+            if (B._textFeldLauscher) return { ok: false, detail: 'selectionchange-Lauscher bleibt' };
+            return true;
+        });
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
+    var vorherAsync = window.__zusatzTestsAsync;
+    window.__zusatzTestsAsync = function(c) {
+        var vorher = (typeof vorherAsync === 'function') ? vorherAsync(c) : Promise.resolve();
+        return Promise.resolve(vorher).then(function() {
+            ctx = c;
+            return c.pruefeAsync('AP-3.2: close() schließt das Fenster "Text bearbeiten" sofort', tbCloseSchliesstFenster);
+        });
+    };
+
     window.__zusatzTests = function(c) {
         if (typeof vorherSync === 'function') vorherSync(c);
         ctx = c;
@@ -1218,5 +1839,19 @@
         p('AP-3.1: textErsetzen - leerer Inhalt entfernt das Element (1 Undo, Auswahl leer)', textErsetzenLeer);
         p('AP-3.1: textErsetzen - Teilfarben durch lesbareLauffarbe(…, Tafelfarbe)', textErsetzenTeilfarbenLesbar);
         p('AP-3.1: textErsetzen - beendet Drehmodus und laufendes Ziehen (erreichte Lage gilt)', textErsetzenBeendetGesten);
+        // PLAN-Blocktext-Formatierung.md, AP-3.2
+        p('AP-3.2: "Text bearbeiten" zeigt Text samt Formatierung, Formatleiste, Knöpfe, Marke am Ende, ändert beim Öffnen nichts', tbFensterZeigtText);
+        p('AP-3.2: "Übernehmen" ersetzt unter gleicher ID (Lage/Größe/Drehung/Farbe bleiben), 1 Undo, Klickschutz, Strg+Z', tbUebernehmen);
+        p('AP-3.2: "Abbrechen" und Escape ändern nichts (kein Undo, Auswahl und Tafel bleiben, Fokus auf dem Knopf)', tbAbbrechenUndEscape);
+        p('AP-3.2: Enter im Feld = Zeilenwechsel im selben Absatz, Weitertippen am Ende', tbEnter);
+        p('AP-3.2: Entf, Rücktaste, Strg+Z, Strg+D im Fenster wirken nicht auf die Tafel', tbTastaturWirktNichtAufDieTafel);
+        p('AP-3.2: Text-Werkzeug-Text ohne teile lässt sich formatieren, Strg+Z stellt den Klartext her', tbTextWerkzeugText);
+        p('AP-3.2: "Übernehmen" ohne eigene Änderung ändert nichts (kein Undo, dasselbe Element)', tbUebernehmenOhneAenderung);
+        p('AP-3.2: leerer Text entfernt das Element (1 Undo, Auswahl leer, Strg+Z)', tbLeererTextEntfernt);
+        p('AP-3.2: Umbruch beim Übernehmen am sichtbaren Rand, per Enter geschriebene Zeile bleibt', tbUmbruchBeimUebernehmen);
+        p('AP-3.2: öffnet nur bei genau einem gewählten Text', tbNurBeiEinemText);
+        p('AP-3.2: Tab-Falle des Fensters (Feld erstes, "Übernehmen" letztes Ziel)', tbTabFalle);
+        p('AP-3.2: grüne Tafel - Feld grün, Teilfarben lesbar, stabil beim Übernehmen', tbGrueneTafel);
+        p('AP-3.2: Fenster schließt bei destroy(), Seitenwechsel, aufgehobener Auswahl; "Übernehmen" ohne Ziel ändert nichts', tbSchliesstBeiTafelSeiteAuswahl);
     };
 })();
