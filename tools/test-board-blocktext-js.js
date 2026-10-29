@@ -620,6 +620,11 @@ gleich('11d: harter Zeilenwechsel bleibt, Teil ueber \\n wird geteilt',
 gleich('11d: \\r\\n wie \\n, Teile folgen',
 	versuche(function () { return B.umbrechenTeile({ text: 'ab\r\ncd', teile: [{ t: 'a' }, { t: 'b\r\nc', f: 1 }, { t: 'd' }] }, 1000, 20, massF); }),
 	[{ text: 'ab', teile: [{ t: 'a' }, { t: 'b', f: 1 }] }, { text: 'cd', teile: [{ t: 'c', f: 1 }, { t: 'd' }] }]);
+// Nachtrag nach der Mutationsprobe (Mutation „\r nicht normiert" blieb
+// sonst unentdeckt, weil ein \r vor \n am Zeilenende ohnehin entfaellt):
+gleich('11d: einzelnes \\r wie \\n (wie umbrechen)',
+	versuche(function () { return B.umbrechenTeile({ text: 'ab\rcd', teile: [{ t: 'a' }, { t: 'b\rc', f: 1 }, { t: 'd' }] }, 1000, 20, massF); }),
+	[{ text: 'ab', teile: [{ t: 'a' }, { t: 'b', f: 1 }] }, { text: 'cd', teile: [{ t: 'c', f: 1 }, { t: 'd' }] }]);
 
 // 20 px, Breite 35: fett 14 je Zeichen, normal 10. „ab" = 28, „abc" = 42;
 // „cde" = 14 + 20 = 34, „cdef" = 44.
