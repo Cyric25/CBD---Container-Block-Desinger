@@ -45,6 +45,99 @@
         'cbd-drawing-toggle', 'cbd-board-blocktext-leiste', 'screen-reader-text'
     ];
 
+    // Formatierung beim Lesen (PLAN-Blocktext-Formatierung.md, AP-2.1):
+    // Stil eines Zeichens, das nicht aus einem Textknoten stammt - Listen-
+    // praefix, " | " zwischen Tabellenzellen, Leerzeichen an Blockgrenzen
+    // in einer Tabellenzeile und "\n" aus BR.
+    var BLOCKTEXT_KLARTEXT = { f: 0, k: 0, farbe: null };
+
+    /**
+     * Farbangabe -> '#rrggbb' oder null (AP-2.1, Review-Befund B10 aus
+     * AP-1.rev). getComputedStyle liefert meist rgb()/rgba(), fuer
+     * color-mix() aber color(srgb …) oder oklab(…). Solche Formen passen
+     * nicht auf das Farbmuster des Elementmodells, und teileZusammenlegen()
+     * liesse sie still weg - deshalb wird hier vereinheitlicht:
+     * #rgb/#rrggbb, rgb()/rgba() (Komma- oder Leerzeichenform) und
+     * color(srgb r g b [/ a]) mit Anteilen 0..1 werden zu '#rrggbb';
+     * ein Alpha ueber 0 wird uebergangen (halb durchsichtiges Rot -> Rot).
+     * null (= keine eigene Farbe): Alpha 0 (durchsichtig, Regel F6) und
+     * alles nicht Darstellbare (oklab, lab, display-p3, Farbnamen, Anteile
+     * ausserhalb des Bereichs).
+     */
+    function blocktextHexFarbe(wert) {
+        if (typeof wert !== 'string') return null;
+        var s = wert.replace(/^\s+|\s+$/g, '').toLowerCase();
+        var m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/.exec(s);
+        if (m) {
+            var h = m[1];
+            if (h.length === 3) {
+                h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+            }
+            return '#' + h;
+        }
+        var faktor = 1;
+        m = /^rgba?\(([^()]*)\)$/.exec(s);
+        if (!m) {
+            m = /^color\(\s*srgb\s+([^()]*)\)$/.exec(s);
+            if (!m) return null;
+            faktor = 255;
+        }
+        var werte = m[1].split(/[\s,\/]+/);
+        if (werte.length && werte[0] === '') werte.shift();
+        if (werte.length && werte[werte.length - 1] === '') werte.pop();
+        if (werte.length !== 3 && werte.length !== 4) return null;
+        var zahlen = [];
+        for (var i = 0; i < werte.length; i++) {
+            if (!/^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/.test(werte[i])) return null;
+            zahlen.push(parseFloat(werte[i]));
+        }
+        if (zahlen.length === 4 && !(zahlen[3] > 0)) return null;
+        var hex = '#';
+        for (var j = 0; j < 3; j++) {
+            var v = zahlen[j] * faktor;
+            if (!(v >= -0.5 && v <= 255.5)) return null;
+            var n = Math.max(0, Math.min(255, Math.round(v)));
+            hex += (n < 16 ? '0' : '') + n.toString(16);
+        }
+        return hex;
+    }
+
+    // Leerraum eines gelesenen Absatzes bereinigen - zeichenweise auf Text
+    // UND Stil-Liste zugleich (AP-2.1). Ergebnis-Text exakt wie die frueheren
+    // regulaeren Ausdruecke in _blocktextLesen() (bis 3.1.147):
+    //   text.replace(/ {2,}/g, ' ').replace(/ *\n */g, '\n')
+    //       .replace(/^[ \n]+|[ \n]+$/g, '')
+    // 1. Mehrere Leerzeichen -> eines; das ERSTE behaelt seinen Stil
+    //    (<p>a <b> b </b> c</p> -> "a " normal, "b " fett, "c" normal).
+    // 2. Leerzeichen direkt vor oder nach "\n" entfallen (nach Schritt 1
+    //    sind Leerzeichenfolgen hoechstens 1 lang - genau das, was der
+    //    zweite Ausdruck entfernt).
+    // 3. Leerzeichen und "\n" an beiden Raendern entfallen.
+    // Nur U+0020 und "\n" werden angefasst, Surrogatpaare bleiben ganz.
+    // Bitte nicht wieder auf die regulaeren Ausdruecke umstellen: die
+    // Stil-Liste muss Zeichen fuer Zeichen mitlaufen. (Als Zeilenkommentar,
+    // weil der zweite Ausdruck einen Block-Kommentar beenden wuerde.)
+    function blocktextBereinigen(text, stile) {
+        var z = [], s = [];
+        var i;
+        for (i = 0; i < text.length; i++) {
+            var c = text.charAt(i);
+            if (c === ' ' && i > 0 && text.charAt(i - 1) === ' ') continue;
+            z.push(c);
+            s.push(stile[i]);
+        }
+        var z2 = [], s2 = [];
+        for (i = 0; i < z.length; i++) {
+            if (z[i] === ' ' && ((i > 0 && z[i - 1] === '\n') || (i + 1 < z.length && z[i + 1] === '\n'))) continue;
+            z2.push(z[i]);
+            s2.push(s[i]);
+        }
+        var von = 0, bis = z2.length;
+        while (von < bis && (z2[von] === ' ' || z2[von] === '\n')) von++;
+        while (bis > von && (z2[bis - 1] === ' ' || z2[bis - 1] === '\n')) bis--;
+        return { text: z2.slice(von, bis).join(''), stile: s2.slice(von, bis) };
+    }
+
     // Eigene Notizen im localStorage (AP-4.4, Schritt 7): Alle Schlüssel mit
     // dem Präfix 'cbd-board-' gehören zu den Tafeln und werden exportiert,
     // importiert und mit "Alle Notizen löschen" entfernt - außer den
@@ -5154,19 +5247,90 @@
          * mit "inline" beginnt und nicht "contents" ist. Innerhalb einer
          * Tabellenzeile gelten sie nicht: TR = ein Absatz, Zellen mit " | ".
          * Braucht deshalb einen im Dokument hängenden Bereich.
+         *
+         * Formatierung (PLAN-Blocktext-Formatierung.md, AP-2.1, Regel F6):
+         * Jeder Absatz trägt zusätzlich teile [{t, f?, k?, farbe?}] im Format
+         * des Elementmodells - aber nur, wenn etwas formatiert ist (sonst
+         * fehlt der Schlüssel). fett = berechnete font-weight >= 600, kursiv =
+         * font-style italic/oblique, farbe = berechnete Farbe als '#rrggbb',
+         * wenn sie von der Grundfarbe abweicht. Grundfarbe:
+         * optionen.grundfarbe, sonst die berechnete Farbe des ersten
+         * .cbd-container-content in wurzel, sonst die von wurzel. Stil eines
+         * Textknotens = Stil seines Elternelements, Formeltext = Stil des
+         * Formel-Elements; Listenpräfix, " | ", Leerzeichen an Blockgrenzen
+         * und "\n" aus BR sind Klartext. Der reine Text bleibt genau wie vor
+         * AP-2.1 (die Leerraum-Bereinigung läuft zeichenweise über Text und
+         * Stile zugleich, siehe blocktextBereinigen()).
+         *
+         * optionen (F10, das Bearbeitungsfeld aus AP-2.4 wird mit demselben
+         * Leser zurückgelesen): grundfarbe ('#rrggbb' u. a.) ersetzt die
+         * berechnete Grundfarbe; nbsp: true behandelt geschütztes Leerzeichen
+         * (U+00A0) wie ein Leerzeichen (zusammengefasst, am Rand entfernt).
+         * Ohne optionen bleibt es wie bisher erhalten.
          */
-        _blocktextLesen: function(wurzel) {
+        _blocktextLesen: function(wurzel, optionen) {
             var modul = blocktextModul();
+            var elemente = elementeModul();
+            var opt = optionen || {};
             var absaetze = [];
-            var lauf = null; // {art, praefix, text}
+            var lauf = null; // {art, praefix, text, stile} - stile: ein Stil je Zeichen von text
             var zelleNr = 0;
+            var LEER = opt.nbsp ? /[ \t\n\r\f ]+/g : /[ \t\n\r\f]+/g;
+            var LEER_PRE = opt.nbsp ? /[ \t\f ]+/g : /[ \t\f]+/g;
+            var istElement = !!(wurzel && wurzel.nodeType === 1);
+
+            var grundfarbe = blocktextHexFarbe(opt.grundfarbe);
+            if (!grundfarbe && istElement) {
+                var inhalt = wurzel.querySelector('.cbd-container-content');
+                grundfarbe = blocktextHexFarbe(window.getComputedStyle(inhalt || wurzel).color);
+            }
+
+            // Berechneter Stil -> {f, k, farbe} (Regel F6). 'bold'/'normal'
+            // nur zur Sicherheit, Browser liefern Zahlen ("700").
+            function formatVon(stil) {
+                var g = stil.fontWeight;
+                g = g === 'bold' ? 700 : (g === 'normal' ? 400 : parseFloat(g));
+                var lage = String(stil.fontStyle || '');
+                var farbe = blocktextHexFarbe(stil.color);
+                return {
+                    f: g >= 600 ? 1 : 0,
+                    k: (lage.indexOf('italic') === 0 || lage.indexOf('oblique') === 0) ? 1 : 0,
+                    farbe: (farbe && farbe !== grundfarbe) ? farbe : null
+                };
+            }
+
+            // Zeichen gleichen Stils zu Teilen; Präfix als Klartext davor.
+            // teileZusammenlegen liefert für reinen Klartext [] -> kein teile.
+            function teileBilden(praefix, text, stile) {
+                if (!elemente || typeof elemente.teileZusammenlegen !== 'function') return null;
+                var roh = praefix ? [{ t: praefix }] : [];
+                var i = 0;
+                while (i < text.length) {
+                    var st = stile[i];
+                    var j = i + 1;
+                    while (j < text.length && (stile[j] === st ||
+                        (stile[j].f === st.f && stile[j].k === st.k && stile[j].farbe === st.farbe))) {
+                        j++;
+                    }
+                    var teil = { t: text.slice(i, j) };
+                    if (st.f) teil.f = 1;
+                    if (st.k) teil.k = 1;
+                    if (st.farbe) teil.farbe = st.farbe;
+                    roh.push(teil);
+                    i = j;
+                }
+                var teile = elemente.teileZusammenlegen(roh);
+                return teile.length ? teile : null;
+            }
 
             function abschliessen(hart) {
                 if (!lauf) return;
-                var t = lauf.text.replace(/ {2,}/g, ' ').replace(/ *\n */g, '\n')
-                    .replace(/^[ \n]+|[ \n]+$/g, '');
-                if (t) {
-                    absaetze.push({ art: lauf.art, text: lauf.praefix + t });
+                var b = blocktextBereinigen(lauf.text, lauf.stile);
+                if (b.text) {
+                    var absatz = { art: lauf.art, text: lauf.praefix + b.text };
+                    var teile = teileBilden(lauf.praefix, b.text, b.stile);
+                    if (teile) absatz.teile = teile;
+                    absaetze.push(absatz);
                     lauf = null;
                 } else if (hart || !lauf.praefix) {
                     lauf = null;
@@ -5177,12 +5341,14 @@
 
             function beginnen(art, praefix) {
                 abschliessen(true);
-                lauf = { art: art, praefix: praefix || '', text: '' };
+                lauf = { art: art, praefix: praefix || '', text: '', stile: [] };
             }
 
-            function anhaengen(s) {
-                if (!lauf) lauf = { art: 'absatz', praefix: '', text: '' };
+            function anhaengen(s, format) {
+                if (!lauf) lauf = { art: 'absatz', praefix: '', text: '', stile: [] };
+                var st = format || BLOCKTEXT_KLARTEXT;
                 lauf.text += s;
+                for (var i = 0; i < s.length; i++) lauf.stile.push(st);
             }
 
             function hatWegKlasse(el) {
@@ -5206,15 +5372,16 @@
                 return (n + start - 1) + '. ';
             }
 
-            function formel(el, inZeile) {
+            // format: Stil des Formel-Elements selbst (z. B. fett in <strong>)
+            function formel(el, inZeile, format) {
                 var quelle = el.getAttribute('data-latex');
-                var t = (modul && typeof modul.latexZuText === 'function') ? modul.latexZuText(quelle) : quelle;
+                var t = String((modul && typeof modul.latexZuText === 'function') ? modul.latexZuText(quelle) : quelle);
                 if (!inZeile && el.classList.contains('cbd-latex-display')) {
                     beginnen('formel');
-                    anhaengen(t);
+                    anhaengen(t, format);
                     abschliessen(true);
                 } else {
-                    anhaengen(t);
+                    anhaengen(t, format);
                 }
             }
 
@@ -5227,13 +5394,14 @@
                 }
                 var stil = window.getComputedStyle(el);
                 if (stil.display === 'none' || stil.visibility === 'hidden') return;
+                var format = formatVon(stil);
 
                 if (el.classList.contains('cbd-latex-formula') && el.hasAttribute('data-latex')) {
-                    formel(el, ctx.inZeile);
+                    formel(el, ctx.inZeile, format);
                     return;
                 }
                 if (tag === 'BR') {
-                    anhaengen('\n');
+                    anhaengen('\n', BLOCKTEXT_KLARTEXT);
                     return;
                 }
 
@@ -5251,20 +5419,21 @@
                 var kind = {
                     pre: ctx.pre || tag === 'PRE',
                     ueberschrift: ctx.ueberschrift || istUeberschrift,
-                    inZeile: ctx.inZeile
+                    inZeile: ctx.inZeile,
+                    format: format
                 };
 
                 if (ctx.inZeile) {
                     // In einer Tabellenzeile: Zellen verbinden, alles
                     // andere Blockige nur als Leerzeichen trennen
                     if (tag === 'TD' || tag === 'TH') {
-                        if (zelleNr > 0) anhaengen(' | ');
+                        if (zelleNr > 0) anhaengen(' | ', BLOCKTEXT_KLARTEXT);
                         zelleNr++;
                     } else if (istBlock || art) {
-                        anhaengen(' ');
+                        anhaengen(' ', BLOCKTEXT_KLARTEXT);
                     }
                     besuchen(el, kind);
-                    if (istBlock || art) anhaengen(' ');
+                    if (istBlock || art) anhaengen(' ', BLOCKTEXT_KLARTEXT);
                     return;
                 }
 
@@ -5297,17 +5466,23 @@
                 for (var k = knoten.firstChild; k; k = k.nextSibling) {
                     if (zu && k.nodeName !== 'SUMMARY') continue;
                     if (k.nodeType === 3) {
+                        // Stil eines Textknotens = Stil seines Elternelements
                         var s = k.nodeValue;
-                        s = ctx.pre ? s.replace(/\r\n?/g, '\n').replace(/[ \t\f]+/g, ' ')
-                            : s.replace(/[ \t\n\r\f]+/g, ' ');
-                        if (s) anhaengen(s);
+                        s = ctx.pre ? s.replace(/\r\n?/g, '\n').replace(LEER_PRE, ' ')
+                            : s.replace(LEER, ' ');
+                        if (s) anhaengen(s, ctx.format);
                     } else if (k.nodeType === 1) {
                         element(k, ctx);
                     }
                 }
             }
 
-            if (wurzel) besuchen(wurzel, { pre: false, ueberschrift: false, inZeile: false });
+            if (wurzel) {
+                besuchen(wurzel, {
+                    pre: false, ueberschrift: false, inZeile: false,
+                    format: istElement ? formatVon(window.getComputedStyle(wurzel)) : BLOCKTEXT_KLARTEXT
+                });
+            }
             abschliessen(true);
             return absaetze;
         },
@@ -5322,6 +5497,23 @@
             var bereich = this.overlay.querySelector('.cbd-board-content');
             if (!bereich) return '';
             return this._blocktextLesen(bereich).map(function(a) { return a.text; }).join('\n\n');
+        },
+
+        /**
+         * Absätze des linken Blockbereichs mit Formatierung
+         * (PLAN-Blocktext-Formatierung.md, AP-2.1): [{text, teile?}] aus
+         * _blocktextLesen() ohne art; teile nur bei formatierten Absätzen.
+         * Gleiche Texte wie _blocktextAlsText(). Ohne offene Tafel [].
+         */
+        _blocktextAbsaetze: function() {
+            if (!this.overlay) return [];
+            var bereich = this.overlay.querySelector('.cbd-board-content');
+            if (!bereich) return [];
+            return this._blocktextLesen(bereich).map(function(a) {
+                var absatz = { text: a.text };
+                if (a.teile) absatz.teile = a.teile;
+                return absatz;
+            });
         },
 
         /**
