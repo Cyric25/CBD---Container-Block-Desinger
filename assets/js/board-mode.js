@@ -51,6 +51,14 @@
     // in einer Tabellenzeile und "\n" aus BR.
     var BLOCKTEXT_KLARTEXT = { f: 0, k: 0, farbe: null };
 
+    // Namen der Stiftfarben (presetColors) für die Farbknöpfe der
+    // Formatleiste im Bearbeitungsfeld (PLAN-Blocktext-Formatierung.md,
+    // AP-2.4): aria-label und Tooltip. Unbekannte Farbe -> ihr Hex-Wert.
+    var FORMAT_FARBNAMEN = {
+        '#000000': 'Schwarz', '#ffffff': 'Weiß', '#ff0000': 'Rot',
+        '#0000ff': 'Blau', '#ffff00': 'Gelb', '#00ff00': 'Grün'
+    };
+
     /**
      * Farbangabe -> '#rrggbb' oder null (AP-2.1, Review-Befund B10 aus
      * AP-1.rev). getComputedStyle liefert meist rgb()/rgba(), fuer
@@ -5267,6 +5275,12 @@
          * berechnete Grundfarbe; nbsp: true behandelt geschütztes Leerzeichen
          * (U+00A0) wie ein Leerzeichen (zusammengefasst, am Rand entfernt).
          * Ohne optionen bleibt es wie bisher erhalten.
+         * pre: true (AP-2.4) liest schon die Wurzel wie ein PRE - "\n" in
+         * Textknoten bleibt ein Zeilenwechsel. Das Bearbeitungsfeld hat
+         * white-space: pre-wrap, und Chrome/Safari fügen dort bei einem
+         * Zeilenwechsel (Umschalt+Enter, insertLineBreak) ein "\n"-Zeichen
+         * statt eines <br> ein - ohne die Option würde er beim Lesen zum
+         * Leerzeichen. Nur _textFeldLesen() setzt sie.
          */
         _blocktextLesen: function(wurzel, optionen) {
             var modul = blocktextModul();
@@ -5479,7 +5493,7 @@
 
             if (wurzel) {
                 besuchen(wurzel, {
-                    pre: false, ueberschrift: false, inZeile: false,
+                    pre: !!opt.pre, ueberschrift: false, inZeile: false,
                     format: istElement ? formatVon(window.getComputedStyle(wurzel)) : BLOCKTEXT_KLARTEXT
                 });
             }
@@ -5775,6 +5789,9 @@
          * (aria-modal, Review-Befund G1); eine gehaltene Taste auf einem
          * Knopf (keydown mit repeat) wirkt nicht - gehaltenes Enter auf
          * "Auf neuer Seite einfügen" legte sonst Seite um Seite an (M1).
+         * Seit PLAN-Blocktext-Formatierung.md, AP-2.4 zählt auch das
+         * Bearbeitungsfeld (div[contenteditable]) als Ziel; es steht im
+         * DOM vor seiner Formatleiste und bleibt so das erste Ziel.
          */
         _blocktextFensterBauen: function(zusatzKlasse, titel, meldung, beiEscape) {
             this._blocktextFensterSchliessen(false);
@@ -5805,7 +5822,7 @@
                     e.preventDefault();
                     beiEscape();
                 } else if (e.key === 'Tab') {
-                    var ziele = dialog.querySelectorAll('textarea, button:not([disabled])');
+                    var ziele = dialog.querySelectorAll('textarea, [contenteditable="true"], button:not([disabled])');
                     if (!ziele.length) return;
                     var erstes = ziele[0];
                     var letztes = ziele[ziele.length - 1];
@@ -5840,9 +5857,11 @@
          * Offenes Blocktext-Fenster entfernen (auch aus close/destroy/
          * _openOverlay). rueckfokus: Fokus zurück auf den Knopf "Text auf die
          * Tafel" (Abbrechen, Weglassen, Schließen, Escape - AP-2.fix1, G1);
-         * sonst bliebe er auf body.
+         * sonst bliebe er auf body. Entfernt auch den selectionchange-
+         * Lauscher eines Bearbeitungsfelds (_textFeldBauen, AP-2.4).
          */
         _blocktextFensterSchliessen: function(rueckfokus) {
+            this._textFeldLauscherEntfernen();
             var f = this._blocktextFenster;
             this._blocktextFenster = null;
             if (f && f.parentNode) f.parentNode.removeChild(f);
@@ -5892,30 +5911,371 @@
             if (s && s.parentNode) s.parentNode.removeChild(s);
         },
 
+        // =============================================
+        // Bearbeitungsfeld mit Formatleiste (PLAN-Blocktext-Formatierung.md,
+        // AP-2.4, F8-F10): Vorschau "Text auf die Tafel", in Phase 3 auch
+        // "Text bearbeiten"
+        // =============================================
+
+        /**
+         * Formatiert bearbeitbares Feld samt Formatleiste bauen (F8).
+         * Liefert {feld, leiste}. Der Aufrufer hängt feld VOR leiste ins
+         * Fenster: Die Tab-Falle von _blocktextFensterBauen nimmt das erste
+         * Ziel im DOM als Anfang (Prüfung g1Fokus: Tab vom letzten Knopf
+         * führt ins Feld); board-mode.css stellt die Leiste per order über
+         * das Feld.
+         *
+         * absaetze: [{text, teile?}] (auch Zeichenketten) wie aus
+         * _blocktextAbsaetze() bzw. aus einem Text-Element. teile werden nur
+         * übernommen, wenn ihre Verkettung genau text ergibt. optionen:
+         *   modus       'vorschau' (Standard): je Absatz ein div, Enter =
+         *               neuer Absatz; 'bearbeiten' (Phase 3): alles in EINEM
+         *               div, Absätze und Zeilen durch <br>, Enter =
+         *               Zeilenwechsel (F12)
+         *   grundfarbe  Farbe des Texts ohne eigene Farbe (Einfügefarbe bzw.
+         *               Farbe des Elements)
+         *   hintergrund Tafelfarbe
+         * Das Feld zeigt den Text so, wie er auf die Tafel kommt: Hintergrund
+         * = Tafel, Schrift = Grundfarbe, Teilfarben schon über
+         * lesbareLauffarbe (F7). Zurückgelesen wird mit _textFeldLesen().
+         *
+         * Inhalt NUR über DOM-Methoden (createElement, Textknoten, <br>) -
+         * nie innerHTML mit Text aus dem Block oder der Zwischenablage (XSS).
+         *
+         * Formatleiste: Fett, Kursiv, die Stiftfarben (presetColors),
+         * Standard (= Grundfarbe, entfernt die Farbe). Die Leiste verhindert
+         * pointerdown und mousedown, damit Fokus und Markierung im Feld
+         * bleiben. Ein Klick nimmt die Markierung im Feld - liegt keine im
+         * Feld (auf dem iPad kann sie beim Antippen verloren gehen, Risiko in
+         * Abschnitt 5 des Plans), die zuletzt dort gemerkte (selectionchange)
+         * - und formatiert per document.execCommand mit styleWithCSS (F9).
+         * Nur eine Schreibmarke im Feld oder gar keine Markierung: nichts.
+         * Die Leiste ist EIN Tab-Halt (role toolbar), Pfeiltasten/Pos1/Ende
+         * wandern zwischen den Knöpfen.
+         *
+         * Feld: Einfügen aus der Zwischenablage nur als Klartext
+         * (insertText), Ziehen und Ablegen gesperrt, kein Unterstreichen
+         * (Strg/Cmd+U, dazu beforeinput formatUnderline für das iPad-Menü) -
+         * unterstrichen käme nicht auf die Tafel.
+         *
+         * Der selectionchange-Lauscher hängt am document; entfernt wird er
+         * in _blocktextFensterSchliessen() (also auch in close/destroy/
+         * _openOverlay) und beim Bau des nächsten Felds - es gibt höchstens
+         * eines.
+         */
+        _textFeldBauen: function(absaetze, optionen) {
+            var opt = optionen || {};
+            var modul = blocktextModul();
+            var modus = opt.modus === 'bearbeiten' ? 'bearbeiten' : 'vorschau';
+            var hintergrund = blocktextHexFarbe(opt.hintergrund) || '#ffffff';
+            var grundfarbe = blocktextHexFarbe(opt.grundfarbe) || '#000000';
+
+            // Teilfarbe so, wie sie auf die Tafel kommt (F7); null = keine
+            function lauffarbe(farbe) {
+                var hex = blocktextHexFarbe(farbe);
+                if (!hex || !modul || typeof modul.lesbareLauffarbe !== 'function') return hex;
+                return modul.lesbareLauffarbe(hex, hintergrund);
+            }
+
+            var feld = document.createElement('div');
+            feld.className = 'cbd-board-blocktext-feld';
+            feld.setAttribute('contenteditable', 'true');
+            feld.setAttribute('role', 'textbox');
+            feld.setAttribute('aria-multiline', 'true');
+            feld.setAttribute('aria-label', modus === 'bearbeiten' ? 'Text bearbeiten' : 'Text für die Tafel');
+            feld.setAttribute('spellcheck', 'false');
+            feld.setAttribute('autocorrect', 'off');
+            feld.setAttribute('autocapitalize', 'off');
+            feld.setAttribute('data-modus', modus);
+            feld.setAttribute('data-grundfarbe', grundfarbe);
+            feld.style.backgroundColor = hintergrund;
+            feld.style.color = grundfarbe;
+
+            // Text in ziel hängen, "\n" -> <br>
+            function zeilenAnhaengen(ziel, text) {
+                var zeilen = text.split('\n');
+                for (var i = 0; i < zeilen.length; i++) {
+                    if (i > 0) ziel.appendChild(document.createElement('br'));
+                    if (zeilen[i]) ziel.appendChild(document.createTextNode(zeilen[i]));
+                }
+            }
+
+            // Absatz -> Teile; teile nur, wenn sie genau den Text ergeben
+            function teileVon(absatz) {
+                var text = typeof absatz === 'string' ? absatz : String((absatz && absatz.text) || '');
+                var teile = (absatz && typeof absatz === 'object' && Array.isArray(absatz.teile)) ? absatz.teile : null;
+                if (teile) {
+                    var kette = '';
+                    for (var i = 0; i < teile.length && teile; i++) {
+                        if (!teile[i] || typeof teile[i].t !== 'string') teile = null;
+                        else kette += teile[i].t;
+                    }
+                    if (teile && kette !== text) teile = null;
+                }
+                return teile || [{ t: text }];
+            }
+
+            // Je formatiertem Teil ein span (fett, kursiv, Farbe), Klartext
+            // als Textknoten
+            function absatzAnhaengen(ziel, absatz) {
+                var teile = teileVon(absatz);
+                for (var i = 0; i < teile.length; i++) {
+                    var teil = teile[i];
+                    var farbe = teil.farbe ? lauffarbe(teil.farbe) : null;
+                    var behaelter = ziel;
+                    if (teil.f || teil.k || farbe) {
+                        behaelter = document.createElement('span');
+                        if (teil.f) behaelter.style.fontWeight = 'bold';
+                        if (teil.k) behaelter.style.fontStyle = 'italic';
+                        if (farbe) behaelter.style.color = farbe;
+                        ziel.appendChild(behaelter);
+                    }
+                    zeilenAnhaengen(behaelter, teil.t);
+                }
+            }
+
+            var liste = Array.isArray(absaetze) ? absaetze : [];
+            var i;
+            if (modus === 'bearbeiten') {
+                var block = document.createElement('div');
+                for (i = 0; i < liste.length; i++) {
+                    if (i > 0) block.appendChild(document.createElement('br'));
+                    absatzAnhaengen(block, liste[i]);
+                }
+                // Ein leeres div hat keine Zeile für die Schreibmarke
+                if (!block.firstChild) block.appendChild(document.createElement('br'));
+                feld.appendChild(block);
+            } else {
+                for (i = 0; i < liste.length; i++) {
+                    var div = document.createElement('div');
+                    absatzAnhaengen(div, liste[i]);
+                    if (div.firstChild) feld.appendChild(div);
+                }
+                if (!feld.firstChild) {
+                    var leer = document.createElement('div');
+                    leer.appendChild(document.createElement('br'));
+                    feld.appendChild(leer);
+                }
+            }
+
+            // ---- Markierung merken ----
+            var gemerkt = null;
+            function imFeld(r) {
+                return !!r && feld.contains(r.startContainer) && feld.contains(r.endContainer);
+            }
+            // Markierung, auf die ein Knopf wirkt: die aktuelle, wenn sie im
+            // Feld liegt (nur Schreibmarke -> keine); liegt keine im Feld,
+            // die zuletzt dort gemerkte
+            function markierung() {
+                var sel = window.getSelection();
+                var r = (sel && sel.rangeCount) ? sel.getRangeAt(0) : null;
+                if (!imFeld(r)) r = gemerkt;
+                return (r && imFeld(r) && !r.collapsed) ? r.cloneRange() : null;
+            }
+            this._textFeldLauscherEntfernen();
+            var merken = function() {
+                var sel = window.getSelection();
+                if (!sel || !sel.rangeCount) return;
+                var r = sel.getRangeAt(0);
+                if (imFeld(r)) gemerkt = r.cloneRange();
+            };
+            document.addEventListener('selectionchange', merken);
+            this._textFeldLauscher = merken;
+
+            function ausfuehren(befehl, wert) {
+                var bereich = markierung();
+                if (!bereich) return;
+                if (document.activeElement !== feld) {
+                    try {
+                        feld.focus({ preventScroll: true });
+                    } catch (fehler) {
+                        feld.focus();
+                    }
+                }
+                var sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(bereich);
+                document.execCommand('styleWithCSS', false, true);
+                document.execCommand(befehl, false, wert);
+            }
+
+            function standardVerhindern(e) {
+                e.preventDefault();
+            }
+
+            // ---- Formatleiste ----
+            var leiste = document.createElement('div');
+            leiste.className = 'cbd-board-blocktext-format';
+            leiste.setAttribute('role', 'toolbar');
+            leiste.setAttribute('aria-label', 'Formatieren');
+            var knoepfe = [];
+
+            function tabHalt(aktiv) {
+                for (var j = 0; j < knoepfe.length; j++) knoepfe[j].tabIndex = knoepfe[j] === aktiv ? 0 : -1;
+            }
+
+            function knopf(klasse, beschriftung, name, beiKlick) {
+                var k = document.createElement('button');
+                k.type = 'button';
+                k.className = 'cbd-board-format-knopf ' + klasse;
+                k.textContent = beschriftung;
+                if (name) {
+                    k.setAttribute('aria-label', name);
+                    k.title = name;
+                }
+                k.tabIndex = knoepfe.length ? -1 : 0;
+                k.addEventListener('click', function() {
+                    tabHalt(k);
+                    beiKlick();
+                });
+                knoepfe.push(k);
+                leiste.appendChild(k);
+                return k;
+            }
+
+            function farbKnopf(farbe) {
+                var hex = blocktextHexFarbe(farbe) || String(farbe);
+                var k = knopf('cbd-board-format-farbe', '', FORMAT_FARBNAMEN[hex] || hex, function() {
+                    ausfuehren('foreColor', lauffarbe(hex) || hex);
+                });
+                k.style.backgroundColor = hex;
+                k.setAttribute('data-farbe', hex);
+            }
+
+            knopf('cbd-board-format-fett', 'F', 'Fett', function() { ausfuehren('bold'); });
+            knopf('cbd-board-format-kursiv', 'K', 'Kursiv', function() { ausfuehren('italic'); });
+            var stifte = this.presetColors || [];
+            for (i = 0; i < stifte.length; i++) farbKnopf(stifte[i]);
+            var standard = knopf('cbd-board-format-standard', 'Standard', '', function() {
+                ausfuehren('foreColor', grundfarbe);
+            });
+            standard.title = 'Farbe entfernen';
+
+            leiste.addEventListener('pointerdown', standardVerhindern);
+            leiste.addEventListener('mousedown', standardVerhindern);
+            leiste.addEventListener('keydown', function(e) {
+                var nr = knoepfe.indexOf(e.target);
+                if (nr < 0) return;
+                var n = knoepfe.length;
+                var neu = -1;
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') neu = (nr + 1) % n;
+                else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') neu = (nr + n - 1) % n;
+                else if (e.key === 'Home') neu = 0;
+                else if (e.key === 'End') neu = n - 1;
+                if (neu < 0) return;
+                e.preventDefault();
+                tabHalt(knoepfe[neu]);
+                knoepfe[neu].focus();
+            });
+
+            // ---- Feld ----
+            feld.addEventListener('paste', function(e) {
+                e.preventDefault();
+                var daten = e.clipboardData;
+                var text = daten ? String(daten.getData('text/plain') || '').replace(/\r\n?/g, '\n') : '';
+                if (!text) return;
+                if (modus === 'bearbeiten') {
+                    var zeilen = text.split('\n');
+                    for (var z = 0; z < zeilen.length; z++) {
+                        if (z > 0) document.execCommand('insertLineBreak');
+                        if (zeilen[z]) document.execCommand('insertText', false, zeilen[z]);
+                    }
+                } else {
+                    // Zeilenwechsel werden hier zu neuen Absätzen (Chrome/Safari)
+                    document.execCommand('insertText', false, text);
+                }
+            });
+            feld.addEventListener('dragover', standardVerhindern);
+            feld.addEventListener('drop', standardVerhindern);
+            feld.addEventListener('beforeinput', function(e) {
+                if (e.inputType === 'formatUnderline') e.preventDefault();
+            });
+            feld.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'u' || e.key === 'U')) {
+                    e.preventDefault();
+                    return;
+                }
+                if (e.key !== 'Enter' || e.isComposing) return;
+                if (modus === 'bearbeiten') {
+                    if (!e.shiftKey) {
+                        e.preventDefault();
+                        document.execCommand('insertLineBreak');
+                    }
+                } else {
+                    document.execCommand('defaultParagraphSeparator', false, 'div');
+                }
+            });
+
+            return { feld: feld, leiste: leiste };
+        },
+
+        /** selectionchange-Lauscher des Bearbeitungsfelds abmelden (AP-2.4). */
+        _textFeldLauscherEntfernen: function() {
+            if (this._textFeldLauscher) {
+                document.removeEventListener('selectionchange', this._textFeldLauscher);
+                this._textFeldLauscher = null;
+            }
+        },
+
+        /**
+         * Bearbeitungsfeld zurücklesen (AP-2.4, F10): derselbe Leser wie für
+         * den Blockbereich (_blocktextLesen), mit der Grundfarbe des Felds -
+         * Teile in dieser Farbe tragen keine eigene, auch nach "Standard" -,
+         * geschütztem Leerzeichen als Leerzeichen (contenteditable setzt
+         * &nbsp;) und "\n" als Zeilenwechsel (Option pre, siehe dort).
+         * Liefert [{text, teile?}] wie _blocktextAbsaetze() - direkt für
+         * blocktextEinfuegen() (AP-2.3) bzw. in Phase 3 für textErsetzen().
+         * Das Feld muss im Dokument hängen (berechnete Stile).
+         */
+        _textFeldLesen: function(feld) {
+            if (!feld) return [];
+            var grundfarbe = feld.getAttribute('data-grundfarbe') || window.getComputedStyle(feld).color;
+            return this._blocktextLesen(feld, { grundfarbe: grundfarbe, nbsp: true, pre: true }).map(function(a) {
+                var absatz = { text: a.text };
+                if (a.teile) absatz.teile = a.teile;
+                return absatz;
+            });
+        },
+
         /**
          * Vorschau "Text auf die Tafel" (AP-2.3, E1): Text des Blockbereichs
-         * im Textfeld zum Kürzen und Ändern, "Auf die Tafel" fügt ein.
-         * Bleibt ein Rest oder ist kein Platz, folgt die Rückfrage.
+         * zum Kürzen und Ändern, "Auf die Tafel" fügt ein. Bleibt ein Rest
+         * oder ist kein Platz, folgt die Rückfrage.
+         *
+         * Seit PLAN-Blocktext-Formatierung.md, AP-2.4 (F8) ein formatiert
+         * bearbeitbares Feld mit Formatleiste (_textFeldBauen) statt eines
+         * textarea: Es zeigt fett, kursiv und Farben so, wie sie auf die
+         * Tafel kommen (Tafelfarbe als Hintergrund, Einfügefarbe als
+         * Grundschrift - dieselbe lesbareFarbe() wie in blocktextEinfuegen);
+         * jeder Absatz (div) wird ein eigener Textblock. "Auf die Tafel"
+         * liest das Feld mit _textFeldLesen() und übergibt die Absätze als
+         * Array (AP-2.3).
          */
         blocktextVorschau: function() {
             if (!this.overlay) return;
             var self = this;
-            var text = this._blocktextAlsText();
-            var leer = !text;
+            var absaetze = this._blocktextAbsaetze();
+            var leer = !absaetze.length;
             var teile = this._blocktextFensterBauen('', 'Text auf die Tafel',
                 leer ? 'In diesem Block gibt es keinen Text zum Übernehmen.'
-                     : 'Lösche, was du nicht brauchst. Leere Zeilen trennen die Textblöcke.',
+                     : 'Lösche, was du nicht brauchst. Jeder Absatz wird ein eigener Textblock. ' +
+                       'Markiere Wörter, um sie fett, kursiv oder farbig zu machen.',
                 function() { self._blocktextFensterSchliessen(true); });
 
             var feld = null;
             if (!leer) {
-                feld = document.createElement('textarea');
-                feld.className = 'cbd-board-blocktext-feld';
-                feld.rows = 12;
-                feld.spellcheck = false;
-                feld.setAttribute('aria-label', 'Text für die Tafel');
-                feld.value = text;
+                var modul = blocktextModul();
+                var bau = this._textFeldBauen(absaetze, {
+                    modus: 'vorschau',
+                    grundfarbe: (modul && typeof modul.lesbareFarbe === 'function') ?
+                        modul.lesbareFarbe(this.currentColor, this.boardColor) : this.currentColor,
+                    hintergrund: this.boardColor
+                });
+                feld = bau.feld;
+                // Feld VOR der Leiste (erstes Ziel der Tab-Falle);
+                // board-mode.css stellt die Leiste per order darüber
                 teile.dialog.appendChild(feld);
+                teile.dialog.appendChild(bau.leiste);
             }
 
             teile.aktionen.appendChild(this._blocktextFensterKnopf('cbd-board-confirm-cancel',
@@ -5928,7 +6288,8 @@
                     'Auf die Tafel', function() {
                         if (erledigt) return; // schneller Doppelklick
                         erledigt = true;
-                        var erg = self.blocktextEinfuegen(feld.value);
+                        // Lesen, solange das Feld noch im Dokument hängt
+                        var erg = self.blocktextEinfuegen(self._textFeldLesen(feld));
                         self._blocktextFensterSchliessen(false);
                         self._blocktextKlickschutz();
                         self._blocktextNachEinfuegen(erg, false);
@@ -5938,8 +6299,16 @@
             document.body.appendChild(teile.fenster);
 
             if (feld) {
+                // Fokus ins Feld, Schreibmarke an den Anfang (eingeklappt)
                 feld.focus();
-                feld.setSelectionRange(0, 0);
+                var sel = window.getSelection();
+                if (sel) {
+                    var anfang = document.createRange();
+                    anfang.setStart(feld, 0);
+                    anfang.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(anfang);
+                }
                 feld.scrollTop = 0;
             } else {
                 teile.aktionen.firstChild.focus();

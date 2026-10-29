@@ -1336,20 +1336,52 @@ html.cbd-board-offen .sidebar-toggle-btn {
     margin: 0 0 12px 0;
 }
 
+/* Bearbeitungsfeld (PLAN-Blocktext-Formatierung.md, AP-2.4, F8): ein
+   div[contenteditable] statt des früheren textarea. Hintergrund und
+   Grundschrift setzt board-mode.js (_textFeldBauen) INLINE auf Tafelfarbe
+   und Einfügefarbe - das Feld zeigt den Text so, wie er auf die Tafel
+   kommt. Die Werte hier gelten nur ohne Inline-Stil; eine Darkmode-Regel
+   für das Feld gibt es deshalb bewusst nicht.
+   Höhe: wächst mit dem Inhalt bis rund 12 Zeilen (wie das textarea mit
+   rows 12), danach scrollt es; bei niedriger Bildschirmhöhe schrumpft es
+   zuerst (flex 1 1, min-height). pre-wrap: Chrome/Safari fügen einen
+   Zeilenwechsel dann als "\n" ein - _textFeldLesen() liest das Feld
+   deshalb mit der Option pre. Die DOM-Reihenfolge ist Feld, Leiste,
+   Knöpfe (Tab-Falle); order stellt die Leiste über das Feld. */
 .cbd-board-blocktext-feld {
     display: block;
+    order: 2;
     width: 100%;
     box-sizing: border-box;
     flex: 1 1 auto;
     min-height: 3.5em;
+    max-height: 16.8em;
+    overflow: auto;
     margin: 0 0 16px 0;
     padding: 8px 10px;
     border: 1px solid var(--color-border, #cccccc);
     border-radius: 6px;
     background: var(--color-background, #ffffff);
     color: var(--color-text-primary, #333333);
-    font: 15px/1.4 sans-serif;
-    resize: vertical;
+    font: 18px/1.4 sans-serif;
+    text-align: left;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    cursor: text;
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+}
+
+/* Jeder Absatz (div) wird ein eigener Textblock - der Abstand macht das
+   sichtbar (ein Zeilenwechsel im Absatz hat keinen) */
+.cbd-board-blocktext-feld > div {
+    margin: 0 0 0.6em 0;
+}
+
+.cbd-board-blocktext-feld > div:last-child {
+    margin-bottom: 0;
 }
 
 .cbd-board-blocktext-feld:focus {
@@ -1357,7 +1389,62 @@ html.cbd-board-offen .sidebar-toggle-btn {
     outline-offset: 0;
 }
 
+/* Formatleiste über dem Feld: Fett, Kursiv, sechs Stiftfarben, Standard.
+   Knöpfe mindestens 36x36 px (Touch); bricht auf schmalen Anzeigen um. */
+.cbd-board-blocktext-format {
+    order: 1;
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 8px 0;
+}
+
+.cbd-board-format-knopf {
+    box-sizing: border-box;
+    min-width: 36px;
+    height: 36px;
+    margin: 0;
+    padding: 0 10px;
+    border: 1px solid var(--color-border, #cccccc);
+    border-radius: 6px;
+    background: var(--color-background, #ffffff);
+    color: var(--color-text-primary, #333333);
+    font: 16px/1 sans-serif;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.cbd-board-format-knopf:hover {
+    background: var(--color-ui-surface-light, #f5ede9);
+    color: var(--color-text-primary, #333333);
+}
+
+.cbd-board-format-fett {
+    font-weight: bold;
+}
+
+.cbd-board-format-kursiv {
+    font-style: italic;
+}
+
+/* Farbknöpfe: Fläche in der Stiftfarbe (inline), deutlicher Rahmen - auch
+   Weiß und Gelb sind auf dem Fenster sichtbar */
+.cbd-board-format-farbe,
+.cbd-board-format-farbe:hover {
+    width: 36px;
+    padding: 0;
+    border: 2px solid var(--color-text-primary, #333333);
+    color: var(--color-text-primary, #333333);
+}
+
+.cbd-board-format-standard {
+    font-size: 14px;
+}
+
 .cbd-board-blocktext-dialog .cbd-board-confirm-actions {
+    order: 3;
     flex: 0 0 auto;
     justify-content: flex-end;
     flex-wrap: wrap;
@@ -1626,10 +1713,24 @@ html.cbd-board-offen .sidebar-toggle-btn {
     color: var(--color-text-muted, #b0b0b0);
 }
 
-[data-theme="dark"] .cbd-board-blocktext-feld {
+/* Bearbeitungsfeld (AP-2.4): keine Darkmode-Regel - es zeigt bewusst die
+   Tafelfarben (inline). Nur die Formatleiste folgt dem Darkmode; die
+   Farbknöpfe behalten ihre Stiftfarbe (inline), der helle Rahmen hebt
+   Schwarz und Blau vom dunklen Fenster ab. */
+[data-theme="dark"] .cbd-board-format-knopf {
     background: var(--color-background, #121212);
     color: var(--color-text-primary, #e8e8e8);
     border-color: var(--color-border, #444444);
+}
+
+[data-theme="dark"] .cbd-board-format-knopf:hover {
+    background: var(--color-background-light, #2a2a2a);
+    color: var(--color-text-primary, #e8e8e8);
+}
+
+[data-theme="dark"] .cbd-board-format-farbe,
+[data-theme="dark"] .cbd-board-format-farbe:hover {
+    border-color: var(--color-text-primary, #e8e8e8);
 }
 
 [data-theme="dark"] .cbd-board-blocktext-dialog .cbd-board-confirm-cancel {
