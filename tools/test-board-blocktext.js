@@ -379,6 +379,238 @@
         return ergebnis(f);
     }
 
+    // ------------------------------------------------------------------
+    // AP-2.3: Knopf, Vorschau, Rückfrage
+    // ------------------------------------------------------------------
+    function langerInhalt(n) {
+        var l = [];
+        for (var i = 1; i <= n; i++) l.push('<p>Absatz ' + i + ' mit etwas Text, damit er eine Zeile füllt.</p>');
+        return l.join('');
+    }
+
+    function bereich() {
+        return B.overlay.querySelector('.cbd-board-content');
+    }
+
+    function fenster() {
+        return document.querySelector('.cbd-board-blocktext-overlay');
+    }
+
+    function feld() {
+        return document.querySelector('.cbd-board-blocktext-feld');
+    }
+
+    function taste(ziel, key, extra) {
+        var init = { key: key, bubbles: true, cancelable: true };
+        for (var k in (extra || {})) init[k] = extra[k];
+        var ev = new KeyboardEvent('keydown', init);
+        ziel.dispatchEvent(ev);
+        return ev;
+    }
+
+    function vorschauOeffnen() {
+        B.overlay.querySelector('.cbd-board-blocktext-knopf').click();
+        return feld();
+    }
+
+    function leisteKlebt() {
+        oeffnenMit(langerInhalt(80));
+        var f = [];
+        var b = bereich();
+        var leiste = b.firstElementChild;
+        if (!leiste || !leiste.classList.contains('cbd-board-blocktext-leiste')) {
+            return { ok: false, detail: 'erstes Kind: ' + (leiste && leiste.className) };
+        }
+        var knopf = leiste.querySelector('.cbd-board-blocktext-knopf');
+        var r = knopf.getBoundingClientRect();
+        if (!(r.width > 0 && r.height > 0)) f.push('Knopf unsichtbar');
+        if (knopf.textContent.indexOf('Text auf die Tafel') < 0) f.push('Beschriftung ' + JSON.stringify(knopf.textContent));
+        b.scrollTop = 500;
+        if (b.scrollTop < 100) f.push('Bereich scrollt nicht (' + b.scrollTop + ')');
+        var oben = b.getBoundingClientRect().top;
+        var r2 = knopf.getBoundingClientRect();
+        if (r2.top < oben - 0.5 || r2.bottom > b.getBoundingClientRect().bottom) f.push('nach Scrollen bei ' + Math.round(r2.top) + ', Bereich ab ' + Math.round(oben));
+        var vorher = getComputedStyle(knopf).fontSize;
+        var regler = B.fontSize;
+        B.setFontSize(300);
+        var nachher = getComputedStyle(knopf).fontSize;
+        B.setFontSize(regler); // gilt über das Schließen hinaus
+        var lb = getComputedStyle(leiste).backgroundColor;
+        if (lb !== getComputedStyle(b).backgroundColor) f.push('Leiste ' + lb + ' auf Bereich ' + getComputedStyle(b).backgroundColor);
+        if (vorher !== '13px' || nachher !== '13px') f.push('Schrift ' + vorher + ' -> ' + nachher);
+        if (B._blocktextAlsText().indexOf('Text auf die Tafel') >= 0) f.push('Beschriftung im gelesenen Text');
+        if (B.overlay.querySelector('.cbd-board-split').children.length !== 2) f.push('Split hat nicht mehr 2 Kinder');
+        return ergebnis(f);
+    }
+
+    function vorschauKlick() {
+        oeffnenMit('<p>Eins</p><p>Zwei</p>');
+        var f = [];
+        var t = vorschauOeffnen();
+        if (!fenster()) return { ok: false, detail: 'kein Fenster' };
+        if (!t) return { ok: false, detail: 'kein Textfeld' };
+        if (t.value !== 'Eins\n\nZwei') f.push('Inhalt ' + JSON.stringify(t.value));
+        if (document.activeElement !== t) f.push('Fokus auf ' + (document.activeElement && document.activeElement.className));
+        if (t.selectionStart !== 0 || t.selectionEnd !== 0) f.push('Schreibmarke ' + t.selectionStart + '-' + t.selectionEnd);
+        if (fenster().parentNode !== document.body) f.push('Fenster nicht am body');
+        if (!fenster().querySelector('.cbd-board-blocktext-einfuegen')) f.push('kein Knopf "Auf die Tafel"');
+        return ergebnis(f);
+    }
+
+    function escapeImFeld() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        var ev = taste(t, 'Escape');
+        var f = [];
+        if (fenster()) f.push('Fenster noch offen');
+        if (!B.overlay) f.push('Tafel geschlossen');
+        if (!ev.defaultPrevented) f.push('Escape nicht abgefangen');
+        return ergebnis(f);
+    }
+
+    function strgZImFeld() {
+        oeffnenMit('<p>Eins</p>');
+        ctx.zeiger('pointerdown', 3, 'mouse', 300, 300);
+        ctx.zeiger('pointermove', 3, 'mouse', 400, 300);
+        ctx.zeiger('pointerup', 3, 'mouse', 400, 300);
+        var anzahl = el().length;
+        var undo = B.undoStapel.length;
+        var t = vorschauOeffnen();
+        taste(t, 'z', { ctrlKey: true });
+        var f = [];
+        if (anzahl !== 1) f.push('Strich fehlt vorher (' + anzahl + ')');
+        if (B.undoStapel.length !== undo || el().length !== anzahl) f.push('Tafel verändert: Undo ' + undo + ' -> ' + B.undoStapel.length + ', Elemente ' + el().length);
+        if (!fenster()) f.push('Fenster zu');
+        return ergebnis(f);
+    }
+
+    function entfImFeld() {
+        oeffnenMit('<p>Eins</p>');
+        B.blocktextEinfuegen('Ausgewählt');
+        var ids = B.auswahl.slice();
+        var anzahl = el().length;
+        var t = vorschauOeffnen();
+        taste(t, 'Delete');
+        taste(t, 'Backspace');
+        taste(t, 'd', { ctrlKey: true });
+        var f = [];
+        if (ids.length !== 1) f.push('vorher keine Auswahl');
+        if (B.auswahl.join() !== ids.join()) f.push('Auswahl ' + B.auswahl.join());
+        if (el().length !== anzahl) f.push('Elemente ' + anzahl + ' -> ' + el().length);
+        return ergebnis(f);
+    }
+
+    function gekuerztEinfuegen() {
+        oeffnenMit('<p>Eins</p><p>Zwei</p><p>Drei</p>');
+        var t = vorschauOeffnen();
+        t.value = 'Eins\n\nDrei';
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var f = [];
+        if (fenster()) f.push('Fenster noch offen');
+        var ist = texte().map(function(x) { return x.text; }).join('|');
+        if (ist !== 'Eins|Drei') f.push('Elemente ' + JSON.stringify(ist));
+        if (B.currentTool !== 'lasso' || B.auswahl.length !== 2) f.push('Werkzeug ' + B.currentTool + ', Auswahl ' + B.auswahl.length);
+        return ergebnis(f);
+    }
+
+    function restNeueSeite() {
+        oeffnenMit(langerInhalt(60));
+        vorschauOeffnen();
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var f = [];
+        var rf = fenster();
+        if (!rf || !rf.classList.contains('cbd-board-blocktext-rest')) return { ok: false, detail: 'keine Rückfrage' };
+        if (!/Textbl(ock passt|öcke passen) nicht mehr auf diese Seite\./.test(rf.textContent)) f.push('Meldung ' + JSON.stringify(rf.querySelector('p').textContent));
+        var aufSeite1 = texte().length;
+        rf.querySelector('.cbd-board-blocktext-neue-seite').click();
+        if (B.totalPages !== 2 || B.currentPageIndex !== 1) f.push('Seite ' + B.currentPageIndex + ' von ' + B.totalPages);
+        if (!texte().length) f.push('Seite 2 leer');
+        if (!aufSeite1) f.push('Seite 1 leer');
+        // 60 Absätze passen nicht auf zwei Seiten: erneute Rückfrage
+        var rf2 = fenster();
+        if (!rf2 || !rf2.classList.contains('cbd-board-blocktext-rest')) f.push('keine zweite Rückfrage');
+        else {
+            rf2.querySelector('.cbd-board-confirm-cancel').click();
+            if (fenster() || B.totalPages !== 2) f.push('Weglassen auf Seite 2: ' + B.totalPages + ' Seiten');
+        }
+        return ergebnis(f);
+    }
+
+    function restWeglassen() {
+        oeffnenMit(langerInhalt(60));
+        vorschauOeffnen();
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var rf = fenster();
+        if (!rf) return { ok: false, detail: 'keine Rückfrage' };
+        var f = [];
+        if (document.activeElement !== rf.querySelector('.cbd-board-blocktext-neue-seite')) f.push('Fokus nicht auf "Auf neuer Seite einfügen"');
+        taste(document.activeElement, 'Escape');
+        if (fenster()) f.push('Escape schließt die Rückfrage nicht');
+        if (B.totalPages !== 1) f.push(B.totalPages + ' Seiten');
+        if (!B.overlay) f.push('Tafel geschlossen');
+        return ergebnis(f);
+    }
+
+    function keinPlatzRueckfrage() {
+        oeffnenMit('<p>Eins</p>');
+        ctx.zeiger('pointerdown', 3, 'mouse', 10, 5);
+        for (var y = 15; y < B.cssHeight; y += 10) ctx.zeiger('pointermove', 3, 'mouse', 10, Math.min(y, B.cssHeight - 5));
+        ctx.zeiger('pointerup', 3, 'mouse', 10, B.cssHeight - 5);
+        vorschauOeffnen();
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var rf = fenster();
+        var f = [];
+        if (!rf || rf.querySelector('p').textContent !== 'Auf dieser Seite ist kein Platz mehr.') f.push('Meldung ' + (rf && rf.querySelector('p').textContent));
+        else {
+            rf.querySelector('.cbd-board-blocktext-neue-seite').click();
+            if (B.totalPages !== 2 || texte().length !== 1) f.push('neue Seite: ' + B.totalPages + ' Seiten, ' + texte().length + ' Texte');
+            if (fenster()) f.push('Fenster nach Einfügen offen');
+        }
+        return ergebnis(f);
+    }
+
+    function leererBlock() {
+        oeffnenMit('<p hidden>versteckt</p>');
+        vorschauOeffnen();
+        var fe = fenster();
+        var f = [];
+        if (!fe) return { ok: false, detail: 'kein Fenster' };
+        if (feld()) f.push('Textfeld vorhanden');
+        if (fe.querySelector('p').textContent !== 'In diesem Block gibt es keinen Text zum Übernehmen.') f.push('Meldung ' + fe.querySelector('p').textContent);
+        var knoepfe = fe.querySelectorAll('button');
+        if (knoepfe.length !== 1 || knoepfe[0].textContent !== 'Schließen') f.push('Knöpfe ' + knoepfe.length);
+        else knoepfe[0].click();
+        if (fenster()) f.push('Schließen schließt nicht');
+        return ergebnis(f);
+    }
+
+    function destroyMitFenster() {
+        oeffnenMit('<p>Eins</p>');
+        vorschauOeffnen();
+        var f = [];
+        if (!fenster()) f.push('kein Fenster');
+        B.destroy();
+        if (fenster()) f.push('Fenster nach destroy() noch da');
+        B.open(CID, '<p>Inhalt für den Test</p>', '#ffffff');
+        if (fenster()) f.push('Fenster nach neuem Öffnen da');
+        return ergebnis(f);
+    }
+
+    function klickNebenFenster() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        t.value = 'gekürzt';
+        var fe = fenster();
+        fe.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        var f = [];
+        if (!fenster() || feld().value !== 'gekürzt') f.push('Klick neben das Fenster schließt es');
+        // Tasten bei Fokus außerhalb des Fensters wirken nicht auf die Tafel
+        document.body.focus();
+        taste(document.body, 'Escape');
+        if (!B.overlay) f.push('Escape am body schließt die Tafel');
+        return ergebnis(f);
+    }
+
     function knopfleisteUnsichtbar() {
         // Leiste aus AP-2.3 (Klasse) und Aktionsleiste fallen weg, auch wenn
         // sie im Blockbereich stehen
@@ -438,6 +670,20 @@
         p('Blocktext einfügen: leerer Text -> nichts, leerer Rest -> keine Seite', leererText);
         p('Blocktext einfügen: Strg+Z nimmt alles Eingefügte zurück', strgZ);
         p('Blocktext einfügen: Texte und Schrift überleben Speichern und Wiederöffnen', speichernWiederoeffnen);
+
+        // AP-2.3
+        p('Blocktext-Knopf: erstes Kind des Blockbereichs, klebt beim Scrollen, 13 px auch bei 300 %', leisteKlebt);
+        p('Blocktext-Vorschau: Klick öffnet Fenster mit Blocktext, Fokus im Textfeld am Anfang', vorschauKlick);
+        p('Blocktext-Vorschau: Escape im Textfeld schließt nur das Fenster', escapeImFeld);
+        p('Blocktext-Vorschau: Strg+Z im Textfeld wirkt nicht auf die Tafel', strgZImFeld);
+        p('Blocktext-Vorschau: Entf/Rücktaste/Strg+D im Textfeld lassen die Auswahl in Ruhe', entfImFeld);
+        p('Blocktext-Vorschau: gekürzter Text -> genau diese Absätze', gekuerztEinfuegen);
+        p('Blocktext-Rückfrage: langer Text -> Rückfrage, neue Seite, erneute Rückfrage, Weglassen', restNeueSeite);
+        p('Blocktext-Rückfrage: Fokus auf "Auf neuer Seite einfügen", Escape = Weglassen', restWeglassen);
+        p('Blocktext-Rückfrage: volle Seite -> "kein Platz", neue Seite fügt ein', keinPlatzRueckfrage);
+        p('Blocktext-Vorschau: Block ohne Text -> Hinweis und nur "Schließen"', leererBlock);
+        p('Blocktext-Vorschau: destroy() entfernt das Fenster, neues Öffnen ohne Fenster', destroyMitFenster);
+        p('Blocktext-Vorschau: Klick neben das Fenster schließt nicht, Escape außerhalb schließt die Tafel nicht', klickNebenFenster);
     };
 
     window.__zusatzTestsAsync = function(c) {

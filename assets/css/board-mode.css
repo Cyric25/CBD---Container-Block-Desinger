@@ -1235,6 +1235,125 @@ html.cbd-board-offen .sidebar-toggle-btn {
 }
 
 /* =============================================
+   BLOCKTEXT AUF DIE TAFEL (PLAN-Blocktext-auf-Tafel.md, AP-2.3)
+   Leiste mit dem Knopf "Text auf die Tafel" als erstes Kind von
+   .cbd-board-content (klebt beim Scrollen oben, E4) und die Fenster
+   Vorschau/Rückfrage (Muster .cbd-board-confirm-*).
+   Feste px-Größen: Der Regler "Textgröße" setzt am Blockbereich eine
+   em-Schrift (100-300 %) - die Leiste soll dabei gleich groß bleiben.
+   ============================================= */
+
+.cbd-board-blocktext-leiste {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    justify-content: flex-end;
+    padding: 6px 0;
+    margin-bottom: 8px;
+    /* Fläche des Blockbereichs (#fafafa, im Darkmode dessen eigene Regel)
+       - ein eigener Wert stünde als heller Streifen im Bereich */
+    background: inherit;
+    font-size: 13px;
+    line-height: 1;
+}
+
+.cbd-board-blocktext-knopf {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--color-ui-surface, #e24614);
+    border-radius: 6px;
+    background: var(--color-background, #ffffff);
+    color: var(--color-text-primary, #333333);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.cbd-board-blocktext-knopf:hover,
+.cbd-board-blocktext-knopf:focus-visible {
+    background: var(--color-ui-surface-light, #f5ede9);
+    color: var(--color-text-primary, #333333);
+}
+
+.cbd-board-blocktext-knopf .dashicons {
+    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    color: var(--color-ui-surface, #e24614);
+}
+
+/* Fenster: breiter als die Löschen-Rückfrage, Text linksbündig. Passt sich
+   niedrigen Fenstern an (Querformat-Handy): Der Dialog wird höchstens so
+   hoch wie der Bildschirm, das Textfeld schrumpft zuerst. */
+.cbd-board-blocktext-overlay:focus {
+    outline: none;
+}
+
+.cbd-board-blocktext-dialog {
+    display: flex;
+    flex-direction: column;
+    max-width: 640px;
+    width: 92%;
+    max-height: calc(100vh - 24px);
+    box-sizing: border-box;
+    text-align: left;
+    overflow: auto;
+}
+
+.cbd-board-blocktext-dialog p {
+    margin: 0 0 12px 0;
+}
+
+.cbd-board-blocktext-feld {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    flex: 1 1 auto;
+    min-height: 3.5em;
+    margin: 0 0 16px 0;
+    padding: 8px 10px;
+    border: 1px solid var(--color-border, #cccccc);
+    border-radius: 6px;
+    background: var(--color-background, #ffffff);
+    color: var(--color-text-primary, #333333);
+    font: 15px/1.4 sans-serif;
+    resize: vertical;
+}
+
+.cbd-board-blocktext-feld:focus {
+    outline: 2px solid var(--color-ui-surface, #e24614);
+    outline-offset: 0;
+}
+
+.cbd-board-blocktext-dialog .cbd-board-confirm-actions {
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.cbd-board-blocktext-einfuegen,
+.cbd-board-blocktext-neue-seite {
+    background: var(--color-ui-surface, #e24614);
+    color: var(--color-text-on-accent, #ffffff);
+}
+
+.cbd-board-blocktext-einfuegen:hover,
+.cbd-board-blocktext-neue-seite:hover {
+    background: var(--color-ui-surface-dark, #c93d12);
+    color: var(--color-text-on-accent, #ffffff);
+}
+
+.cbd-board-blocktext-dialog button:focus-visible {
+    outline: 2px solid var(--color-ui-surface, #e24614);
+    outline-offset: 2px;
+}
+
+/* =============================================
    TEXT-EINGABE - Overlay des Werkzeugs "Text" (data-tool="text")
    ============================================= */
 
@@ -1430,6 +1549,43 @@ html.cbd-board-offen .sidebar-toggle-btn {
     background: var(--color-background-light, #1e1e1e);
     color: var(--color-text-primary, #e8e8e8);
     border-color: var(--color-ui-surface, #e24614);
+}
+
+/* Blocktext auf die Tafel (AP-2.3): Die Leiste erbt die Fläche des
+   Blockbereichs (background: inherit, folgt also dessen Regel oben); Knopf
+   wie die Knöpfe der Auswahlleiste, Fenster mit dunkler Fläche */
+[data-theme="dark"] .cbd-board-blocktext-knopf {
+    background: var(--color-background, #121212);
+    color: var(--color-text-primary, #e8e8e8);
+}
+
+[data-theme="dark"] .cbd-board-blocktext-knopf:hover,
+[data-theme="dark"] .cbd-board-blocktext-knopf:focus-visible {
+    background: var(--color-background-light, #2a2a2a);
+    color: var(--color-text-primary, #e8e8e8);
+}
+
+[data-theme="dark"] .cbd-board-blocktext-dialog {
+    background: var(--color-background-light, #1e1e1e);
+}
+
+[data-theme="dark"] .cbd-board-blocktext-dialog h4 {
+    color: var(--color-text-primary, #e8e8e8);
+}
+
+[data-theme="dark"] .cbd-board-blocktext-dialog p {
+    color: var(--color-text-muted, #b0b0b0);
+}
+
+[data-theme="dark"] .cbd-board-blocktext-feld {
+    background: var(--color-background, #121212);
+    color: var(--color-text-primary, #e8e8e8);
+    border-color: var(--color-border, #444444);
+}
+
+[data-theme="dark"] .cbd-board-blocktext-dialog .cbd-board-confirm-cancel {
+    background: var(--color-background, #121212);
+    color: var(--color-text-primary, #e8e8e8);
 }
 
 /* =============================================

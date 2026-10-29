@@ -289,6 +289,10 @@
             this.currentColor = '#000000';
             this._standardBreiten();
 
+            // Ein liegengebliebenes Fenster "Text auf die Tafel" (AP-2.3)
+            // gehörte zur vorigen Tafel
+            this._blocktextFensterSchliessen();
+
             // Multi-Seiten-State zurücksetzen
             this.currentPageIndex = 0;
             this.totalPages = 1;
@@ -425,6 +429,9 @@
          * Aufraeumen und Overlay entfernen
          */
         destroy: function() {
+            // Vorschau/Rückfrage "Text auf die Tafel" (AP-2.3) hängen am body
+            this._blocktextFensterSchliessen();
+
             // Events entfernen
             this.unbindEvents();
 
@@ -687,6 +694,19 @@
             // Block-Inhalt einfuegen
             var contentArea = overlay.querySelector('.cbd-board-content');
             contentArea.innerHTML = contentHtml;
+
+            // "Text auf die Tafel" (PLAN-Blocktext-auf-Tafel.md, AP-2.3, E4):
+            // klebende Leiste als ERSTES Kind des Blockbereichs - ein drittes
+            // Kind von .cbd-board-split bräche die Handy-/Querformat-Regeln.
+            // Per insertBefore, damit der Inhalt nicht neu geparst wird.
+            // _blocktextLesen() überspringt die Leiste.
+            var blocktextLeiste = document.createElement('div');
+            blocktextLeiste.className = 'cbd-board-blocktext-leiste';
+            blocktextLeiste.innerHTML =
+                '<button type="button" class="cbd-board-blocktext-knopf" title="Text dieses Blocks auf die Tafel übernehmen">' +
+                    '<span class="dashicons dashicons-clipboard"></span> Text auf die Tafel' +
+                '</button>';
+            contentArea.insertBefore(blocktextLeiste, contentArea.firstChild);
 
             // Interaktive Blöcke initialisieren (Scripts ausführen)
             this.initializeInteractiveBlocks(contentArea);
@@ -1083,6 +1103,15 @@
             if (closeBtn) {
                 closeBtn.addEventListener('click', function() {
                     self.close();
+                });
+            }
+
+            // "Text auf die Tafel" (AP-2.3): Knopf der Leiste im Blockbereich
+            var blocktextKnopf = this.overlay.querySelector('.cbd-board-blocktext-knopf');
+            if (blocktextKnopf) {
+                blocktextKnopf.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    self.blocktextVorschau();
                 });
             }
 
@@ -3701,6 +3730,12 @@
         },
 
         onKeyDown: function(e) {
+            // Fenster "Text auf die Tafel" offen (AP-2.3): Tasten gehören
+            // dem Fenster, auch wenn der Fokus es per Tab verlassen hat.
+            // Das Fenster selbst reicht nichts durch (stopPropagation).
+            if (this._blocktextFenster) {
+                return;
+            }
             if (e.key === 'Escape') {
                 // 3.1.143: im Drehmodus beendet ESC zuerst nur den Drehmodus
                 // (laufende Drehung zurück), die Auswahl bleibt
@@ -5294,6 +5329,191 @@
             }
             this.addPage();
             return this.blocktextEinfuegen(text);
+        },
+
+        /**
+         * Fenster nach dem Muster von showClearConfirm() bauen (AP-2.3):
+         * div.cbd-board-confirm-overlay > div.cbd-board-confirm-dialog am
+         * body, also über der Tafel und außerhalb von deren Kontextmenü- und
+         * Markiersperre. Liefert {fenster, dialog, aktionen}; der Verweis
+         * steht in this._blocktextFenster (es gibt höchstens eines).
+         *
+         * Tastatur: keydown am Fenster IMMER stopPropagation() - der
+         * Tafel-Handler onKeyDown() hängt am document und würde sonst bei
+         * Escape die ganze Tafel schließen, bei Strg+Z auf der Tafel
+         * rückgängig machen und bei Entf/Rücktaste eine Lasso-Auswahl
+         * löschen (dieselbe Regel wie im Textfeld von openTextInput).
+         * Escape ruft beiEscape(). Kein Schließen per Klick neben das
+         * Fenster: gekürzter Text ginge sonst verloren.
+         */
+        _blocktextFensterBauen: function(zusatzKlasse, titel, meldung, beiEscape) {
+            this._blocktextFensterSchliessen();
+            var fenster = document.createElement('div');
+            fenster.className = 'cbd-board-confirm-overlay cbd-board-blocktext-overlay ' + zusatzKlasse;
+            // Fokussierbar: Ein Klick auf den abgedunkelten Rand oder den
+            // Fenstertext setzt den Fokus hierher statt auf body - Tasten
+            // landen dann weiter bei diesem Fenster
+            fenster.tabIndex = -1;
+            var dialog = document.createElement('div');
+            dialog.className = 'cbd-board-confirm-dialog cbd-board-blocktext-dialog';
+            dialog.setAttribute('role', 'dialog');
+            dialog.setAttribute('aria-modal', 'true');
+            dialog.setAttribute('aria-labelledby', 'cbd-board-blocktext-titel');
+            var h = document.createElement('h4');
+            h.id = 'cbd-board-blocktext-titel';
+            h.textContent = titel;
+            var p = document.createElement('p');
+            p.textContent = meldung;
+            var aktionen = document.createElement('div');
+            aktionen.className = 'cbd-board-confirm-actions';
+            dialog.appendChild(h);
+            dialog.appendChild(p);
+            fenster.appendChild(dialog);
+            fenster.addEventListener('keydown', function(e) {
+                e.stopPropagation();
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    beiEscape();
+                }
+            });
+            this._blocktextFenster = fenster;
+            return { fenster: fenster, dialog: dialog, aktionen: aktionen };
+        },
+
+        /** Knopf für ein Blocktext-Fenster. */
+        _blocktextFensterKnopf: function(klasse, beschriftung, beiKlick) {
+            var knopf = document.createElement('button');
+            knopf.type = 'button';
+            knopf.className = klasse;
+            knopf.textContent = beschriftung;
+            knopf.addEventListener('click', beiKlick);
+            return knopf;
+        },
+
+        /** Offenes Blocktext-Fenster entfernen (auch aus destroy/_openOverlay). */
+        _blocktextFensterSchliessen: function() {
+            var f = this._blocktextFenster;
+            this._blocktextFenster = null;
+            if (f && f.parentNode) f.parentNode.removeChild(f);
+        },
+
+        /**
+         * Vorschau "Text auf die Tafel" (AP-2.3, E1): Text des Blockbereichs
+         * im Textfeld zum Kürzen und Ändern, "Auf die Tafel" fügt ein.
+         * Bleibt ein Rest oder ist kein Platz, folgt die Rückfrage.
+         */
+        blocktextVorschau: function() {
+            if (!this.overlay) return;
+            var self = this;
+            var text = this._blocktextAlsText();
+            var leer = !text;
+            var teile = this._blocktextFensterBauen('', 'Text auf die Tafel',
+                leer ? 'In diesem Block gibt es keinen Text zum Übernehmen.'
+                     : 'Lösche, was du nicht brauchst. Leere Zeilen trennen die Textblöcke.',
+                function() { self._blocktextFensterSchliessen(); });
+
+            var feld = null;
+            if (!leer) {
+                feld = document.createElement('textarea');
+                feld.className = 'cbd-board-blocktext-feld';
+                feld.rows = 12;
+                feld.spellcheck = false;
+                feld.setAttribute('aria-label', 'Text für die Tafel');
+                feld.value = text;
+                teile.dialog.appendChild(feld);
+            }
+
+            teile.aktionen.appendChild(this._blocktextFensterKnopf('cbd-board-confirm-cancel',
+                leer ? 'Schließen' : 'Abbrechen', function() {
+                    self._blocktextFensterSchliessen();
+                }));
+            if (!leer) {
+                var erledigt = false;
+                teile.aktionen.appendChild(this._blocktextFensterKnopf('cbd-board-blocktext-einfuegen',
+                    'Auf die Tafel', function() {
+                        if (erledigt) return; // schneller Doppelklick
+                        erledigt = true;
+                        var erg = self.blocktextEinfuegen(feld.value);
+                        self._blocktextFensterSchliessen();
+                        self._blocktextNachEinfuegen(erg, false);
+                    }));
+            }
+            teile.dialog.appendChild(teile.aktionen);
+            document.body.appendChild(teile.fenster);
+
+            if (feld) {
+                feld.focus();
+                feld.setSelectionRange(0, 0);
+                feld.scrollTop = 0;
+            } else {
+                teile.aktionen.firstChild.focus();
+            }
+        },
+
+        /**
+         * Nach dem Einfügen: Rest oder fehlender Platz -> Rückfrage.
+         * aufNeuerSeite: das Einfügen lief schon auf einer frischen Seite.
+         */
+        _blocktextNachEinfuegen: function(erg, aufNeuerSeite) {
+            if (!erg) return;
+            if (erg.keinPlatz) {
+                if (aufNeuerSeite) {
+                    // Auch die leere Seite hat im sichtbaren Ausschnitt keinen
+                    // Platz für eine Zeile (stark vergrößert) - nicht noch
+                    // eine Seite anbieten, sonst entstünde je Klick eine
+                    // weitere leere Seite
+                    this._blocktextHinweis('Auch auf der neuen Seite ist im sichtbaren Ausschnitt kein Platz. ' +
+                        'Verkleinere die Ansicht und versuche es noch einmal.');
+                    return;
+                }
+                this._blocktextRestFragen(erg.rest, 'Auf dieser Seite ist kein Platz mehr.');
+            } else if (erg.rest.length > 0) {
+                var n = erg.rest.length;
+                this._blocktextRestFragen(erg.rest, n === 1 ?
+                    '1 Textblock passt nicht mehr auf diese Seite.' :
+                    n + ' Textblöcke passen nicht mehr auf diese Seite.');
+            }
+        },
+
+        /**
+         * Rückfrage für den Rest (AP-2.3): "Weglassen" oder "Auf neuer Seite
+         * einfügen". Bleibt danach wieder ein Rest, wird erneut gefragt -
+         * eine Schleife über die Rückfrage, keine Programmschleife.
+         */
+        _blocktextRestFragen: function(rest, meldung) {
+            if (!this.overlay) return;
+            var self = this;
+            var teile = this._blocktextFensterBauen('cbd-board-blocktext-rest', 'Text auf die Tafel', meldung,
+                function() { self._blocktextFensterSchliessen(); });
+            teile.aktionen.appendChild(this._blocktextFensterKnopf('cbd-board-confirm-cancel', 'Weglassen', function() {
+                self._blocktextFensterSchliessen();
+            }));
+            var erledigt = false;
+            var weiter = this._blocktextFensterKnopf('cbd-board-blocktext-neue-seite', 'Auf neuer Seite einfügen', function() {
+                if (erledigt) return;
+                erledigt = true;
+                self._blocktextFensterSchliessen();
+                self._blocktextNachEinfuegen(self.blocktextAufNeueSeite(rest), true);
+            });
+            teile.aktionen.appendChild(weiter);
+            teile.dialog.appendChild(teile.aktionen);
+            document.body.appendChild(teile.fenster);
+            weiter.focus();
+        },
+
+        /** Reiner Hinweis mit "Schließen" (AP-2.3). */
+        _blocktextHinweis: function(meldung) {
+            if (!this.overlay) return;
+            var self = this;
+            var teile = this._blocktextFensterBauen('cbd-board-blocktext-hinweis', 'Text auf die Tafel', meldung,
+                function() { self._blocktextFensterSchliessen(); });
+            var zu = this._blocktextFensterKnopf('cbd-board-confirm-cancel', 'Schließen', function() {
+                self._blocktextFensterSchliessen();
+            });
+            teile.aktionen.appendChild(zu);
+            teile.dialog.appendChild(teile.aktionen);
+            document.body.appendChild(teile.fenster);
+            zu.focus();
         },
 
         // =============================================
