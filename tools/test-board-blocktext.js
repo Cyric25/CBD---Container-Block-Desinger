@@ -1625,9 +1625,10 @@
         if (namen.join('|') !== soll.join('|')) f.push('Knöpfe ' + namen.join('|'));
         var farben = Array.prototype.map.call(l.querySelectorAll('.cbd-board-format-farbe'), function(k) { return getComputedStyle(k).backgroundColor; });
         if (farben.join('|') !== B.presetColors.map(rgbVon).join('|')) f.push('Farbknöpfe ' + farben.join('|'));
+        // Layoutgröße (offsetWidth), nicht getBoundingClientRect: Das Fenster
+        // blendet mit transform: scale(0.98) ein (cbdBoardFadeIn)
         Array.prototype.forEach.call(knoepfe, function(k) {
-            var r = k.getBoundingClientRect();
-            if (r.width < 36 || r.height < 36) f.push((k.getAttribute('aria-label') || k.textContent) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height));
+            if (k.offsetWidth < 36 || k.offsetHeight < 36) f.push((k.getAttribute('aria-label') || k.textContent) + ' ' + k.offsetWidth + 'x' + k.offsetHeight);
             if (k.type !== 'button') f.push('type ' + k.type);
         });
         return ergebnis(f);
