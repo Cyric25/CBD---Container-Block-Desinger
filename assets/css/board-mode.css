@@ -1015,6 +1015,18 @@ html.cbd-board-offen .sidebar-toggle-btn {
     display: inline-flex;
 }
 
+/* PLAN-Blocktext-Formatierung.md, AP-3.1 (F11): "Text bearbeiten" nur bei
+   genau EINEM gewaehlten Text (Klasse --ein-text, board-mode.js
+   _auswahlLeisteAusrichten), nie im Drehmodus. Ohne die erste Regel waere
+   der Knopf ueber .cbd-board-auswahl-knopf immer sichtbar. */
+.cbd-board-auswahl-leiste .cbd-board-auswahl-nur-ein-text {
+    display: none;
+}
+
+.cbd-board-auswahl-leiste--ein-text:not(.cbd-board-auswahl-leiste--drehen) .cbd-board-auswahl-nur-ein-text {
+    display: inline-flex;
+}
+
 .cbd-board-auswahl-textgruppe {
     align-items: center;
     gap: 2px;

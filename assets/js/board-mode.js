@@ -167,6 +167,53 @@
         return aus;
     }
 
+    /**
+     * teile eines Absatzes {text, teile?} für textErsetzen()
+     * (PLAN-Blocktext-Formatierung.md, AP-3.1): brauchbar sind sie nur als
+     * Array von Objekten mit Zeichenketten-t, deren Verkettung genau text
+     * ist (dieselbe Regel wie absatzNormieren() in board-blocktext.js und
+     * teileVon in _textFeldBauen). Liefert dann dasselbe Array (es wird nur
+     * gelesen), sonst null - der Absatz gilt als Klartext. f/k/farbe prüft
+     * später _blocktextMitTeilen() (lesbare Farbe, teileZusammenlegen).
+     */
+    function textTeileBrauchbar(teile, text) {
+        if (!Array.isArray(teile)) return null;
+        var kette = '';
+        for (var i = 0; i < teile.length; i++) {
+            var teil = teile[i];
+            if (teil === null || typeof teil !== 'object' || typeof teil.t !== 'string') return null;
+            kette += teil.t;
+            if (kette.length > text.length) return null;
+        }
+        return kette === text ? teile : null;
+    }
+
+    /**
+     * Teile im Bereich [a, e) eines Texts, dessen Teile teile sind
+     * (Positionen in UTF-16-Einheiten), als neue Objekte {t[, f: 1][, k: 1]
+     * [, farbe]} - für den Zeilenumbruch in textErsetzen() (AP-3.1). Die
+     * Bereiche enden dort an Zeilenwechseln, zerschneiden also kein
+     * Surrogatpaar.
+     */
+    function textTeileAusschnitt(teile, a, e) {
+        var aus = [];
+        var pos = 0;
+        for (var i = 0; i < teile.length && pos < e; i++) {
+            var t = teile[i].t;
+            var von = Math.max(a, pos);
+            var bis = Math.min(e, pos + t.length);
+            if (bis > von) {
+                var n = { t: t.slice(von - pos, bis - pos) };
+                if (teile[i].f) n.f = 1;
+                if (teile[i].k) n.k = 1;
+                if (teile[i].farbe) n.farbe = teile[i].farbe;
+                aus.push(n);
+            }
+            pos += t.length;
+        }
+        return aus;
+    }
+
     // Leerraum eines gelesenen Absatzes bereinigen - zeichenweise auf Text
     // UND Stil-Liste zugleich (AP-2.1). Ergebnis-Text exakt wie die frueheren
     // regulaeren Ausdruecke in _blocktextLesen() (bis 3.1.147):
@@ -837,12 +884,18 @@
                 // Hinweis und "Abbrechen" (Klasse --drehen, board-mode.css).
                 // "A−"/"A+" mit Größenanzeige (3.1.144): auswahlTextGroesse(),
                 // nur sichtbar, wenn Texte gewählt sind (Klasse --text).
+                // "Text bearbeiten" (PLAN-Blocktext-Formatierung.md, AP-3.1,
+                // F11): auswahlTextBearbeiten(), nur sichtbar bei genau EINEM
+                // gewählten Text (Klasse --ein-text), nie im Drehmodus.
                 '<div class="cbd-board-auswahl-leiste" role="toolbar" aria-label="Auswahl" style="display: none;">' +
                     '<button type="button" class="cbd-board-auswahl-knopf" data-aktion="drehen" title="Um einen Drehpunkt drehen">' +
                         '<span class="dashicons dashicons-image-rotate"></span> Drehen' +
                     '</button>' +
                     '<button type="button" class="cbd-board-auswahl-knopf" data-aktion="duplizieren" title="Auswahl duplizieren (Strg+D)">' +
                         '<span class="dashicons dashicons-admin-page"></span> Duplizieren' +
+                    '</button>' +
+                    '<button type="button" class="cbd-board-auswahl-knopf cbd-board-auswahl-nur-ein-text" data-aktion="text-bearbeiten" title="Text bearbeiten">' +
+                        '<span class="dashicons dashicons-edit"></span> Text bearbeiten' +
                     '</button>' +
                     '<span class="cbd-board-auswahl-textgruppe cbd-board-auswahl-nur-text">' +
                         '<button type="button" class="cbd-board-auswahl-knopf cbd-board-auswahl-text-kleiner" data-aktion="text-kleiner" title="Text verkleinern" aria-label="Text verkleinern">A−</button>' +
@@ -1475,6 +1528,8 @@
                         self.auswahlTextGroesse(1); // 3.1.144
                     } else if (aktion === 'text-kleiner') {
                         self.auswahlTextGroesse(-1);
+                    } else if (aktion === 'text-bearbeiten') {
+                        self.auswahlTextBearbeiten(); // PLAN-Blocktext-Formatierung.md, AP-3.1/AP-3.2
                     } else if (aktion === 'drehen-abbrechen') {
                         self._drehenAbbrechen();
                     }
@@ -3706,6 +3761,189 @@
             return true;
         },
 
+        // ---------------------------------------------
+        // "Text bearbeiten" (PLAN-Blocktext-Formatierung.md, Phase 3)
+        // ---------------------------------------------
+        //
+        // Ist genau EIN Text gewählt, zeigt die Auswahlleiste den Knopf
+        // "Text bearbeiten" (F11; Klasse --ein-text in
+        // _auswahlLeisteAusrichten). Sein Fenster (AP-3.2) öffnet den Text im
+        // Bearbeitungsfeld aus _textFeldBauen (Modus 'bearbeiten'), und
+        // "Übernehmen" ruft textErsetzen() mit dem, was _textFeldLesen()
+        // liefert.
+
+        /**
+         * Das gewählte Text-Element, wenn genau EIN Element gewählt ist und
+         * es ein Text ist - sonst null (AP-3.1). Grundlage für die
+         * Sichtbarkeit von "Text bearbeiten".
+         */
+        _einGewaehlterText: function() {
+            if (!this.modell || !this.auswahl || this.auswahl.length !== 1) return null;
+            var el = this.modell.elemente;
+            for (var i = 0; i < el.length; i++) {
+                if (el[i].id === this.auswahl[0]) return el[i].typ === 'text' ? el[i] : null;
+            }
+            return null;
+        },
+
+        /**
+         * Knopf "Text bearbeiten" der Auswahlleiste (F11). In AP-3.1 ein
+         * leerer Platzhalter, der nichts tut - das Fenster dazu baut AP-3.2.
+         */
+        auswahlTextBearbeiten: function() {
+            return false;
+        },
+
+        /**
+         * Inhalt eines Text-Elements ersetzen (AP-3.1, Entscheidungen F7,
+         * F11, F12) - für "Übernehmen" im Fenster "Text bearbeiten".
+         *
+         * absaetze: Array wie von _textFeldLesen() - Objekte {text, teile?}
+         * (teile wie im Elementmodell) und/oder Zeichenketten. Sie werden mit
+         * "\n" zu EINEM Text verbunden (das "\n" ist ein Klartext-Teil);
+         * Einträge ohne sichtbaren Text zählen nicht (wie bei
+         * blocktextEinfuegen). Unbrauchbare teile (kein Array, ein Eintrag
+         * ohne Zeichenketten-t, Verkettung ≠ text) -> der Absatz als Klartext.
+         *
+         * Das Element bleibt unter derselben ID an derselben Stelle der
+         * Liste; x, y, breite, winkel und farbe bleiben. Umbruch (F12): nur
+         * bei unverdrehten Texten werden Zeilen, die über den rechten Rand
+         * des SICHTBAREN Ausschnitts minus 20 px ragen, mit umbrechenTeile in
+         * der Schrift des Elements umbrochen; vorhandene Zeilenwechsel und
+         * passende Zeilen bleiben unverändert. Teilfarben gehen durch
+         * lesbareLauffarbe(…, Tafelfarbe) (F7), danach teileZusammenlegen -
+         * beides über _blocktextMitTeilen() (mit dessen Absicherung: mehr als
+         * MAX_TEILE Teile -> ohne teile, der Text bleibt).
+         *
+         * EIN Undo-Schritt, die Auswahl bleibt. Leerer Inhalt ([] oder nur
+         * Leerraum) entfernt das Element (ein Undo-Schritt), die ID fällt aus
+         * der Auswahl. Laufendes Ziehen/Drehen wird vorher übernommen (wie
+         * bei auswahlTextGroesse).
+         *
+         * Rückgabe true bei einer Änderung; false ohne Änderung (gleicher
+         * Inhalt, unbekannte ID, kein Text, absaetze kein Array) - dann kein
+         * Undo-Eintrag.
+         */
+        textErsetzen: function(id, absaetze) {
+            if (!this.modell || !Array.isArray(absaetze)) return false;
+            if (this._ziehen) this._ziehenBeenden(true);
+            if (this._drehen) this._drehenBeenden(true);
+            // erst nach dem Beenden suchen: Ziehen/Drehen bauen neue Objekte
+            var liste = this.modell.elemente;
+            var stelle = -1;
+            for (var i = 0; i < liste.length; i++) {
+                if (liste[i].id === id) {
+                    stelle = i;
+                    break;
+                }
+            }
+            if (stelle < 0 || liste[stelle].typ !== 'text') return false;
+            var alt = liste[stelle];
+            var inhalt = this._textErsetzenInhalt(absaetze);
+
+            if (!/\S/.test(inhalt.text)) {
+                this.merkeZustand();
+                this.modell.elemente = elementeModul().entferne(this.modell, [id]).elemente;
+                this.auswahl = (this.auswahl || []).filter(function(a) { return a !== id; });
+                this.zeichneModell();
+                this._auswahlZeichnen();
+                return true;
+            }
+
+            if (!alt.winkel) inhalt = this._textErsetzenUmbrechen(inhalt, alt);
+            var neu = this._blocktextMitTeilen({ id: alt.id, typ: 'text', farbe: alt.farbe, breite: alt.breite,
+                text: inhalt.text, x: alt.x, y: alt.y }, inhalt.teile);
+            if (alt.winkel) neu.winkel = alt.winkel;
+            if (neu.text === alt.text && JSON.stringify(neu.teile) === JSON.stringify(alt.teile)) return false;
+
+            this.merkeZustand();
+            var elemente = liste.slice();
+            elemente[stelle] = neu;
+            this.modell.elemente = elemente;
+            this.zeichneModell();
+            this._auswahlZeichnen();
+            return true;
+        },
+
+        /**
+         * Absätze -> {text, teile} für textErsetzen(): mit "\n" verbunden,
+         * teile vollständig (Klartext als {t}), Verkettung === text.
+         */
+        _textErsetzenInhalt: function(absaetze) {
+            var text = '';
+            var teile = [];
+            var erster = true;
+            for (var i = 0; i < absaetze.length; i++) {
+                var a = absaetze[i];
+                var t = null;
+                var tt = null;
+                if (typeof a === 'string') {
+                    t = a;
+                } else if (a !== null && typeof a === 'object' && typeof a.text === 'string') {
+                    t = a.text;
+                    tt = textTeileBrauchbar(a.teile, t);
+                }
+                if (t === null || !/\S/.test(t)) continue;
+                if (!erster) {
+                    text += '\n';
+                    teile.push({ t: '\n' });
+                }
+                erster = false;
+                text += t;
+                teile = teile.concat(tt || [{ t: t }]);
+            }
+            return { text: text, teile: teile };
+        },
+
+        /**
+         * Umbruchregel F12 für textErsetzen(): Grenze = rechter Rand des
+         * sichtbaren Ausschnitts (_sichtbarerBereich, Modell-px) minus 20 px,
+         * ab el.x. Jede Zeile (an "\n") für sich: Passt sie (umbrechenTeile
+         * liefert eine Zeile), bleibt sie unverändert, auch mit Leerzeichen
+         * am Ende; sonst ersetzen die umbrochenen Zeilen sie (das Leerzeichen
+         * an einer Umbruchstelle wird ein "\n", Klartext-Teil). Gemessen in
+         * der Schrift des Elements, je Teil fett/kursiv (_textMass). Liegt
+         * der Rand links von el.x (Grenze <= 0), bleibt alles, wie es ist.
+         */
+        _textErsetzenUmbrechen: function(inhalt, el) {
+            var sichtbar = this._sichtbarerBereich();
+            var grenze = sichtbar.x + sichtbar.b - 20 - el.x;
+            if (!(grenze > 0)) return inhalt;
+            var modul = blocktextModul();
+            var px = elementeModul().schriftPx(el.breite);
+            var mass = this._textMass();
+            var zeilen = inhalt.text.split('\n');
+            var text = '';
+            var teile = [];
+            var pos = 0;
+            var umbrochen = false;
+            for (var i = 0; i < zeilen.length; i++) {
+                var zeile = zeilen[i];
+                var zt = textTeileAusschnitt(inhalt.teile, pos, pos + zeile.length);
+                pos += zeile.length + 1;
+                if (i > 0) {
+                    text += '\n';
+                    teile.push({ t: '\n' });
+                }
+                var stuecke = zeile === '' ? [] : modul.umbrechenTeile({ text: zeile, teile: zt }, grenze, px, mass);
+                if (stuecke.length < 2) {
+                    text += zeile;
+                    teile = teile.concat(zt);
+                    continue;
+                }
+                umbrochen = true;
+                for (var k = 0; k < stuecke.length; k++) {
+                    if (k > 0) {
+                        text += '\n';
+                        teile.push({ t: '\n' });
+                    }
+                    text += stuecke[k].text;
+                    teile = teile.concat(stuecke[k].teile);
+                }
+            }
+            return umbrochen ? { text: text, teile: teile } : inhalt;
+        },
+
         /**
          * Anzeige des Drehmodus auf der Auswahl-Ebene: Drehpunkt (Kreis mit
          * Kreuz), während der Drehung Bezugsstrahl (gestrichelt), Strahl zum
@@ -3914,6 +4152,10 @@
                 if (kleiner) kleiner.disabled = tg.max <= E.TEXT_PX_MIN;
                 if (groesser) groesser.disabled = tg.min >= E.TEXT_PX_MAX;
             }
+            // PLAN-Blocktext-Formatierung.md, AP-3.1 (F11): "Text bearbeiten"
+            // nur bei genau EINEM gewählten Text, nie im Drehmodus (ebenfalls
+            // vor dem Messen der Leistenbreite unten)
+            leiste.classList.toggle('cbd-board-auswahl-leiste--ein-text', !d && this._einGewaehlterText() !== null);
             var ov = this.overlay.getBoundingClientRect();
             var skala = this.overlay.offsetWidth ? ov.width / this.overlay.offsetWidth : 1;
             if (!skala) skala = 1;
@@ -3953,6 +4195,11 @@
          * A−/A+, auf die Breite der Zeichenfläche begrenzt), in Overlay-px;
          * 0 ohne Leiste. Misst unsichtbar und stellt danach alles wieder her
          * (Folge-AP G9, für _blocktextVerteilen).
+         * Seit PLAN-Blocktext-Formatierung.md, AP-3.1 misst sie konservativ
+         * auch mit dem Knopf "Text bearbeiten" (Klasse --ein-text, erscheint
+         * bei genau einem gewählten Text): Die Leiste kann so höchstens
+         * niedriger sein als gemessen, nie höher - auf schmalen Anzeigen
+         * bricht sie mit dem Knopf früher in eine weitere Zeile um.
          */
         _auswahlLeisteHoeheText: function() {
             var leiste = this._auswahlLeiste;
@@ -3972,6 +4219,7 @@
             leiste.style.visibility = 'hidden';
             leiste.style.display = 'flex';
             leiste.classList.add('cbd-board-auswahl-leiste--text');
+            leiste.classList.add('cbd-board-auswahl-leiste--ein-text'); // AP-3.1
             leiste.classList.remove('cbd-board-auswahl-leiste--drehen');
             leiste.style.maxWidth = this._auswahlLeisteMaxBreite(bereich.getBoundingClientRect().width / skala) + 'px';
             if (anzeige) anzeige.textContent = '200 px'; // breiteste Anzeige
