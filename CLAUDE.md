@@ -5224,11 +5224,16 @@ im selben Feld (Beschreibung im eigenen Abschnitt „Text bearbeiten" weiter
 oben; hier stehen nur Prüfungen, Einschränkungen und Abnahme der Phase 3). Die
 Abschnitte bis „Rückweg auf 3.1.147" beschreiben das Fundament (Phase 1);
 danach folgen die Unterabschnitte der Phase 2, die gemeinsame Liste der
-bekannten Einschränkungen und die der Phase 3. **Stand: Phase 1 bis 3 sind
-abgeschlossen und werden mit dem ZIP 3.1.149 ausgeliefert** (es enthält
-3.1.148; die Reihenfolge beim Upload ist 3.1.149 direkt). Den Live-Upload
-macht der Betreiber; die Abnahme am echten Gerät steht aus (Unterabschnitt
-„Betreiber-Abnahme").
+bekannten Einschränkungen und die der Phase 3. **Stand: ausgeliefert mit
+3.1.149.** Phase 1 bis 3 sind auf `main` (Merge der Phase 3: `5fe81af`,
+Versionserhöhung: `315c12f`; Phase 2: `771e887` und `1ba03d8`); das ZIP
+`dist/container-block-designer-3.1.149.zip` (49,1 MB, 51 486 844 Byte, 1008
+Dateien, gebaut mit `npm run build`) enthält alle drei Phasen und ist geprüft
+(Version in der Hauptdatei, die Dateien der Phasen 1 bis 3 byte-gleich zum
+Repo, kein `tools/`, `--no-dev`-Autoloader ohne Fatal unter PHP 8.5 und 8.3).
+Hochgeladen wird **3.1.149 direkt** (3.1.148 ist darin enthalten, kein
+Zwischenschritt). Den Live-Upload macht der Betreiber; die Abnahme am echten
+Gerät steht aus (Unterabschnitt „Betreiber-Abnahme").
 
 #### Das Format (Entscheidungen F1–F5)
 
