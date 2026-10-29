@@ -110,6 +110,63 @@
         return hex;
     }
 
+    /**
+     * Einzelne UTF-16-Surrogate in einer Zeichenkette durch U+FFFD ersetzen
+     * (AP-2.fix2, Review-Befund B5 aus AP-2.rev): ein High-Surrogat ohne
+     * folgendes Low und ein Low ohne vorheriges High. Eine präparierte
+     * Zwischenablage (text/plain) oder ein zerlegtes Zeichen im Feld
+     * brächten sonst ein halbes Zeichen in den Text; json_decode im Server
+     * lehnt das ab, und die Klassen-Tafel würde nur als Bild gespeichert.
+     * Gültige Paare (Emoji) bleiben ganz.
+     */
+    function blocktextEinzelneSurrogate(text) {
+        var s = String(text);
+        var aus = '';
+        var von = 0;
+        for (var i = 0; i < s.length; i++) {
+            var c = s.charCodeAt(i);
+            if (c >= 0xD800 && c <= 0xDBFF) {
+                var n = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
+                if (n >= 0xDC00 && n <= 0xDFFF) {
+                    i++;
+                    continue;
+                }
+            } else if (!(c >= 0xDC00 && c <= 0xDFFF)) {
+                continue;
+            }
+            aus += s.slice(von, i) + '�';
+            von = i + 1;
+        }
+        return von === 0 && aus === '' ? s : aus + s.slice(von);
+    }
+
+    /**
+     * Wie blocktextEinzelneSurrogate() für einen gelesenen Absatz
+     * {text, teile?}. Ersetzt wird anhand von text (ein Paar über einer
+     * Teilgrenze bleibt gültig und unverändert); jedes Zeichen wird durch
+     * genau ein Zeichen ersetzt, die Länge ändert sich also nie. Die
+     * Verkettung der Teile ergibt danach weiter text. Ein Absatz ohne
+     * einzelnes Surrogat kommt unverändert zurück (dasselbe Objekt).
+     */
+    function blocktextAbsatzOhneEinzelneSurrogate(absatz) {
+        var neu = blocktextEinzelneSurrogate(absatz.text);
+        if (neu === absatz.text) return absatz;
+        var aus = { text: neu };
+        if (absatz.teile) {
+            var pos = 0;
+            aus.teile = absatz.teile.map(function(teil) {
+                var kopie = {};
+                for (var schluessel in teil) {
+                    if (Object.prototype.hasOwnProperty.call(teil, schluessel)) kopie[schluessel] = teil[schluessel];
+                }
+                kopie.t = neu.slice(pos, pos + teil.t.length);
+                pos += teil.t.length;
+                return kopie;
+            });
+        }
+        return aus;
+    }
+
     // Leerraum eines gelesenen Absatzes bereinigen - zeichenweise auf Text
     // UND Stil-Liste zugleich (AP-2.1). Ergebnis-Text exakt wie die frueheren
     // regulaeren Ausdruecke in _blocktextLesen() (bis 3.1.147):
@@ -5274,7 +5331,9 @@
          * Leser zurückgelesen): grundfarbe ('#rrggbb' u. a.) ersetzt die
          * berechnete Grundfarbe; nbsp: true behandelt geschütztes Leerzeichen
          * (U+00A0) wie ein Leerzeichen (zusammengefasst, am Rand entfernt).
-         * Ohne optionen bleibt es wie bisher erhalten.
+         * Ohne optionen bleibt es wie bisher erhalten; auch das
+         * Bearbeitungsfeld setzt nbsp seit AP-2.fix2 nicht mehr
+         * (_textFeldLesen).
          * pre: true (AP-2.4) liest schon die Wurzel wie ein PRE - "\n" in
          * Textknoten bleibt ein Zeilenwechsel. Das Bearbeitungsfeld hat
          * white-space: pre-wrap, und Chrome/Safari fügen dort bei einem
@@ -5561,11 +5620,21 @@
          *    Bereich); erst danach wird es entfernt. Die Reihenfolge
          *    "zurücksetzen, berechnen, Sperre weg" ist entscheidend: Wer die
          *    Sperre vor der Berechnung entfernt, startet den Übergang
-         *    hell -> dunkel auf der ganzen Seite. Inline-<style> setzt
-         *    'unsafe-inline' in style-src voraus - das braucht das Theme
-         *    ohnehin (Customizer-CSS als Inline-<style>). Laufende
+         *    hell -> dunkel auf der ganzen Seite. Laufende
          *    Übergänge (z. B. Hover auf dem Knopf) springen durch die
          *    Sperre an ihr Ende.
+         *    Die Sperre ist bevorzugt ein Constructable Stylesheet
+         *    (new CSSStyleSheet() + replaceSync(), angehängt über
+         *    document.adoptedStyleSheets; danach wird exakt die alte Liste
+         *    wiederhergestellt): Das wirkt auch unter einer CSP OHNE
+         *    'unsafe-inline' in style-src, unter der ein eingefügtes
+         *    <style>-Element wirkungslos bliebe (Review AP-2.rev, B3: dann
+         *    würde wieder der Startwert des Übergangs gelesen, dazu ein
+         *    CSP-Konsolenfehler je Lesen). Fehlen Constructable
+         *    Stylesheets (ältere Browser) oder scheitert der Aufbau,
+         *    sperrt ein <style data-cbd-hellmodus-lesen>-Element wie
+         *    bisher; das setzt 'unsafe-inline' in style-src voraus - das
+         *    braucht das Theme ohnehin (Customizer-CSS als Inline-<style>).
          * 2. Beobachter auf <html>: Ein MutationObserver auf data-theme
          *    bekäme zwei Einträge (entfernt, wieder gesetzt). Sein Rückruf
          *    läuft als Mikrotask NACH diesem synchronen Block und sieht das
@@ -5583,10 +5652,26 @@
             var html = document.documentElement;
             if (!html || !html.hasAttribute('data-theme')) return lesen();
             var wert = html.getAttribute('data-theme');
-            var sperre = document.createElement('style');
-            sperre.setAttribute('data-cbd-hellmodus-lesen', '');
-            sperre.appendChild(document.createTextNode('*, *::before, *::after { transition: none !important; }'));
-            (document.head || html).appendChild(sperre);
+            var SPERRE_CSS = '*, *::before, *::after { transition: none !important; }';
+            var altBlaetter = null; // adoptedStyleSheets vor der Sperre (exakt wiederherzustellen)
+            var sperre = null;      // <style>-Element, nur im Rückfall
+            try {
+                if (typeof window.CSSStyleSheet === 'function' && document.adoptedStyleSheets) {
+                    var blatt = new window.CSSStyleSheet();
+                    blatt.replaceSync(SPERRE_CSS);
+                    var alt = Array.prototype.slice.call(document.adoptedStyleSheets);
+                    document.adoptedStyleSheets = alt.concat([blatt]);
+                    altBlaetter = alt; // erst nach gelungener Zuweisung gesetzt
+                }
+            } catch (fehler) {
+                altBlaetter = null;
+            }
+            if (!altBlaetter) {
+                sperre = document.createElement('style');
+                sperre.setAttribute('data-cbd-hellmodus-lesen', '');
+                sperre.appendChild(document.createTextNode(SPERRE_CSS));
+                (document.head || html).appendChild(sperre);
+            }
             try {
                 html.removeAttribute('data-theme');
                 return lesen();
@@ -5596,7 +5681,8 @@
                 // (Falle 1 oben) - der Rückgabewert wird nicht gebraucht
                 window.getComputedStyle(html).getPropertyValue('color');
                 if (bereich && bereich.nodeType === 1) window.getComputedStyle(bereich).getPropertyValue('color');
-                if (sperre.parentNode) sperre.parentNode.removeChild(sperre);
+                if (altBlaetter) document.adoptedStyleSheets = altBlaetter;
+                if (sperre && sperre.parentNode) sperre.parentNode.removeChild(sperre);
             }
         },
 
@@ -6070,13 +6156,17 @@
                 }
             }
 
-            // Absatz -> Teile; teile nur, wenn sie genau den Text ergeben
+            // Absatz -> Teile; teile nur, wenn sie genau den Text ergeben,
+            // sonst gilt der Absatz als Klartext. Die Schleifenbedingung
+            // prüft teile VOR teile.length: Ein ungültiger Teil setzt teile
+            // auf null (Review AP-2.rev, B1 - "i < teile.length && teile"
+            // las teile.length nach teile = null und warf einen TypeError).
             function teileVon(absatz) {
                 var text = typeof absatz === 'string' ? absatz : String((absatz && absatz.text) || '');
                 var teile = (absatz && typeof absatz === 'object' && Array.isArray(absatz.teile)) ? absatz.teile : null;
                 if (teile) {
                     var kette = '';
-                    for (var i = 0; i < teile.length && teile; i++) {
+                    for (var i = 0; teile && i < teile.length; i++) {
                         if (!teile[i] || typeof teile[i].t !== 'string') teile = null;
                         else kette += teile[i].t;
                     }
@@ -6242,7 +6332,9 @@
             feld.addEventListener('paste', function(e) {
                 e.preventDefault();
                 var daten = e.clipboardData;
-                var text = daten ? String(daten.getData('text/plain') || '').replace(/\r\n?/g, '\n') : '';
+                // Einzelne Surrogate -> U+FFFD (B5): Eine präparierte
+                // Zwischenablage soll kein halbes Zeichen in den Text bringen
+                var text = daten ? blocktextEinzelneSurrogate(String(daten.getData('text/plain') || '').replace(/\r\n?/g, '\n')) : '';
                 if (!text) return;
                 if (modus === 'bearbeiten') {
                     var zeilen = text.split('\n');
@@ -6290,9 +6382,22 @@
         /**
          * Bearbeitungsfeld zurücklesen (AP-2.4, F10): derselbe Leser wie für
          * den Blockbereich (_blocktextLesen), mit der Grundfarbe des Felds -
-         * Teile in dieser Farbe tragen keine eigene, auch nach "Standard" -,
-         * geschütztem Leerzeichen als Leerzeichen (contenteditable setzt
-         * &nbsp;) und "\n" als Zeilenwechsel (Option pre, siehe dort).
+         * Teile in dieser Farbe tragen keine eigene, auch nach "Standard" -
+         * und "\n" als Zeilenwechsel (Option pre, siehe dort).
+         *
+         * Geschütztes Leerzeichen (U+00A0) bleibt erhalten (nbsp: false,
+         * AP-2.fix2, Review-Befund B2): Es stammt aus der Quelle ("25 °C",
+         * bis 3.1.147 blieb es auf der Tafel erhalten, dort bricht die Zeile
+         * nicht zwischen Zahl und Einheit). Ein im Feld getipptes
+         * Leerzeichen ist U+0020 - das Feld hat white-space: pre-wrap, dort
+         * fügt der Browser kein &nbsp; ein (gemessen in Chrome, Prüfung
+         * "getipptes Leerzeichen"); aufeinanderfolgende Leerzeichen fasst
+         * der Leser trotzdem zusammen. Die Option nbsp des Lesers selbst
+         * bleibt bestehen.
+         *
+         * Einzelne Surrogate werden zu U+FFFD (B5, siehe
+         * blocktextEinzelneSurrogate): in text und in allen t.
+         *
          * Liefert [{text, teile?}] wie _blocktextAbsaetze() - direkt für
          * blocktextEinfuegen() (AP-2.3) bzw. in Phase 3 für textErsetzen().
          * Das Feld muss im Dokument hängen (berechnete Stile).
@@ -6300,10 +6405,10 @@
         _textFeldLesen: function(feld) {
             if (!feld) return [];
             var grundfarbe = feld.getAttribute('data-grundfarbe') || window.getComputedStyle(feld).color;
-            return this._blocktextLesen(feld, { grundfarbe: grundfarbe, nbsp: true, pre: true }).map(function(a) {
+            return this._blocktextLesen(feld, { grundfarbe: grundfarbe, nbsp: false, pre: true }).map(function(a) {
                 var absatz = { text: a.text };
                 if (a.teile) absatz.teile = a.teile;
-                return absatz;
+                return blocktextAbsatzOhneEinzelneSurrogate(absatz);
             });
         },
 
