@@ -2058,6 +2058,277 @@
     }
 
     // ------------------------------------------------------------------
+    // AP-3.fix2 (Review AP-3.rev, Befunde B1 und B2): Umbruchregel F12a
+    // (Entscheidung des Orchestrators). textErsetzen() bricht eine Zeile
+    // (Abschnitt zwischen \n) nur um, wenn
+    //   R1 ihr Text NICHT unverändert als Zeile im bisherigen text vorkommt
+    //      (bloßes Formatieren bricht nichts um) und
+    //   R2 sie gemessen (mit Formatierung) über den rechten Rand des
+    //      sichtbaren Ausschnitts SELBST ragt - dann wie bisher auf
+    //      Rand − 20 − x;
+    //   R3 ist diese Zielbreite kleiner als 8 × Schrift-px, gar nicht.
+    // B2: Eine Teilgrenze mitten in einem Surrogatpaar rückt eine Einheit
+    // nach hinten (das tiefe Surrogat kommt zum Teil des hohen, ein leerer
+    // Teil entfällt, danach teileZusammenlegen); kein t enthält ein
+    // einzelnes Surrogat, das JSON ist für PHP json_decode tauglich.
+    // ------------------------------------------------------------------
+
+    /** Rechter Rand des sichtbaren Ausschnitts (Modell-px). */
+    function randRechts() {
+        var s = B._sichtbarerBereich();
+        return s.x + s.b;
+    }
+
+    /** Breite von text in Schrift px mit stil {f, k} (über _textMass, wie das Element gemessen wird). */
+    function breiteIn(text, px, stil) {
+        return B._textMass()(text, px, stil || {});
+    }
+
+    /**
+     * Zeile "<anfang> Wort0 Wort1 … xx…x", die bei x in Schrift px (stil)
+     * im 20-px-Randstreifen endet: Rand − 20 < x + Breite ≤ Rand − 2.
+     * null, wenn sich das nicht einrichten lässt.
+     */
+    function zeileImRandstreifen(x, px, stil, anfang) {
+        var rand = randRechts();
+        var z = anfang;
+        for (var i = 0; i < 400 && x + breiteIn(z + ' Wort' + i, px, stil) <= rand - 20; i++) z += ' Wort' + i;
+        var wort = '';
+        while (wort.length < 50 && x + breiteIn(z + ' ' + wort, px, stil) <= rand - 20) wort += 'x';
+        z += ' ' + wort;
+        var ende = x + breiteIn(z, px, stil);
+        return ende > rand - 20 && ende <= rand - 2 ? z : null;
+    }
+
+    /** Enthält s ein einzelnes (ungepaartes) Surrogat? */
+    function einzelnesSurrogat(s) {
+        for (var i = 0; i < s.length; i++) {
+            var c = s.charCodeAt(i);
+            if (c >= 0xD800 && c <= 0xDBFF) {
+                var d = s.charCodeAt(i + 1);
+                if (d >= 0xDC00 && d <= 0xDFFF) {
+                    i++;
+                    continue;
+                }
+                return true;
+            }
+            if (c >= 0xDC00 && c <= 0xDFFF) return true;
+        }
+        return false;
+    }
+
+    // (a) Review B1 (a): "pH" endet im Randstreifen und wird nur fett -> bleibt EINE Zeile
+    function fix2PhImRandstreifen() {
+        ctx.oeffnen();
+        var f = [];
+        var px = E.schriftPx(2);
+        var rand = randRechts();
+        var x = Math.floor(rand - 6 - breiteIn('pH', px, { f: 1 }));
+        var id = einsetzen(neuesText({ x: x, y: 200, text: 'pH' }));
+        if (!(x + breiteIn('pH', px) > rand - 20 && x + breiteIn('pH', px, { f: 1 }) <= rand)) {
+            return { ok: false, detail: 'Testaufbau: "pH" endet nicht im Randstreifen (x ' + x + ', Rand ' + rand + ')' };
+        }
+        var undo0 = B.undoStapel.length;
+        var r = B.textErsetzen(id, [{ text: 'pH', teile: [{ t: 'pH', f: 1 }] }]);
+        var n = element(id);
+        if (!n) return { ok: false, detail: 'Element fehlt danach' };
+        if (r !== true) f.push('Rückgabe ' + r + ' statt true');
+        if (n.text !== 'pH') f.push('text ' + JSON.stringify(n.text) + ' statt "pH" (umbrochen)');
+        if (teileText(n) !== JSON.stringify([{ t: 'pH', f: 1 }])) f.push('teile ' + teileText(n));
+        if (n.x !== x || n.y !== 200) f.push('Lage ' + n.x + '/' + n.y);
+        if (B.undoStapel.length !== undo0 + 1) f.push('Undo-Schritte ' + (B.undoStapel.length - undo0) + ' statt 1');
+        var rb = B._rahmen(n);
+        if (rb.x + rb.b > rand + 0.01) f.push('Rahmen endet bei ' + (rb.x + rb.b).toFixed(1) + ' hinter dem Rand ' + rand.toFixed(1));
+        return ergebnis(f);
+    }
+
+    // (b) Text unverändert, nur formatiert: KEINE Zeile wird umbrochen - weder
+    // die im Randstreifen (fett ragt sie sogar über den Rand) noch eine, die
+    // schon vorher über den Rand ragt (z. B. nach A+)
+    function fix2NurFormatieren() {
+        ctx.oeffnen();
+        var f = [];
+        var x = 100, px = E.schriftPx(2);
+        var rand = randRechts();
+        if (rand - 20 - x < 8 * px) return { ok: false, detail: 'Testaufbau: Zielbreite ' + (rand - 20 - x) + ' px unter 8 × ' + px + ' px' };
+        var streifen = zeileImRandstreifen(x, px, {}, 'Streifen');
+        if (!streifen) return { ok: false, detail: 'Testaufbau: keine Zeile im Randstreifen' };
+        var lang = langeZeile().text;
+        if (!(x + breiteIn(lang, px) > rand)) return { ok: false, detail: 'Testaufbau: lange Zeile ragt nicht über den Rand' };
+        var altText = 'Kurz\n' + streifen + '\n' + lang;
+        var id = einsetzen(neuesText({ x: x, y: 100, text: altText }));
+        var undo0 = B.undoStapel.length;
+        // 1) die Zeile im Randstreifen ganz fett
+        var teile1 = [{ t: 'Kurz\n' }, { t: streifen, f: 1 }, { t: '\n' + lang }];
+        B.textErsetzen(id, [{ text: altText, teile: teile1 }]);
+        var n = element(id);
+        if (n.text !== altText) f.push('Zeile fett: ' + n.text.split('\n').length + ' Zeilen statt 3 (umbrochen)');
+        if (teileText(n) !== JSON.stringify(teile1)) f.push('Zeile fett: teile ' + teileText(n).slice(0, 120));
+        // 2) in der überlangen Zeile ein Wort kursiv, eines rot
+        var ab = altText.lastIndexOf('\n');
+        var i0 = altText.indexOf('Wort20', ab), i1 = altText.indexOf('Wort40', ab);
+        var teile2 = [{ t: altText.slice(0, i0) }, { t: 'Wort20', k: 1 }, { t: altText.slice(i0 + 6, i1) },
+            { t: 'Wort40', farbe: '#ff0000' }, { t: altText.slice(i1 + 6) }];
+        B.textErsetzen(id, [{ text: altText, teile: teile2 }]);
+        n = element(id);
+        if (n.text !== altText) f.push('Wörter kursiv/rot: ' + n.text.split('\n').length + ' Zeilen statt 3 (umbrochen)');
+        if (teileText(n) !== JSON.stringify(teile2)) f.push('Wörter kursiv/rot: teile ' + teileText(n).slice(0, 120));
+        if (B.undoStapel.length !== undo0 + 2) f.push('Undo-Schritte ' + (B.undoStapel.length - undo0) + ' statt 2');
+        var p = E.pruefeModell(B.modell);
+        if (!p || !p.modell || JSON.stringify(p.modell.elemente[el().indexOf(n)]) !== JSON.stringify(n)) f.push('pruefeModell ändert das Element');
+        return ergebnis(f);
+    }
+
+    // (c) Neue Zeile, die über den sichtbaren Rand ragt -> umbrochen auf
+    // Rand − 20 − x (wie umbrechenTeile), die unveränderte überlange Zeile
+    // davor bleibt. Gemessen wird MIT Formatierung: eine geänderte Zeile, die
+    // normal noch im Randstreifen endet, fett aber über den Rand ragt, wird umbrochen.
+    function fix2NeueZeileUeberDenRand() {
+        ctx.oeffnen();
+        var f = [];
+        var x = 100, px = E.schriftPx(3); // 28 px
+        var rand = randRechts(), grenze = rand - 20 - x;
+        var alt = langeZeile().text;
+        var id = einsetzen(neuesText({ x: x, y: 60, breite: 3, text: alt }));
+        var woerter = [];
+        for (var i = 0; i < 40; i++) woerter.push('Neu' + i);
+        var neu = { text: woerter.join(' '), teile: [{ t: woerter.slice(0, 5).join(' ') + ' ' },
+            { t: woerter.slice(5, 9).join(' '), f: 1 }, { t: ' ' + woerter.slice(9).join(' ') }] };
+        var zeilen = U.umbrechenTeile(neu, grenze, px, B._textMass());
+        if (zeilen.length < 3) return { ok: false, detail: 'Testaufbau: neue Zeile ergibt nur ' + zeilen.length + ' Zeilen bei ' + grenze + ' px' };
+        B.textErsetzen(id, [alt, neu]);
+        var n = element(id);
+        var soll = alt + '\n' + zeilen.map(function(z) { return z.text; }).join('\n');
+        if (n.text.split('\n')[0] !== alt) f.push('unveränderte überlange Zeile umbrochen (' + n.text.split('\n').length + ' Zeilen)');
+        if (n.text !== soll) f.push('text ' + JSON.stringify(n.text.slice(0, 60)) + '… statt ' + JSON.stringify(soll.slice(0, 60)) + '… (' + n.text.split('\n').length + ' statt ' + (1 + zeilen.length) + ' Zeilen)');
+        var breiten = zeilenBreiten(n);
+        for (var k = 1; k < breiten.length; k++) {
+            if (breiten[k] > grenze + 0.01) f.push('neue Zeile ' + k + ': ' + breiten[k].toFixed(1) + ' px > ' + grenze.toFixed(1) + ' px');
+        }
+        var vorStil = stilJeZeichen(alt + '\n' + neu.text, [{ t: alt + '\n' }].concat(neu.teile));
+        var nachStil = stilJeZeichen(n.text, n.teile);
+        var abweichend = 0;
+        for (var c = 0; c < n.text.length; c++) {
+            if (n.text.charAt(c) !== '\n' && nachStil[c] !== vorStil[c]) abweichend++;
+        }
+        if (n.text.length === alt.length + 1 + neu.text.length && abweichend) f.push(abweichend + ' Zeichen mit anderer Formatierung');
+        // geänderte Zeile: normal im Randstreifen, fett über dem Rand
+        var px2 = E.schriftPx(2);
+        var id2 = einsetzen(neuesText({ x: x, y: 400, text: 'Kurz' }));
+        var z = zeileImRandstreifen(x, px2, {}, 'Fett');
+        if (!z || !(x + breiteIn(z, px2, { f: 1 }) > rand)) return { ok: false, detail: 'Testaufbau: keine Zeile, die normal im Streifen endet und fett über den Rand ragt' };
+        B.textErsetzen(id2, [{ text: z, teile: [{ t: z, f: 1 }] }]);
+        var n2 = element(id2);
+        if (n2.text.indexOf('\n') < 0) f.push('fett über den Rand ragende Zeile nicht umbrochen (fett nicht mitgemessen?)');
+        var soll2 = U.umbrechenTeile({ text: z, teile: [{ t: z, f: 1 }] }, grenze, px2, B._textMass()).map(function(zz) { return zz.text; }).join('\n');
+        if (n2.text !== soll2) f.push('fette Zeile nicht auf Rand − 20 − x umbrochen');
+        return ergebnis(f);
+    }
+
+    // (d) Geänderte oder neue Zeile, die im Randstreifen endet (nicht über den Rand) -> NICHT umbrochen
+    function fix2GeaenderteZeileImRandstreifen() {
+        ctx.oeffnen();
+        var f = [];
+        var x = 100, px = E.schriftPx(2);
+        var rand = randRechts();
+        if (rand - 20 - x < 8 * px) return { ok: false, detail: 'Testaufbau: Zielbreite ' + (rand - 20 - x) + ' px unter 8 × ' + px + ' px' };
+        var id = einsetzen(neuesText({ x: x, y: 100, text: 'Kurz' }));
+        // 1) "Kurz" als Klartext bis in den Randstreifen verlängert
+        var z1 = zeileImRandstreifen(x, px, {}, 'Kurz');
+        if (!z1) return { ok: false, detail: 'Testaufbau: keine Zeile im Randstreifen' };
+        var r = B.textErsetzen(id, [z1]);
+        var n = element(id);
+        if (r !== true) f.push('verlängert: Rückgabe ' + r);
+        if (n.text !== z1) f.push('verlängerte Zeile umbrochen: ' + JSON.stringify(n.text.slice(-24)));
+        // 2) neue zweite Zeile ganz fett, endet (fett gemessen) im Randstreifen
+        var z2 = zeileImRandstreifen(x, px, { f: 1 }, 'Fett');
+        if (!z2) return { ok: false, detail: 'Testaufbau: keine fette Zeile im Randstreifen' };
+        B.textErsetzen(id, [{ text: z1 + '\n' + z2, teile: [{ t: z1 + '\n' }, { t: z2, f: 1 }] }]);
+        n = element(id);
+        if (n.text !== z1 + '\n' + z2) f.push('neue fette Zeile: ' + n.text.split('\n').length + ' Zeilen statt 2 (umbrochen)');
+        if (teileText(n) !== JSON.stringify([{ t: z1 + '\n' }, { t: z2, f: 1 }])) f.push('teile ' + teileText(n).slice(0, 120));
+        // der Text bleibt sichtbar
+        var rb = B._rahmen(n);
+        if (rb.x + rb.b > rand + 0.01) f.push('Rahmen endet bei ' + (rb.x + rb.b).toFixed(1) + ' hinter dem Rand ' + rand.toFixed(1));
+        return ergebnis(f);
+    }
+
+    // (e) Zielbreite Rand − 20 − x kleiner als 8 × Schrift-px: lange neue Zeile
+    // NICHT umbrochen (keine schmale Spalte); genau 8 × px: umbrochen
+    function fix2ZielbreiteZuKlein() {
+        ctx.oeffnen();
+        var f = [];
+        var px = E.schriftPx(2);
+        var rand = randRechts();
+        var lang = langeZeile();
+        // knapp unter 8 × px und (Review B1 (d)) nur zwei Zeichen breit
+        [8 * px - 1, 2 * px].forEach(function(ziel, nr) {
+            var x = rand - 20 - ziel;
+            var id = einsetzen(neuesText({ x: x, y: 100 + 150 * nr, text: 'Kurz' }));
+            if (rand - 20 - x !== ziel) {
+                f.push('Testaufbau: Zielbreite ' + (rand - 20 - x) + ' statt ' + ziel);
+                return;
+            }
+            B.textErsetzen(id, [lang]);
+            var n = element(id);
+            if (n.text !== lang.text) f.push('Zielbreite ' + ziel + ' px: umbrochen zu ' + n.text.split('\n').length + ' Zeilen');
+            if (teileText(n) !== JSON.stringify(lang.teile)) f.push('Zielbreite ' + ziel + ' px: teile ' + teileText(n).slice(0, 80));
+        });
+        // Kante: genau 8 × px wird umbrochen (R3 gilt nur für "kleiner als")
+        var x3 = rand - 20 - 8 * px;
+        var id3 = einsetzen(neuesText({ x: x3, y: 450, text: 'Kurz' }));
+        if (rand - 20 - x3 !== 8 * px) return { ok: false, detail: 'Testaufbau: Zielbreite ' + (rand - 20 - x3) + ' statt ' + (8 * px) };
+        B.textErsetzen(id3, [lang]);
+        var soll3 = U.umbrechenTeile(lang, 8 * px, px, B._textMass()).map(function(z) { return z.text; }).join('\n');
+        if (element(id3).text !== soll3) f.push('Zielbreite genau 8 × px: nicht auf ' + (8 * px) + ' px umbrochen (' + element(id3).text.split('\n').length + ' Zeilen)');
+        return ergebnis(f);
+    }
+
+    // (f) B2: Teilgrenze mitten in einem Surrogatpaar -> das tiefe Surrogat
+    // kommt zum Teil des hohen, leere Teile entfallen, danach zusammengelegt;
+    // Verkettung = text, kein einzelnes Surrogat in einem t, JSON ohne \\ud-Escape
+    function fix2TeilgrenzeImSurrogatpaar() {
+        ctx.oeffnen();
+        var f = [];
+        var H = '\uD83D', T = '\uDE00', P = H + T; // Emoji U+1F600
+        var id = einsetzen(neuesText({ x: 100, y: 100, text: 'Alt' }));
+        var gid = einsetzen(neuesText({ x: 100, y: 400, text: 'Dreh', winkel: 20 }));
+        function pruefen(wann, eid, eingabe, sollText, sollTeile) {
+            var r = B.textErsetzen(eid, eingabe);
+            var n = element(eid);
+            if (!n) {
+                f.push(wann + ': Element fehlt');
+                return;
+            }
+            if (r !== true) f.push(wann + ': Rückgabe ' + r + ' statt true');
+            if (n.text !== sollText) f.push(wann + ': text ' + JSON.stringify(n.text));
+            if (teileText(n) !== JSON.stringify(sollTeile)) f.push(wann + ': teile ' + JSON.stringify(teileText(n)) + ' statt ' + JSON.stringify(JSON.stringify(sollTeile)));
+            var liste = n.teile || [];
+            if (liste.map(function(t) { return t.t; }).join('') !== n.text) f.push(wann + ': Verkettung der teile ist nicht der text');
+            if (liste.some(function(t) { return einzelnesSurrogat(t.t); })) f.push(wann + ': ein t enthält ein einzelnes Surrogat');
+            if (JSON.stringify(n).toLowerCase().indexOf('\\ud') >= 0) f.push(wann + ': JSON mit \\ud-Escape (PHP json_decode lehnt es ab)');
+            var p = E.pruefeModell(B.modell);
+            if (!p || !p.modell || JSON.stringify(p.modell.elemente[el().indexOf(n)]) !== JSON.stringify(n)) f.push(wann + ': pruefeModell ändert das Element');
+        }
+        pruefen('Review-Beispiel', id, [{ text: 'a' + P + 'b', teile: [{ t: 'a' + H, f: 1 }, { t: T + 'b' }] }],
+            'a' + P + 'b', [{ t: 'a' + P, f: 1 }, { t: 'b' }]);
+        pruefen('Teil nur aus dem tiefen Surrogat', id, [{ text: 'x' + P + 'y', teile: [{ t: 'x' }, { t: H, k: 1 }, { t: T, farbe: '#ff0000' }, { t: 'y' }] }],
+            'x' + P + 'y', [{ t: 'x' }, { t: P, k: 1 }, { t: 'y' }]);
+        pruefen('danach zusammengelegt', id, [{ text: 'x' + P + 'y', teile: [{ t: 'x' }, { t: H, f: 1 }, { t: T }, { t: 'y', f: 1 }] }],
+            'x' + P + 'y', [{ t: 'x' }, { t: P + 'y', f: 1 }]);
+        pruefen('zwei geteilte Paare hintereinander', id, [{ text: P + P, teile: [{ t: H, f: 1 }, { t: T + H }, { t: T, f: 1 }] }],
+            P + P, [{ t: P, f: 1 }, { t: P }]);
+        pruefen('leerer Teil dazwischen', id, [{ text: 'a' + P + 'b', teile: [{ t: 'a' + H, k: 1 }, { t: '' }, { t: T + 'b' }] }],
+            'a' + P + 'b', [{ t: 'a' + P, k: 1 }, { t: 'b' }]);
+        pruefen('zweiter Absatz', id, ['Eins', { text: P + 'c', teile: [{ t: H, farbe: '#0000ff' }, { t: T + 'c', f: 1 }] }],
+            'Eins\n' + P + 'c', [{ t: 'Eins\n' }, { t: P, farbe: '#0000ff' }, { t: 'c', f: 1 }]);
+        pruefen('gedreht (ohne Umbruch)', gid, [{ text: 'a' + P + 'b', teile: [{ t: 'a' + H, f: 1 }, { t: T + 'b' }] }],
+            'a' + P + 'b', [{ t: 'a' + P, f: 1 }, { t: 'b' }]);
+        if (element(gid) && element(gid).winkel !== 20) f.push('gedreht: winkel ' + element(gid).winkel);
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     var vorherAsync = window.__zusatzTestsAsync;
@@ -2121,5 +2392,12 @@
         p('AP-3.fix1: Leiste mit Knopf passt nicht mehr hin - Ergebnis mit Platz für die Leiste ohne Knopf', fix1LeistenplatzKnapp);
         p('AP-3.fix1: _auswahlLeisteHoeheText(mitEinText) misst mit oder ohne Knopf, ohne Argument mit Knopf', fix1LeistenHoeheParameter);
         p('AP-3.fix1: textErsetzen kürzt auf 5000 Einheiten, nie im Surrogatpaar, teile passend, pruefeModell ändert nichts', fix1TextErsetzenObergrenze);
+        // PLAN-Blocktext-Formatierung.md, AP-3.fix2 (Umbruchregel F12a, Review-Befunde B1, B2)
+        p('AP-3.fix2: (a) "pH" endet im Randstreifen, nur fett - bleibt eine Zeile', fix2PhImRandstreifen);
+        p('AP-3.fix2: (b) Text unverändert, nur formatiert - keine Zeile umbrochen (auch nicht über dem Rand)', fix2NurFormatieren);
+        p('AP-3.fix2: (c) neue Zeile über dem sichtbaren Rand - umbrochen auf Rand − 20 − x, gemessen mit Formatierung', fix2NeueZeileUeberDenRand);
+        p('AP-3.fix2: (d) geänderte/neue Zeile endet im Randstreifen - nicht umbrochen', fix2GeaenderteZeileImRandstreifen);
+        p('AP-3.fix2: (e) Zielbreite unter 8 × Schrift-px - nicht umbrochen, keine Spalte (genau 8 × px: umbrochen)', fix2ZielbreiteZuKlein);
+        p('AP-3.fix2: (f) Teilgrenze im Surrogatpaar rückt nach hinten, kein einzelnes Surrogat, Verkettung = text', fix2TeilgrenzeImSurrogatpaar);
     };
 })();
