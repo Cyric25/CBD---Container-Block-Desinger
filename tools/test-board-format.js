@@ -18,6 +18,9 @@
  *   - Strich- und Punkt-Radierer entfernen einen formatierten Text wie
  *     einen unformatierten (der Punkt-Radierer am rechten Ende des fetten
  *     Rahmens beweist die Breitenmessung)
+ *   - AP-1.fix1 (Review-Befund B5): zeichneModell() misst in Pass 4 nur Teile,
+ *     auf die in derselben Zeile noch ein Teil folgt (ohne teile: keine
+ *     measureText-Aufrufe)
  *
  * Wird von tools/test-board-zeiger.html NACH test-board-textgroesse.js und
  * VOR test-board-blocktext.js geladen und hängt sich an den Haken
@@ -616,6 +619,71 @@
     }
 
     // ------------------------------------------------------------------
+    // AP-1.fix1 (Review-Befund B5): beim Zeichnen nicht überflüssig messen
+    // ------------------------------------------------------------------
+    /**
+     * Zahl der measureText-Aufrufe der Zeichenebene während EINES
+     * zeichneModell(). Die Hülle liegt als eigene Eigenschaft an der
+     * Zeichenebene und wird danach wieder entfernt (wie bei
+     * zeichnenMitschreiben).
+     */
+    function messAufrufeBeimZeichnen() {
+        var c = B.drawingCtx;
+        var n = 0;
+        var orig = c.measureText;
+        c.measureText = function() {
+            n++;
+            return orig.apply(this, arguments);
+        };
+        try {
+            B.zeichneModell();
+        } finally {
+            delete c.measureText;
+        }
+        return n;
+    }
+
+    /**
+     * Pass 4 von zeichneModell() rückt in einer Zeile nur um die Breite eines
+     * Teils weiter, wenn danach in derselben Zeile noch ein Teil folgt. Der
+     * letzte Teil einer Zeile braucht keine Messung - bei einem Text ohne
+     * teile (jede bestehende Tafel) heißt das: gar keine. Vor dem Zählen wird
+     * einmal gezeichnet (füllt den Rahmen-Zwischenspeicher), es ist nichts
+     * gewählt; gezählt wird die Differenz zu einem leeren Modell.
+     */
+    function zeichnenMisstNurFolgendeTeile() {
+        var f = [];
+        ctx.oeffnen();
+        B.zeichneModell();
+        var leer = messAufrufeBeimZeichnen();
+
+        // A: Text ohne teile, drei Zeilen -> 0 Messungen
+        ctx.oeffnen();
+        einsetzen(neuesText({ x: 60, y: 60, breite: 1, text: 'eins\nzwei\ndrei' }));
+        if (B.auswahl.length) return { ok: false, detail: 'Testaufbau: es ist etwas gewählt' };
+        var nA = messAufrufeBeimZeichnen() - leer;
+        if (nA !== 0) f.push('A (ohne teile, 3 Zeilen): ' + nA + ' measureText-Aufrufe statt 0');
+
+        // B: eine Zeile aus drei Teilen -> 2 Messungen (nach Teil 1 und 2)
+        ctx.oeffnen();
+        einsetzen(neuesText({ x: 60, y: 60, breite: 1, text: 'ab cd ef',
+            teile: [{ t: 'ab ' }, { t: 'cd ', f: 1 }, { t: 'ef', farbe: '#ff0000' }] }));
+        var nB = messAufrufeBeimZeichnen() - leer;
+        if (nB !== 2) f.push('B (eine Zeile, 3 Teile): ' + nB + ' measureText-Aufrufe statt 2');
+
+        // C: Teil über den Zeilenwechsel, Zeilen [a, b] und [c, d] -> 2 Messungen
+        // (nach "a" und nach "c"); das Zeilenende zählt je Zeile, nicht je Element
+        ctx.oeffnen();
+        einsetzen(neuesText({ x: 60, y: 60, breite: 1, text: 'ab\ncd',
+            teile: [{ t: 'a' }, { t: 'b\nc', f: 1 }, { t: 'd' }] }));
+        var nC = messAufrufeBeimZeichnen() - leer;
+        if (nC !== 2) f.push('C (Teil über Zeilenwechsel, 2 Zeilen à 2 Teile): ' + nC + ' measureText-Aufrufe statt 2');
+
+        if (B.drawingCtx.hasOwnProperty('measureText')) f.push('measureText-Hülle nicht entfernt');
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     window.__zusatzTests = function(c) {
@@ -635,5 +703,6 @@
         p('AP-1.3: A+, Ziehen, Drehen, Duplizieren und Strg+Z behalten teile', lassoAktionenBehaltenTeile);
         p('AP-1.3: teile überlebt Speichern und Wiederöffnen und wird formatiert gezeichnet', speichernUndWiederoeffnen);
         p('AP-1.3: Strich- und Punkt-Radierer entfernen formatierten Text', radiererEntferntFormatiertenText);
+        p('AP-1.fix1: Zeichnen misst nur Teile, auf die in derselben Zeile ein Teil folgt (B5)', zeichnenMisstNurFolgendeTeile);
     };
 })();
