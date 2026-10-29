@@ -9,6 +9,14 @@
  *     ersetzt (Format: tools/fixtures/blocktext/README.md)
  *   - künstliche Fälle (a)-(f) aus dem Plan und einige Randfälle
  *
+ * Formatierung lesen (PLAN-Blocktext-Formatierung.md, AP-2.1, F6/F10):
+ *   _blocktextLesen(wurzel, optionen) liefert je Absatz zusätzlich teile
+ *   (fett = font-weight >= 600, kursiv = italic/oblique, Farbe = berechnete
+ *   Farbe != Grundfarbe, als '#rrggbb'); Fälle (a)-(l) des Plans, Regel F6,
+ *   Befund B10 (color(srgb …)/oklab(…)), _blocktextAbsaetze() und
+ *   asynchron die Teile des Testmaterials (Verkettung = Text, gültig).
+ *   Prüfnamen beginnen mit "Formatierung lesen".
+ *
  * Die Fixture-Prüfungen holen die Dateien per fetch - die Prüfseite muss
  * über den Webserver laufen. Wird von tools/test-board-zeiger.html als
  * letzte Zusatzdatei vor test-board-zeiger.js geladen und hängt sich an die
@@ -851,6 +859,264 @@
     }
 
     // ------------------------------------------------------------------
+    // Formatierung lesen (PLAN-Blocktext-Formatierung.md, AP-2.1, F6/F10):
+    // _blocktextLesen(wurzel, optionen) liefert je Absatz neben text auch
+    // teile [{t, f?, k?, farbe?}] - nur, wenn der Absatz formatiert ist.
+    // Grundfarbe der Prüfseite ist Schwarz (Blockbereich ohne Website-CSS).
+    // ------------------------------------------------------------------
+
+    // Absätze als {text, teile?}. Ein vorhandener Schlüssel teile mit dem
+    // Wert undefined wird sichtbar gemacht - "kein Schlüssel teile" gehört
+    // zur Regel (F3: ohne Formatierung kein Feld).
+    function textUndTeile(liste) {
+        return (liste || []).map(function(a) {
+            var o = { text: a.text };
+            if (Object.prototype.hasOwnProperty.call(a, 'teile')) {
+                o.teile = a.teile === undefined ? 'undefined' : a.teile;
+            }
+            return o;
+        });
+    }
+
+    function teileVergleich(ist, soll) {
+        var i = JSON.stringify(textUndTeile(ist));
+        var s = JSON.stringify(soll);
+        return i === s ? true : { ok: false, detail: 'ist ' + i + ' / soll ' + s };
+    }
+
+    // Prüffunktion: Tafel mit html öffnen, _blocktextLesen(Blockbereich,
+    // optionen) mit soll = [{text, teile?}] vergleichen (Schlüsselreihenfolge
+    // der Teile t, f, k, farbe wie bei teileZusammenlegen)
+    function teileFall(html, soll, optionen) {
+        return function() {
+            oeffnenMit(html);
+            return teileVergleich(B._blocktextLesen(bereich(), optionen), soll);
+        };
+    }
+
+    // Fälle (a)-(i) des Plans - text UND teile. Fall (l) prüft für dieselben
+    // HTML-Stücke, dass _blocktextAlsText() unverändert bleibt.
+    var FORMAT_FAELLE = [
+        {
+            name: '(a) strong mitten im Wort',
+            html: '<p>Es entsteht eine <strong>trans</strong>-Bindung</p>',
+            soll: [{ text: 'Es entsteht eine trans-Bindung', teile: [{ t: 'Es entsteht eine ' }, { t: 'trans', f: 1 }, { t: '-Bindung' }] }]
+        },
+        {
+            name: '(b) em, strong+em',
+            html: '<p><em>kursiv</em> und <strong><em>beides</em></strong></p>',
+            soll: [{ text: 'kursiv und beides', teile: [{ t: 'kursiv', k: 1 }, { t: ' und ' }, { t: 'beides', f: 1, k: 1 }] }]
+        },
+        {
+            name: '(c) eigene Farbe als #rrggbb',
+            html: '<p>Ein <span style="color:#71230a">Begriff</span>.</p>',
+            soll: [{ text: 'Ein Begriff.', teile: [{ t: 'Ein ' }, { t: 'Begriff', farbe: '#71230a' }, { t: '.' }] }]
+        },
+        {
+            // Grundfarbe = erstes .cbd-container-content (#123456), nicht der
+            // (schwarze) Blockbereich: Titel in Grundfarbe ohne farbe,
+            // Schwarz im Inhalt mit farbe; Absatz ohne Formatierung ohne teile
+            name: '(d) Farbe = Grundfarbe -> kein farbe, ohne Formatierung kein teile',
+            html: '<h3 class="cbd-block-title" style="color:#123456">Titel</h3>' +
+                '<div class="cbd-container-content" style="color:#123456">' +
+                '<p>Ganz <span style="color:#123456">ohne</span> Formatierung</p>' +
+                '<p>Mit <span style="color:rgb(0, 0, 0)">Schwarz</span></p></div>',
+            soll: [
+                { text: 'Titel', teile: [{ t: 'Titel', f: 1 }] },
+                { text: 'Ganz ohne Formatierung' },
+                { text: 'Mit Schwarz', teile: [{ t: 'Mit ' }, { t: 'Schwarz', farbe: '#000000' }] }
+            ]
+        },
+        {
+            name: '(e) Leerraum über Teilgrenzen - erstes Leerzeichen behält seine Formatierung',
+            html: '<p>a <strong> b </strong> c</p>',
+            soll: [{ text: 'a b c', teile: [{ t: 'a ' }, { t: 'b ', f: 1 }, { t: 'c' }] }]
+        },
+        {
+            // \n aus BR ist Klartext, Leerzeichen um \n entfallen
+            name: '(e2) BR als Klartext, Leerzeichen um den Zeilenwechsel entfallen',
+            html: '<p><strong>a </strong><br> <em>b</em></p>',
+            soll: [{ text: 'a\nb', teile: [{ t: 'a', f: 1 }, { t: '\n' }, { t: 'b', k: 1 }] }]
+        },
+        {
+            name: '(f) Listenpräfix immer Klartext',
+            html: '<ul><li><strong>x</strong></li></ul><ol start="3"><li style="font-weight:700;color:#ff0000">y</li></ol>',
+            soll: [
+                { text: '• x', teile: [{ t: '• ' }, { t: 'x', f: 1 }] },
+                { text: '3. y', teile: [{ t: '3. ' }, { t: 'y', f: 1, farbe: '#ff0000' }] }
+            ]
+        },
+        {
+            name: '(g) Überschrift fett über den Standard-Stil',
+            html: '<h3>Titel</h3>',
+            soll: [{ text: 'Titel', teile: [{ t: 'Titel', f: 1 }] }]
+        },
+        {
+            name: '(h) Formel hat den Stil des Formel-Elements',
+            html: '<p>Wasser: <strong><span class="cbd-latex-formula cbd-latex-inline" data-latex="H_2O">' +
+                '<span class="katex"><span class="katex-html" aria-hidden="true">H2O</span></span></span></strong></p>' +
+                '<div style="font-style:italic"><span class="cbd-latex-formula cbd-latex-display" data-latex="x^2" style="display:block">x2</span></div>',
+            soll: [
+                { text: 'Wasser: ' + M.latexZuText('H_2O'), teile: [{ t: 'Wasser: ' }, { t: M.latexZuText('H_2O'), f: 1 }] },
+                { text: M.latexZuText('x^2'), teile: [{ t: M.latexZuText('x^2'), k: 1 }] }
+            ]
+        },
+        {
+            name: '(i) Tabellenzeile - " | " ist Klartext',
+            html: '<table><tr><td><strong>A</strong></td><td>B</td></tr><tr><th>C</th><th>D</th></tr></table>',
+            soll: [
+                { text: 'A | B', teile: [{ t: 'A', f: 1 }, { t: ' | B' }] },
+                { text: 'C | D', teile: [{ t: 'C', f: 1 }, { t: ' | ' }, { t: 'D', f: 1 }] }
+            ]
+        }
+    ];
+
+    // (d, zweiter Teil): ohne .cbd-container-content gilt die Farbe der
+    // übergebenen Wurzel als Grundfarbe
+    function formatGrundfarbeWurzel() {
+        oeffnenMit('<div id="fmt-wurzel" style="color:#336699"><p>a <span style="color:#336699">b</span> ' +
+            '<span style="color:#000000">c</span></p></div>');
+        var w = bereich().querySelector('#fmt-wurzel');
+        if (!w) return { ok: false, detail: 'Wurzel fehlt' };
+        return teileVergleich(B._blocktextLesen(w), [{ text: 'a b c', teile: [{ t: 'a b ' }, { t: 'c', farbe: '#000000' }] }]);
+    }
+
+    // (j) Option grundfarbe ersetzt die berechnete Grundfarbe
+    function formatOptionGrundfarbe() {
+        var html = '<p style="color:#ff0000">rot <span style="color:#000000">schwarz</span></p>';
+        var f = [];
+        var mit = teileFall(html, [{ text: 'rot schwarz', teile: [{ t: 'rot ' }, { t: 'schwarz', farbe: '#000000' }] }],
+            { grundfarbe: '#ff0000' })();
+        if (mit !== true) f.push('mit {grundfarbe:#ff0000}: ' + mit.detail);
+        var ohne = teileFall(html, [{ text: 'rot schwarz', teile: [{ t: 'rot ', farbe: '#ff0000' }, { t: 'schwarz' }] }])();
+        if (ohne !== true) f.push('ohne Option: ' + ohne.detail);
+        return ergebnis(f);
+    }
+
+    // (k) Option nbsp: geschütztes Leerzeichen wie ein Leerzeichen
+    // (zusammengefasst, am Rand entfernt); ohne Option bleibt es wie bisher
+    function formatOptionNbsp() {
+        var NB = String.fromCharCode(160);
+        var html = '<p>a&nbsp;b&nbsp; c</p><p>&nbsp;x&nbsp;</p><p>a&nbsp;<strong>&nbsp;b</strong></p>';
+        var f = [];
+        var mit = teileFall(html, [
+            { text: 'a b c' },
+            { text: 'x' },
+            { text: 'a b', teile: [{ t: 'a ' }, { t: 'b', f: 1 }] }
+        ], { nbsp: true })();
+        if (mit !== true) f.push('mit {nbsp:true}: ' + mit.detail);
+        var ohne = teileFall(html, [
+            { text: 'a' + NB + 'b' + NB + ' c' },
+            { text: NB + 'x' + NB },
+            { text: 'a' + NB + NB + 'b', teile: [{ t: 'a' + NB }, { t: NB + 'b', f: 1 }] }
+        ])();
+        if (ohne !== true) f.push('ohne Option: ' + ohne.detail);
+        return ergebnis(f);
+    }
+
+    // (l) _blocktextAlsText() liefert für (a)-(i) denselben Text wie vor
+    // AP-2.1 (Regressionswächter, schon vor der Umsetzung grün)
+    function formatAlsTextUnveraendert() {
+        var f = [];
+        FORMAT_FAELLE.forEach(function(fall) {
+            oeffnenMit(fall.html);
+            var soll = fall.soll.map(function(a) { return a.text; }).join('\n\n');
+            var v = vergleich(B._blocktextAlsText(), soll);
+            if (v !== true) f.push(fall.name + ': ' + v.detail);
+        });
+        return ergebnis(f);
+    }
+
+    // Regel F6: fett ab font-weight 600 (Glossarbegriffe), 500 nicht;
+    // oblique zählt als kursiv; Unterstreichen wird nicht übernommen
+    function formatRegelF6() {
+        return teileFall('<p><span style="font-weight:600">a</span><span style="font-weight:500">b</span>' +
+            '<span style="font-style:oblique 10deg">c</span><b>d</b>' +
+            '<span class="glossar-term" style="font-weight:600;color:#71230a;text-decoration:underline">Begriff</span></p>',
+        [{ text: 'abcdBegriff', teile: [{ t: 'a', f: 1 }, { t: 'b' }, { t: 'c', k: 1 }, { t: 'd', f: 1 }, { t: 'Begriff', f: 1, farbe: '#71230a' }] }])();
+    }
+
+    // Befund B10 (AP-1.rev): getComputedStyle liefert für color-mix()
+    // color(srgb …) bzw. oklab(…). srgb wird zu #rrggbb, nicht Darstellbares
+    // gibt keine eigene Farbe; durchsichtig (Alpha 0) zählt nicht,
+    // halbdurchsichtig zählt mit der deckenden Farbe.
+    function formatB10Farbformen() {
+        var html = '<p>a <span id="fmt-srgb" style="color:color-mix(in srgb, #ff0000 50%, #0000ff)">m</span> ' +
+            '<span id="fmt-oklab" style="color:color-mix(in oklab, #ff0000 50%, #0000ff)">o</span> ' +
+            '<span style="color:rgba(255, 0, 0, 0)">t</span> <span style="color:rgba(0, 0, 255, 0.5)">h</span></p>';
+        oeffnenMit(html);
+        var f = [];
+        var srgb = getComputedStyle(bereich().querySelector('#fmt-srgb')).color;
+        var oklab = getComputedStyle(bereich().querySelector('#fmt-oklab')).color;
+        if (srgb.indexOf('color(srgb') !== 0) f.push('Vorbedingung: Browser liefert ' + srgb);
+        if (oklab.indexOf('oklab(') !== 0) f.push('Vorbedingung: Browser liefert ' + oklab);
+        var v = teileVergleich(B._blocktextLesen(bereich()), [{ text: 'a m o t h', teile: [
+            { t: 'a ' }, { t: 'm', farbe: '#800080' }, { t: ' o t ' }, { t: 'h', farbe: '#0000ff' }
+        ] }]);
+        if (v !== true) f.push(v.detail);
+        return ergebnis(f);
+    }
+
+    // _blocktextAbsaetze(): Absätze des Blockbereichs als [{text, teile?}]
+    // (ohne art), Texte wie _blocktextAlsText(); ohne Tafel []
+    function formatAbsaetze() {
+        if (typeof B._blocktextAbsaetze !== 'function') return { ok: false, detail: '_blocktextAbsaetze fehlt' };
+        var f = [];
+        if (B.overlay) B.destroy();
+        var leer = B._blocktextAbsaetze();
+        if (JSON.stringify(leer) !== '[]') f.push('ohne Tafel ' + JSON.stringify(leer));
+        oeffnenMit('<h3 class="cbd-block-title">Titel</h3><p>Es <strong>x</strong></p><ul><li>y</li></ul>');
+        var l = B._blocktextAbsaetze();
+        var soll = [
+            { text: 'Titel', teile: [{ t: 'Titel', f: 1 }] },
+            { text: 'Es x', teile: [{ t: 'Es ' }, { t: 'x', f: 1 }] },
+            { text: '• y' }
+        ];
+        if (JSON.stringify(l) !== JSON.stringify(soll)) f.push('ist ' + JSON.stringify(l));
+        var t = (l || []).map(function(a) { return a.text; }).join('\n\n');
+        if (t !== B._blocktextAlsText()) f.push('Text weicht von _blocktextAlsText() ab: ' + sichtbar(t));
+        return ergebnis(f);
+    }
+
+    // Asynchron: Teile aus dem Testmaterial - Verkettung aller t = text,
+    // jedes teile besteht die Prüfung des Elementmodells unverändert
+    // (pruefeModell), und mindestens ein Absatz ist formatiert (Überschriften,
+    // strong, th im Testmaterial)
+    function formatTestmaterial() {
+        var E = window.CBDBoardElemente;
+        var f = [];
+        var formatiert = 0;
+        var kette = Promise.resolve();
+        FIXTURES.forEach(function(name) {
+            kette = kette.then(function() {
+                return holen('fixtures/blocktext/' + name + '.html');
+            }).then(function(html) {
+                oeffnenMit(html);
+                B._blocktextLesen(bereich()).forEach(function(a, i) {
+                    if (!Object.prototype.hasOwnProperty.call(a, 'teile')) return;
+                    formatiert++;
+                    var wo = name + ' Absatz ' + i;
+                    if (!Array.isArray(a.teile) || !a.teile.length) {
+                        f.push(wo + ': teile ' + JSON.stringify(a.teile));
+                        return;
+                    }
+                    var kett = a.teile.map(function(t) { return t.t; }).join('');
+                    if (kett !== a.text) f.push(wo + ': Verkettung ' + sichtbar(kett.slice(0, 60)) + ' statt ' + sichtbar(a.text.slice(0, 60)));
+                    var p = E.pruefeModell({ v: 1, breite: 1000, hoehe: 1000, elemente: [
+                        { id: 'e1', typ: 'text', farbe: '#000000', breite: 2, text: a.text, x: 0, y: 0, teile: a.teile }
+                    ] });
+                    var el2 = p && p.modell.elemente[0];
+                    if (!el2 || JSON.stringify(el2.teile) !== JSON.stringify(a.teile)) f.push(wo + ': Prüfung des Modells verwirft/ändert teile');
+                });
+            });
+        });
+        return kette.then(function() {
+            if (!formatiert) f.push('kein Absatz des Testmaterials mit teile');
+            return ergebnis(f);
+        });
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     window.__zusatzTests = function(c) {
@@ -928,6 +1194,18 @@
         p('G9: auch nach A+ liegt die Leiste nicht auf dem Text', g9NachAPlus);
         p('G9: Zoom 2 und Verschiebung - Leiste frei, Text im Ausschnitt', g9Zoom);
         p('G9: kein Platz für die Leiste -> trotzdem eingefügt, wie bisher bei y 20', g9KeinPlatzFuerLeiste);
+
+        // Formatierung lesen (PLAN-Blocktext-Formatierung.md, AP-2.1)
+        FORMAT_FAELLE.forEach(function(fall) {
+            p('Formatierung lesen ' + fall.name, teileFall(fall.html, fall.soll));
+        });
+        p('Formatierung lesen (d) ohne .cbd-container-content: Grundfarbe = Farbe der Wurzel', formatGrundfarbeWurzel);
+        p('Formatierung lesen (j) Option grundfarbe', formatOptionGrundfarbe);
+        p('Formatierung lesen (k) Option nbsp', formatOptionNbsp);
+        p('Formatierung lesen (l) _blocktextAlsText() für (a)-(i) unverändert', formatAlsTextUnveraendert);
+        p('Formatierung lesen: Regel F6 (Stärke 600 ja, 500 nein, oblique, Glossarbegriff)', formatRegelF6);
+        p('Formatierung lesen (B10): color(srgb …) -> #rrggbb, oklab(…) und Alpha 0 ohne Farbe', formatB10Farbformen);
+        p('Formatierung lesen: _blocktextAbsaetze() als [{text, teile?}], ohne Tafel []', formatAbsaetze);
     };
 
     window.__zusatzTestsAsync = function(c) {
@@ -949,6 +1227,8 @@
                 return c.pruefeAsync('AP-2.fix1 (M2): "Auf neuer Seite einfügen" wartet, bis gespeichert ist', m2SpeichernAbwarten);
             }).then(function() {
                 return c.pruefeAsync('AP-2.fix1 (G2): close() schließt das Fenster sofort', g2CloseSchliesstFenster);
+            }).then(function() {
+                return c.pruefeAsync('Formatierung lesen: Testmaterial - Verkettung der Teile = Text, Modellprüfung behält teile', formatTestmaterial);
             });
         });
     };
