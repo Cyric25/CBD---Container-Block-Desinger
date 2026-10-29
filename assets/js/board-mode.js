@@ -5187,6 +5187,115 @@
             return this._blocktextLesen(bereich).map(function(a) { return a.text; }).join('\n\n');
         },
 
+        /**
+         * Sichtbarer Ausschnitt der Zeichenfläche in Modell-Koordinaten
+         * {x, y, b, h} (AP-2.2): Größe von .cbd-board-canvas-area, um
+         * Verschiebung und Zoom zurückgerechnet, auf die Zeichenfläche
+         * begrenzt.
+         */
+        _sichtbarerBereich: function() {
+            var flaeche = this.overlay ? this.overlay.querySelector('.cbd-board-canvas-area') : null;
+            var breite = flaeche ? flaeche.clientWidth : this.cssWidth;
+            var hoehe = flaeche ? flaeche.clientHeight : this.cssHeight;
+            var zoom = this.zoom || 1;
+            function begrenzt(v, max) { return Math.max(0, Math.min(max, v)); }
+            var x0 = begrenzt(-this.panX / zoom, this.cssWidth);
+            var x1 = begrenzt((breite - this.panX) / zoom, this.cssWidth);
+            var y0 = begrenzt(-this.panY / zoom, this.cssHeight);
+            var y1 = begrenzt((hoehe - this.panY) / zoom, this.cssHeight);
+            return { x: x0, y: y0, b: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
+        },
+
+        /**
+         * Text als Text-Elemente auf die aktuelle Seite setzen (AP-2.2) - ein
+         * Element je Absatz (Leerzeile trennt), auf die sichtbare Breite
+         * umbrochen (Zeilenwechsel stehen danach im Text, Architektur E8).
+         * Aufgerufen von der Vorschau (AP-2.3).
+         *
+         * Platzierung (E9): unter allem, was im sichtbaren Ausschnitt schon
+         * auf der Seite steht, 20 px Rand - eigene Notizen werden nicht
+         * überdeckt. Schrift 24 px, bis 18 px verkleinert, bis alles passt;
+         * was dann nicht passt, kommt als "rest" zurück (Absätze als
+         * Quelltext, für blocktextAufNeueSeite).
+         *
+         * Farbe (E10): aktuelle Stiftfarbe, aber mit Kontrastschutz - nach
+         * dem Öffnen ist der Stift immer Schwarz, auf grüner oder schwarzer
+         * Tafel wäre der Text sonst unsichtbar.
+         *
+         * Undo (E11): EIN Schritt für alle Absätze, wie beim Duplizieren.
+         * Danach ist das Lasso aktiv und alles Eingefügte ausgewählt
+         * (verschieben, A−/A+, drehen sofort möglich).
+         *
+         * Rückgabe {eingefuegt, rest, keinPlatz[, px, ids]}; ohne Tafel null.
+         * keinPlatz: nicht einmal eine Zeile in 18 px passt - nichts geändert,
+         * kein Undo-Eintrag.
+         */
+        blocktextEinfuegen: function(text) {
+            if (!this.modell) return null;
+            var modul = blocktextModul();
+            if (this._ziehen) this._ziehenBeenden(true);
+            if (this._drehen) this._drehenBeenden(true);
+            var absaetze = modul.absaetzeAusText(text);
+            if (!absaetze.length) return { eingefuegt: 0, rest: [], keinPlatz: false };
+
+            var self = this;
+            var rahmen = this.modell.elemente.map(function(el) { return self._rahmen(el); });
+            var flaeche = modul.flaecheUnter(this._sichtbarerBereich(), rahmen, 20);
+            var ctx = this.drawingCtx;
+            var mass = function(t, px) {
+                ctx.font = px + 'px sans-serif';
+                return ctx.measureText(t).width;
+            };
+            var erg = modul.verteile(absaetze, flaeche, mass, { startPx: 24, minPx: 18, maxZeichen: 5000 });
+            if (!erg.bloecke.length) return { eingefuegt: 0, rest: absaetze, keinPlatz: true };
+
+            var farbe = modul.lesbareFarbe(this.currentColor, this.boardColor);
+            var neu = [];
+            var ids = [];
+            for (var i = 0; i < erg.bloecke.length; i++) {
+                var blk = erg.bloecke[i];
+                var el = this._elementAusStroke({ tool: 'text', text: blk.text, color: farbe,
+                    width: (erg.px - 16) / 4, points: [{ x: blk.x, y: blk.y }] });
+                if (el) {
+                    neu.push(el);
+                    ids.push(el.id);
+                }
+            }
+            this.merkeZustand();
+            this.modell.elemente = this.modell.elemente.concat(neu);
+            this.zeichneModell();
+
+            // Auch bei schon aktivem Lasso: alte Auswahl und eine halb
+            // gezogene Lassolinie verwerfen (setTool hebt sie dann nicht auf)
+            this.auswahlAufheben();
+            this.setTool('lasso');
+            // setTool() schaltet nur den Zustand um; den Knopf der
+            // Werkzeugleiste stellt sonst nur dessen eigener Klick
+            var knoepfe = this.overlay.querySelectorAll('.cbd-board-tool');
+            for (var k = 0; k < knoepfe.length; k++) {
+                knoepfe[k].classList.toggle('active', knoepfe[k].getAttribute('data-tool') === 'lasso');
+            }
+            this.auswahl = ids;
+            this._auswahlZeichnen();
+            return { eingefuegt: ids.length, rest: erg.rest, keinPlatz: false, px: erg.px, ids: ids };
+        },
+
+        /**
+         * Rest auf einer neuen Seite fortsetzen (AP-2.2): addPage() sichert
+         * die aktuelle Seite und wechselt auf eine leere, dann wie
+         * blocktextEinfuegen() - mit eigenem Undo-Schritt auf der neuen Seite
+         * (jede Seite hat ihren eigenen Stapel). Ohne Rest keine neue Seite.
+         */
+        blocktextAufNeueSeite: function(rest) {
+            if (!this.modell) return null;
+            var text = Array.isArray(rest) ? rest.join('\n\n') : '';
+            if (!blocktextModul().absaetzeAusText(text).length) {
+                return { eingefuegt: 0, rest: [], keinPlatz: false };
+            }
+            this.addPage();
+            return this.blocktextEinfuegen(text);
+        },
+
         // =============================================
         // Tafelansicht im Block (lokaler Modus)
         // =============================================

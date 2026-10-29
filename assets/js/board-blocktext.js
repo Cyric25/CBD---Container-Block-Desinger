@@ -2,9 +2,10 @@
  * Blocktext auf die Tafel — reines Text- und Geometriemodul
  * (Plan „Blocktext auf die Tafel", Phase 1, Architektur E5).
  *
- * Setzt „window.CBDBoardBlocktext". Wird ab Phase 2 von „board-mode.js"
- * genutzt und dann in „class-cbd-style-loader.php" VOR „cbd-board-mode"
- * eingereiht. Bis dahin ist die Datei nirgends eingebunden.
+ * Setzt „window.CBDBoardBlocktext". Genutzt von „board-mode.js" (seit
+ * Phase 2: Lesen des Blockbereichs, Einfuegen auf die Tafel), eingereiht in
+ * „class-cbd-style-loader.php" als „cbd-board-blocktext" VOR
+ * „cbd-board-mode".
  *
  * BITTE DOM-FREI LASSEN: Kein Zugriff auf das Dokument, den
  * Browser-Speicher oder Zeichenflaechen. Der Harnisch

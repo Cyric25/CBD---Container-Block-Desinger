@@ -172,6 +172,213 @@
         return vergleich(ist, soll);
     }
 
+    // ------------------------------------------------------------------
+    // AP-2.2: Einfügen (blocktextEinfuegen, blocktextAufNeueSeite)
+    // ------------------------------------------------------------------
+    var ctx;
+
+    function el() {
+        return (B.modell && B.modell.elemente) ? B.modell.elemente : [];
+    }
+
+    function texte() {
+        return el().filter(function(e) { return e.typ === 'text'; });
+    }
+
+    function ergebnis(f) {
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    function strich(x1, y1, x2, y2) {
+        B.setTool('pen');
+        B.setColor('#000000');
+        var n = Math.max(1, Math.round(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)) / 10));
+        ctx.zeiger('pointerdown', 3, 'mouse', x1, y1);
+        for (var i = 1; i <= n; i++) {
+            ctx.zeiger('pointermove', 3, 'mouse', x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n);
+        }
+        ctx.zeiger('pointerup', 3, 'mouse', x2, y2);
+        return el()[el().length - 1];
+    }
+
+    function absaetze(n) {
+        var l = [];
+        for (var i = 1; i <= n; i++) l.push('Absatz ' + i + ' mit etwas Text, damit er eine Zeile füllt.');
+        return l.join('\n\n');
+    }
+
+    // Rahmen r liegt (mit 0,5 px Spiel) in Bereich s
+    function innerhalb(r, s) {
+        return r.x >= s.x - 0.5 && r.y >= s.y - 0.5 && r.x + r.b <= s.x + s.b + 0.5 && r.y + r.h <= s.y + s.h + 0.5;
+    }
+
+    function rahmenText(r) {
+        return '{' + [r.x, r.y, r.b, r.h].map(function(v) { return Math.round(v); }).join(',') + '}';
+    }
+
+    function zweiAbsaetzeLeer() {
+        ctx.oeffnen();
+        var f = [];
+        var undo = B.undoStapel.length;
+        var erg = B.blocktextEinfuegen('Erster Absatz\n\nZweiter Absatz');
+        var t = texte();
+        if (!erg || erg.eingefuegt !== 2 || erg.keinPlatz || erg.rest.length) f.push('Ergebnis ' + JSON.stringify(erg));
+        if (t.length !== 2) return { ok: false, detail: t.length + ' Texte' };
+        if (t[0].text !== 'Erster Absatz' || t[1].text !== 'Zweiter Absatz') f.push('Texte ' + JSON.stringify([t[0].text, t[1].text]));
+        if (t[0].breite !== 2 || t[1].breite !== 2) f.push('breite ' + t[0].breite + '/' + t[1].breite);
+        if (t[0].x !== 20 || t[0].y !== 20) f.push('erstes bei ' + t[0].x + '/' + t[0].y);
+        var r0 = B._rahmen(t[0]);
+        if (!(t[1].y >= r0.y + r0.h) || t[1].x !== 20) f.push('zweites bei ' + t[1].x + '/' + t[1].y + ', erstes endet ' + (r0.y + r0.h));
+        if (B.undoStapel.length !== undo + 1) f.push('Undo ' + undo + ' -> ' + B.undoStapel.length);
+        if (B.currentTool !== 'lasso') f.push('Werkzeug ' + B.currentTool);
+        if (B.auswahl.join() !== [t[0].id, t[1].id].join()) f.push('Auswahl ' + B.auswahl.join());
+        var knopf = B.overlay.querySelector('.cbd-board-tool.active');
+        if (!knopf || knopf.getAttribute('data-tool') !== 'lasso') f.push('aktiver Knopf ' + (knopf && knopf.getAttribute('data-tool')));
+        var leiste = B.overlay.querySelector('.cbd-board-auswahl-leiste');
+        if (!leiste || leiste.style.display === 'none') f.push('Auswahlleiste nicht sichtbar');
+        return ergebnis(f);
+    }
+
+    function unterStrich() {
+        ctx.oeffnen();
+        var s = strich(50, 100, 400, 100);
+        var unten = B._rahmen(s).y + B._rahmen(s).h;
+        B.blocktextEinfuegen('Text unter dem Strich');
+        var t = texte();
+        if (t.length !== 1) return { ok: false, detail: t.length + ' Texte' };
+        return t[0].y >= unten + 20 ? true : { ok: false, detail: 'Text bei y ' + t[0].y + ', Strich endet ' + unten };
+    }
+
+    function langerText() {
+        ctx.oeffnen();
+        var f = [];
+        var erg = B.blocktextEinfuegen(absaetze(60));
+        if (!erg || erg.px !== 18) f.push('px ' + (erg && erg.px));
+        if (!erg || !erg.rest.length) f.push('kein Rest');
+        var flaeche = { x: 0, y: 0, b: B.cssWidth, h: B.cssHeight };
+        texte().forEach(function(t) {
+            if (!innerhalb(B._rahmen(t), flaeche)) f.push(t.id + ' außerhalb: ' + rahmenText(B._rahmen(t)));
+            if (t.text.length > 5000) f.push(t.id + ' hat ' + t.text.length + ' Zeichen');
+        });
+        if (erg && texte().length + erg.rest.length < 60) f.push('Absätze verloren: ' + texte().length + ' + ' + erg.rest.length);
+        return ergebnis(f);
+    }
+
+    function restAufNeueSeite() {
+        ctx.oeffnen();
+        var f = [];
+        var erg = B.blocktextEinfuegen(absaetze(60));
+        var erg2 = B.blocktextAufNeueSeite(erg.rest);
+        if (B.currentPageIndex !== 1 || B.totalPages !== 2) f.push('Seite ' + B.currentPageIndex + ' von ' + B.totalPages);
+        if (!erg2 || !erg2.eingefuegt || texte().length !== erg2.eingefuegt) f.push('Seite 2: ' + texte().length + ' Texte, Ergebnis ' + JSON.stringify(erg2 && erg2.eingefuegt));
+        if (B.undoStapel.length !== 1) f.push('Undo-Stapel Seite 2: ' + B.undoStapel.length);
+        // Seite 2 setzt genau dort fort, wo Seite 1 aufgehört hat
+        if (texte().length && erg.rest[0].indexOf(texte()[0].text.split('\n')[0]) !== 0) {
+            f.push('Seite 2 beginnt mit ' + JSON.stringify(texte()[0].text.slice(0, 40)) + ' statt ' + JSON.stringify(erg.rest[0].slice(0, 40)));
+        }
+        if (B.auswahl.length !== texte().length) f.push('Auswahl ' + B.auswahl.length);
+        return ergebnis(f);
+    }
+
+    function grueneTafel() {
+        ctx.oeffnen();
+        var f = [];
+        B.setBoardColor('#1a472a');
+        B.setColor('#000000');
+        B.blocktextEinfuegen('Auf grün');
+        var t = texte();
+        if (t.length !== 1 || t[0].farbe !== '#ffffff') f.push('Farbe ' + (t[0] && t[0].farbe));
+        B.setBoardColor('#ffffff');
+        B.setColor('#c00000');
+        B.blocktextEinfuegen('Rot auf weiß');
+        t = texte();
+        if (t.length !== 2 || t[1].farbe !== '#c00000') f.push('Stiftfarbe nicht übernommen: ' + (t[1] && t[1].farbe));
+        return ergebnis(f);
+    }
+
+    function zoomUndVerschiebung() {
+        ctx.oeffnen();
+        var f = [];
+        B.zoom = 2;
+        B.panX = -300;
+        B.panY = -200;
+        B.updateCanvasTransform();
+        var s = B._sichtbarerBereich();
+        if (Math.abs(s.x - 150) > 0.01 || Math.abs(s.y - 100) > 0.01) f.push('Ausschnitt ' + rahmenText(s));
+        var erg = B.blocktextEinfuegen(absaetze(3));
+        if (!erg || erg.eingefuegt !== 3) f.push('eingefügt ' + (erg && erg.eingefuegt));
+        texte().forEach(function(t) {
+            if (!innerhalb(B._rahmen(t), s)) f.push(t.id + ' außerhalb ' + rahmenText(B._rahmen(t)) + ' von ' + rahmenText(s));
+        });
+        if (texte().length && (texte()[0].x !== s.x + 20 || texte()[0].y !== s.y + 20)) {
+            f.push('erstes bei ' + texte()[0].x + '/' + texte()[0].y);
+        }
+        return ergebnis(f);
+    }
+
+    function tafelVoll() {
+        ctx.oeffnen();
+        strich(10, 5, 10, B.cssHeight - 5);
+        var vorher = el().slice();
+        var undo = B.undoStapel.length;
+        var erg = B.blocktextEinfuegen('passt nicht\n\nauch nicht');
+        var f = [];
+        if (!erg || !erg.keinPlatz || erg.eingefuegt !== 0 || erg.rest.length !== 2) f.push('Ergebnis ' + JSON.stringify(erg));
+        if (el().length !== vorher.length || el()[0] !== vorher[0]) f.push('Elemente geändert');
+        if (B.undoStapel.length !== undo) f.push('Undo-Eintrag');
+        return ergebnis(f);
+    }
+
+    function leererText() {
+        ctx.oeffnen();
+        var undo = B.undoStapel.length;
+        var erg = B.blocktextEinfuegen(' \n\n  \n');
+        var f = [];
+        if (!erg || erg.eingefuegt !== 0 || erg.keinPlatz || erg.rest.length) f.push('Ergebnis ' + JSON.stringify(erg));
+        if (el().length || B.undoStapel.length !== undo) f.push('geändert');
+        if (B.currentTool !== 'pen') f.push('Werkzeug ' + B.currentTool);
+        if (B.blocktextAufNeueSeite([]).eingefuegt !== 0 || B.totalPages !== 1) f.push('leerer Rest legt Seite an');
+        return ergebnis(f);
+    }
+
+    function strgZ() {
+        ctx.oeffnen();
+        var s = strich(50, 60, 300, 60);
+        B.blocktextEinfuegen(absaetze(4));
+        if (texte().length !== 4) return { ok: false, detail: texte().length + ' Texte' };
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+        var f = [];
+        if (texte().length) f.push(texte().length + ' Texte nach Strg+Z');
+        if (el().length !== 1 || el()[0] !== s) f.push('Strich nicht unverändert');
+        return ergebnis(f);
+    }
+
+    function speichernWiederoeffnen() {
+        ctx.oeffnen();
+        B.blocktextEinfuegen(absaetze(5));
+        // Text, Schrift und Farbe exakt; die Lage mit 0,05 px Spiel - das
+        // Speicherformat rundet (148.39999999999998 kommt als 148.4 zurück)
+        function stand() {
+            return texte().map(function(t) {
+                return { s: [t.text, t.breite, t.farbe].join('|'), x: t.x, y: t.y };
+            });
+        }
+        var vorher = stand();
+        B.saveDrawing();
+        B.destroy();
+        B.open(CID, '<p>Inhalt für den Test</p>', '#ffffff');
+        var nachher = stand();
+        var f = [];
+        if (vorher.length !== 5 || nachher.length !== 5) f.push('vorher ' + vorher.length + ', nachher ' + nachher.length);
+        for (var i = 0; i < Math.min(vorher.length, nachher.length); i++) {
+            if (vorher[i].s !== nachher[i].s) f.push(i + ': ' + JSON.stringify(nachher[i].s));
+            if (Math.abs(vorher[i].x - nachher[i].x) > 0.05 || Math.abs(vorher[i].y - nachher[i].y) > 0.05) {
+                f.push(i + ': Lage ' + nachher[i].x + '/' + nachher[i].y + ' statt ' + vorher[i].x + '/' + vorher[i].y);
+            }
+        }
+        return ergebnis(f);
+    }
+
     function knopfleisteUnsichtbar() {
         // Leiste aus AP-2.3 (Klasse) und Aktionsleiste fallen weg, auch wenn
         // sie im Blockbereich stehen
@@ -218,6 +425,19 @@
         p('Blocktext: Zeilenwechsel in PRE bleiben', fall('<pre>a\n  b</pre>', 'a\nb'));
         p('Blocktext: Arten titel/ueberschrift/absatz/liste/zeile/formel', arten);
         p('Blocktext: Knopfleiste der Funktion selbst wird nicht gelesen', knopfleisteUnsichtbar);
+
+        // AP-2.2
+        ctx = c;
+        p('Blocktext einfügen: zwei Absätze auf leerer Tafel (24 px, 20/20, 1 Undo, Lasso, Auswahl)', zweiAbsaetzeLeer);
+        p('Blocktext einfügen: unter vorhandenem Strich (+20 px)', unterStrich);
+        p('Blocktext einfügen: langer Text - 18 px, Rest, alles innerhalb der Fläche, ≤ 5000 Zeichen', langerText);
+        p('Blocktext einfügen: Rest auf neuer Seite (Seite 2, eigener Undo-Schritt)', restAufNeueSeite);
+        p('Blocktext einfügen: grüne Tafel + schwarzer Stift -> weiß, sonst Stiftfarbe', grueneTafel);
+        p('Blocktext einfügen: Zoom 2 und Verschiebung - im sichtbaren Ausschnitt', zoomUndVerschiebung);
+        p('Blocktext einfügen: Tafel voll -> keinPlatz, nichts geändert, kein Undo', tafelVoll);
+        p('Blocktext einfügen: leerer Text -> nichts, leerer Rest -> keine Seite', leererText);
+        p('Blocktext einfügen: Strg+Z nimmt alles Eingefügte zurück', strgZ);
+        p('Blocktext einfügen: Texte und Schrift überleben Speichern und Wiederöffnen', speichernWiederoeffnen);
     };
 
     window.__zusatzTestsAsync = function(c) {
