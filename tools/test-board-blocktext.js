@@ -24,6 +24,17 @@
  *   nichts), blocktextAufNeueSeite() setzt einen formatierten Rest fort.
  *   Prüfnamen beginnen mit "Formatiert einfügen".
  *
+ * Bearbeitungsfeld (PLAN-Blocktext-Formatierung.md, AP-2.4, F8-F10): Die
+ *   Vorschau ist ein formatiert bearbeitbares div (_textFeldBauen) mit
+ *   Formatleiste; gelesen über _textFeldLesen. Aufbau und Tafelfarben,
+ *   berechnete Stile, Rundlauf Feld = Blockbereich, Knöpfe F/K/Farben/
+ *   Standard (Markierung per Range), Klartext-Einfügen, Strg+U, Ziehen,
+ *   Zeilenwechsel, Modus "bearbeiten", Tastatur der Leiste, gemerkte
+ *   Markierung (asynchron). Drei ältere Vorschau-Prüfungen (vorschauKlick,
+ *   gekuerztEinfuegen, klickNebenFenster) lesen das Feld seit AP-2.4 über
+ *   feldText()/feldSetzen() statt textarea.value (geplante Umstellung F8).
+ *   Prüfnamen beginnen mit "Bearbeitungsfeld".
+ *
  * Die Fixture-Prüfungen holen die Dateien per fetch - die Prüfseite muss
  * über den Webserver laufen. Wird von tools/test-board-zeiger.html als
  * letzte Zusatzdatei vor test-board-zeiger.js geladen und hängt sich an die
@@ -1530,6 +1541,383 @@
     }
 
     // ------------------------------------------------------------------
+    // Bearbeitungsfeld (PLAN-Blocktext-Formatierung.md, AP-2.4, F8-F10):
+    // Die Vorschau ist ein formatiert bearbeitbares div mit Formatleiste
+    // (Fett, Kursiv, sechs Stiftfarben, Standard). Gelesen wird es mit
+    // B._textFeldLesen() (= _blocktextLesen mit Grundfarbe des Felds).
+    // Prüfnamen beginnen mit "Bearbeitungsfeld".
+    // ------------------------------------------------------------------
+    var FARBNAMEN = ['Schwarz', 'Weiß', 'Rot', 'Blau', 'Gelb', 'Grün'];
+
+    function formatLeiste() {
+        return document.querySelector('.cbd-board-blocktext-format');
+    }
+
+    function formatKnopf(selektor) {
+        var l = formatLeiste();
+        return l ? l.querySelector(selektor) : null;
+    }
+
+    function farbKnopf(name) {
+        return formatKnopf('.cbd-board-format-farbe[aria-label="' + name + '"]');
+    }
+
+    // '#rrggbb' -> 'rgb(r, g, b)' wie getComputedStyle
+    function rgbVon(hex) {
+        return 'rgb(' + parseInt(hex.substr(1, 2), 16) + ', ' + parseInt(hex.substr(3, 2), 16) + ', ' +
+            parseInt(hex.substr(5, 2), 16) + ')';
+    }
+
+    // Erster Textknoten im Feld t, der wort enthält -> {knoten, start}
+    function textStelle(t, wort) {
+        var w = document.createTreeWalker(t, NodeFilter.SHOW_TEXT, null, false);
+        for (var n = w.nextNode(); n; n = w.nextNode()) {
+            var i = n.nodeValue.indexOf(wort);
+            if (i >= 0) return { knoten: n, start: i };
+        }
+        return null;
+    }
+
+    // Markierung per Range auf wort setzen (wie ein Doppelklick); ende:
+    // eingeklappt direkt hinter wort (Schreibmarke)
+    function markiere(t, wort, ende) {
+        var s = textStelle(t, wort);
+        if (!s) throw new Error('Wort ' + JSON.stringify(wort) + ' nicht im Feld');
+        t.focus();
+        var r = document.createRange();
+        r.setStart(s.knoten, ende ? s.start + wort.length : s.start);
+        r.setEnd(s.knoten, s.start + wort.length);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
+    }
+
+    // Berechneter Stil des Elements, in dem wort steht
+    function stilVon(t, wort) {
+        var s = textStelle(t, wort);
+        return s ? getComputedStyle(s.knoten.parentNode) : null;
+    }
+
+    function lesenAls(t) {
+        return JSON.stringify(textUndTeile(B._textFeldLesen(t)));
+    }
+
+    function bfFeldAufbau() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        var f = [];
+        if (!t) return { ok: false, detail: 'kein Feld' };
+        if (t.tagName !== 'DIV' || t.getAttribute('contenteditable') !== 'true') f.push('Feld ist ' + t.tagName + ' contenteditable=' + t.getAttribute('contenteditable'));
+        if (t.getAttribute('role') !== 'textbox' || t.getAttribute('aria-multiline') !== 'true' || !t.getAttribute('aria-label')) f.push('role/aria-multiline/aria-label fehlen');
+        if (t.getAttribute('spellcheck') !== 'false' || t.getAttribute('autocorrect') !== 'off' || t.getAttribute('autocapitalize') !== 'off') f.push('spellcheck/autocorrect/autocapitalize');
+        if (fenster().querySelector('textarea')) f.push('noch ein textarea im Fenster');
+        var st = getComputedStyle(t);
+        if (st.backgroundColor !== rgbVon(B.boardColor)) f.push('Hintergrund ' + st.backgroundColor + ' statt Tafel ' + B.boardColor);
+        var grund = M.lesbareFarbe(B.currentColor, B.boardColor);
+        if (st.color !== rgbVon(grund)) f.push('Schrift ' + st.color + ' statt Einfügefarbe ' + grund);
+        var l = formatLeiste();
+        if (!l || l.getAttribute('role') !== 'toolbar') return { ok: false, detail: f.concat(['keine Leiste mit role toolbar']).join('; ') };
+        if (!fenster().contains(l)) f.push('Leiste nicht im Fenster');
+        if (l.getBoundingClientRect().bottom > t.getBoundingClientRect().top + 0.5) f.push('Leiste nicht über dem Feld');
+        var knoepfe = l.querySelectorAll('button');
+        var namen = Array.prototype.map.call(knoepfe, function(k) { return k.getAttribute('aria-label') || k.textContent; });
+        var soll = ['Fett', 'Kursiv'].concat(FARBNAMEN, ['Standard']);
+        if (namen.join('|') !== soll.join('|')) f.push('Knöpfe ' + namen.join('|'));
+        var farben = Array.prototype.map.call(l.querySelectorAll('.cbd-board-format-farbe'), function(k) { return getComputedStyle(k).backgroundColor; });
+        if (farben.join('|') !== B.presetColors.map(rgbVon).join('|')) f.push('Farbknöpfe ' + farben.join('|'));
+        Array.prototype.forEach.call(knoepfe, function(k) {
+            var r = k.getBoundingClientRect();
+            if (r.width < 36 || r.height < 36) f.push((k.getAttribute('aria-label') || k.textContent) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height));
+            if (k.type !== 'button') f.push('type ' + k.type);
+        });
+        return ergebnis(f);
+    }
+
+    function bfSpansFormatiert() {
+        oeffnenMit('<p>Ein <strong>fettes</strong> und <em>kursives</em> Wort, <span style="color:#0000ff">blau</span> und normal.</p>');
+        var t = vorschauOeffnen();
+        var f = [];
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        var fett = stilVon(t, 'fettes'), kursiv = stilVon(t, 'kursives'), blau = stilVon(t, 'blau'), normal = stilVon(t, 'und normal');
+        if (!fett || !(parseFloat(fett.fontWeight) >= 600)) f.push('fettes: ' + (fett && fett.fontWeight));
+        if (!kursiv || kursiv.fontStyle !== 'italic') f.push('kursives: ' + (kursiv && kursiv.fontStyle));
+        if (!blau || blau.color !== 'rgb(0, 0, 255)') f.push('blau: ' + (blau && blau.color));
+        if (!normal || parseFloat(normal.fontWeight) >= 600 || normal.fontStyle !== 'normal' || normal.color !== getComputedStyle(t).color) {
+            f.push('normal: ' + (normal && [normal.fontWeight, normal.fontStyle, normal.color].join(' ')));
+        }
+        if (kursiv && parseFloat(kursiv.fontWeight) >= 600) f.push('kursives auch fett');
+        return ergebnis(f);
+    }
+
+    // Grüne Tafel: Feld grün, Grundschrift weiß, Glossarfarbe aufgehellt
+    // (lesbareLauffarbe, F7) - so, wie es auf die Tafel kommt
+    function bfGrueneTafel() {
+        oeffnenMit('<p>Ein <span style="color:#71230a">Begriff</span> im Text.</p>');
+        B.setBoardColor('#1a472a');
+        B.setColor('#000000');
+        var t = vorschauOeffnen();
+        var f = [];
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        var st = getComputedStyle(t);
+        if (st.backgroundColor !== 'rgb(26, 71, 42)') f.push('Hintergrund ' + st.backgroundColor);
+        if (st.color !== 'rgb(255, 255, 255)') f.push('Grundschrift ' + st.color);
+        var soll = M.lesbareLauffarbe('#71230a', '#1a472a');
+        var b = stilVon(t, 'Begriff');
+        if (!b || b.color !== rgbVon(soll)) f.push('Begriff ' + (b && b.color) + ' statt ' + rgbVon(soll));
+        if (kontrastWert(soll, '#1a472a') < 3) f.push('Kontrast ' + kontrastWert(soll, '#1a472a'));
+        // Zurückgelesen: die angezeigte (lesbare) Farbe, Grundschrift ohne Farbe
+        var soll2 = JSON.stringify([{ text: 'Ein Begriff im Text.', teile: [{ t: 'Ein ' }, { t: 'Begriff', farbe: soll }, { t: ' im Text.' }] }]);
+        if (lesenAls(t) !== soll2) f.push('gelesen ' + lesenAls(t));
+        return ergebnis(f);
+    }
+
+    // Unverändertes Feld = dieselben Absätze wie der Blockbereich (F10)
+    function bfUnveraendertGleich() {
+        oeffnenMit('<h3>Titel</h3>' +
+            '<p>Es entsteht eine <strong>trans</strong>-Bindung mit <em>kursivem</em> und <span style="color:#0000ff">blauem</span> Text.</p>' +
+            '<ul><li><strong>x</strong> y</li></ul>' +
+            '<p>Zeile 1<br>Zeile <strong>2<br>fett</strong> weiter</p>' +
+            '<p>Ganz normal.</p>' +
+            '<table><tr><td><strong>A</strong></td><td>B</td></tr></table>');
+        var soll = B._blocktextAbsaetze();
+        var t = vorschauOeffnen();
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        var ist = B._textFeldLesen(t);
+        var a = JSON.stringify(textUndTeile(ist));
+        var b = JSON.stringify(textUndTeile(soll));
+        if (soll.length !== 6 || !soll[1].teile) return { ok: false, detail: 'Vorbedingung: ' + b };
+        return a === b ? true : { ok: false, detail: 'Feld ' + a + ' / Block ' + b };
+    }
+
+    function bfFettKursivKnopf() {
+        oeffnenMit('<p>Eins zwei drei</p>');
+        var t = vorschauOeffnen();
+        if (!t || !formatKnopf('.cbd-board-format-fett')) return { ok: false, detail: 'kein Feld/keine Leiste' };
+        markiere(t, 'zwei');
+        formatKnopf('.cbd-board-format-fett').click();
+        markiere(t, 'drei');
+        formatKnopf('.cbd-board-format-kursiv').click();
+        var soll = JSON.stringify([{ text: 'Eins zwei drei', teile: [{ t: 'Eins ' }, { t: 'zwei', f: 1 }, { t: ' ' }, { t: 'drei', k: 1 }] }]);
+        return lesenAls(t) === soll ? true : { ok: false, detail: 'gelesen ' + lesenAls(t) };
+    }
+
+    function bfFarbknopfStandard() {
+        oeffnenMit('<p>Eins zwei drei</p><p>Ein <span style="color:#0000ff">blaues</span> Wort</p>');
+        var t = vorschauOeffnen();
+        if (!t || !farbKnopf('Rot')) return { ok: false, detail: 'kein Feld/kein Knopf Rot' };
+        var f = [];
+        markiere(t, 'zwei');
+        farbKnopf('Rot').click();
+        var ist = B._textFeldLesen(t);
+        var soll1 = JSON.stringify([{ t: 'Eins ' }, { t: 'zwei', farbe: '#ff0000' }, { t: ' drei' }]);
+        if (JSON.stringify(ist[0] && ist[0].teile) !== soll1) f.push('Rot: ' + JSON.stringify(ist[0]));
+        markiere(t, 'zwei');
+        formatKnopf('.cbd-board-format-standard').click();
+        markiere(t, 'blaues');
+        formatKnopf('.cbd-board-format-standard').click();
+        var soll2 = JSON.stringify([{ text: 'Eins zwei drei' }, { text: 'Ein blaues Wort' }]);
+        if (lesenAls(t) !== soll2) f.push('Standard: ' + lesenAls(t));
+        return ergebnis(f);
+    }
+
+    function bfPasteKlartext() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        markiere(t, 'Eins', true);
+        var dt = new DataTransfer();
+        dt.setData('text/html', '<b class="cbd-fremd">Fremd</b><img class="cbd-fremd" src="data:,">');
+        dt.setData('text/plain', ' Fremd');
+        var ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+        t.dispatchEvent(ev);
+        var f = [];
+        if (!ev.defaultPrevented) f.push('paste nicht abgefangen');
+        if (t.querySelector('.cbd-fremd, b, img')) f.push('Markup eingefügt: ' + t.innerHTML.slice(0, 120));
+        if (lesenAls(t) !== JSON.stringify([{ text: 'Eins Fremd' }])) f.push('gelesen ' + lesenAls(t));
+        return ergebnis(f);
+    }
+
+    function bfStrgU() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        var f = [];
+        if (!taste(t, 'u', { ctrlKey: true }).defaultPrevented) f.push('Strg+U nicht verhindert');
+        if (!taste(t, 'u', { metaKey: true }).defaultPrevented) f.push('Cmd+U nicht verhindert');
+        if (taste(t, 'b', { ctrlKey: true }).defaultPrevented) f.push('Strg+B verhindert (bleibt Browser-Standard)');
+        if (!fenster() || !B.overlay) f.push('Fenster oder Tafel geschlossen');
+        return ergebnis(f);
+    }
+
+    function bfZiehenGesperrt() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        var f = [];
+        ['dragover', 'drop'].forEach(function(typ) {
+            var dt = new DataTransfer();
+            dt.setData('text/plain', 'x');
+            var ev = new DragEvent(typ, { bubbles: true, cancelable: true, dataTransfer: dt });
+            t.dispatchEvent(ev);
+            if (!ev.defaultPrevented) f.push(typ + ' nicht verhindert');
+        });
+        return ergebnis(f);
+    }
+
+    // Formatknöpfe nehmen dem Feld weder Fokus noch Markierung
+    function bfKnoepfeHaltenMarkierung() {
+        oeffnenMit('<p>Eins</p>');
+        vorschauOeffnen();
+        var l = formatLeiste();
+        if (!l) return { ok: false, detail: 'keine Leiste' };
+        var f = [];
+        Array.prototype.forEach.call(l.querySelectorAll('button'), function(k) {
+            var p = new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse', isPrimary: true });
+            k.dispatchEvent(p);
+            var m = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+            k.dispatchEvent(m);
+            if (!p.defaultPrevented || !m.defaultPrevented) f.push((k.getAttribute('aria-label') || k.textContent) + ': pointerdown ' + p.defaultPrevented + ', mousedown ' + m.defaultPrevented);
+        });
+        return ergebnis(f);
+    }
+
+    // Ohne Markierung im Feld tun die Knöpfe nichts (Schreibmarke im Feld
+    // oder Markierung außerhalb des Felds)
+    function bfOhneMarkierung() {
+        oeffnenMit('<p>Eins zwei</p>');
+        var t = vorschauOeffnen();
+        if (!t || !formatLeiste()) return { ok: false, detail: 'kein Feld/keine Leiste' };
+        var f = [];
+        var vorher = t.innerHTML;
+        function alleKnoepfe() {
+            Array.prototype.forEach.call(formatLeiste().querySelectorAll('button'), function(k) { k.click(); });
+        }
+        markiere(t, 'Eins', true);
+        alleKnoepfe();
+        if (t.innerHTML !== vorher) f.push('mit Schreibmarke geändert: ' + t.innerHTML.slice(0, 120));
+        var p = fenster().querySelector('p');
+        var r = document.createRange();
+        r.selectNodeContents(p);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(r);
+        alleKnoepfe();
+        if (t.innerHTML !== vorher) f.push('mit Markierung außerhalb geändert: ' + t.innerHTML.slice(0, 120));
+        return ergebnis(f);
+    }
+
+    function bfAufDieTafel() {
+        oeffnenMit('<p>Es entsteht eine <strong>trans</strong>-Bindung</p><p>Ohne alles</p>');
+        var t = vorschauOeffnen();
+        if (!t || !farbKnopf('Rot')) return { ok: false, detail: 'kein Feld/kein Knopf Rot' };
+        markiere(t, 'Ohne');
+        farbKnopf('Rot').click();
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var f = [];
+        if (fenster()) f.push('Fenster noch offen');
+        var tx = texte();
+        if (tx.length !== 2) return { ok: false, detail: tx.length + ' Texte' };
+        if (JSON.stringify(tx[0].teile) !== JSON.stringify([{ t: 'Es entsteht eine ' }, { t: 'trans', f: 1 }, { t: '-Bindung' }])) f.push('erster ' + JSON.stringify(tx[0].teile));
+        if (JSON.stringify(tx[1].teile) !== JSON.stringify([{ t: 'Ohne', farbe: '#ff0000' }, { t: ' alles' }])) f.push('zweiter ' + JSON.stringify(tx[1].teile));
+        if (B.currentTool !== 'lasso' || B.auswahl.length !== 2) f.push('Werkzeug ' + B.currentTool + ', Auswahl ' + B.auswahl.length);
+        var m = modellUnveraendert();
+        if (m) f.push(m);
+        return ergebnis(f);
+    }
+
+    // Zeilenwechsel im Feld (Umschalt+Enter = insertLineBreak) bleibt beim
+    // Lesen ein Zeilenwechsel - Chrome/Safari fügen bei white-space:
+    // pre-wrap dafür ein "\n"-Zeichen statt eines <br> ein
+    function bfZeilenwechsel() {
+        oeffnenMit('<p>Eins zwei</p><p>x<br>y</p>');
+        var t = vorschauOeffnen();
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        markiere(t, 'Eins', true);
+        document.execCommand('insertLineBreak');
+        var soll = JSON.stringify([{ text: 'Eins\nzwei' }, { text: 'x\ny' }]);
+        return lesenAls(t) === soll ? true : { ok: false, detail: 'gelesen ' + lesenAls(t) + ', Feld ' + JSON.stringify(t.innerHTML) };
+    }
+
+    // Enter: Vorschau = neuer Absatz (Standard des Browsers), Modus
+    // "bearbeiten" (Phase 3, F12) = Zeilenwechsel; dort alle Absätze in
+    // einem div, Zeilen durch <br> getrennt
+    function bfEnterUndModus() {
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        var f = [];
+        if (taste(t, 'Enter').defaultPrevented) f.push('Vorschau: Enter verhindert');
+        var teile = B._textFeldBauen([{ text: 'Zeile eins\nZeile zwei', teile: [{ t: 'Zeile ' }, { t: 'eins\nZeile', f: 1 }, { t: ' zwei' }] }],
+            { modus: 'bearbeiten', grundfarbe: '#0000ff', hintergrund: '#ffffff' });
+        var b = teile.feld;
+        document.body.appendChild(b);
+        try {
+            if (b.children.length !== 1 || b.children[0].tagName !== 'DIV' || b.querySelectorAll('br').length !== 1) f.push('Bearbeiten-Aufbau ' + JSON.stringify(b.innerHTML));
+            if (getComputedStyle(b).color !== 'rgb(0, 0, 255)') f.push('Grundschrift ' + getComputedStyle(b).color);
+            var soll = JSON.stringify([{ text: 'Zeile eins\nZeile zwei', teile: [{ t: 'Zeile ' }, { t: 'eins', f: 1 }, { t: '\n' }, { t: 'Zeile', f: 1 }, { t: ' zwei' }] }]);
+            if (lesenAls(b) !== soll) f.push('Bearbeiten gelesen ' + lesenAls(b));
+            markiere(b, ' zw', true); // Schreibmarke mitten in "zwei"
+            var ev = taste(b, 'Enter');
+            if (!ev.defaultPrevented) f.push('Bearbeiten: Enter nicht verhindert');
+            if (b.children.length !== 1) f.push('Bearbeiten: neues div nach Enter');
+            var gelesen = B._textFeldLesen(b);
+            if (gelesen.length !== 1 || gelesen[0].text !== 'Zeile eins\nZeile zw\nei') f.push('Bearbeiten nach Enter ' + JSON.stringify(gelesen));
+            if (taste(b, 'Enter', { shiftKey: true }).defaultPrevented) f.push('Bearbeiten: Umschalt+Enter verhindert');
+        } finally {
+            if (b.parentNode) b.parentNode.removeChild(b);
+        }
+        return ergebnis(f);
+    }
+
+    // Leiste als ein Tab-Halt (role toolbar), Pfeiltasten wandern
+    function bfLeisteTastatur() {
+        oeffnenMit('<p>Eins</p>');
+        vorschauOeffnen();
+        var l = formatLeiste();
+        if (!l) return { ok: false, detail: 'keine Leiste' };
+        var knoepfe = l.querySelectorAll('button');
+        var f = [];
+        var halte = Array.prototype.filter.call(knoepfe, function(k) { return k.tabIndex === 0; });
+        if (halte.length !== 1 || halte[0] !== knoepfe[0]) f.push(halte.length + ' Tab-Halte in der Leiste');
+        knoepfe[0].focus();
+        taste(knoepfe[0], 'ArrowRight');
+        if (document.activeElement !== knoepfe[1] || knoepfe[1].tabIndex !== 0 || knoepfe[0].tabIndex !== -1) f.push('Pfeil rechts');
+        taste(knoepfe[1], 'End');
+        if (document.activeElement !== knoepfe[knoepfe.length - 1]) f.push('Ende');
+        taste(document.activeElement, 'ArrowRight');
+        if (document.activeElement !== knoepfe[0]) f.push('Pfeil rechts am Ende kreist nicht');
+        taste(document.activeElement, 'ArrowLeft');
+        if (document.activeElement !== knoepfe[knoepfe.length - 1]) f.push('Pfeil links am Anfang kreist nicht');
+        return ergebnis(f);
+    }
+
+    // Inhalt nur als Text: Zeichen wie "<" aus dem Block bleiben Text
+    function bfNurText() {
+        oeffnenMit('<p>&lt;b class="cbd-fremd"&gt;x&lt;/b&gt; &amp; <strong>&lt;i class="cbd-fremd"&gt;</strong></p>');
+        var t = vorschauOeffnen();
+        if (!t || t.tagName !== 'DIV') return { ok: false, detail: 'kein div-Feld' };
+        var f = [];
+        if (t.querySelector('.cbd-fremd, b, i')) f.push('Markup erzeugt: ' + t.innerHTML.slice(0, 120));
+        var soll = JSON.stringify([{ text: '<b class="cbd-fremd">x</b> & <i class="cbd-fremd">', teile: [{ t: '<b class="cbd-fremd">x</b> & ' }, { t: '<i class="cbd-fremd">', f: 1 }] }]);
+        if (lesenAls(t) !== soll) f.push('gelesen ' + lesenAls(t));
+        return ergebnis(f);
+    }
+
+    // Asynchron (selectionchange kommt als eigene Aufgabe): Geht die
+    // Markierung beim Antippen eines Knopfs verloren (iPad), gilt die
+    // zuletzt im Feld gemerkte
+    function bfGemerkteMarkierung() {
+        oeffnenMit('<p>Eins zwei drei</p>');
+        var t = vorschauOeffnen();
+        if (!t || !formatKnopf('.cbd-board-format-fett')) return Promise.resolve({ ok: false, detail: 'kein Feld/keine Leiste' });
+        markiere(t, 'zwei');
+        return warte(50).then(function() {
+            window.getSelection().removeAllRanges();
+            return warte(50);
+        }).then(function() {
+            formatKnopf('.cbd-board-format-fett').click();
+            var soll = JSON.stringify([{ text: 'Eins zwei drei', teile: [{ t: 'Eins ' }, { t: 'zwei', f: 1 }, { t: ' drei' }] }]);
+            return lesenAls(t) === soll ? true : { ok: false, detail: 'gelesen ' + lesenAls(t) };
+        });
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     window.__zusatzTests = function(c) {
@@ -1636,6 +2024,24 @@
         p('Formatiert einfügen: blocktextAufNeueSeite mit Objekten (Probe G5, gemischter Rest)', fmtNeueSeiteProbe);
         p('Formatiert einfügen: über MAX_TEILE bleibt der Text, die Formatierung entfällt, Modell unverändert', fmtUeberMaxTeile);
         p('Formatiert einfügen: Teile, die nicht zum Text passen, werden nicht gesetzt (Absicherung)', fmtVerkettungAbgesichert);
+
+        // Bearbeitungsfeld (PLAN-Blocktext-Formatierung.md, AP-2.4)
+        p('Bearbeitungsfeld: div[contenteditable] in Tafelfarben, Formatleiste über dem Feld (Fett, Kursiv, sechs Farben, Standard, 36 px)', bfFeldAufbau);
+        p('Bearbeitungsfeld: Vorschau zeigt fett, kursiv und farbig (berechnete Stile)', bfSpansFormatiert);
+        p('Bearbeitungsfeld: grüne Tafel - Feld grün, Grundschrift weiß, Glossarfarbe aufgehellt', bfGrueneTafel);
+        p('Bearbeitungsfeld: _textFeldLesen liefert für unverändertes Feld dieselben Absätze wie _blocktextAbsaetze()', bfUnveraendertGleich);
+        p('Bearbeitungsfeld: Knopf "F" und "K" auf eine Markierung -> f:1 / k:1 beim Lesen', bfFettKursivKnopf);
+        p('Bearbeitungsfeld: Farbknopf Rot -> farbe #ff0000, "Standard" entfernt die Farbe', bfFarbknopfStandard);
+        p('Bearbeitungsfeld: Einfügen aus der Zwischenablage nur als Klartext', bfPasteKlartext);
+        p('Bearbeitungsfeld: Strg+U/Cmd+U verhindert, Strg+B bleibt', bfStrgU);
+        p('Bearbeitungsfeld: Ziehen und Ablegen gesperrt', bfZiehenGesperrt);
+        p('Bearbeitungsfeld: Formatknöpfe verhindern pointerdown und mousedown', bfKnoepfeHaltenMarkierung);
+        p('Bearbeitungsfeld: ohne Markierung im Feld tun die Knöpfe nichts', bfOhneMarkierung);
+        p('Bearbeitungsfeld: "Auf die Tafel" legt Elemente mit teile an', bfAufDieTafel);
+        p('Bearbeitungsfeld: Zeilenwechsel im Feld bleibt beim Lesen ein Zeilenwechsel', bfZeilenwechsel);
+        p('Bearbeitungsfeld: Enter - Vorschau neuer Absatz, Modus "bearbeiten" Zeilenwechsel in einem div', bfEnterUndModus);
+        p('Bearbeitungsfeld: Leiste ein Tab-Halt, Pfeiltasten wandern', bfLeisteTastatur);
+        p('Bearbeitungsfeld: Text aus dem Block bleibt Text (kein Markup)', bfNurText);
     };
 
     window.__zusatzTestsAsync = function(c) {
@@ -1659,6 +2065,8 @@
                 return c.pruefeAsync('AP-2.fix1 (G2): close() schließt das Fenster sofort', g2CloseSchliesstFenster);
             }).then(function() {
                 return c.pruefeAsync('Formatierung lesen: Testmaterial - Verkettung der Teile = Text, Modellprüfung behält teile', formatTestmaterial);
+            }).then(function() {
+                return c.pruefeAsync('Bearbeitungsfeld: verlorene Markierung (iPad) - Knopf nutzt die zuletzt im Feld gemerkte', bfGemerkteMarkierung);
             });
         });
     };
