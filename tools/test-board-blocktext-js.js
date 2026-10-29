@@ -362,9 +362,14 @@ function mass(t, px) {
 }
 
 console.log('\nGruppe 3: Schnittstelle');
-gleich('genau die sechs Funktionen der Schnittstelle (Plan, Abschnitt 4)',
+// Bis AP-2.2 (PLAN-Blocktext-Formatierung.md) hiess diese Pruefung „genau die
+// sechs Funktionen der Schnittstelle (Plan, Abschnitt 4)" (alter Plan
+// „Blocktext auf die Tafel"). F14 erweitert die Schnittstelle planmaessig um
+// umbrechenTeile und lesbareLauffarbe; umgestellt auf Entscheidung des
+// Orchestrators. Bleibt eine Exaktpruefung.
+gleich('genau die acht Funktionen der Schnittstelle (PLAN-Blocktext-Formatierung.md, Abschnitt 4)',
 	Object.keys(B).sort(),
-	['absaetzeAusText', 'flaecheUnter', 'latexZuText', 'lesbareFarbe', 'umbrechen', 'verteile']);
+	['absaetzeAusText', 'flaecheUnter', 'latexZuText', 'lesbareFarbe', 'lesbareLauffarbe', 'umbrechen', 'umbrechenTeile', 'verteile']);
 Object.keys(B).forEach(function (k) {
 	pruefe('Schnittstelle: ' + k + ' ist Funktion', typeof B[k] === 'function');
 });
