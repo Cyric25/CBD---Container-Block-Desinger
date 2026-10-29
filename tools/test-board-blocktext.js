@@ -43,6 +43,14 @@
  *   _textFeldLesen (schaltet nicht um). Prüfnamen beginnen mit
  *   "Darkmode lesen".
  *
+ * Robustheit des Bearbeitungsfelds (PLAN-Blocktext-Formatierung.md,
+ *   AP-2.fix2, Review-Befunde B1, B2, B3, B5): ungültige teile -> Klartext
+ *   statt Ausnahme (B1); geschütztes Leerzeichen der Quelle bleibt U+00A0,
+ *   getipptes bleibt U+0020 (B2); die Übergangssperre von _imHellmodus ist
+ *   ein adoptiertes Stylesheet mit Rückfall auf <style> (B3, Prüfnamen
+ *   "Darkmode lesen (B3)"); einzelne Surrogate werden beim Lesen und beim
+ *   Einfügen zu U+FFFD (B5). Prüfnamen "AP-2.fix2 (B…)".
+ *
  * Die Fixture-Prüfungen holen die Dateien per fetch - die Prüfseite muss
  * über den Webserver laufen. Wird von tools/test-board-zeiger.html als
  * letzte Zusatzdatei vor test-board-zeiger.js geladen und hängt sich an die
@@ -1927,6 +1935,208 @@
     }
 
     // ------------------------------------------------------------------
+    // AP-2.fix2 (Review-Befunde B1, B2, B5 aus AP-2.rev): Robustheit des
+    // Bearbeitungsfelds. B3 (Sperre als adoptiertes Stylesheet) steht nach
+    // der Gruppe "Darkmode lesen".
+    // ------------------------------------------------------------------
+    var F2_NB = String.fromCharCode(160);
+    var F2_FF = String.fromCharCode(0xFFFD);
+    var F2_H = String.fromCharCode(0xD83D); // High-Surrogat
+    var F2_L = String.fromCharCode(0xDE00); // Low-Surrogat (H + L = Emoji-Paar)
+
+    // Feld über _textFeldBauen bauen, ans Dokument hängen (berechnete Stile),
+    // fn(feld) ausführen, danach Feld und selectionchange-Lauscher entfernen
+    function mitFeld(absaetze, optionen, fn) {
+        var bau = B._textFeldBauen(absaetze, optionen || {});
+        document.body.appendChild(bau.feld);
+        try {
+            return fn(bau.feld);
+        } finally {
+            if (bau.feld.parentNode) bau.feld.parentNode.removeChild(bau.feld);
+            B._textFeldLauscherEntfernen();
+        }
+    }
+
+    // Text des Felds als [{text}] (JSON), wie lesenAls() ohne teile
+    function nurText(t) {
+        return JSON.stringify(B._textFeldLesen(t).map(function(a) { return { text: a.text }; }));
+    }
+
+    // B1: ungültige teile (kein Objekt, t keine Zeichenkette, Verkettung
+    // passt nicht) -> der Absatz erscheint als Klartext, keine Ausnahme.
+    // Vorher: "i < teile.length && teile" las teile.length nach teile = null.
+    function fix2B1UngueltigeTeile() {
+        var f = [];
+        var faelle = [
+            ['null vorn', [null, { t: 'ab' }]],
+            ['null hinten', [{ t: 'a' }, null]],
+            ['t ist keine Zeichenkette', [{ t: 5 }]],
+            ['t hinten keine Zeichenkette', [{ t: 'a' }, { t: 7 }]],
+            ['Zeichenketten statt Teile', ['a', 'b']],
+            ['Verkettung passt nicht (Wächter)', [{ t: 'a' }, { t: 'x' }]]
+        ];
+        ['vorschau', 'bearbeiten'].forEach(function(modus) {
+            faelle.forEach(function(fall) {
+                var name = modus + ', ' + fall[0];
+                try {
+                    mitFeld([{ text: 'ab', teile: fall[1] }], { modus: modus }, function(fe) {
+                        if (fe.textContent !== 'ab') f.push(name + ': Text ' + JSON.stringify(fe.textContent));
+                        if (fe.querySelector('span')) f.push(name + ': formatiertes span trotz ungültiger teile');
+                        if (nurText(fe) !== '[{"text":"ab"}]') f.push(name + ': gelesen ' + nurText(fe));
+                    });
+                } catch (e) {
+                    f.push(name + ': Ausnahme ' + e.name + ': ' + e.message);
+                }
+            });
+        });
+        // Gegenprobe: gültige teile bleiben formatiert
+        mitFeld([{ text: 'ab', teile: [{ t: 'a', f: 1 }, { t: 'b' }] }], {}, function(fe) {
+            var fett = stilVon(fe, 'a');
+            if (!fett || !(parseFloat(fett.fontWeight) >= 600)) f.push('gültige teile: "a" nicht fett');
+        });
+        return ergebnis(f);
+    }
+
+    // B2: geschütztes Leerzeichen (U+00A0) der Quelle bleibt über Vorschau
+    // und "Auf die Tafel" erhalten ("25 °C" bricht nicht um) - wie bis
+    // 3.1.147. Vorher machte _textFeldLesen daraus ein Leerzeichen (nbsp: true).
+    function fix2B2GeschuetztesLeerzeichen() {
+        var f = [];
+        oeffnenMit('<p>25&nbsp;°C</p><p>Wert&nbsp;<strong>fett&nbsp;er</strong> Ende</p>');
+        var soll = [
+            { text: '25' + F2_NB + '°C' },
+            { text: 'Wert' + F2_NB + 'fett' + F2_NB + 'er Ende', teile: [{ t: 'Wert' + F2_NB }, { t: 'fett' + F2_NB + 'er', f: 1 }, { t: ' Ende' }] }
+        ];
+        var sollJson = JSON.stringify(soll);
+        var block = JSON.stringify(textUndTeile(B._blocktextAbsaetze()));
+        if (block !== sollJson) f.push('Vorbedingung Blockbereich: ' + block);
+        var t = vorschauOeffnen();
+        if (!t) return { ok: false, detail: 'kein Feld' };
+        if (t.textContent.indexOf('25' + F2_NB + '°C') < 0) f.push('Feld zeigt U+00A0 nicht: ' + JSON.stringify(t.textContent));
+        var gelesen = JSON.stringify(textUndTeile(B._textFeldLesen(t)));
+        if (gelesen !== sollJson) f.push('_textFeldLesen: ' + gelesen + ' / soll ' + sollJson);
+        fenster().querySelector('.cbd-board-blocktext-einfuegen').click();
+        var tx = texte();
+        if (tx.length !== 2) return { ok: false, detail: f.concat([tx.length + ' Texte']).join('; ') };
+        if (tx[0].text !== '25' + F2_NB + '°C') f.push('Element 1: ' + JSON.stringify(tx[0].text));
+        if (tx[1].text !== 'Wert' + F2_NB + 'fett' + F2_NB + 'er Ende') f.push('Element 2: ' + JSON.stringify(tx[1].text));
+        return ergebnis(f);
+    }
+
+    // B2 (Wächter, auch vor der Umsetzung grün): Ein getipptes Leerzeichen
+    // ist im pre-wrap-Feld U+0020, nie U+00A0; mehrere hintereinander
+    // fasst der Leser zu einem zusammen - die Entscheidung nbsp: false
+    // ändert daran nichts.
+    function fix2B2TippenBleibtU0020() {
+        var f = [];
+        oeffnenMit('<p>Einszwei</p>');
+        var t = vorschauOeffnen();
+        if (!t) return { ok: false, detail: 'kein Feld' };
+        markiere(t, 'Eins', true);
+        document.execCommand('insertText', false, ' ');
+        if (t.textContent.indexOf(F2_NB) >= 0) f.push('Leerzeichen beim Tippen ist U+00A0: ' + JSON.stringify(t.textContent));
+        if (nurText(t) !== JSON.stringify([{ text: 'Eins zwei' }])) f.push('gelesen ' + nurText(t));
+        document.execCommand('insertText', false, '  ');
+        if (t.textContent.indexOf(F2_NB) >= 0) f.push('mehrere Leerzeichen: U+00A0 ' + JSON.stringify(t.textContent));
+        if (nurText(t) !== JSON.stringify([{ text: 'Eins zwei' }])) f.push('mehrere gelesen ' + nurText(t));
+        return ergebnis(f);
+    }
+
+    // B5: einzelne Surrogate (High ohne folgendes Low, Low ohne vorheriges
+    // High) werden beim Lesen zu U+FFFD - sonst scheitert json_decode im
+    // Server und die Klassen-Tafel würde nur als Bild gespeichert. Gültige
+    // Paare (Emoji) bleiben; die Verkettung der Teile ergibt weiter text.
+    function fix2B5LesenSurrogate() {
+        var f = [];
+        var H = F2_H, L = F2_L, FF = F2_FF;
+        var faelle = [
+            ['High allein mitten', 'a' + H + 'b', 'a' + FF + 'b'],
+            ['Low allein mitten', 'a' + L + 'b', 'a' + FF + 'b'],
+            ['High am Ende', 'ab' + H, 'ab' + FF],
+            ['Low am Anfang', L + 'ab', FF + 'ab'],
+            ['gültiges Paar bleibt', 'a' + H + L + 'b', 'a' + H + L + 'b'],
+            ['High, dann gültiges Paar', 'a' + H + H + L, 'a' + FF + H + L],
+            ['gültiges Paar, dann Low', H + L + L, H + L + FF],
+            ['zwei High nacheinander', H + H, FF + FF]
+        ];
+        faelle.forEach(function(fall) {
+            mitFeld([fall[1]], {}, function(fe) {
+                var ist = nurText(fe);
+                var soll = JSON.stringify([{ text: fall[2] }]);
+                if (ist !== soll) f.push(fall[0] + ': ' + ist + ' / soll ' + soll);
+            });
+        });
+        // mit Formatierung: Teile und Text bleiben deckungsgleich
+        function teileFall2(name, absatz, sollText, sollTeile) {
+            mitFeld([absatz], {}, function(fe) {
+                var l = B._textFeldLesen(fe);
+                var a = l[0];
+                if (!a || a.text !== sollText) f.push(name + ': text ' + JSON.stringify(a && a.text) + ' / soll ' + JSON.stringify(sollText));
+                var kette = a && a.teile ? a.teile.map(function(x) { return x.t; }).join('') : (a && a.text);
+                if (a && kette !== a.text) f.push(name + ': Verkettung ' + JSON.stringify(kette) + ' != text');
+                if (JSON.stringify(a && a.teile) !== JSON.stringify(sollTeile)) f.push(name + ': teile ' + JSON.stringify(a && a.teile) + ' / soll ' + JSON.stringify(sollTeile));
+            });
+        }
+        teileFall2('fett mit einzelnem Surrogat',
+            { text: 'a' + H + 'b', teile: [{ t: 'a' + H, f: 1 }, { t: 'b' }] },
+            'a' + FF + 'b', [{ t: 'a' + FF, f: 1 }, { t: 'b' }]);
+        teileFall2('Paar über der Teilgrenze bleibt',
+            { text: 'a' + H + L + 'b', teile: [{ t: 'a' + H, f: 1 }, { t: L + 'b', k: 1 }] },
+            'a' + H + L + 'b', [{ t: 'a' + H, f: 1 }, { t: L + 'b', k: 1 }]);
+        teileFall2('Low am Teilanfang ohne High davor',
+            { text: 'ab' + L + 'c', teile: [{ t: 'ab' }, { t: L + 'c', f: 1 }] },
+            'ab' + FF + 'c', [{ t: 'ab' }, { t: FF + 'c', f: 1 }]);
+        return ergebnis(f);
+    }
+
+    // B5: Einfügen aus der Zwischenablage ersetzt einzelne Surrogate schon
+    // beim Einfügen (die an execCommand('insertText') übergebenen Texte und
+    // das Feld enthalten keine mehr), in beiden Modi
+    function fix2B5Einfuegen() {
+        var f = [];
+        var H = F2_H, L = F2_L, FF = F2_FF;
+        function einfuegen(t, text) {
+            var aufrufe = [];
+            var orig = document.execCommand;
+            document.execCommand = function(befehl, ui, wert) {
+                if (befehl === 'insertText') aufrufe.push(String(wert));
+                return orig.apply(document, arguments);
+            };
+            try {
+                var dt = new DataTransfer();
+                dt.setData('text/plain', text);
+                t.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+            } finally {
+                delete document.execCommand;
+            }
+            return aufrufe;
+        }
+        function einzeln(s) {
+            return /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(s);
+        }
+        oeffnenMit('<p>Eins</p>');
+        var t = vorschauOeffnen();
+        if (!t) return { ok: false, detail: 'kein Feld' };
+        markiere(t, 'Eins', true);
+        var a1 = einfuegen(t, 'x' + L + 'y');
+        if (a1.join('|') !== 'x' + FF + 'y') f.push('Vorschau: insertText mit ' + JSON.stringify(a1));
+        if (einzeln(t.textContent)) f.push('Vorschau: Feld enthält ein einzelnes Surrogat');
+        if (nurText(t) !== JSON.stringify([{ text: 'Einsx' + FF + 'y' }])) f.push('Vorschau gelesen ' + nurText(t));
+        // gültiges Emoji-Paar bleibt beim Einfügen
+        var a2 = einfuegen(t, H + L);
+        if (a2.join('|') !== H + L) f.push('Vorschau: Emoji-Paar verändert: ' + JSON.stringify(a2));
+        // Modus "bearbeiten": zeilenweise
+        mitFeld([{ text: 'ab' }], { modus: 'bearbeiten' }, function(b) {
+            markiere(b, 'ab', true);
+            var a3 = einfuegen(b, 'p' + L + 'q\nr' + H);
+            if (a3.join('|') !== 'p' + FF + 'q|r' + FF) f.push('bearbeiten: insertText mit ' + JSON.stringify(a3));
+            if (einzeln(b.textContent)) f.push('bearbeiten: Feld enthält ein einzelnes Surrogat');
+            if (nurText(b) !== JSON.stringify([{ text: 'abp' + FF + 'q\nr' + FF }])) f.push('bearbeiten gelesen ' + nurText(b));
+        });
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
     // Darkmode lesen (PLAN-Blocktext-Formatierung.md, AP-2.fix1): Der
     // Blockbereich wird mit den Stilen des Hellmodus gelesen - data-theme
     // für die Dauer des synchronen Lesens entfernt, danach wieder gesetzt,
@@ -2155,6 +2365,159 @@
     }
 
     // ------------------------------------------------------------------
+    // AP-2.fix2, B3: Die Übergangssperre von _imHellmodus ist ein per
+    // adoptedStyleSheets angehängtes Stylesheet (wirkt auch unter einer CSP
+    // ohne 'unsafe-inline' in style-src), Rückfall auf ein <style>-Element.
+    // ------------------------------------------------------------------
+    function fix2KannAdoptieren() {
+        return typeof window.CSSStyleSheet === 'function' && 'adoptedStyleSheets' in document &&
+            typeof window.CSSStyleSheet.prototype.replaceSync === 'function';
+    }
+
+    function fix2Blaetter() {
+        return Array.prototype.slice.call(document.adoptedStyleSheets || []);
+    }
+
+    function fix2GleicheListe(a, b) {
+        if (a.length !== b.length) return false;
+        for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+        return true;
+    }
+
+    // Wie ein <style>-Element unter einer strengen CSP: wird nicht wirksam
+    // (hier: gar nicht erst ins Dokument gehängt)
+    function fix2StyleElementeSperren() {
+        var orte = [document.head, document.documentElement];
+        orte.forEach(function(ort) {
+            ort.appendChild = function(knoten) {
+                if (knoten && knoten.nodeName === 'STYLE') return knoten;
+                return Node.prototype.appendChild.call(this, knoten);
+            };
+        });
+        return function() {
+            orte.forEach(function(ort) { delete ort.appendChild; });
+        };
+    }
+
+    function dmB3OhneStyleElement() {
+        if (!fix2KannAdoptieren()) return { ok: false, detail: 'Browser ohne Constructable Stylesheets - Prüfung nicht anwendbar' };
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var vorher = fix2Blaetter();
+            var freigeben = fix2StyleElementeSperren();
+            var gelesen, stile;
+            try {
+                stile = document.querySelectorAll('style').length;
+                gelesen = dmGelesen(B._blocktextAbsaetze());
+            } finally {
+                freigeben();
+            }
+            if (gelesen !== JSON.stringify(DM_SOLL)) f.push('ohne wirksames <style> nicht im Hellmodus gelesen: ' + gelesen);
+            if (!fix2GleicheListe(vorher, fix2Blaetter())) f.push('adoptedStyleSheets danach ' + fix2Blaetter().length + ' statt ' + vorher.length + ' Blättern');
+            if (document.documentElement.getAttribute('data-theme') !== 'dark') f.push('data-theme danach ' + document.documentElement.getAttribute('data-theme'));
+            var aussen = bereich().querySelector('#pf-dm-span');
+            if (typeof aussen.getAnimations === 'function' && aussen.getAnimations().length) f.push('laufender Übergang danach');
+            if (getComputedStyle(aussen).color !== DM_DUNKEL) f.push('Farbe danach ' + getComputedStyle(aussen).color);
+            return ergebnis(f);
+        });
+    }
+
+    function dmB3AdoptiertWaehrendLesen() {
+        if (!fix2KannAdoptieren()) return { ok: false, detail: 'Browser ohne Constructable Stylesheets - Prüfung nicht anwendbar' };
+        return imDmAufbau(function() {
+            dmVorbereiten('dark');
+            var f = [];
+            var ausgang = fix2Blaetter();
+            var eigenes = new window.CSSStyleSheet(); // schon vorhandenes adoptiertes Blatt der Seite
+            var mitEigenem = ausgang.concat([eigenes]);
+            document.adoptedStyleSheets = mitEigenem;
+            var original = B._blocktextLesen;
+            try {
+                // 1) Normalfall
+                var waehrend = null;
+                B._blocktextLesen = function() {
+                    var l = fix2Blaetter();
+                    waehrend = {
+                        anzahl: l.length,
+                        eigenesNochDa: l.indexOf(eigenes) >= 0,
+                        style: !!document.querySelector('style[data-cbd-hellmodus-lesen]'),
+                        sperre: l.length ? l[l.length - 1] : null
+                    };
+                    return original.apply(this, arguments);
+                };
+                B._blocktextAbsaetze();
+                if (!waehrend) return { ok: false, detail: 'Leser nicht aufgerufen' };
+                if (waehrend.anzahl !== mitEigenem.length + 1) f.push('beim Lesen ' + waehrend.anzahl + ' Blätter statt ' + (mitEigenem.length + 1));
+                if (!waehrend.eigenesNochDa) f.push('vorhandenes Blatt beim Lesen entfernt');
+                if (waehrend.style) f.push('beim Lesen ein <style data-cbd-hellmodus-lesen>-Element');
+                var regeln = waehrend.sperre && waehrend.sperre !== eigenes ? waehrend.sperre.cssRules : null;
+                if (!regeln || regeln.length !== 1 || regeln[0].cssText.indexOf('transition') < 0 || regeln[0].cssText.indexOf('important') < 0) {
+                    f.push('Sperrblatt: ' + (regeln && Array.prototype.map.call(regeln, function(r) { return r.cssText; }).join(' ')));
+                }
+                if (!fix2GleicheListe(mitEigenem, fix2Blaetter())) f.push('danach ' + fix2Blaetter().length + ' Blätter, nicht genau die alte Liste');
+                // 2) Ausnahme im Leser: die alte Liste kommt trotzdem zurück
+                B._blocktextLesen = function() { throw new Error('pf-b3-ausnahme'); };
+                var geworfen = null;
+                try { B._blocktextAbsaetze(); } catch (e) { geworfen = e; }
+                if (!geworfen || geworfen.message !== 'pf-b3-ausnahme') f.push('Ausnahme nicht weitergereicht');
+                if (!fix2GleicheListe(mitEigenem, fix2Blaetter())) f.push('nach Ausnahme ' + fix2Blaetter().length + ' Blätter, nicht genau die alte Liste');
+                if (document.documentElement.getAttribute('data-theme') !== 'dark') f.push('data-theme nach Ausnahme ' + document.documentElement.getAttribute('data-theme'));
+            } finally {
+                B._blocktextLesen = original;
+                document.adoptedStyleSheets = ausgang;
+            }
+            return ergebnis(f);
+        });
+    }
+
+    // Rückfall (Wächter, vor der Umsetzung grün): Gibt es keine
+    // Constructable Stylesheets oder schlagen sie fehl, sperrt ein
+    // <style data-cbd-hellmodus-lesen>-Element die Übergänge und wird
+    // danach entfernt.
+    function dmB3Rueckfall() {
+        var f = [];
+        var originalBlatt = window.CSSStyleSheet;
+        var faelle = [
+            ['CSSStyleSheet nicht konstruierbar',
+                function() { window.CSSStyleSheet = function() { throw new Error('pf-nicht-unterstuetzt'); }; },
+                function() { window.CSSStyleSheet = originalBlatt; }],
+            ['adoptedStyleSheets nicht vorhanden',
+                function() { Object.defineProperty(document, 'adoptedStyleSheets', { value: undefined, configurable: true, writable: true }); },
+                function() { delete document.adoptedStyleSheets; }]
+        ];
+        faelle.forEach(function(fall) {
+            var r = imDmAufbau(function() {
+                dmVorbereiten('dark');
+                var vorher = fix2Blaetter();
+                var original = B._blocktextLesen;
+                var waehrend = null;
+                var gelesen;
+                fall[1]();
+                try {
+                    B._blocktextLesen = function() {
+                        waehrend = !!document.querySelector('style[data-cbd-hellmodus-lesen]');
+                        return original.apply(this, arguments);
+                    };
+                    gelesen = dmGelesen(B._blocktextAbsaetze());
+                } finally {
+                    B._blocktextLesen = original;
+                    fall[2]();
+                }
+                var g = [];
+                if (gelesen !== JSON.stringify(DM_SOLL)) g.push('nicht im Hellmodus gelesen: ' + gelesen);
+                if (waehrend !== true) g.push('beim Lesen kein <style>-Element');
+                if (document.querySelector('style[data-cbd-hellmodus-lesen]')) g.push('<style> bleibt zurück');
+                if (!fix2GleicheListe(vorher, fix2Blaetter())) g.push('adoptedStyleSheets verändert');
+                if (document.documentElement.getAttribute('data-theme') !== 'dark') g.push('data-theme danach ' + document.documentElement.getAttribute('data-theme'));
+                return g;
+            });
+            if (r && r.length) f.push(fall[0] + ': ' + r.join('; '));
+        });
+        return ergebnis(f);
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     window.__zusatzTests = function(c) {
@@ -2288,6 +2651,16 @@
         p('Darkmode lesen: Ausnahme beim Lesen - data-theme kommt zurück, kein <style> bleibt', dmAusnahme);
         p('Darkmode lesen: nur der Blockbereich schaltet um (zwei Änderungen), _textFeldLesen nicht', dmNurBlockbereich);
         p('Darkmode lesen: Vorschau zeigt im Darkmode die Hellmodus-Farbe', dmVorschauFarben);
+
+        // AP-2.fix2 (Review-Befunde B1, B2, B3, B5)
+        p('AP-2.fix2 (B1): ungültige teile im Bearbeitungsfeld -> Klartext statt Ausnahme', fix2B1UngueltigeTeile);
+        p('AP-2.fix2 (B2): geschütztes Leerzeichen bleibt U+00A0 über Vorschau und "Auf die Tafel"', fix2B2GeschuetztesLeerzeichen);
+        p('AP-2.fix2 (B2): getipptes Leerzeichen im Feld bleibt U+0020 (Wächter)', fix2B2TippenBleibtU0020);
+        p('AP-2.fix2 (B5): einzelne Surrogate beim Lesen des Felds -> U+FFFD, Verkettung = text, Paare bleiben', fix2B5LesenSurrogate);
+        p('AP-2.fix2 (B5): Einfügen aus der Zwischenablage ersetzt einzelne Surrogate (beide Modi)', fix2B5Einfuegen);
+        p('Darkmode lesen (B3): Übergangssperre wirkt auch, wenn ein <style>-Element nicht wirkt (adoptedStyleSheets)', dmB3OhneStyleElement);
+        p('Darkmode lesen (B3): Sperre ist beim Lesen ein adoptiertes Blatt (kein <style>), danach exakt die alte Liste, auch nach Ausnahme', dmB3AdoptiertWaehrendLesen);
+        p('Darkmode lesen (B3): Rückfall auf <style>, wenn Constructable Stylesheets fehlen oder scheitern (Wächter)', dmB3Rueckfall);
     };
 
     window.__zusatzTestsAsync = function(c) {
