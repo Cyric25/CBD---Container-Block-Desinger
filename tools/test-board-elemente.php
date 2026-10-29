@@ -8,6 +8,14 @@
  *   A  CBD_Classroom::pruefe_elemente_json()   (privat, per Reflection)
  *   B  CBD_Classroom::ajax_save_drawing()      (Spalte schreiben, Selbstheilung)
  *   C  CBD_Classroom::ajax_load_drawing()      (Spalte liefern, alte DB ohne Spalte)
+ *   D  Obergrenze Punkte und Speicherspitze    (AP-4.fix1, Befund F1)
+ *   E  Schreibfehler mit Elementen             (PNG ohne Elemente, AP-4.fix1)
+ *   F  Fingerabdruck des PNG                   (veraltete Liste nach einem Rückweg, AP-4.fix2)
+ *   G  Feld winkel bei Text und Bild           (Lasso-Drehen 3.1.143)
+ *   H  Textgröße nachträglich                  (A−/A+, 3.1.144)
+ *   I  Feld teile                              (formatierter Text, AP-1.2 des Plans
+ *                                               „Blocktext-Formatierung"; Gegenstück:
+ *                                               Gruppe 13 in tools/test-board-elemente-js.js)
  *
  * Aufruf:  php tools/test-board-elemente.php
  *
@@ -734,6 +742,283 @@ $d = is_string($r) ? json_decode($r, true) : null;
 check('H1 kleinste Textgröße (breite 0.5 = 18 px) bleibt', $d && 0.5 === $d['elemente'][0]['breite'], $r);
 check('H2 größte Textgröße (breite 46 = 200 px) bleibt', $d && 46 === $d['elemente'][1]['breite'], $r);
 check('H3 Zwischenwert 4.75 mit winkel bleibt', $d && 4.75 === $d['elemente'][2]['breite'] && 30 === $d['elemente'][2]['winkel'], $r);
+
+// =========================================================================
+echo "\nI: Feld teile (formatierter Text: fett, kursiv, Farbe; AP-1.2)\n";
+// =========================================================================
+
+// Plan „Blocktext-Formatierung", Entscheidungen F1–F3. Die Regel steht
+// gleichlautend in pruefeTeile() in assets/js/board-elemente.js:
+//   - Verkettung aller t === (auf 5000 Zeichen gekürzter) text
+//   - Teil: t nicht leere Zeichenkette; f fehlt oder genau 1; k fehlt oder
+//     genau 1; farbe fehlt oder passt auf das Farbmuster; fremde Schlüssel
+//     entfallen; höchstens 1000 Teile
+//   - ein ungültiger Teil oder eine falsche Verkettung verwirft NUR das Feld
+//     teile (das Element bleibt); hat kein Teil f, k oder farbe, entfällt teile
+// Wer eine Prüfung hier ändert, muss tools/test-board-elemente-js.js (Gruppe
+// 13) mitziehen – beide Harnische führen dieselbe Fallliste.
+
+/** Grundelement mit teile; $extra überschreibt oder ergänzt Felder. */
+function teile_el($teile, array $extra = array(), $text = 'Es ist fett.') {
+    return array_merge(array('id' => 'e1', 'typ' => 'text', 'farbe' => '#000000', 'breite' => 2,
+        'text' => $text, 'x' => 10, 'y' => 20, 'teile' => $teile), $extra);
+}
+
+/** Modell aus rohem Element-JSON (für Eingaben, die json_encode nicht erzeugt). */
+function teile_modell_roh($element_json) {
+    return '{"v":1,"breite":100,"hoehe":100,"elemente":[' . $element_json . ']}';
+}
+
+/** Erstes Element der bereinigten Liste als Array – oder null. */
+function teile_erstes($roh_modell) {
+    $r = pj(geslasht($roh_modell));
+    $d = is_string($r) ? json_decode($r, true) : null;
+    return ($d && isset($d['elemente'][0])) ? $d['elemente'][0] : null;
+}
+
+/** teile_erstes() für ein Element als Array. */
+function teile_r($el) {
+    return teile_erstes(mit_element($el));
+}
+
+/** Element blieb erhalten (Text, Farbe, Lage, Breite unverändert) und hat KEIN teile. */
+function ohne_teile_aber_intakt($r, $text = 'Es ist fett.') {
+    return is_array($r) && !array_key_exists('teile', $r)
+        && $r['text'] === $text && '#000000' === $r['farbe'] && 10 === $r['x'] && 20 === $r['y'] && 2 === $r['breite'];
+}
+
+$gut = array(array('t' => 'Es ist '), array('t' => 'fett', 'f' => 1), array('t' => '.'));
+
+// --- a: gültig bleibt erhalten ---------------------------------------------
+$r = teile_r(teile_el($gut));
+check('I1 gültige teile bleiben inhaltsgleich erhalten', is_array($r) && isset($r['teile']) && $r['teile'] === $gut, $r);
+check('I2 text bleibt vollständig neben teile', is_array($r) && 'Es ist fett.' === $r['text'], $r);
+
+$fremd = $gut;
+$fremd[2] = array('t' => '.', 'x' => 1, 'onclick' => 'boese()');
+$r = teile_r(teile_el($fremd));
+check('I3 unbekannte Schlüssel im Teil entfernt, Rest bleibt', is_array($r) && isset($r['teile']) && $r['teile'] === $gut, $r);
+
+$voll = array(array('farbe' => '#71230a', 'k' => 1, 'f' => 1, 't' => 'Es ist fett.'));
+$r = teile_r(teile_el($voll));
+check('I4 Teil mit f, k und farbe bleibt (Eingabe in anderer Schlüsselreihenfolge)',
+    is_array($r) && isset($r['teile'][0]) && 1 === $r['teile'][0]['f'] && 1 === $r['teile'][0]['k']
+    && '#71230a' === $r['teile'][0]['farbe'] && 'Es ist fett.' === $r['teile'][0]['t'], $r);
+check('I5 Schlüsselreihenfolge im Teil: t, f, k, farbe',
+    is_array($r) && isset($r['teile'][0]) && array_keys($r['teile'][0]) === array('t', 'f', 'k', 'farbe'), $r);
+
+$nur_farbe = array(array('t' => 'Es ist '), array('t' => 'fett.', 'farbe' => 'rgb(1, 2, 3)'));
+$r = teile_r(teile_el($nur_farbe));
+check('I6 Teil nur mit farbe (rgb) bleibt', is_array($r) && isset($r['teile']) && $r['teile'] === $nur_farbe, $r);
+
+$r = teile_r(teile_el($gut, array('winkel' => 30)));
+check('I7 Element mit teile UND winkel: beide im Ergebnis',
+    is_array($r) && isset($r['teile']) && $r['teile'] === $gut && 30 === ($r['winkel'] ?? null), $r);
+check('I8 Schlüsselreihenfolge: id, typ, farbe, breite, text, x, y, teile, winkel',
+    is_array($r) && array_keys($r) === array('id', 'typ', 'farbe', 'breite', 'text', 'x', 'y', 'teile', 'winkel'),
+    is_array($r) ? array_keys($r) : null);
+
+$r = teile_r(teile_el($gut));
+check('I9 Schlüsselreihenfolge ohne winkel: id, typ, farbe, breite, text, x, y, teile',
+    is_array($r) && array_keys($r) === array('id', 'typ', 'farbe', 'breite', 'text', 'x', 'y', 'teile'),
+    is_array($r) ? array_keys($r) : null);
+
+$el = teile_el($gut);
+unset($el['teile']);
+$r = teile_r($el);
+check('I10 Element ohne teile: kein Feld teile, Schlüssel wie bisher',
+    is_array($r) && array_keys($r) === array('id', 'typ', 'farbe', 'breite', 'text', 'x', 'y'), is_array($r) ? array_keys($r) : null);
+
+// Mehrsprachiger Text: Anführungszeichen, Backslash, Index-Zeichen, Emoji
+$text = "Na⁺ \"zitiert\" \\ 😀 ok";
+$mehr = array(array('t' => 'Na⁺ '), array('t' => '"zitiert"', 'k' => 1), array('t' => ' \\ ', 'farbe' => 'rgb(1, 2, 3)'),
+    array('t' => '😀', 'f' => 1, 'k' => 1), array('t' => ' ok'));
+$r = teile_r(teile_el($mehr, array(), $text));
+check('I11 Sonderzeichen (Anführungszeichen, Backslash, Emoji) überstehen die Prüfung',
+    is_array($r) && $text === $r['text'] && isset($r['teile']) && $r['teile'] === $mehr, $r);
+
+// --- b: falsche Verkettung --------------------------------------------------
+$falsche = array(
+    'zu kurz' => array(array('t' => 'Es ist '), array('t' => 'fett', 'f' => 1)),
+    'zu lang' => array(array('t' => 'Es ist '), array('t' => 'fett', 'f' => 1), array('t' => '.!')),
+    'andere Zeichen' => array(array('t' => 'Es ist '), array('t' => 'Fett', 'f' => 1), array('t' => '.')),
+    'andere Reihenfolge' => array(array('t' => 'fett', 'f' => 1), array('t' => 'Es ist '), array('t' => '.')),
+);
+foreach ($falsche as $name => $teile) {
+    $r = teile_r(teile_el($teile));
+    check("I12 Verkettung falsch ($name): teile fehlt, Element bleibt unverändert", ohne_teile_aber_intakt($r), $r);
+}
+
+// --- c: kein Array / leer / zu viele ---------------------------------------
+$kein_array = array('Zeichenkette' => 'Es ist fett.', 'Zahl' => 5, 'true' => true, 'null' => null, 'leeres Array' => array());
+foreach ($kein_array as $name => $wert) {
+    $r = teile_r(teile_el($wert));
+    check("I13 teile = $name: Feld fehlt, Element bleibt", ohne_teile_aber_intakt($r), $r);
+}
+$r = teile_erstes(teile_modell_roh('{"id":"e1","typ":"text","farbe":"#000000","breite":2,"text":"Es ist fett.","x":10,"y":20,'
+    . '"teile":{"a":{"t":"Es ist fett.","f":1}}}'));
+check('I14 teile als Objekt mit Textschlüssel (keine Liste): Feld fehlt, Element bleibt', ohne_teile_aber_intakt($r), $r);
+$r = teile_erstes(teile_modell_roh('{"id":"e1","typ":"text","farbe":"#000000","breite":2,"text":"Es ist fett.","x":10,"y":20,'
+    . '"teile":{"1":{"t":"Es ist fett.","f":1}}}'));
+check('I15 teile als Objekt, dessen Schlüssel nicht bei 0 beginnen: Feld fehlt, Element bleibt', ohne_teile_aber_intakt($r), $r);
+
+$viele = array();
+for ($i = 0; $i < 1001; $i++) {
+    $viele[] = array('t' => 'a', 'f' => 1);
+}
+$r = teile_r(teile_el($viele, array(), str_repeat('a', 1001)));
+check('I16 1001 Teile (> MAX_TEILE): Feld fehlt, Element bleibt', ohne_teile_aber_intakt($r, str_repeat('a', 1001)), is_array($r) ? array_keys($r) : $r);
+array_pop($viele);
+$r = teile_r(teile_el($viele, array(), str_repeat('a', 1000)));
+check('I17 genau 1000 Teile (= MAX_TEILE) bleiben', is_array($r) && isset($r['teile']) && 1000 === count($r['teile']) && $r['teile'] === $viele,
+    is_array($r) ? (isset($r['teile']) ? count($r['teile']) : 'ohne teile') : $r);
+
+// --- d: ungültiges t -------------------------------------------------------
+// Die Verkettung stimmt in diesen Fällen absichtlich (leeres t, null und
+// false ergeben beim Verketten nichts): verworfen wird allein wegen des Teils.
+$fast_gut = array('t' => 'Es ist fett.', 'f' => 1);
+$ungueltig_t = array(
+    'ohne t' => array($fast_gut, array('f' => 1)),
+    't leer' => array($fast_gut, array('t' => '', 'f' => 1)),
+    't null' => array($fast_gut, array('t' => null, 'f' => 1)),
+    't false' => array($fast_gut, array('t' => false, 'f' => 1)),
+    't Zahl' => array($fast_gut, array('t' => 5, 'f' => 1)),
+    't Array' => array($fast_gut, array('t' => array('x'), 'f' => 1)),
+    't Objekt' => array($fast_gut, array('t' => (object) array('a' => 1), 'f' => 1)),
+);
+foreach ($ungueltig_t as $name => $teile) {
+    $r = teile_r(teile_el($teile));
+    check("I18 Teil mit $name: teile fehlt, Element bleibt", ohne_teile_aber_intakt($r), $r);
+}
+$r = teile_r(teile_el(array($fast_gut, 'kein Teil')));
+check('I19 Eintrag ist kein Teil (Zeichenkette): teile fehlt, Element bleibt', ohne_teile_aber_intakt($r), $r);
+$r = teile_r(teile_el(array($fast_gut, array('Es ist', 'fett'))));
+check('I20 Eintrag ist eine Liste statt eines Teils: teile fehlt, Element bleibt', ohne_teile_aber_intakt($r), $r);
+
+// t "0" ist eine nicht leere Zeichenkette (empty("0") wäre hier die Falle)
+$r = teile_r(teile_el(array(array('t' => '0', 'f' => 1)), array(), '0'));
+check('I21 t = "0" ist gültig (nicht leere Zeichenkette)', is_array($r) && isset($r['teile']) && $r['teile'] === array(array('t' => '0', 'f' => 1)), $r);
+
+// --- e: f / k nur als Ganzzahl 1 --------------------------------------------
+foreach (array('f', 'k') as $schluessel) {
+    foreach (array('true' => true, '2' => 2, '"1"' => '1', '0' => 0, 'false' => false, 'null' => null, '1.5' => 1.5, '[1]' => array(1)) as $name => $wert) {
+        $teile = array(array('t' => 'Es ist '), array('t' => 'fett', $schluessel => $wert), array('t' => '.'));
+        $r = teile_r(teile_el($teile));
+        check("I22 $schluessel = $name: teile fehlt, Element bleibt", ohne_teile_aber_intakt($r), $r);
+    }
+}
+$r = teile_r(teile_el(array(array('t' => 'Es ist fett.', 'k' => 1))));
+check('I23 nur k = 1 ist gültig', is_array($r) && isset($r['teile']) && $r['teile'] === array(array('t' => 'Es ist fett.', 'k' => 1)), $r);
+
+// --- f: Farbe ---------------------------------------------------------------
+foreach (array('rot', '#12', '#1234567', 'rgb(1,2)', 'rgba(1,2,3,4);x', '#000"><script>', 'url(javascript:alert(1))', "#000000\n", '') as $f) {
+    $r = teile_r(teile_el(array(array('t' => 'Es ist fett.', 'farbe' => $f))));
+    check('I24 ungültige Teil-farbe ' . json_encode($f) . ': teile fehlt, Element bleibt', ohne_teile_aber_intakt($r), $r);
+}
+foreach (array('Zahl' => 5, 'true' => true, 'null' => null, 'Array' => array('#000000')) as $name => $f) {
+    $r = teile_r(teile_el(array(array('t' => 'Es ist fett.', 'farbe' => $f))));
+    check("I25 Teil-farbe als $name: teile fehlt, Element bleibt", ohne_teile_aber_intakt($r), $r);
+}
+foreach (array('#71230a', 'rgb(1, 2, 3)', '#abc', '#A1b2C3', 'rgba(255, 255, 200, 1.0)') as $f) {
+    $teile = array(array('t' => 'Es ist fett.', 'farbe' => $f));
+    $r = teile_r(teile_el($teile));
+    check('I26 gültige Teil-farbe ' . json_encode($f) . ' bleibt', is_array($r) && isset($r['teile']) && $r['teile'] === $teile, $r);
+}
+
+// --- g: nur Klartext --------------------------------------------------------
+$klartext = array(
+    'ein Teil ohne Format' => array(array('t' => 'Es ist fett.')),
+    'zwei Teile ohne Format' => array(array('t' => 'Es ist '), array('t' => 'fett.')),
+    'nur fremde Schlüssel' => array(array('t' => 'Es ist fett.', 'x' => 1)),
+);
+foreach ($klartext as $name => $teile) {
+    $r = teile_r(teile_el($teile));
+    check("I27 $name: teile entfällt, Element bleibt", ohne_teile_aber_intakt($r), $r);
+}
+
+// --- h: 5000-Zeichen-Grenze -------------------------------------------------
+$lang = str_repeat('a', 5001);
+$r = teile_r(teile_el(array(array('t' => str_repeat('a', 5000), 'f' => 1), array('t' => 'a')), array(), $lang));
+check('I28 Text mit 5001 Zeichen und passenden teile: text auf 5000 gekürzt',
+    is_array($r) && 5000 === mb_strlen($r['text'], 'UTF-8'), is_array($r) ? mb_strlen($r['text'], 'UTF-8') : $r);
+check('I29 ... und teile fehlt (Verkettung 5001 ≠ gekürzter Text)', is_array($r) && !array_key_exists('teile', $r), $r ? array_keys($r) : $r);
+
+// Der Vergleich läuft gegen den schon gekürzten Text: Passen die Teile zu
+// den ersten 5000 Zeichen, bleiben sie erhalten (mehrbyteiges Zeichen, damit
+// ein Byte- statt Zeichenschnitt auffiele).
+$lang_ae = str_repeat('ä', 5001);
+$teile_ae = array(array('t' => str_repeat('ä', 5000), 'f' => 1));
+$r = teile_r(teile_el($teile_ae, array(), $lang_ae));
+check('I30 teile passen zum gekürzten Text (5000 × ä): text gekürzt UND teile bleiben',
+    is_array($r) && 5000 === mb_strlen($r['text'], 'UTF-8') && isset($r['teile']) && $r['teile'] === $teile_ae,
+    is_array($r) ? array_keys($r) : $r);
+
+// --- andere Typen und mehrere Elemente --------------------------------------
+$r = teile_erstes(teile_modell_roh(json_encode(array('id' => 'e1', 'typ' => 'strich', 'werkzeug' => 'pen', 'farbe' => '#000000',
+    'breite' => 2, 'punkte' => array(array(1, 1), array(2, 2)), 'teile' => $gut))));
+check('I31 Strich mit teile: Strich bleibt, teile fällt weg', is_array($r) && 'strich' === $r['typ'] && !array_key_exists('teile', $r), $r);
+$r = teile_erstes(teile_modell_roh(json_encode(array('id' => 'e1', 'typ' => 'bild', 'daten' => $bild, 'x' => 0, 'y' => 0,
+    'b' => 10, 'h' => 5, 'teile' => $gut))));
+check('I32 Bild mit teile: Bild bleibt, teile fällt weg', is_array($r) && 'bild' === $r['typ'] && !array_key_exists('teile', $r), $r);
+
+$zwei = json_encode(array('v' => 1, 'breite' => 100, 'hoehe' => 100, 'elemente' => array(
+    teile_el($gut),
+    teile_el(array(array('t' => 'falsch', 'f' => 1)), array('id' => 'e2')),
+    teile_el($nur_farbe, array('id' => 'e3')),
+)));
+$r = pj(geslasht($zwei));
+$d = is_string($r) ? json_decode($r, true) : null;
+check('I33 mehrere Elemente: jedes für sich beurteilt (gültig, ungültig, gültig)',
+    $d && 3 === count($d['elemente'])
+    && isset($d['elemente'][0]['teile']) && !array_key_exists('teile', $d['elemente'][1]) && isset($d['elemente'][2]['teile'])
+    && $d['elemente'][0]['teile'] === $gut && $d['elemente'][2]['teile'] === $nur_farbe, $r);
+
+// Rundlauf über die Hülle des Speicherns: elemente_data trägt teile unverändert
+$wpdb->spalte = true;
+$wpdb->zeile = null;
+$antwort = speichern(array('elemente_data' => geslasht(mit_element(teile_el($gut, array('winkel' => 15))))));
+$modell_gespeichert = $wpdb->zeile ? modell_aus_zeile($wpdb->zeile['elemente_data'], $wpdb->zeile['drawing_data']) : null;
+check('I34 Speichern über ajax_save_drawing(): teile und winkel stehen in der gespeicherten Liste',
+    is_array($modell_gespeichert) && isset($modell_gespeichert['elemente'][0]['teile'])
+    && $modell_gespeichert['elemente'][0]['teile'] === $gut && 15 === $modell_gespeichert['elemente'][0]['winkel'],
+    $modell_gespeichert);
+
+// Nachtrag: Fälle, in denen das Verketten mit Umwandlung (Zahl -> Zeichenkette)
+// genau den Text ergäbe. Nur die Typprüfung von t verwirft sie – I18 (t Zahl)
+// allein würde auch ein Programm ohne Typprüfung bestehen, weil dort die
+// Verkettung schon aus anderem Grund nicht passt.
+$r = teile_r(teile_el(array(array('t' => 'Es ist ', 'f' => 1), array('t' => 5), array('t' => '.')), array(), 'Es ist 5.'));
+check('I35 t = 5 (Umwandlung ergäbe den Text): teile fehlt, Element bleibt', ohne_teile_aber_intakt($r, 'Es ist 5.'), $r);
+$r = teile_r(teile_el(array(array('t' => 'a', 'f' => 1), array('t' => true)), array(), 'a1'));
+check('I36 t = true (Umwandlung ergäbe den Text): teile fehlt, Element bleibt', ohne_teile_aber_intakt($r, 'a1'), $r);
+$r = teile_r(teile_el(array(array('t' => 'Es ist fett', 'f' => 1), null, array('t' => '.'))));
+check('I37 ein Eintrag ist null: teile fehlt, Element bleibt', ohne_teile_aber_intakt($r), $r);
+
+// Nachtrag aus der Mutationsprobe: I22 bis I26 stehen oben unverändert. In
+// I22/I24/I25 trägt allein der geprüfte Wert die Formatierung; ein Programm,
+// das einen ungültigen Wert wie "fehlt" behandelt (z. B. isset() statt
+// array_key_exists()), verwürfe teile dort trotzdem – weil dann gar nichts
+// mehr formatiert wäre. Hier trägt ein zweiter Teil die Formatierung, sodass
+// nur die Prüfung des Werts selbst den Ausschlag gibt.
+foreach (array('f' => 'k', 'k' => 'f') as $schluessel => $begleiter) {
+    foreach (array('true' => true, '2' => 2, '"1"' => '1', '0' => 0, 'false' => false, 'null' => null, '1.5' => 1.5, '[1]' => array(1)) as $name => $wert) {
+        $teile = array(array('t' => 'Es ist ', $begleiter => 1), array('t' => 'fett', $schluessel => $wert), array('t' => '.'));
+        $r = teile_r(teile_el($teile));
+        check("I38 $schluessel = $name neben gültigem $begleiter = 1: teile fehlt, Element bleibt", ohne_teile_aber_intakt($r), $r);
+    }
+}
+foreach (array('rot', '#12', '', 'Zahl' => 5, 'true' => true, 'false' => false, 'null' => null, 'Array' => array('#000000'), 'Zeilenwechsel' => "#000000\n") as $name => $f) {
+    $r = teile_r(teile_el(array(array('t' => 'Es ', 'f' => 1), array('t' => 'ist fett.', 'farbe' => $f))));
+    check('I39 ungültige farbe (' . json_encode($f) . ') neben gültigem f = 1: teile fehlt, Element bleibt', ohne_teile_aber_intakt($r), $r);
+}
+
+// Zeichenfolgen gleicher Länge, die PHP bei lockerem Vergleich (==) für gleich
+// hielte ("100" == "1e2", "0.1" == ".10"): Die Verkettung wird streng verglichen.
+foreach (array('100' => '1e2', '0.1' => '.10') as $text => $teil_text) {
+    $r = teile_r(teile_el(array(array('t' => $teil_text, 'f' => 1)), array(), (string) $text));
+    check('I40 Verkettung ' . json_encode($teil_text) . ' ≠ text ' . json_encode((string) $text) . ' (nur lockerer Vergleich hielte sie für gleich): teile fehlt',
+        ohne_teile_aber_intakt($r, (string) $text), $r);
+}
 
 echo "\nErgebnis: {$GLOBALS['oks']} OK, {$GLOBALS['fails']} FAIL\n";
 exit($GLOBALS['fails'] > 0 ? 1 : 0);

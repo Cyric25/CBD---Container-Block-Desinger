@@ -11,18 +11,39 @@
  * Zeichenflaechen. Der Harnisch `node tools/test-board-elemente-js.js` fuehrt
  * diese Datei in einem leeren `vm`-Kontext aus und prueft den Quelltext auf
  * genau diese Namen — auch in Kommentaren. Textbreiten misst der Aufrufer
- * ueber eine uebergebene Messfunktion `ctxMass(text, schriftPx) -> px`.
+ * ueber eine uebergebene Messfunktion `ctxMass(text, schriftPx, stil) -> px`
+ * mit `stil = {f: 0|1, k: 0|1}` (fett, kursiv; Schriftangabe dazu liefert
+ * schrift(px, f, k)). Aeltere Messfunktionen mit zwei Parametern laufen
+ * weiter, messen dann aber fett/kursiv in normaler Schrift.
  *
  * Format (verbindlich, Plan Abschnitt 4 „Elementmodell v1"):
  *   { v: 1, breite, hoehe, elemente: [
  *     { id:'e1', typ:'strich', werkzeug:'pen'|'highlighter', farbe, breite, punkte:[[x,y],...] },
- *     { id:'e2', typ:'text', farbe, breite, text, x, y [, winkel] },
+ *     { id:'e2', typ:'text', farbe, breite, text, x, y [, teile] [, winkel] },
  *     { id:'e3', typ:'bild', daten:'data:image/png;base64,...', x, y, b, h [, winkel] } ] }
  *
  * `winkel` (seit 3.1.143, Lasso-Drehen) ist optional: Drehung in Grad um die
  * linke obere Ecke (x, y), positiv = im Uhrzeigersinn, in (-180, 180]. Fehlt
  * es, ist das Element unverdreht; 0 wird nie geschrieben. Das Format bleibt
  * v1 - eine aeltere Version laesst das Feld beim Pruefen still fallen.
+ *
+ * `teile` (Plan „Formatierter Text auf der Tafel", AP-1.1, Entscheidungen
+ * F1-F5) ist optional: Abschnitte eines Texts in fett, kursiv und eigener
+ * Farbe, `teile: [{t, f?, k?, farbe?}]`. `text` bleibt IMMER vollstaendig
+ * erhalten - aeltere Versionen (Rueckweg auf 3.1.147) lesen nur `text` und
+ * zeigen ihn unformatiert. Regeln (pruefeTeile): `t` nicht leere
+ * Zeichenkette; `f` fehlt oder genau 1 (fett); `k` fehlt oder genau 1
+ * (kursiv); `farbe` fehlt oder passt auf FARB_MUSTER; unbekannte Schluessel
+ * entfallen; hoechstens MAX_TEILE Teile; die Verkettung aller `t` muss genau
+ * den (auf MAX_TEXT gekuerzten) `text` ergeben - ein Stringvergleich statt
+ * Zeichenpositionen, weil JavaScript UTF-16-Einheiten und PHP Codepunkte
+ * zaehlt. Ein ungueltiger Teil oder eine falsche Verkettung verwirft nur das
+ * Feld `teile`, nie das Element; hat kein Teil `f`, `k` oder `farbe`, entfaellt
+ * `teile` ebenfalls (Modelle ohne Formatierung bleiben byte-gleich zu
+ * 3.1.147). Gleiche Regel wie serverseitig in
+ * CBD_Classroom::pruefe_elemente_json() - bei Aenderung beide Stellen
+ * nachziehen. Die Pruefung legt NICHT zusammen; das macht
+ * teileZusammenlegen() beim Erzeugen (F4).
  *
  * Alle Funktionen sind frei von Seiteneffekten: Eingaben werden nie
  * veraendert, Ergebnisse sind neue Objekte. Unveraenderte Elemente duerfen
@@ -53,6 +74,9 @@
     var TEXT_PX_MIN = 18;
     var TEXT_PX_MAX = 200;
     var TEXT_SCHRITT = 1.2;
+    // Formatierte Abschnitte je Text (Feld teile, AP-1.1). Gleiche Grenze wie
+    // serverseitig in CBD_Classroom::pruefe_elemente_json().
+    var MAX_TEILE = 1000;
 
     // =====================================================================
     // Hilfsfunktionen
@@ -128,6 +152,149 @@
         return el;
     }
 
+    // =====================================================================
+    // Formatierte Teile eines Texts (Feld teile, AP-1.1, F1-F5)
+    // =====================================================================
+
+    /**
+     * Feld `teile` pruefen (Regeln im Kopfkommentar, F2/F3) gegen den schon
+     * gekuerzten `text`. Liefert ein NEUES Array aus neuen Teil-Objekten
+     * (Schluessel in der Reihenfolge t, f, k, farbe; unbekannte entfallen)
+     * oder null - dann entfaellt nur das Feld, nie das Element. Legt nicht
+     * zusammen (F4). Gleiche Regel wie serverseitig in
+     * CBD_Classroom::pruefe_elemente_json() - bei Aenderung beide Stellen
+     * nachziehen.
+     *
+     * "Fehlt" heisst hier `=== undefined`; ein vorhandenes `f: null` (oder
+     * `k`/`farbe: null`) ist also ungueltig.
+     */
+    function pruefeTeile(teile, text) {
+        if (!istArray(teile) || teile.length < 1 || teile.length > MAX_TEILE) return null;
+        if (typeof text !== 'string') return null;
+        var neu = [];
+        var kette = '';
+        var formatiert = false;
+        for (var i = 0; i < teile.length; i++) {
+            var teil = teile[i];
+            if (!istObjekt(teil) || typeof teil.t !== 'string' || teil.t === '') return null;
+            if (teil.f !== undefined && teil.f !== 1) return null;
+            if (teil.k !== undefined && teil.k !== 1) return null;
+            if (teil.farbe !== undefined && (typeof teil.farbe !== 'string' || !FARB_MUSTER.test(teil.farbe))) return null;
+            kette += teil.t;
+            // frueh abbrechen, statt einen ueberlangen Text weiter aufzubauen
+            if (kette.length > text.length) return null;
+            var n = { t: teil.t };
+            if (teil.f === 1) n.f = 1;
+            if (teil.k === 1) n.k = 1;
+            if (teil.farbe !== undefined) n.farbe = teil.farbe;
+            if (teil.f === 1 || teil.k === 1 || teil.farbe !== undefined) formatiert = true;
+            neu.push(n);
+        }
+        // Stringvergleich statt Zeichenpositionen (F2); ohne Formatierung kein Feld (F3)
+        if (kette !== text || !formatiert) return null;
+        return neu;
+    }
+
+    /**
+     * Optionales Feld `teile` an ein NEUES Text-Objekt haengen - nur, wenn
+     * `teile` ein nicht leeres Array ist (Gegenstueck zu mitWinkel). Haengt
+     * eine Kopie an: neue Teil-Objekte nur mit t, f, k, farbe. Aufrufreihenfolge
+     * immer mitWinkel(mitTeile(...), winkel), damit die Schluessel in der
+     * Reihenfolge id, typ, farbe, breite, text, x, y, teile, winkel stehen.
+     * Texte ohne teile bleiben dadurch genau wie in 3.1.147 (gleiche Felder,
+     * gleiche Serialisierung).
+     */
+    function mitTeile(el, teile) {
+        if (!istArray(teile) || teile.length === 0) return el;
+        var liste = [];
+        for (var i = 0; i < teile.length; i++) {
+            var teil = teile[i];
+            if (!istObjekt(teil)) continue;
+            var n = { t: teil.t };
+            if (teil.f !== undefined) n.f = teil.f;
+            if (teil.k !== undefined) n.k = teil.k;
+            if (teil.farbe !== undefined) n.farbe = teil.farbe;
+            liste.push(n);
+        }
+        if (liste.length) el.teile = liste;
+        return el;
+    }
+
+    /**
+     * Schriftangabe in der Kurzschreibweise von ctx.font fuer einen Teil:
+     * '[italic ][bold ]<px>px sans-serif' (F5). Sans-serif wie im
+     * Text-Werkzeug von board-mode.js.
+     */
+    function schrift(px, f, k) {
+        return (k ? 'italic ' : '') + (f ? 'bold ' : '') + px + 'px sans-serif';
+    }
+
+    /**
+     * Text eines Elements als Zeilen aus Teilen, zum Zeichnen und Messen:
+     * [[{t, f:0|1, k:0|1, farbe}, ...], ...] - eine Liste je Zeile (`\n`),
+     * Teile ueber einen Zeilenwechsel werden geteilt, `farbe` ist aufgeloest
+     * (teil.farbe || el.farbe), leere Zeile -> []. Ohne (gueltige) teile ein
+     * Teil je Zeile in el.farbe. Ungueltige teile (Pruefung wie
+     * pruefeModell) werden wie fehlende behandelt - es wird also genau das
+     * gezeichnet, was ein Speichern und Laden uebrig liesse. Die Zahl der
+     * Zeilen ist immer text.split('\n').length.
+     */
+    function zeilenTeile(el) {
+        var text = String(el.text);
+        var teile = el.teile !== undefined ? pruefeTeile(el.teile, text) : null;
+        if (!teile) teile = [{ t: text }];
+        var zeilen = [[]];
+        for (var i = 0; i < teile.length; i++) {
+            var teil = teile[i];
+            var stuecke = teil.t.split('\n');
+            var f = teil.f === 1 ? 1 : 0;
+            var k = teil.k === 1 ? 1 : 0;
+            var farbe = teil.farbe || el.farbe;
+            for (var j = 0; j < stuecke.length; j++) {
+                if (j > 0) zeilen.push([]);
+                if (stuecke[j] !== '') {
+                    zeilen[zeilen.length - 1].push({ t: stuecke[j], f: f, k: k, farbe: farbe });
+                }
+            }
+        }
+        return zeilen;
+    }
+
+    /**
+     * Teile fuer das ERZEUGEN aufbereiten (F4; die Pruefung legt bewusst
+     * nicht zusammen): leere oder fehlende `t` entfallen, `f`/`k` werden zu 1
+     * (wahr) bzw. entfallen (falsch), benachbarte Teile mit gleichem
+     * (f, k, farbe) werden verbunden. Eine `farbe`, die nicht auf FARB_MUSTER
+     * passt, entfaellt (sonst verwuerfe die Pruefung beim Speichern die
+     * gesamte Formatierung des Texts). Bleibt keine Formatierung uebrig
+     * (nur Klartext) -> []. Liefert immer ein neues Array; die Eingabe
+     * bleibt unveraendert. MAX_TEILE wird hier nicht durchgesetzt.
+     */
+    function teileZusammenlegen(teile) {
+        var neu = [];
+        var formatiert = false;
+        if (!istArray(teile)) return neu;
+        for (var i = 0; i < teile.length; i++) {
+            var teil = teile[i];
+            if (!istObjekt(teil) || typeof teil.t !== 'string' || teil.t === '') continue;
+            var f = teil.f ? 1 : 0;
+            var k = teil.k ? 1 : 0;
+            var farbe = typeof teil.farbe === 'string' && FARB_MUSTER.test(teil.farbe) ? teil.farbe : '';
+            var letzter = neu.length ? neu[neu.length - 1] : null;
+            if (letzter && (letzter.f || 0) === f && (letzter.k || 0) === k && (letzter.farbe || '') === farbe) {
+                letzter.t += teil.t;
+                continue;
+            }
+            var n = { t: teil.t };
+            if (f) n.f = 1;
+            if (k) n.k = 1;
+            if (farbe) n.farbe = farbe;
+            if (f || k || farbe) formatiert = true;
+            neu.push(n);
+        }
+        return formatiert ? neu : [];
+    }
+
     /**
      * Umschliessendes Rechteck eines um seine linke obere Ecke (x, y)
      * gedrehten Rechtecks b x h. Bildschirmsinn (y nach unten): positiver
@@ -165,8 +332,8 @@
                 breite: e.breite, punkte: punkte };
         }
         if (e.typ === 'text') {
-            return mitWinkel({ id: id, typ: 'text', farbe: e.farbe, breite: e.breite,
-                text: e.text, x: e.x + dx, y: e.y + dy }, e.winkel);
+            return mitWinkel(mitTeile({ id: id, typ: 'text', farbe: e.farbe, breite: e.breite,
+                text: e.text, x: e.x + dx, y: e.y + dy }, e.teile), e.winkel);
         }
         if (e.typ === 'bild') {
             return mitWinkel({ id: id, typ: 'bild', daten: e.daten, x: e.x + dx, y: e.y + dy,
@@ -209,9 +376,13 @@
             if (!istZahl(el.x) || !istZahl(el.y)) return null;
             // winkel optional (Lasso-Drehen 3.1.143); vorhanden, aber keine Zahl -> ungueltig
             if (el.winkel !== undefined && !istZahl(el.winkel)) return null;
-            return mitWinkel({ id: el.id, typ: 'text', farbe: el.farbe, breite: el.breite,
-                text: el.text.length > MAX_TEXT ? el.text.substring(0, MAX_TEXT) : el.text,
-                x: el.x, y: el.y }, el.winkel);
+            var inhalt = el.text.length > MAX_TEXT ? el.text.substring(0, MAX_TEXT) : el.text;
+            // teile optional (AP-1.1): gegen den GEKUERZTEN Text pruefen - ein
+            // gekuerzter Text passt nicht mehr und verliert nur die Formatierung.
+            // Ungueltig -> nur das Feld entfaellt, das Element bleibt.
+            return mitWinkel(mitTeile({ id: el.id, typ: 'text', farbe: el.farbe, breite: el.breite,
+                text: inhalt, x: el.x, y: el.y },
+                el.teile !== undefined ? pruefeTeile(el.teile, inhalt) : null), el.winkel);
         }
 
         if (el.typ === 'bild') {
@@ -330,13 +501,20 @@
         }
         if (el.typ === 'text') {
             var groesse = schriftPx(el.breite);
-            var zeilen = String(el.text).split('\n');
+            // Zeilen aus Teilen (AP-1.1, F5): Breite einer Zeile = Summe ihrer
+            // Teile, jeder mit seinem Stil gemessen (fett/kursiv sind breiter).
+            // Ohne teile ist jede Zeile genau ein Teil {f:0, k:0} wie bisher.
+            var zeilen = zeilenTeile(el);
             var breitest = 0;
             for (var z = 0; z < zeilen.length; z++) {
-                // Ohne Messfunktion grob schaetzen (0,6 em je Zeichen).
-                var w = typeof ctxMass === 'function'
-                    ? ctxMass(zeilen[z], groesse)
-                    : zeilen[z].length * groesse * 0.6;
+                var w = 0;
+                for (var t = 0; t < zeilen[z].length; t++) {
+                    var teil = zeilen[z][t];
+                    // Ohne Messfunktion grob schaetzen (0,6 em je Zeichen).
+                    w += typeof ctxMass === 'function'
+                        ? ctxMass(teil.t, groesse, { f: teil.f, k: teil.k })
+                        : teil.t.length * groesse * 0.6;
+                }
                 if (w > breitest) breitest = w;
             }
             return gedrehterRahmen(el.x, el.y, breitest, zeilen.length * ZEILENHOEHE * groesse, el.winkel);
@@ -519,8 +697,8 @@
                 continue;
             }
             geaendert++;
-            neu.push(mitWinkel({ id: e.id, typ: 'text', farbe: e.farbe, breite: (schrift - 16) / 4,
-                text: e.text, x: e.x, y: e.y }, e.winkel));
+            neu.push(mitWinkel(mitTeile({ id: e.id, typ: 'text', farbe: e.farbe, breite: (schrift - 16) / 4,
+                text: e.text, x: e.x, y: e.y }, e.teile), e.winkel));
         }
         return { modell: kopf(modell, neu), geaendert: geaendert };
     }
@@ -724,8 +902,8 @@
                 }
                 // winkel bleibt; bei ungleichen Faktoren sx/sy ist das eine
                 // Naeherung (eine gedrehte Flaeche wuerde eigentlich geschert)
-                neu.push(mitWinkel({ id: e.id, typ: 'text', farbe: e.farbe, breite: tb,
-                    text: e.text, x: e.x * sx, y: e.y * sy }, e.winkel));
+                neu.push(mitWinkel(mitTeile({ id: e.id, typ: 'text', farbe: e.farbe, breite: tb,
+                    text: e.text, x: e.x * sx, y: e.y * sy }, e.teile), e.winkel));
             } else if (e.typ === 'bild') {
                 neu.push(mitWinkel({ id: e.id, typ: 'bild', daten: e.daten, x: e.x * sx, y: e.y * sy,
                     b: e.b * sx, h: e.h * sy }, e.winkel));
@@ -754,9 +932,10 @@
                     breite: runde(e.breite), punkte: punkte });
             } else if (e.typ === 'text') {
                 // winkel in Grad, damit 2 Nachkommastellen genuegen (0,01°);
-                // auf 0 gerundet entfaellt das Feld
-                el.push(mitWinkel({ id: e.id, typ: 'text', farbe: e.farbe, breite: runde(e.breite),
-                    text: e.text, x: runde(e.x), y: runde(e.y) }, runde(e.winkel || 0)));
+                // auf 0 gerundet entfaellt das Feld. teile (AP-1.1) nur, wenn
+                // vorhanden - ohne teile byte-gleich zu 3.1.147.
+                el.push(mitWinkel(mitTeile({ id: e.id, typ: 'text', farbe: e.farbe, breite: runde(e.breite),
+                    text: e.text, x: runde(e.x), y: runde(e.y) }, e.teile), runde(e.winkel || 0)));
             } else if (e.typ === 'bild') {
                 el.push(mitWinkel({ id: e.id, typ: 'bild', daten: e.daten, x: runde(e.x), y: runde(e.y),
                     b: runde(e.b), h: runde(e.h) }, runde(e.winkel || 0)));
@@ -859,6 +1038,7 @@
         VERSION: VERSION,
         TEXT_PX_MIN: TEXT_PX_MIN,
         TEXT_PX_MAX: TEXT_PX_MAX,
+        MAX_TEILE: MAX_TEILE,
         pruefeModell: pruefeModell,
         ausStrokes: ausStrokes,
         zuStrokes: zuStrokes,
@@ -880,6 +1060,9 @@
         hoechsteIdNummer: hoechsteIdNummer,
         leeresModell: leeresModell,
         schriftPx: schriftPx,
+        schrift: schrift,
+        zeilenTeile: zeilenTeile,
+        teileZusammenlegen: teileZusammenlegen,
         abdruck: abdruck,
         verpacke: verpacke,
         entpacke: entpacke

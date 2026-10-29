@@ -1025,9 +1025,16 @@
          * ueber den gemeinsamen Wrapper .cbd-board-canvas-container) per
          * CSS-Filter, wenn die Website im Darkmode ist UND die Tafel auf der
          * weissen Standardfarbe steht. Wirkt rein visuell auf die Darstellung
-         * (invert(1)) - die in localStorage/serverseitig gespeicherten
-         * Pixel bleiben unveraendert, betrifft also gleichermassen neu
-         * gezeichnete wie bereits vorher gespeicherte Notizen. Bewusst
+         * - die in localStorage/serverseitig gespeicherten Pixel bleiben
+         * unveraendert, betrifft also gleichermassen neu gezeichnete wie
+         * bereits vorher gespeicherte Notizen.
+         * AP-1.fix1 (Review-Befund B7): Der Filter ist seit F13
+         * (PLAN-Blocktext-Formatierung.md, AP-1.4) `invert(1)
+         * hue-rotate(180deg)` statt reinem `invert(1)`: Die Helligkeit kippt
+         * wie bisher, der Farbton bleibt erhalten (Rot bleibt roetlich, Blau
+         * blaeulich statt Tuerkis bzw. Gelb). Die Regel steht in
+         * assets/css/board-mode.css (.cbd-board-inverted); die Auswahlebene
+         * darin wendet die Umkehrung an. Bewusst
          * ausgenommen: Tafeln, die der Nutzer aktiv auf Gruen/Schwarz
          * gestellt hat (boardColor !== '#ffffff') - eine bewusste
          * Farbwahl soll nicht zusaetzlich invertiert werden.
@@ -2725,6 +2732,32 @@
             return m.elemente.length ? m.elemente[0] : null;
         },
 
+        /**
+         * Messfunktion fuer Text-Elemente: function(text, px, stil) -> Breite
+         * in px, mit stil = {f: 0|1, k: 0|1} (fett, kursiv) wie sie
+         * CBDBoardElemente.rahmen()/waehleImLasso() uebergeben (AP-1.3,
+         * Plan "Formatierter Text auf der Tafel", F5). Gemessen wird mit der
+         * Zeichenebene in der Schrift, in der auch gezeichnet wird
+         * (CBDBoardElemente.schrift) - fett und kursiv sind breiter, sonst
+         * stimmen Rahmen, Lasso-Treffer und Radierer nicht. Ohne Zeichenebene
+         * null: das Modul schaetzt dann 0,6 em je Zeichen.
+         *
+         * _rahmen() und _lassoAbschliessen() messen NUR darueber und bauen
+         * keine eigene Messfunktion - sonst messen sie fett/kursiv wieder in
+         * normaler Schrift. Zwei Stellen messen noch selbst: das laufende x
+         * beim Zeichnen (zeichneModell, Pass 4) und _blocktextVerteilen()
+         * (das stellt AP-2.3 um).
+         */
+        _textMass: function() {
+            var ctx = this.drawingCtx;
+            if (!ctx) return null;
+            var E = elementeModul();
+            return function(text, px, stil) {
+                ctx.font = E.schrift(px, stil && stil.f, stil && stil.k);
+                return ctx.measureText(text).width;
+            };
+        },
+
         /** Rahmen eines Elements; Textbreite mit der Zeichenebene gemessen. */
         _rahmen: function(el) {
             var cache = this._rahmenCache;
@@ -2732,11 +2765,7 @@
                 var r = cache.get(el);
                 if (r) return r;
             }
-            var ctx = this.drawingCtx;
-            var rb = elementeModul().rahmen(el, ctx ? function(text, px) {
-                ctx.font = px + 'px sans-serif';
-                return ctx.measureText(text).width;
-            } : null);
+            var rb = elementeModul().rahmen(el, this._textMass());
             if (cache) cache.set(el, rb);
             return rb;
         },
@@ -3005,14 +3034,27 @@
 
             // Pass 4: Text-Elemente (oberste Ebene). Schrift wie im
             // Elementmodell v1: Math.round(16 + breite * 4) px, Zeilenhöhe 1,2.
+            // AP-1.3 (Plan "Formatierter Text auf der Tafel", F5): Jede Zeile
+            // kommt aus CBDBoardElemente.zeilenTeile(el) als Liste von Teilen
+            // {t, f, k, farbe} (Farbe schon aufgelöst); je Teil EIN fillText in
+            // der Schrift schrift(px, f, k) und seiner Farbe, das laufende x
+            // rückt um die mit derselben Schrift gemessene Breite des Teils
+            // weiter. Ein Text ohne teile ist eine Zeile = ein Teil und wird
+            // wie in 3.1.147 gezeichnet ('<px>px sans-serif', ein fillText je
+            // Zeile; nur leere Zeilen rufen keinen fillText('') mehr).
+            // AP-1.fix1 (Review-Befund B5): Gemessen wird nur, wenn in
+            // derselben Zeile noch ein Teil FOLGT - nach dem letzten Teil
+            // einer Zeile braucht niemand mehr das x. Ein Text ohne teile
+            // (jede bestehende Tafel) misst beim Zeichnen deshalb gar nicht;
+            // das zusätzliche measureText je Zeile kostete bei 240 Zeilen
+            // rund 1 ms je Bild, und im Ziehen/Drehen läuft das je Frame.
+            var E = elementeModul();
             for (i = 0; i < elemente.length; i++) {
                 el = elemente[i];
                 if (el.typ !== 'text') continue;
-                var fontSizePx = Math.round(16 + el.breite * 4);
-                ctx.font = fontSizePx + 'px sans-serif';
-                ctx.fillStyle = el.farbe;
+                var fontSizePx = E.schriftPx(el.breite);
                 ctx.textBaseline = 'top';
-                var textLines = el.text.split('\n');
+                var zeilen = E.zeilenTeile(el);
                 // 3.1.143: gedrehter Text um seine linke obere Ecke
                 var tx = el.x, ty = el.y;
                 if (el.winkel) {
@@ -3022,8 +3064,17 @@
                     tx = 0;
                     ty = 0;
                 }
-                for (var li = 0; li < textLines.length; li++) {
-                    ctx.fillText(textLines[li], tx, ty + li * fontSizePx * 1.2);
+                for (var li = 0; li < zeilen.length; li++) {
+                    var zx = tx;
+                    for (var ti = 0; ti < zeilen[li].length; ti++) {
+                        var teil = zeilen[li][ti];
+                        ctx.font = E.schrift(fontSizePx, teil.f, teil.k);
+                        ctx.fillStyle = teil.farbe;
+                        ctx.fillText(teil.t, zx, ty + li * fontSizePx * 1.2);
+                        if (ti + 1 < zeilen[li].length) {
+                            zx += ctx.measureText(teil.t).width;
+                        }
+                    }
                 }
                 if (el.winkel) {
                     ctx.restore();
@@ -3093,11 +3144,8 @@
         _lassoAbschliessen: function() {
             var polygon = this._lasso;
             this._lasso = null;
-            var ctx = this.drawingCtx;
-            var ids = (polygon && this.modell) ? elementeModul().waehleImLasso(this.modell, polygon, ctx ? function(text, px) {
-                ctx.font = px + 'px sans-serif';
-                return ctx.measureText(text).width;
-            } : null) : [];
+            // AP-1.3: Messung ueber _textMass() (fett/kursiv), wie in _rahmen()
+            var ids = (polygon && this.modell) ? elementeModul().waehleImLasso(this.modell, polygon, this._textMass()) : [];
             this.auswahl = ids;
             this._auswahlZeichnen();
         },

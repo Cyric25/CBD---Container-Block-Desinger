@@ -73,6 +73,13 @@ class CBD_Classroom {
     const ELEMENTE_MAX_PUNKTE = 100000;
 
     /**
+     * Obergrenze für die Teile (`teile`) eines Text-Elements (Plan
+     * „Blocktext-Formatierung", Entscheidung F3). Gleicher Wert wie MAX_TEILE in
+     * assets/js/board-elemente.js. Bitte nur gemeinsam ändern.
+     */
+    const ELEMENTE_MAX_TEILE = 1000;
+
+    /**
      * Option key for enabling/disabling the classroom system
      */
     const OPTION_ENABLED = 'cbd_classroom_enabled';
@@ -852,7 +859,9 @@ class CBD_Classroom {
      *   - false  unlesbar (kein Text, zu groß, kein JSON-Objekt, v != 1,
      *            Maße ungültig, elemente kein Array)
      *   - string bereinigte JSON (nur erlaubte Schlüssel, ungültige Elemente
-     *            und doppelte IDs verworfen, Text auf 5000 Zeichen gekürzt)
+     *            und doppelte IDs verworfen, Text auf 5000 Zeichen gekürzt;
+     *            das optionale Feld `teile` eines Texts nur, wenn es die Regel
+     *            von elemente_teile() erfüllt – sonst entfällt allein dieses Feld)
      *
      * wp_unslash() MUSS vor json_decode() stehen (Risiko R7): WordPress
      * slasht alle $_POST-Werte, jedes Anführungszeichen der JSON käme als \"
@@ -964,6 +973,16 @@ class CBD_Classroom {
                 }
                 $sauber = array('id' => $id, 'typ' => 'text', 'farbe' => $farbe, 'breite' => $b,
                     'text' => mb_substr($inhalt, 0, 5000, 'UTF-8'), 'x' => $x, 'y' => $y);
+                // Formatierter Text (fett, kursiv, Farbe): Gleiche Regel wie pruefeTeile() in
+                // assets/js/board-elemente.js – bei Änderung beide Stellen nachziehen. Gegen den
+                // schon gekürzten Text prüfen; ungültig -> nur dieses Feld entfällt. Schlüsselreihenfolge
+                // wie im Browser: id, typ, farbe, breite, text, x, y, teile, winkel.
+                if (array_key_exists('teile', $el)) {
+                    $formatiert = self::elemente_teile($el['teile'], $sauber['text'], $farb_muster);
+                    if (null !== $formatiert) {
+                        $sauber['teile'] = $formatiert;
+                    }
+                }
                 if (null !== $winkel) {
                     $sauber['winkel'] = $winkel;
                 }
@@ -994,7 +1013,7 @@ class CBD_Classroom {
             }
             $teile[] = $teil;
             $ids[$id] = true;
-            unset($el, $sauber, $punkte, $punkte_roh, $teil);
+            unset($el, $sauber, $punkte, $punkte_roh, $formatiert, $teil);
         }
 
         if (empty($teile)) {
@@ -1023,6 +1042,87 @@ class CBD_Classroom {
         }
         $zahl = 0 + $wert;
         return is_finite((float) $zahl) ? $zahl : null;
+    }
+
+    /**
+     * Optionales Feld `teile` eines Text-Elements: formatierter Text (fett,
+     * kursiv, Farbe). Plan „Blocktext-Formatierung", Entscheidungen F1–F3.
+     * Gleiche Regel wie pruefeTeile() in assets/js/board-elemente.js – bei
+     * Änderung beide Stellen nachziehen (Fallliste in beiden Harnischen:
+     * tools/test-board-elemente.php Gruppe I, tools/test-board-elemente-js.js
+     * Gruppe 13).
+     *
+     * Gültig ist `teile`, wenn alles davon zutrifft:
+     *   - eine nicht leere Liste mit höchstens ELEMENTE_MAX_TEILE Einträgen
+     *   - jeder Teil ist `{t, f?, k?, farbe?}`: `t` eine nicht leere Zeichenkette,
+     *     `f` und `k` fehlen oder sind genau die Ganzzahl 1, `farbe` fehlt oder
+     *     passt auf das Farbmuster; unbekannte Schlüssel entfallen
+     *   - die Verkettung aller `t` ist genau `$text` (Stringvergleich, kein Zählen
+     *     von Positionen: JavaScript zählt UTF-16-Einheiten, PHP Codepunkte)
+     *   - mindestens ein Teil trägt `f`, `k` oder `farbe` (sonst ist es Klartext)
+     * Ein einziger ungültiger Teil verwirft das ganze Feld; es wird nie
+     * repariert. Die Schlüsselreihenfolge im Teil ist t, f, k, farbe.
+     *
+     * @param mixed  $teile      Rohwert von `teile` aus dem dekodierten Element.
+     * @param string $text       Der bereits auf 5000 Zeichen gekürzte Text des Elements.
+     * @param string $farb_muster Regulärer Ausdruck für Farben (wie bei `farbe` des Elements).
+     * @return array|null Bereinigte Liste oder null (Feld entfällt).
+     */
+    private static function elemente_teile($teile, $text, $farb_muster) {
+        if (!is_array($teile)) {
+            return null;
+        }
+        $anzahl = count($teile);
+        if ($anzahl < 1 || $anzahl > self::ELEMENTE_MAX_TEILE) {
+            return null;
+        }
+
+        $text_laenge = strlen($text);
+        $sauber = array();
+        $formatiert = false;
+        $verkettet = '';
+        $index = 0;
+        foreach ($teile as $schluessel => $teil) {
+            // Eine Liste: Schlüssel 0, 1, 2 … (ein JSON-Objekt mit Textschlüsseln ist keine).
+            if ($schluessel !== $index++) {
+                return null;
+            }
+            // Typen VOR dem Verketten prüfen: implode()/.= würden null, false und Zahlen
+            // sonst stillschweigend umdeuten.
+            if (!is_array($teil) || !array_key_exists('t', $teil)
+                || !is_string($teil['t']) || '' === $teil['t']) {
+                return null;
+            }
+            $eintrag = array('t' => $teil['t']);
+            foreach (array('f', 'k') as $kennung) {
+                if (array_key_exists($kennung, $teil)) {
+                    if (1 !== $teil[$kennung]) { // Ganzzahl 1, nicht true, '1' oder 1.0
+                        return null;
+                    }
+                    $eintrag[$kennung] = 1;
+                    $formatiert = true;
+                }
+            }
+            if (array_key_exists('farbe', $teil)) {
+                // Modifikator D: `$` passt nur am Textende, nicht vor einem angehängten
+                // Zeilenwechsel – so streng wie das JavaScript-Muster ohne m-Flag.
+                if (!is_string($teil['farbe']) || !preg_match($farb_muster . 'D', $teil['farbe'])) {
+                    return null;
+                }
+                $eintrag['farbe'] = $teil['farbe'];
+                $formatiert = true;
+            }
+            $verkettet .= $teil['t'];
+            if (strlen($verkettet) > $text_laenge) {
+                return null; // schon zu lang: kann nicht mehr gleich sein (hält die Speicherspitze klein)
+            }
+            $sauber[] = $eintrag;
+        }
+
+        if (!$formatiert || $verkettet !== $text) {
+            return null;
+        }
+        return $sauber;
     }
 
     /**
