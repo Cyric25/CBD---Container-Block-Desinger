@@ -27,18 +27,32 @@
  *     auswahlTextBearbeiten(), Höhenmessung der Leiste mit dem Knopf;
  *     textErsetzen(id, absaetze): gleiche ID und Stelle, ein Undo-Schritt,
  *     Auswahl bleibt, Absätze mit \n, Umbruch am sichtbaren Rand (nur
- *     unverdreht), Teilfarben lesbar, leerer Inhalt entfernt, laufende
- *     Gesten werden beendet
+ *     unverdreht; die Regel gilt seit AP-3.fix2 als F12a, siehe unten),
+ *     Teilfarben lesbar, leerer Inhalt entfernt, laufende Gesten werden
+ *     beendet
  *   - AP-3.2 (Phase 3, F8/F11/F12): Fenster "Text bearbeiten" -
  *     auswahlTextBearbeiten() öffnet den Text im Bearbeitungsfeld
  *     (Modus 'bearbeiten') samt Formatleiste, "Übernehmen" ruft
  *     textErsetzen(), "Abbrechen"/Escape ändern nichts, Enter = Zeilenwechsel,
  *     Tastatur im Feld wirkt nicht auf die Tafel, Fenster schließt bei
  *     destroy()/close()/Seitenwechsel/aufgehobener Auswahl
+ *   - AP-3.fix1 (Phase 3, Befunde aus AP-3.1): Platz für die Auswahlleiste
+ *     nach dem Einfügen (mehrere Blöcke: unter der Leiste OHNE Knopf "Text
+ *     bearbeiten", genau ein Block: MIT Knopf; _auswahlLeisteHoeheText(
+ *     mitEinText)); textErsetzen() kürzt auf 5000 UTF-16-Einheiten, nie
+ *     mitten im Surrogatpaar, teile passend zugeschnitten
+ *   - AP-3.fix2 (Phase 3, Review-Befunde B1, B2): Umbruchregel F12a - R1
+ *     unveränderte Zeile nie, R2 nur Zeilen, die über den Rand selbst ragen
+ *     (mit Formatierung gemessen), R3 Zielbreite unter 8 x Schrift-px: kein
+ *     Umbruch; Teilgrenzen mitten im Surrogatpaar rücken nach hinten
+ *
+ * Gesamtzahl: 52 Prüfungen (14 aus Phase 1, 12 AP-3.1, 14 AP-3.2, 6
+ * AP-3.fix1, 6 AP-3.fix2), davon eine asynchron (AP-3.2, close()).
  *
  * Wird von tools/test-board-zeiger.html NACH test-board-textgroesse.js und
- * VOR test-board-blocktext.js geladen und hängt sich an den Haken
- * window.__zusatzTests an (vorhandenen zuerst aufrufen).
+ * VOR test-board-blocktext.js geladen und hängt sich an die Haken
+ * window.__zusatzTests (synchron) UND window.__zusatzTestsAsync (die eine
+ * asynchrone Prüfung) an - jeweils den vorhandenen Haken zuerst aufrufen.
  */
 (function() {
     'use strict';
