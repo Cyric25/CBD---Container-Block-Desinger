@@ -739,6 +739,7 @@
         t.focus();
         var ev2 = taste(t, 'Tab', { shiftKey: true });
         if (!ev2.defaultPrevented || document.activeElement !== letzter) f.push('Umschalt+Tab am Anfang kreist nicht');
+        t.focus(); // nach Umschalt+Tab steht der Fokus auf dem letzten Knopf
         var ev3 = taste(t, 'Tab');
         if (ev3.defaultPrevented) f.push('Tab mitten im Fenster abgefangen');
         taste(t, 'Escape');

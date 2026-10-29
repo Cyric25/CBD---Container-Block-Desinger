@@ -1362,6 +1362,20 @@ html.cbd-board-offen .sidebar-toggle-btn {
     outline-offset: 2px;
 }
 
+/* Klickschutz (AP-2.fix1): 400 ms nach "Auf die Tafel"/"Auf neuer Seite
+   einfügen" unsichtbar über allem, auch über den Fenstern (1000001), damit
+   der zweite Klick eines Doppelklicks ins Leere geht (board-mode.js,
+   _blocktextKlickschutz) */
+.cbd-board-blocktext-schild {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1000002;
+    background: transparent;
+}
+
 /* =============================================
    TEXT-EINGABE - Overlay des Werkzeugs "Text" (data-tool="text")
    ============================================= */

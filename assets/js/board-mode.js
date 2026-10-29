@@ -290,8 +290,9 @@
             this._standardBreiten();
 
             // Ein liegengebliebenes Fenster "Text auf die Tafel" (AP-2.3)
-            // gehörte zur vorigen Tafel
+            // samt Klickschutz (AP-2.fix1) gehörte zur vorigen Tafel
             this._blocktextFensterSchliessen();
+            this._blocktextKlickschutzEntfernen();
 
             // Multi-Seiten-State zurücksetzen
             this.currentPageIndex = 0;
@@ -389,6 +390,11 @@
         close: function() {
             if (!this.overlay) return;
 
+            // Fenster "Text auf die Tafel" sofort schließen, nicht erst in
+            // destroy() 200 ms später - ein Einfügen in dieser Zeit wäre
+            // nicht mehr gespeichert worden (AP-2.fix1, Review-Befund G2)
+            this._blocktextFensterSchliessen();
+
             // Zeichnung speichern
             this.saveDrawing();
 
@@ -429,8 +435,10 @@
          * Aufraeumen und Overlay entfernen
          */
         destroy: function() {
-            // Vorschau/Rückfrage "Text auf die Tafel" (AP-2.3) hängen am body
+            // Vorschau/Rückfrage "Text auf die Tafel" (AP-2.3) und der
+            // Klickschutz (AP-2.fix1) hängen am body
             this._blocktextFensterSchliessen();
+            this._blocktextKlickschutzEntfernen();
 
             // Events entfernen
             this.unbindEvents();
@@ -5193,7 +5201,12 @@
             }
 
             function besuchen(knoten, ctx) {
+                // Geschlossenes <details>: nur die Überschrift (SUMMARY) ist zu
+                // sehen; der übrige Inhalt behält sein berechnetes display und
+                // würde sonst mitgelesen (AP-2.fix1, Review-Befund G6)
+                var zu = knoten.nodeName === 'DETAILS' && !knoten.open;
                 for (var k = knoten.firstChild; k; k = k.nextSibling) {
+                    if (zu && k.nodeName !== 'SUMMARY') continue;
                     if (k.nodeType === 3) {
                         var s = k.nodeValue;
                         s = ctx.pre ? s.replace(/\r\n?/g, '\n').replace(/[ \t\f]+/g, ' ')
@@ -5275,13 +5288,7 @@
 
             var self = this;
             var rahmen = this.modell.elemente.map(function(el) { return self._rahmen(el); });
-            var flaeche = modul.flaecheUnter(this._sichtbarerBereich(), rahmen, 20);
-            var ctx = this.drawingCtx;
-            var mass = function(t, px) {
-                ctx.font = px + 'px sans-serif';
-                return ctx.measureText(t).width;
-            };
-            var erg = modul.verteile(absaetze, flaeche, mass, { startPx: 24, minPx: 18, maxZeichen: 5000 });
+            var erg = this._blocktextVerteilen(absaetze, rahmen);
             if (!erg.bloecke.length) return { eingefuegt: 0, rest: absaetze, keinPlatz: true };
 
             var farbe = modul.lesbareFarbe(this.currentColor, this.boardColor);
@@ -5316,16 +5323,40 @@
         },
 
         /**
+         * Absätze im sichtbaren Ausschnitt unter den gegebenen Rahmen
+         * verteilen (24 -> 18 px, höchstens 5000 Zeichen je Block); Breiten
+         * mit der Zeichenebene gemessen wie in _rahmen().
+         */
+        _blocktextVerteilen: function(absaetze, rahmen) {
+            var modul = blocktextModul();
+            var ctx = this.drawingCtx;
+            var mass = function(t, px) {
+                ctx.font = px + 'px sans-serif';
+                return ctx.measureText(t).width;
+            };
+            var flaeche = modul.flaecheUnter(this._sichtbarerBereich(), rahmen, 20);
+            return modul.verteile(absaetze, flaeche, mass, { startPx: 24, minPx: 18, maxZeichen: 5000 });
+        },
+
+        /**
          * Rest auf einer neuen Seite fortsetzen (AP-2.2): addPage() sichert
          * die aktuelle Seite und wechselt auf eine leere, dann wie
          * blocktextEinfuegen() - mit eigenem Undo-Schritt auf der neuen Seite
          * (jede Seite hat ihren eigenen Stapel). Ohne Rest keine neue Seite.
+         * Passt im sichtbaren Ausschnitt nicht einmal einer LEEREN Seite
+         * etwas hin (stark vergrößert), entsteht ebenfalls keine Seite -
+         * Rückgabe keinPlatz (AP-2.fix1, Review-Befund G5: vorher blieb eine
+         * leere Seite zurück, Seiten lassen sich nicht löschen).
          */
         blocktextAufNeueSeite: function(rest) {
             if (!this.modell) return null;
             var text = Array.isArray(rest) ? rest.join('\n\n') : '';
-            if (!blocktextModul().absaetzeAusText(text).length) {
+            var absaetze = blocktextModul().absaetzeAusText(text);
+            if (!absaetze.length) {
                 return { eingefuegt: 0, rest: [], keinPlatz: false };
+            }
+            if (!this._blocktextVerteilen(absaetze, []).bloecke.length) {
+                return { eingefuegt: 0, rest: absaetze, keinPlatz: true };
             }
             this.addPage();
             return this.blocktextEinfuegen(text);
@@ -5345,9 +5376,14 @@
          * löschen (dieselbe Regel wie im Textfeld von openTextInput).
          * Escape ruft beiEscape(). Kein Schließen per Klick neben das
          * Fenster: gekürzter Text ginge sonst verloren.
+         *
+         * AP-2.fix1: Tab/Umschalt+Tab kreisen innerhalb des Fensters
+         * (aria-modal, Review-Befund G1); eine gehaltene Taste auf einem
+         * Knopf (keydown mit repeat) wirkt nicht - gehaltenes Enter auf
+         * "Auf neuer Seite einfügen" legte sonst Seite um Seite an (M1).
          */
         _blocktextFensterBauen: function(zusatzKlasse, titel, meldung, beiEscape) {
-            this._blocktextFensterSchliessen();
+            this._blocktextFensterSchliessen(false);
             var fenster = document.createElement('div');
             fenster.className = 'cbd-board-confirm-overlay cbd-board-blocktext-overlay ' + zusatzKlasse;
             // Fokussierbar: Ein Klick auf den abgedunkelten Rand oder den
@@ -5374,6 +5410,22 @@
                 if (e.key === 'Escape') {
                     e.preventDefault();
                     beiEscape();
+                } else if (e.key === 'Tab') {
+                    var ziele = dialog.querySelectorAll('textarea, button:not([disabled])');
+                    if (!ziele.length) return;
+                    var erstes = ziele[0];
+                    var letztes = ziele[ziele.length - 1];
+                    var aktiv = document.activeElement;
+                    var drinnen = dialog.contains(aktiv);
+                    if (e.shiftKey && (aktiv === erstes || !drinnen)) {
+                        e.preventDefault();
+                        letztes.focus();
+                    } else if (!e.shiftKey && (aktiv === letztes || !drinnen)) {
+                        e.preventDefault();
+                        erstes.focus();
+                    }
+                } else if (e.repeat && e.target && e.target.tagName === 'BUTTON') {
+                    e.preventDefault();
                 }
             });
             this._blocktextFenster = fenster;
@@ -5390,11 +5442,60 @@
             return knopf;
         },
 
-        /** Offenes Blocktext-Fenster entfernen (auch aus destroy/_openOverlay). */
-        _blocktextFensterSchliessen: function() {
+        /**
+         * Offenes Blocktext-Fenster entfernen (auch aus close/destroy/
+         * _openOverlay). rueckfokus: Fokus zurück auf den Knopf "Text auf die
+         * Tafel" (Abbrechen, Weglassen, Schließen, Escape - AP-2.fix1, G1);
+         * sonst bliebe er auf body.
+         */
+        _blocktextFensterSchliessen: function(rueckfokus) {
             var f = this._blocktextFenster;
             this._blocktextFenster = null;
             if (f && f.parentNode) f.parentNode.removeChild(f);
+            if (rueckfokus && f && this.overlay) {
+                var knopf = this.overlay.querySelector('.cbd-board-blocktext-knopf');
+                if (knopf) {
+                    try {
+                        knopf.focus({ preventScroll: true });
+                    } catch (fehler) {
+                        knopf.focus();
+                    }
+                }
+            }
+        },
+
+        /**
+         * Klickschutz nach "Auf die Tafel" bzw. "Auf neuer Seite einfügen"
+         * (AP-2.fix1, Review-Befunde M1/G3): 400 ms lang fängt eine
+         * unsichtbare Fläche über allem (board-mode.css,
+         * .cbd-board-blocktext-schild) Zeigerklicks ab. Der zweite Klick
+         * eines Doppelklicks oder doppelt erkannten Tippens träfe sonst den
+         * Knopf der sofort erscheinenden Folge-Rückfrage (zweite neue Seite)
+         * oder die Zeichenfläche mit aktivem Lasso (Auswahl weg).
+         * Tastatur bleibt frei.
+         */
+        _blocktextKlickschutz: function() {
+            this._blocktextKlickschutzEntfernen();
+            var schild = document.createElement('div');
+            schild.className = 'cbd-board-blocktext-schild';
+            schild.setAttribute('aria-hidden', 'true');
+            document.body.appendChild(schild);
+            this._blocktextSchild = schild;
+            var self = this;
+            this._blocktextSchildZeit = setTimeout(function() {
+                self._blocktextKlickschutzEntfernen();
+            }, 400);
+        },
+
+        /** Klickschutz entfernen (nach Ablauf, in destroy und _openOverlay). */
+        _blocktextKlickschutzEntfernen: function() {
+            if (this._blocktextSchildZeit) {
+                clearTimeout(this._blocktextSchildZeit);
+                this._blocktextSchildZeit = null;
+            }
+            var s = this._blocktextSchild;
+            this._blocktextSchild = null;
+            if (s && s.parentNode) s.parentNode.removeChild(s);
         },
 
         /**
@@ -5410,7 +5511,7 @@
             var teile = this._blocktextFensterBauen('', 'Text auf die Tafel',
                 leer ? 'In diesem Block gibt es keinen Text zum Übernehmen.'
                      : 'Lösche, was du nicht brauchst. Leere Zeilen trennen die Textblöcke.',
-                function() { self._blocktextFensterSchliessen(); });
+                function() { self._blocktextFensterSchliessen(true); });
 
             var feld = null;
             if (!leer) {
@@ -5425,7 +5526,7 @@
 
             teile.aktionen.appendChild(this._blocktextFensterKnopf('cbd-board-confirm-cancel',
                 leer ? 'Schließen' : 'Abbrechen', function() {
-                    self._blocktextFensterSchliessen();
+                    self._blocktextFensterSchliessen(true);
                 }));
             if (!leer) {
                 var erledigt = false;
@@ -5434,7 +5535,8 @@
                         if (erledigt) return; // schneller Doppelklick
                         erledigt = true;
                         var erg = self.blocktextEinfuegen(feld.value);
-                        self._blocktextFensterSchliessen();
+                        self._blocktextFensterSchliessen(false);
+                        self._blocktextKlickschutz();
                         self._blocktextNachEinfuegen(erg, false);
                     }));
             }
@@ -5479,21 +5581,41 @@
          * Rückfrage für den Rest (AP-2.3): "Weglassen" oder "Auf neuer Seite
          * einfügen". Bleibt danach wieder ein Rest, wird erneut gefragt -
          * eine Schleife über die Rückfrage, keine Programmschleife.
+         *
+         * Speichert die Klassen-Tafel gerade (isSaving, saveToServer läuft
+         * noch für die vorige Seite), wartet "Auf neuer Seite einfügen", bis
+         * das Speichern fertig ist (höchstens 15 s): addPage() speichert die
+         * gerade befüllte Seite, und saveToServer() überspränge das während
+         * der Sperre - die Seite wäre nach dem Wiederöffnen leer
+         * (AP-2.fix1, Review-Befund M2). Weglassen/Escape während des Wartens
+         * brechen ab.
          */
         _blocktextRestFragen: function(rest, meldung) {
             if (!this.overlay) return;
             var self = this;
             var teile = this._blocktextFensterBauen('cbd-board-blocktext-rest', 'Text auf die Tafel', meldung,
-                function() { self._blocktextFensterSchliessen(); });
+                function() { self._blocktextFensterSchliessen(true); });
             teile.aktionen.appendChild(this._blocktextFensterKnopf('cbd-board-confirm-cancel', 'Weglassen', function() {
-                self._blocktextFensterSchliessen();
+                self._blocktextFensterSchliessen(true);
             }));
             var erledigt = false;
             var weiter = this._blocktextFensterKnopf('cbd-board-blocktext-neue-seite', 'Auf neuer Seite einfügen', function() {
                 if (erledigt) return;
                 erledigt = true;
-                self._blocktextFensterSchliessen();
-                self._blocktextNachEinfuegen(self.blocktextAufNeueSeite(rest), true);
+                var beginn = Date.now();
+                (function wennGespeichert() {
+                    if (self._blocktextFenster !== teile.fenster) return; // inzwischen geschlossen
+                    if (self.isSaving && Date.now() - beginn < 15000) {
+                        weiter.disabled = true;
+                        weiter.textContent = 'Wird gespeichert …';
+                        setTimeout(wennGespeichert, 150);
+                        return;
+                    }
+                    self._blocktextFensterSchliessen(false);
+                    var erg = self.blocktextAufNeueSeite(rest);
+                    self._blocktextKlickschutz();
+                    self._blocktextNachEinfuegen(erg, true);
+                })();
             });
             teile.aktionen.appendChild(weiter);
             teile.dialog.appendChild(teile.aktionen);
@@ -5506,9 +5628,9 @@
             if (!this.overlay) return;
             var self = this;
             var teile = this._blocktextFensterBauen('cbd-board-blocktext-hinweis', 'Text auf die Tafel', meldung,
-                function() { self._blocktextFensterSchliessen(); });
+                function() { self._blocktextFensterSchliessen(true); });
             var zu = this._blocktextFensterKnopf('cbd-board-confirm-cancel', 'Schließen', function() {
-                self._blocktextFensterSchliessen();
+                self._blocktextFensterSchliessen(true);
             });
             teile.aktionen.appendChild(zu);
             teile.dialog.appendChild(teile.aktionen);
