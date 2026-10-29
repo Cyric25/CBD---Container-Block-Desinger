@@ -899,9 +899,20 @@ html.cbd-board-offen .sidebar-toggle-btn {
 
 /* Darkmode-Inversion des Containers (AP-1.5, .cbd-board-inverted weiter
    unten) hier wieder aufheben: Rahmen und Lasso behalten die Akzentfarbe
-   statt invertiert (blaeulich) zu erscheinen. */
+   statt invertiert (blaeulich) zu erscheinen.
+   F13 (PLAN-Blocktext-Formatierung.md, AP-1.4): Der Container filtert seit
+   AP-1.4 mit `invert(1) hue-rotate(180deg)`. Diese Ebene muss genau das
+   Gegenteil anwenden. CSS reiht Filter von LINKS NACH RECHTS aneinander, die
+   Umkehrung wird daher in umgekehrter Reihenfolge geschrieben:
+   `hue-rotate(180deg) invert(1)`. Nachgerechnet (Filter-Matrizen der
+   Spezifikation): Beide Reihenfolgen liefern dasselbe Ergebnis, weil die
+   Hue-Rotate-Matrix die Grauachse festhaelt und deshalb mit invert(1)
+   vertauscht; die Spiegelung ist also die Form, die man beim Lesen sofort
+   als Umkehrung erkennt, nicht eine rechnerische Notwendigkeit. Zusammen mit
+   dem Filter des Containers ergibt sich die Identitaet (Rahmen und Lasso
+   behalten ihre Akzentfarbe). */
 .cbd-board-canvas-container.cbd-board-inverted .cbd-board-canvas-auswahl {
-    filter: invert(1);
+    filter: hue-rotate(180deg) invert(1);
 }
 
 .cbd-board-canvas-drawing.cbd-board-lasso-aktiv {
@@ -1537,9 +1548,17 @@ html.cbd-board-offen .sidebar-toggle-btn {
    Darkmode aktiv UND die Tafel auf der weissen Standardfarbe steht (siehe
    dortiger Kommentar). Bewusst kein [data-theme="dark"]-Praefix vor dem
    Selektor: die Klasse selbst traegt die Bedingung bereits, sie wird nur
-   im Darkmode ueberhaupt gesetzt. */
+   im Darkmode ueberhaupt gesetzt.
+   F13 (PLAN-Blocktext-Formatierung.md, AP-1.4): Farbtonerhaltend. Reines
+   `invert(1)` macht aus Rot Tuerkis und aus Dunkelrot Hellblau. Die
+   zusaetzliche Drehung um 180 Grad im Farbkreis bringt den Farbton zurueck:
+   Rot bleibt roetlich, Blau blaeulich; Hell und Dunkel bleiben invertiert
+   (weisse Tafel wird dunkel, schwarzer Strich hell). Rein visuell, die
+   gespeicherten Farben sind unveraendert. Die Auswahlebene darin
+   (.cbd-board-canvas-auswahl, weiter oben) hebt das mit der umgekehrten
+   Filterreihenfolge wieder auf. */
 .cbd-board-canvas-container.cbd-board-inverted {
-    filter: invert(1);
+    filter: invert(1) hue-rotate(180deg);
 }
 
 /* Auswahlleiste des Lassos (AP-5.1) */
