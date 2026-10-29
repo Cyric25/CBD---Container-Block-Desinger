@@ -5518,16 +5518,86 @@
          * (PLAN-Blocktext-Formatierung.md, AP-2.1): [{text, teile?}] aus
          * _blocktextLesen() ohne art; teile nur bei formatierten Absätzen.
          * Gleiche Texte wie _blocktextAlsText(). Ohne offene Tafel [].
+         *
+         * Im Darkmode mit den Stilen des Hellmodus gelesen (AP-2.fix1, siehe
+         * _imHellmodus): Die gespeicherten Farben hängen sonst davon ab, in
+         * welchem Modus die Lehrperson die Seite gerade ansieht (Glossar
+         * '#f0b090' statt '#71230a', Grundfarbe hell statt '#333333').
          */
         _blocktextAbsaetze: function() {
             if (!this.overlay) return [];
             var bereich = this.overlay.querySelector('.cbd-board-content');
             if (!bereich) return [];
-            return this._blocktextLesen(bereich).map(function(a) {
+            var self = this;
+            var gelesen = this._imHellmodus(function() {
+                return self._blocktextLesen(bereich);
+            }, bereich);
+            return gelesen.map(function(a) {
                 var absatz = { text: a.text };
                 if (a.teile) absatz.teile = a.teile;
                 return absatz;
             });
+        },
+
+        /**
+         * Führt lesen() mit den berechneten Stilen des Hellmodus aus und
+         * gibt sein Ergebnis zurück (PLAN-Blocktext-Formatierung.md,
+         * AP-2.fix1). Der Darkmode des Themes ist das Attribut data-theme an
+         * <html> (Theme/header.php; Hellmodus = Attribut fehlt). Es wird für
+         * die Dauer des SYNCHRONEN Lesens entfernt und danach mit demselben
+         * Wert wieder gesetzt - dazwischen zeichnet der Browser kein Bild,
+         * es flackert also nichts. Ohne data-theme läuft lesen() direkt,
+         * ohne jeden Eingriff.
+         *
+         * Zwei Fallen - bitte nicht vereinfachen:
+         * 1. CSS-Übergänge: Das Theme hat z. B. .glossar-term
+         *    {transition: all 0.2s}. Ohne Sperre startet das Umschalten mit
+         *    der nächsten Stilberechnung einen Übergang, und
+         *    getComputedStyle() liefert dessen STARTWERT - also wieder die
+         *    Darkmode-Farbe (Hinweg); auf dem Rückweg liefe ein sichtbarer
+         *    Übergang hell -> dunkel. Deshalb sperrt ein eigenes <style> alle
+         *    Übergänge, bis nach dem Zurücksetzen eine Stilberechnung
+         *    erzwungen ist (getComputedStyle an <html> und am gelesenen
+         *    Bereich); erst danach wird es entfernt. Die Reihenfolge
+         *    "zurücksetzen, berechnen, Sperre weg" ist entscheidend: Wer die
+         *    Sperre vor der Berechnung entfernt, startet den Übergang
+         *    hell -> dunkel auf der ganzen Seite. Inline-<style> setzt
+         *    'unsafe-inline' in style-src voraus - das braucht das Theme
+         *    ohnehin (Customizer-CSS als Inline-<style>). Laufende
+         *    Übergänge (z. B. Hover auf dem Knopf) springen durch die
+         *    Sperre an ihr Ende.
+         * 2. Beobachter auf <html>: Ein MutationObserver auf data-theme
+         *    bekäme zwei Einträge (entfernt, wieder gesetzt). Sein Rückruf
+         *    läuft als Mikrotask NACH diesem synchronen Block und sieht das
+         *    Attribut wieder im alten Zustand. Theme und beide Plugins
+         *    beobachten <html> nicht (Stand AP-2.fix1, Liste in der
+         *    Übergabenotiz des Plans); der Theme-Knopf liest das Attribut
+         *    nur beim Klick, die Tafel-Inversion setzt nur
+         *    updateDarkModeInversion(). Wer einen solchen Beobachter
+         *    einbaut, muss ihn gegen dieses kurze Umschalten prüfen.
+         * Mit try/finally: data-theme kommt auch bei einer Ausnahme zurück.
+         * Gelesen werden nur berechnete Stile (kein Layout) - Resize- und
+         * IntersectionObserver bemerken nichts.
+         */
+        _imHellmodus: function(lesen, bereich) {
+            var html = document.documentElement;
+            if (!html || !html.hasAttribute('data-theme')) return lesen();
+            var wert = html.getAttribute('data-theme');
+            var sperre = document.createElement('style');
+            sperre.setAttribute('data-cbd-hellmodus-lesen', '');
+            sperre.appendChild(document.createTextNode('*, *::before, *::after { transition: none !important; }'));
+            (document.head || html).appendChild(sperre);
+            try {
+                html.removeAttribute('data-theme');
+                return lesen();
+            } finally {
+                html.setAttribute('data-theme', wert);
+                // Stilberechnung erzwingen, solange die Sperre noch gilt
+                // (Falle 1 oben) - der Rückgabewert wird nicht gebraucht
+                window.getComputedStyle(html).getPropertyValue('color');
+                if (bereich && bereich.nodeType === 1) window.getComputedStyle(bereich).getPropertyValue('color');
+                if (sperre.parentNode) sperre.parentNode.removeChild(sperre);
+            }
         },
 
         /**
