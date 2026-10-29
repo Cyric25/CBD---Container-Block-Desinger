@@ -910,7 +910,14 @@ html.cbd-board-offen .sidebar-toggle-btn {
    vertauscht; die Spiegelung ist also die Form, die man beim Lesen sofort
    als Umkehrung erkennt, nicht eine rechnerische Notwendigkeit. Zusammen mit
    dem Filter des Containers ergibt sich die Identitaet (Rahmen und Lasso
-   behalten ihre Akzentfarbe). */
+   behalten ihre Akzentfarbe) - aber nur OHNE Klemmen.
+   AP-1.fix1 (Review-Befund B6): Jede Filterfunktion klemmt ihr Ergebnis auf
+   den Farbbereich 0 bis 1; hue-rotate liefert bei gesaettigten Farben
+   Zwischenwerte ausserhalb davon, und die Umkehrung macht das nicht mehr
+   rueckgaengig. Gesaettigte Akzentfarben erscheinen im Darkmode bei weisser
+   Tafel deshalb leicht entsaettigt: `#e24614` (226, 70, 20) wird zu etwa
+   (211, 81, 31) (gerechnet, nicht gemessen); `#2196f3` bleibt exakt, weil
+   dort nichts geklemmt wird. */
 .cbd-board-canvas-container.cbd-board-inverted .cbd-board-canvas-auswahl {
     filter: hue-rotate(180deg) invert(1);
 }

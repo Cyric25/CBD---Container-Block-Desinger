@@ -874,8 +874,10 @@ console.log('\nGruppe 12: textGroesse / textGroessen / naechsteSchrift (3.1.144)
 // =========================================================================
 // Gruppe 13: teile (Formatierung) - Plan „Formatierter Text auf der Tafel",
 // AP-1.1, Entscheidungen F1-F5. Optionales Feld teile: [{t, f?, k?, farbe?}]
-// neben dem unveraenderten text. Die Faelle a-h entsprechen Gruppe D in
-// tools/test-board-elemente.php (Server-Pruefung, AP-1.2).
+// neben dem unveraenderten text. Die Faelle a-h entsprechen Gruppe I in
+// tools/test-board-elemente.php (Server-Pruefung, AP-1.2; die Gruppen A-H
+// dort waren schon belegt, deshalb heisst die neue Gruppe I, nicht D -
+// AP-1.fix1, Review-Befund B8).
 // =========================================================================
 console.log('\nGruppe 13: teile (Formatierung)');
 (function () {

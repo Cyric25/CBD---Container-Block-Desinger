@@ -8,6 +8,14 @@
  *   A  CBD_Classroom::pruefe_elemente_json()   (privat, per Reflection)
  *   B  CBD_Classroom::ajax_save_drawing()      (Spalte schreiben, Selbstheilung)
  *   C  CBD_Classroom::ajax_load_drawing()      (Spalte liefern, alte DB ohne Spalte)
+ *   D  Obergrenze Punkte und Speicherspitze    (AP-4.fix1, Befund F1)
+ *   E  Schreibfehler mit Elementen             (PNG ohne Elemente, AP-4.fix1)
+ *   F  Fingerabdruck des PNG                   (veraltete Liste nach einem Rückweg, AP-4.fix2)
+ *   G  Feld winkel bei Text und Bild           (Lasso-Drehen 3.1.143)
+ *   H  Textgröße nachträglich                  (A−/A+, 3.1.144)
+ *   I  Feld teile                              (formatierter Text, AP-1.2 des Plans
+ *                                               „Blocktext-Formatierung"; Gegenstück:
+ *                                               Gruppe 13 in tools/test-board-elemente-js.js)
  *
  * Aufruf:  php tools/test-board-elemente.php
  *
