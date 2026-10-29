@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Container Block Designer is a WordPress plugin that creates customizable container blocks for the Gutenberg Block Editor. It allows users to create, manage, and apply styled container blocks with features like collapsible sections, copy-to-clipboard, screenshots, and automatic numbering.
 
-**Current Version:** 3.1.137 (Stand Merge Phase 2 von `PLAN-Rueckmeldungen-Blockverweis-iPad-Tafel-Darkmode-Formeln.md`; die genaue Nummer steht in `CBD_VERSION`)
+**Current Version:** 3.1.148 (Stand Phase 2 von `PLAN-Blocktext-Formatierung.md`, „Text auf die Tafel" mit Formatierung; die genaue Nummer steht in `CBD_VERSION`)
 **WordPress Requirements:** 6.0+
 **PHP Requirements:** 7.4+ (rückwärtskompatibel; getestet auf 7.4.33)
 **Tested up to:** WordPress 6.4, PHP 8.4
@@ -3622,6 +3622,19 @@ sei „bewusst konsistent mit dem … Tafelbild-Feature", stimmt seit F13 nicht
 mehr: Die Tafel erhält den Farbton, Theme-Bilder nicht. Bewusst nicht
 nachgezogen (Scope; vermerkt in `Website/DOKUMENTATION.md`).
 
+**„Text auf die Tafel" liest den Block im Hellmodus (seit 3.1.148,
+`_imHellmodus`):** Der linke Blockbereich der Tafel zeigt im Darkmode die
+Farben des Darkmodes (Glossarbegriffe `#f0b090`, helle Grundfarbe).
+Übernommen wird aber die Formatierung, wie sie im Hellmodus aussähe
+(`#71230a`) – sonst hinge die gespeicherte Farbe vom Modus der Lehrperson ab.
+Dazu entfernt `_imHellmodus()` das Attribut `data-theme` für die Dauer des
+synchronen Lesens (mit Übergangssperre, die auch unter einer CSP ohne
+`'unsafe-inline'` wirkt) und setzt es danach wieder. Die Tafelfarben
+selbst (Inversion `cbd-board-inverted`, Filter) bleiben dabei unberührt.
+Mechanismus, die zwei Fallen (Übergänge, Beobachter auf `<html>`) und das
+CSP-Verhalten stehen im Abschnitt „Formatierter Text: das Feld `teile`",
+Unterabschnitt „Blockbereich im Darkmode lesen".
+
 **Bekannte, nicht behobene Einschränkung:** Der Darkmode-Toggle des Themes
 (`Theme/header.php`) setzt `data-theme` ohne Seiten-Reload. Die reinen
 CSS-Regeln oben reagieren dadurch live, die JS-gesteuerte
@@ -4053,14 +4066,15 @@ Server `CBD_Classroom::elemente_winkel()`, gleiche Regel). Striche haben kein
 stünden in der Elementliste dann waagrecht, das PNG (maßgeblich, E7) zeigt sie
 aber weiter gedreht, bis dort neu gespeichert wird.
 
-**Seit Phase 1 von `PLAN-Blocktext-Formatierung.md` (2026-10-29, nach `main`
-gemergt, noch nicht ausgeliefert – das ZIP folgt mit Phase 2, geplant
-3.1.148): optionales Feld `teile`** am Text-Element — fett, kursiv und
-eigene Farbe für Abschnitte des Texts. Format
-und Prüfregel stehen im eigenen Abschnitt „Formatierter Text: das Feld
-`teile`" unten. Gemeint ist nur die Datenhaltung und die Darstellung auf der
-Tafel; erzeugt wird `teile` erst von Phase 2 („Text auf die Tafel") und
-Phase 3 („Text bearbeiten") desselben Vorhabens.
+**Seit Plugin 3.1.148 (Phasen 1 und 2 von `PLAN-Blocktext-Formatierung.md`,
+2026-10-29): optionales Feld `teile`** am Text-Element — fett, kursiv und
+eigene Farbe für Abschnitte des Texts. Format und Prüfregel stehen im
+eigenen Abschnitt „Formatierter Text: das Feld `teile`" unten. Phase 1
+lieferte Datenhaltung und Darstellung auf der Tafel, Phase 2 den ersten
+Erzeuger: „Text auf die Tafel" übernimmt fett, kursiv und Farbe aus dem
+Block und lässt sie im Bearbeitungsfeld der Vorschau ändern. Ein zweiter
+Erzeuger, „Text bearbeiten" für einen einzelnen gewählten Text (Phase 3
+desselben Vorhabens), steht noch aus.
 
 **Das PNG bleibt die maßgebliche Darstellung (E7).** Schüleransicht,
 Live-Aktualisierung (Klassenpuls), Blockanzeige und PDF-Export lesen
@@ -4082,12 +4096,21 @@ liest nur das PNG, nie `-elemente`/`elemente_data`.
   prüft den Quelltext darauf.
 - `assets/js/board-mode.js` – Zustand `this.modell`, `this.undoStapel`,
   `zeichneModell()` (Alias `redrawAllStrokes()`), Speichern/Laden, die eine
-  Messfunktion `_textMass()` (siehe „Formatierter Text: das Feld `teile`").
+  Messfunktion `_textMass()` (siehe „Formatierter Text: das Feld `teile`");
+  seit Phase 2 des Vorhabens „Formatierter Text" auch Leser, Bearbeitungsfeld
+  und Einfügen von „Text auf die Tafel" (`_blocktextLesen`, `_textFeldBauen`,
+  `_textFeldLesen`, `_blocktextMitTeilen`, `_imHellmodus`).
+- `assets/js/board-blocktext.js` – reines, DOM-freies Modul
+  `window.CBDBoardBlocktext` (Absätze, Umbruch, Verteilung, Farben; seit
+  Phase 2 acht Funktionen, Absätze auch mit `teile`, siehe „Blocktext auf die
+  Tafel", Unterabschnitt „Modul `board-blocktext.js`").
 - `includes/class-cbd-classroom.php` – `pruefe_elemente_json()` (mit
   `elemente_winkel()` und `elemente_teile()`), `elemente_huelle()`,
   `elemente_aus_huelle()`, `ajax_save_drawing()`, `ajax_load_drawing()`.
 - `assets/css/board-mode.css` – seit F13 auch die beiden Darkmode-Filter der
-  Tafel (Abschnitt „Tafelmodus im Darkmode").
+  Tafel (Abschnitt „Tafelmodus im Darkmode"); seit Phase 2 das Bearbeitungsfeld
+  `.cbd-board-blocktext-feld` und die Formatleiste
+  `.cbd-board-blocktext-format` (Abschnitt „BLOCKTEXT AUF DIE TAFEL").
 - `assets/js/personal-notes-manager.js` – Export/Import/Löschen/Zählung.
 
 ### Speicherorte
@@ -4234,11 +4257,11 @@ Abschnitt „Formatierter Text: das Feld `teile`".
 
 | Aufruf | Prüft | Stand |
 |---|---|---|
-| `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | **363 Prüfungen**, Stand Ende Phase 1 des Vorhabens „Formatierter Text" (266 bis 3.1.147, davon seit 3.1.143 Gruppe 11 Drehen/Kopieren/`winkel`, seit 3.1.144 Gruppe 12 Textgröße; dazu 97 aus Gruppe 13 „teile") |
-| `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall, `winkel` (G), Textgröße (H), `teile` (I) | **239 Prüfungen**, Stand Ende Phase 1 (130 in A–H bis 3.1.147, dazu 109 aus Abschnitt I „teile", dieselbe Fallliste wie die JS-Gruppe 13) |
+| `node tools/test-board-elemente-js.js` | Modul `board-elemente.js` ohne Browser | **363 Prüfungen**, seit Ende Phase 1 des Vorhabens „Formatierter Text" unverändert, auch in Phase 2 (266 bis 3.1.147, davon seit 3.1.143 Gruppe 11 Drehen/Kopieren/`winkel`, seit 3.1.144 Gruppe 12 Textgröße; dazu 97 aus Gruppe 13 „teile") |
+| `php tools/test-board-elemente.php` | Serverseite (Stubs, ohne WordPress): Prüfung, Grenzen, Speicherspitze, Hülle, Selbstheilung, Rückfall, `winkel` (G), Textgröße (H), `teile` (I) | **239 Prüfungen**, seit Ende Phase 1 unverändert, auch in Phase 2 (130 in A–H bis 3.1.147, dazu 109 aus Abschnitt I „teile", dieselbe Fallliste wie die JS-Gruppe 13) |
 | `node tools/test-notizen-manager-js.js` | `personal-notes-manager.js` (Mini-DOM im `vm`) | 34 Prüfungen |
-| `node tools/test-board-blocktext-js.js` | Modul `board-blocktext.js` ohne Browser (Blocktext auf die Tafel, seit 2026-10-28): Formelumwandlung inkl. Bestandslauf über `tools/fixtures/blocktext/formeln.json`, Absätze, Umbruch, Verteilung, Farbe | 242 Prüfungen (seit AP-2.fix1) |
-| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **232 Prüfungen**, Stand Ende Phase 1 des Vorhabens „Formatierter Text" (218 bis 3.1.147; dazu 14 aus `test-board-format.js`, 13 aus AP-1.3 und eine aus AP-1.fix1; die Datei lädt nach `test-board-textgroesse.js` und vor `test-board-blocktext.js`). Die 218 setzen sich so zusammen: 160 bis 3.1.145, davon 12 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; dazu 58 aus `test-board-blocktext.js`, davon 4 seit dem Folge-AP G9; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4). Muss über den Webserver laufen (Fixtures per `fetch`), Wartezeit eher 15–20 s |
+| `node tools/test-board-blocktext-js.js` | Modul `board-blocktext.js` ohne Browser (Blocktext auf die Tafel, seit 2026-10-28): Formelumwandlung inkl. Bestandslauf über `tools/fixtures/blocktext/formeln.json`, Absätze, Umbruch, Verteilung, Farbe; seit Phase 2 des Vorhabens „Formatierter Text" auch Absätze mit `teile` (`umbrechenTeile`, `verteile` mit Objekten, `lesbareLauffarbe`, Surrogatpaare) | **346 Prüfungen**, Stand Ende Phase 2 (242 bis 3.1.147, davon seit AP-2.fix1 Gruppe 10 `flaecheUnter`; dazu 104 aus den Gruppen 11–14; Gruppe 3 prüft seitdem genau acht statt sechs Funktionen) |
+| `tools/test-board-zeiger.html` im Browser | `board-mode.js` mit synthetischen PointerEvents | **296 Prüfungen**, Stand Ende Phase 2 des Vorhabens „Formatierter Text" (232 bis Ende Phase 1; dazu 64 neue in `test-board-blocktext.js`: 19 Formatierung lesen (AP-2.1), 13 formatiert einfügen (AP-2.3), 17 Bearbeitungsfeld (AP-2.4), 7 Darkmode lesen (AP-2.fix1), 8 Robustheit des Felds (AP-2.fix2); die HTML-Seite selbst blieb unverändert). Die 232 setzen sich so zusammen: 218 bis 3.1.147 und 14 aus `test-board-format.js`, 13 aus AP-1.3 und eine aus AP-1.fix1; die Datei lädt nach `test-board-textgroesse.js` und vor `test-board-blocktext.js`. Die 218 setzen sich so zusammen: 160 bis 3.1.145, davon 12 aus `test-board-drehen.js` und 5 aus `test-board-textgroesse.js`; dazu 58 aus `test-board-blocktext.js`, davon 4 seit dem Folge-AP G9; Aufteilung bis 3.1.142: 50 eigene seit #7152 + `test-board-modell.js` 23 + `test-board-speichern.js` 32 + `test-board-lasso.js` 34 + `test-board-standard.js` 4). Muss über den Webserver laufen (Fixtures per `fetch`), Wartezeit eher 15–20 s |
 | `php tools/check-php74.php` | PHP-7.4-Kompatibilität | muss OK sein |
 
 Prüfseite: Viewport VOR dem Laden auf ~1366×768, nach dem Laden ca. 10 s
@@ -4246,15 +4269,23 @@ warten und `window.__zusammenfassung` direkt lesen. **`window.__laufen()`
 NICHT aufrufen** – es startet die Prüfungen ein zweites Mal im selben
 Dokument und liefert verfälschte Zahlen (Befund AP-4.doc).
 Cache-Falle: nach dem Kopieren geänderter Skripte `fetch(…, {cache:'reload'})`.
-**Seltener Ausreißer im ausgeblendeten Browser-Bereich (Fernsteuerung):**
-„AP-5.1: ESC ohne Auswahl schließt die Tafel wie bisher" meldet gelegentlich
-eine Zeitüberschreitung von 2000 ms, mit dem Folgefehler „AP-5.2:
-Zwischenstand folgt dem Ziehen … getBoundingClientRect von null" (dann 230 /
-232 statt 232 / 232; in AP-1.fix1 einmal in vier Läufen, beim Neuladen mit
-neuem Abfrageparameter nicht wiederholt). Beide Prüfungen haben nichts mit
-Text zu tun; vermutete Ursache ist Zeitempfindlichkeit im ausgeblendeten
-Bereich. **Bei einem einzelnen Ausreißer neu laden, nicht den Code
-verdächtigen** – tritt er wiederholt auf, untersuchen.
+**Zwei seltene Ausreißer im ausgeblendeten Browser-Bereich (Fernsteuerung),
+beide Zeitüberschreitungen – nicht vom Code:**
+1. „AP-5.1: ESC ohne Auswahl schließt die Tafel wie bisher" meldet
+   gelegentlich eine Zeitüberschreitung von 2000 ms, mit dem Folgefehler
+   „AP-5.2: Zwischenstand folgt dem Ziehen … getBoundingClientRect von null"
+   (dann zwei Prüfungen weniger als die Sollzahl; in AP-1.fix1 einmal in vier
+   Läufen, beim Neuladen mit neuem Abfrageparameter nicht wiederholt).
+2. „AP-4.fix1: Server – mehr als 100 000 Punkte: keine Liste senden, ‚Nur als
+   Bild gespeichert‘" (`tools/test-board-speichern.js`) wartet 2000 ms auf den
+   Status und sieht dann `""`. Trat seit AP-2.3 vereinzelt auf (zwei von neun
+   Läufen, einmal in AP-2.fix1), auch bei unverändertem `board-mode.js`; die
+   Prüfung baut ein Modell mit über 100 000 Punkten, das den Zeitgeber knapp
+   macht. Beim Neuladen jeweils grün.
+Beide Prüfungen haben nichts mit Text zu tun; vermutete Ursache ist
+Zeitempfindlichkeit im ausgeblendeten Bereich. **Bei einem einzelnen
+Ausreißer neu laden (neuer Abfrageparameter), nicht den Code verdächtigen** –
+tritt er wiederholt auf, untersuchen.
 Die Mutationsprobe des Moduls (Kopie per Umgebungsvariable
 `CBD_ELEMENTE_DATEI`) hat alle wesentlichen Mutationen erkannt.
 
@@ -4503,32 +4534,49 @@ Prüfseite, nach `test-board-drehen.js` geladen), Gruppe 12 in
 Testinstallation geprüft (28 → 34 px). **Abnahme am Smartboard/iPad steht
 aus.**
 
-### Blocktext auf die Tafel (Plan `Plan_Archiv/PLAN-Blocktext-auf-Tafel.md`, abgeschlossen 2026-10-29, Plugin 3.1.146; Folge-AP G9 in 3.1.147)
+### Blocktext auf die Tafel (Plan `Plan_Archiv/PLAN-Blocktext-auf-Tafel.md`, abgeschlossen 2026-10-29, Plugin 3.1.146; Folge-AP G9 in 3.1.147; Formatierung und Bearbeitungsfeld seit 3.1.148, Phase 2 von `PLAN-Blocktext-Formatierung.md`)
 
 Wunsch der Schüler: den Text des geöffneten Blocks als Text-Elemente auf die
 eigene Tafel kopieren. Phase 1 lieferte das DOM-freie Modul
 `board-blocktext.js` und Testmaterial, Phase 2 die Funktion in der Tafel.
+**Seit 3.1.148 übernimmt die Funktion auch fett, kursiv und Farbe** und zeigt
+den Text in der Vorschau als formatiert bearbeitbares Feld; die technischen
+Einzelheiten (Leser, Feld, Teilfarben, Darkmode) stehen im Abschnitt
+„Formatierter Text: das Feld `teile`", Unterabschnitte der Phase 2.
 
 #### Bedienung
 
 Oben im linken Blockbereich klebt eine Leiste mit dem Knopf **„Text auf die
 Tafel"** (`.cbd-board-blocktext-leiste` > `button.cbd-board-blocktext-knopf`,
 Dashicon `clipboard`). Er öffnet die **Vorschau**: ein Fenster mit dem
-sichtbaren Text des Blocks in einem Textfeld („Lösche, was du nicht brauchst.
-Leere Zeilen trennen die Textblöcke."). Hier wird gekürzt und geändert –
-Markieren im Blockbereich selbst bleibt seit #7149 gesperrt. **„Auf die
-Tafel"** setzt jeden Absatz als eigenes Text-Element unter den vorhandenen
-Inhalt der aktuellen Seite; danach ist das Lasso aktiv und alles Eingefügte
-ausgewählt (verschieben, A−/A+, drehen sofort möglich). Passt nicht alles,
-fragt ein zweites Fenster: „N Textblöcke passen nicht mehr auf diese Seite."
-→ **„Weglassen"** oder **„Auf neuer Seite einfügen"** (wiederholt sich, bis
-alles steht). Ohne sichtbaren Text: Hinweis und nur „Schließen".
+sichtbaren Text des Blocks in einem **formatiert bearbeitbaren Feld**
+(`div.cbd-board-blocktext-feld[contenteditable]`, bis 3.1.147 ein `textarea`)
+samt Formatleiste darüber („Lösche, was du nicht brauchst. Jeder Absatz wird
+ein eigener Textblock. Markiere Wörter, um sie fett, kursiv oder farbig zu
+machen."). Das Feld zeigt den Text so, wie er auf die Tafel kommt:
+Hintergrund = Tafelfarbe, Grundschrift = Einfügefarbe (der aktuelle Stift,
+lesbar gemacht), fett, kursiv und farbige Wörter (Glossarbegriffe, Links, im
+Editor gesetzte Farben) schon sichtbar. Die Formatleiste hat **F** (Fett),
+**K** (Kursiv), die sechs Stiftfarben der Tafel und **Standard** (entfernt
+die Farbe); sie wirkt auf die markierte Stelle. Hier wird gekürzt und
+geändert – Markieren im Blockbereich selbst bleibt seit #7149 gesperrt.
+**„Auf die Tafel"** setzt jeden Absatz (jedes `div` im Feld) als eigenes
+Text-Element unter den vorhandenen Inhalt der aktuellen Seite; danach ist das
+Lasso aktiv und alles Eingefügte ausgewählt (verschieben, A−/A+, drehen
+sofort möglich). Passt nicht alles, fragt ein zweites Fenster: „N Textblöcke
+passen nicht mehr auf diese Seite." → **„Weglassen"** oder **„Auf neuer Seite
+einfügen"** (wiederholt sich, bis alles steht; der Rest behält seine
+Formatierung). Ohne sichtbaren Text: Hinweis und nur „Schließen".
 
-#### Lesen des Blockbereichs: `_blocktextLesen(wurzel)` (`board-mode.js`)
+#### Lesen des Blockbereichs: `_blocktextLesen(wurzel, optionen)` (`board-mode.js`)
 
-Tiefensuche über `childNodes`, liefert `[{art, text}]` (`art`: `titel`,
-`ueberschrift`, `absatz`, `liste`, `zeile`, `formel`). `_blocktextAlsText()`
-verbindet die Texte von `.cbd-board-content` mit Leerzeilen.
+Tiefensuche über `childNodes`, liefert `[{art, text[, teile]}]` (`art`:
+`titel`, `ueberschrift`, `absatz`, `liste`, `zeile`, `formel`; `teile` nur bei
+formatierten Absätzen, Regel F6 und Optionen im Unterabschnitt „Formatierung
+lesen"). `_blocktextAlsText()` verbindet die Texte von `.cbd-board-content` mit
+Leerzeilen und wird seit AP-2.4 nur noch von Prüfungen genutzt; die Vorschau
+liest über `_blocktextAbsaetze()` (`[{text, teile?}]`, im Darkmode über
+`_imHellmodus`).
 
 - **Nur Sichtbares** (Architektur E7): `hidden`, `aria-hidden="true"`,
   berechnet `display:none` oder `visibility:hidden` fallen samt Inhalt weg.
@@ -4557,8 +4605,30 @@ verbindet die Texte von `.cbd-board-content` mit Leerzeilen.
   bleiben.
 - Braucht einen im Dokument hängenden Bereich (`getComputedStyle`).
 
-#### Einfügen: `blocktextEinfuegen(text)` / `blocktextAufNeueSeite(rest)`
+#### Einfügen: `blocktextEinfuegen(eingabe)` / `blocktextAufNeueSeite(rest)`
 
+- **Eingabe (seit 3.1.148):** eine Zeichenkette (Leerzeile trennt die Absätze,
+  wie bisher) **oder ein Array** von Absätzen – Objekte `{text, teile?}`
+  und/oder Zeichenketten (`_blocktextAbsaetzeAus()`). Einträge ohne sichtbaren
+  Text zählen nicht, auch Nur-Leerraum-Objekte nicht; Zeichenketten im Array
+  laufen wie die Zeichenketten-Eingabe durch `absaetzeAusText()`. Die
+  Vorschau übergibt das Array aus `_textFeldLesen()`. Der Zeichenketten-Aufruf
+  verhält sich byte-gleich wie vor 3.1.148 (kein `teile`, Rest nur
+  Zeichenketten).
+- **`_blocktextMitTeilen(el, teile)`:** Hat ein Block von `verteile()`
+  `teile`, entsteht aus dem Element von `_elementAusStroke()` ein **neues**
+  Objekt in der Schlüsselreihenfolge `id, typ, farbe, breite, text, x, y,
+  teile`. Jede Teilfarbe geht durch `lesbareLauffarbe(farbe, boardColor)`
+  (F7, idempotent); kann die Funktion eine Farbe nicht verarbeiten (z. B.
+  `rgb()`, das aufs Farbmuster passt, aber kein `#rgb`/`#rrggbb` ist),
+  entfällt die Farbe; danach `CBDBoardElemente.teileZusammenlegen`. **Absicherung
+  (nicht im Plan, in AP-2.3 ergänzt):** Bleibt keine Formatierung, hat das
+  Ergebnis mehr als `MAX_TEILE` Teile oder ergibt ihre Verkettung nicht den
+  `text`, kommt das Element **ohne `teile`** (der Text bleibt vollständig).
+  Sonst bestünde es die Modellprüfung nicht, und beim Speichern/Laden entfiele
+  die Formatierung still; gezeichnet würde ohnehin schon unformatiert
+  (`zeilenTeile`). Das Modul `board-blocktext.js` setzt `MAX_TEILE` nicht
+  durch.
 - `_sichtbarerBereich()`: Größe von `.cbd-board-canvas-area`, um
   `panX`/`panY`/`zoom` zurückgerechnet, auf die Zeichenfläche begrenzt.
 - **Platzierung (E9):** `flaecheUnter(sichtbar, Rahmen aller Elemente, 20)` –
@@ -4583,11 +4653,17 @@ verbindet die Texte von `.cbd-board-content` mit Leerzeilen.
 - **Schrift (E3):** `verteile(…, {startPx: 24, minPx: 18, maxZeichen: 5000})`
   über `_blocktextVerteilen()`; `breite = (px − 16) / 4`. Der Umbruch auf die
   sichtbare Breite steht als `\n` im Text (E8, kein neues Elementfeld) – A±
-  bricht deshalb **nicht** neu um.
+  bricht deshalb **nicht** neu um. Gemessen wird seit AP-2.3 nur noch über
+  `_textMass()` **mit Stil**: ein fetter oder kursiver Teil misst in seiner
+  Schrift (fett ist breiter), sonst stimmten Umbruch und Rahmen nicht. Ohne
+  Zeichenebene schätzt das Modul.
 - **Farbe (E10):** `lesbareFarbe(currentColor, boardColor)` – nach dem Öffnen
   ist der Stift Schwarz, auf grüner/schwarzer Tafel wird daraus Weiß.
   Darkmode mit weißer Tafel: gespeichert Schwarz, angezeigt hell (die
-  Zeichenfläche wird invertiert, seit F13 farbtonerhaltend).
+  Zeichenfläche wird invertiert, seit F13 farbtonerhaltend). **Teilfarben**
+  (seit 3.1.148) macht `lesbareLauffarbe` lesbar, Beispiel grüne Tafel: das
+  Glossar-Dunkelrot `#71230a` wird zu `#b18678` (Kontrast 3,31, Farbton
+  bleibt rötlich).
 - **Undo (E11):** EIN `merkeZustand()` je Seite, neue Liste per `concat`.
   Danach `auswahlAufheben()`, `setTool('lasso')`, Werkzeugknopf der Leiste
   nachgezogen (`setTool` selbst stellt ihn nicht um), `auswahl` = neue IDs.
@@ -4613,7 +4689,12 @@ Muster von `showClearConfirm()` (`div.cbd-board-confirm-overlay` >
   `onKeyDown()` steigt aus, solange ein Blocktext-Fenster offen ist (Fokus per
   Tab außerhalb). Tab kreist im Fenster; nach Abbrechen/Weglassen/Schließen/
   Escape kehrt der Fokus auf den Knopf zurück. Gehaltene Taste auf einem
-  Knopf (`e.repeat`) wirkt nicht.
+  Knopf (`e.repeat`) wirkt nicht. **Seit 3.1.148 gilt das alles auch im
+  Bearbeitungsfeld:** Esc, Strg+Z, Entf, Rücktaste, Tab und Strg+D wirken
+  nicht auf die Tafel (Strg+Z macht dort das Rückgängig des Felds); die
+  Tab-Falle zählt `[contenteditable="true"]` als Ziel mit, sonst läge das
+  Feld außerhalb der Falle. Tab-Folge: Feld → Formatleiste (ein Halt, siehe
+  „Das Bearbeitungsfeld") → „Abbrechen" → „Auf die Tafel".
 - Kein Schließen per Klick neben das Fenster (gekürzter Text ginge verloren).
 - **Klickschutz (AP-2.fix1):** 400 ms nach „Auf die Tafel"/„Auf neuer Seite
   einfügen" liegt `div.cbd-board-blocktext-schild` (durchsichtig,
@@ -4640,25 +4721,41 @@ Deshalb steht neben jedem `padding` von `.cbd-board-content` (Grundregel,
 `--cbd-board-inhalt-rand-oben` (24/16/8 px); die Leiste nimmt sie als
 negatives `top`/`margin-top` und als `padding` oben. **Wer das `padding`
 ändert, muss die Variable mitziehen.** Fenster: höchstens Bildschirmhöhe,
-das Textfeld schrumpft zuerst (bei 1141×253: 61 px, Knöpfe sichtbar).
+das Bearbeitungsfeld schrumpft zuerst (bei 1141×253: rund 53 px, beide
+Knöpfe sichtbar; dort macht `@media (max-height: 500px)` die Formatleiste
+und das Fenster kompakter – ohne das lagen „Abbrechen"/„Auf die Tafel"
+unterhalb des Fensters, bis 3.1.147 mit dem `textarea` 61 px).
 
 #### Prüfungen und Abnahme
 
-- Prüfseite `tools/test-board-zeiger.html`: **218 / 218** (3.1.147), davon 58
-  aus `tools/test-board-blocktext.js` (Leseregeln, die acht Testmaterial-Paare
-  zeichengenau, Einfügen, Knopf und Fenster, Befunde des Reviews, vier
-  G9-Prüfungen: Leiste frei nach langem Text, nach A+, bei Zoom 2; Rückfall
-  bei sehr niedrigem Ausschnitt).
+- Prüfseite `tools/test-board-zeiger.html`: **296 / 296** (Stand 3.1.148).
+  Davon 122 aus `tools/test-board-blocktext.js`: 58 bis 3.1.147 (Leseregeln,
+  die acht Testmaterial-Paare zeichengenau, Einfügen, Knopf und Fenster,
+  Befunde des Reviews, vier G9-Prüfungen: Leiste frei nach langem Text, nach
+  A+, bei Zoom 2; Rückfall bei sehr niedrigem Ausschnitt) und 64 aus
+  Phase 2 des Vorhabens „Formatierter Text" (Aufschlüsselung in der
+  Prüfharnisch-Tabelle bei „Tafel-Elemente: Elementmodell v1"; Einzelheiten
+  im Abschnitt „Formatierter Text: das Feld `teile`", Unterabschnitt „Prüfungen
+  und Abnahme (Phase 2)"). Drei der 58 älteren Prüfungen (`vorschauKlick`,
+  `gekuerztEinfuegen`, `klickNebenFenster`) lesen und setzen das Feld seit
+  AP-2.4 über die Helfer `feldText()`/`feldSetzen()` statt `textarea.value` –
+  geplante Umstellung (F8), eigener Commit.
 - G9 zusätzlich mit echten Klicks auf Seite 876 geprüft: 1366×768 (Seite
   voll, Rest auf neuer Seite, zweimal A+), 375×812 und 1141×253 (Leiste
   zweizeilig) – die Leiste lag jedes Mal über dem Text.
-- `node tools/test-board-blocktext-js.js`: **242** (Gruppe 10: `flaecheUnter`).
+- `node tools/test-board-blocktext-js.js`: **346** (Gruppe 10:
+  `flaecheUnter`; Gruppen 11–14: Absätze mit Teilen, Teilfarben,
+  Surrogatpaare).
 - Mit echten Klicks, Tasten, Maus und Doppelklicks auf den Seiten 876, 5652,
   2323 durchgespielt; Fenstergrößen 1366×768, 1024×768, 820×1180, 375×812,
   1141×253; grüne Tafel, Darkmode, Rest auf neuer Seite mit Seitenwechsel.
-- **Offen:** Abnahme am Smartboard und iPad (Bildschirmtastatur im Textfeld,
-  Antippen, mit Stift weiterschreiben) und auf einer echten Klassen-Tafel
-  (Speichern abwarten nur mit simuliertem `isSaving` geprüft).
+  Die Formatierung (Phase 2) wurde auf 876 und 325 mit echten Klicks und echtem
+  Tippen geprüft, dazu eine **echte Klassen-Tafel** (Rundlauf bis in die
+  Datenbank, siehe unten).
+- **Offen:** Abnahme am Smartboard und iPad (Bildschirmtastatur im Feld,
+  Antippen der Formatleiste, mit Stift weiterschreiben), in Safari und
+  Firefox sowie das **echte Einfügen aus der Zwischenablage** (Liste im
+  Unterabschnitt „Betreiber-Abnahme").
 
 #### Bekannte Einschränkungen (Nicht-Ziele und Review AP-2.rev)
 
@@ -4681,6 +4778,13 @@ das Textfeld schrumpft zuerst (bei 1141×253: 61 px, Knöpfe sichtbar).
 - Klassen-Tafel: Schließen direkt nach „Auf neuer Seite einfügen" kann das
   Speichern der letzten Seite weiter überspringen – vorbestehend, siehe
   „Bekannte, bewusst offene Punkte", Punkt 3 (Warteschlange als Folge-AP).
+- **Formatierung (seit 3.1.148, Review AP-2.rev, alle gering):** Glossarbegriffe
+  im **Fließtext** sind nicht fett – `glossar-style.css` setzt nur Farbe und
+  Unterstreichung, die berechnete Stärke ist 400; fett sind sie nur im fetten
+  Umfeld (Blocktitel, `<strong>`), im Fließtext kommt nur die Farbe
+  `#71230a` mit (Regel F6, so gewollt). Weitere Punkte (B4, B6, B7, B8,
+  Doppelklick mit Leerzeichen) im Abschnitt „Formatierter Text: das Feld
+  `teile`", Unterabschnitt „Bekannte Einschränkungen (Phase 2, …)".
 - Testumgebung: Tafel aus der Konsole mit `{stableContainerId: …}` öffnen
   (sonst speichert sie unter der seitenabhängigen `cbd-container-N`).
 
@@ -4689,17 +4793,34 @@ das Textfeld schrumpft zuerst (bei 1141×253: 61 px, Knöpfe sichtbar).
 `assets/js/board-blocktext.js`, IIFE, ES5, setzt `window.CBDBoardBlocktext`,
 DOM-frei (Harnisch prüft auch Kommentare auf `document`, `localStorage`,
 `getContext`, `querySelector`, `getComputedStyle` und auf Backticks).
-Textbreiten misst der Aufrufer über `mass(text, px)` (im Browser
-`measureText`). Genau sechs Funktionen:
+Textbreiten misst der Aufrufer über `mass(text, px, stil)` (im Browser
+`measureText` über `_textMass()`); `stil` ist `{f: 0|1, k: 0|1}` und wird nur
+von Aufrufern mit Teilen gebraucht – Zeichenketten-Absätze messen weiter mit
+zwei Argumenten, also in normaler Schrift (Messaufrufe wie vor Phase 2). Ein
+**Absatz** ist eine Zeichenkette (Verhalten unverändert) oder ein Objekt
+`{text, teile?}` (`teile` im Format des Elementmodells; unbrauchbare `teile`
+gelten als Klartext). Seit Phase 2 des Vorhabens „Formatierter Text" **acht**
+Funktionen (bis 3.1.147 sechs; Gruppe 3 des Harnischs prüft genau diese
+acht):
 
 | Funktion | Ergebnis | Regeln (kurz) |
 |---|---|---|
 | `latexZuText(latex, protokoll)` | lesbarer Unicode-Text | siehe unten; wirft nie, nie ein Backslash; unbekannte Befehle → `protokoll.unbekannt` |
 | `absaetzeAusText(text)` | `[string]` | Trennung an Leerzeilen, einzelne `\n` bleiben, getrimmt |
-| `umbrechen(text, maxBreite, px, mass)` | `[zeile]` | an Leerzeichen; harte `\n` bleiben; zu breites Wort zeichenweise |
-| `verteile(absaetze, flaeche, mass, optionen)` | `{px, bloecke:[{text,x,y,b,h}], rest}` | Schrift `startPx` 24 → `minPx` 18 in 1-px-Schritten, bis alles passt; Zeilenhöhe `1.2*px`, Absatzabstand `Math.round(0.6*px)`; sonst Auffüllen, Teilung an Zeilengrenze; Blöcke ≤ 5000 Zeichen (Teile direkt untereinander) |
+| `umbrechen(text, maxBreite, px, mass)` | `[zeile]` | an Leerzeichen; harte `\n` bleiben; zu breites Wort zeichenweise **je Codepunkt** (Surrogatpaar nie getrennt, B1) |
+| `umbrechenTeile(absatz, maxBreite, px, mass)` | `[{text, teile}]` | (neu) gleiche Wortgrenzen und Sonderfälle wie `umbrechen`, aber je Abschnitt gleichen Stils mit `mass(t, px, {f, k})` gemessen (fett ist breiter); das Leerzeichen an der Umbruchstelle entfällt; je Zeile zusammengelegte Teile, Klartextzeile `[{t: zeile}]`, leere Zeile `[]`; ein Teil über `\n` hinweg wird geteilt; Teilung ebenfalls nur an Codepunkt-Grenzen |
+| `verteile(absaetze, flaeche, mass, optionen)` | `{px, bloecke:[{text,teile?,x,y,b,h}], rest}` | Schrift `startPx` 24 → `minPx` 18 in 1-px-Schritten, bis alles passt; Zeilenhöhe `1.2*px`, Absatzabstand `Math.round(0.6*px)`; sonst Auffüllen, Teilung an Zeilengrenze; Blöcke ≤ 5000 Zeichen (Teile direkt untereinander). **Mit Objekten:** `teile` nur bei Blöcken mit Formatierung (Verkettung aller `t` === `text`, das eingefügte `\n` gehört zum vorigen Teil, Breite = Summe der Teile), `rest` in Eingabeform (Objekt → `{text[, teile]}` ab der Teilungsstelle, Zeichenketten bleiben Zeichenketten); Zeichenketten, Objekte und gemischte Listen sind erlaubt, Objekte mit leerem `text` zählen nicht |
 | `flaecheUnter(sichtbar, rahmenListe, rand)` | `{x,y,b,h}` | unter der Unterkante aller Rahmen, die den sichtbaren Bereich waagrecht schneiden und oberhalb seiner Unterkante beginnen (seit AP-2.fix1); `h` nie negativ |
 | `lesbareFarbe(stift, tafel)` | `'#rrggbb'` | Stift, wenn Kontrast ≥ 3:1 (WCAG); sonst Weiß/Schwarz; ungültiger Stift = Schwarz, ungültige Tafel = Weiß |
+| `lesbareLauffarbe(farbe, tafel)` | `'#rrggbb'` oder `null` | (neu, F7) Kontrast < 3 → die Farbe in 5-%-Schritten mit Weiß (dunkle Tafel) bzw. Schwarz (helle Tafel) mischen, bis Kontrast ≥ 3 – der Farbton bleibt erkennbar; „dunkel" heißt, Weiß hat zur Tafel mehr Kontrast als Schwarz; idempotent; nimmt nur `#rgb`/`#rrggbb` (sonst `null`, z. B. `rgb()` oder ein Name), ungültige Tafel gilt als Weiß |
+
+`verteile`/`umbrechenTeile` setzen `MAX_TEILE` nicht durch; das tut der
+Aufrufer (`_blocktextMitTeilen`, siehe „Einfügen"). Intern: `absatzNormieren`
+(eine Stil-Nummer je UTF-16-Einheit, Farben nur nach dem Farbmuster wie in
+`board-elemente.js`, ein Low-Surrogat erbt den Stil), der Umbruch arbeitet auf
+Bereichen (`umbrecheBereich`, gleiche Regeln und Messaufrufe wie das frühere
+`umbrecheZeile`), ein Zwischenspeicher der Teilbreiten je Umbruch (60
+formatierte Absätze: 24 771 statt 81 251 Messaufrufe).
 
 **Rest eines geteilten Absatzes (AP-1.fix1):** `rest[0]` ist der
 **unveränderte restliche Quelltext** des Absatzes – ohne die weichen
@@ -4734,8 +4855,8 @@ Zeilen (`umbrechen` entfernt nur Leerraum).
   übergibt Arrays aus einem anderen `vm`-Kontext (erster grüner Versuch
   scheiterte daran).
 - Trimmen per Schleife, nicht per `/\s+$/` (quadratisch bei langen
-  Leerzeichenfolgen; die Eingabe kommt in Phase 2 aus einem frei
-  bearbeitbaren Textfeld).
+  Leerzeichenfolgen; die Eingabe sind frei geschriebene Formeln aus dem
+  Seiteninhalt).
 
 **Messwerte (Bestandslauf über alle Formeln der Website):** 2915 eindeutige
 Formeln (5685 Vorkommen auf 246 Seiten): 0 Ausnahmen, 0 Ergebnisse mit
@@ -4773,27 +4894,38 @@ letzten Zeichen (`OZ̅`), verschachteltes `\overset`/`\underset` unten vor
 oben, `\ce`-Pfeilbeschriftung nicht als Chemie gesetzt, `flach()` verschluckt
 ab 100 Ebenen das Zeichen nach einem Backslash (G5). `·` nach griechischem
 Buchstaben ohne Leerzeichen (`ε·c · d`, G4). Zeichenweise Teilung trennt
-Surrogatpaare und kombinierende Zeichen (G6). Harnisch-Lücken:
+kombinierende Zeichen (G6); Surrogatpaare trennt sie seit 3.1.148 nicht mehr
+(Befund B1 des Vorhabens „Formatierter Text", Gruppe 14 des Harnischs). Harnisch-Lücken:
 `teileNachZeichen`-Grenze ±1 und `MAX_TIEFE` werden von keiner Prüfung
 festgenagelt (G3).
 
-**Prüfungen:** `node tools/test-board-blocktext-js.js` – **242 Prüfungen**
+**Prüfungen:** `node tools/test-board-blocktext-js.js` – **346 Prüfungen**
 (Gruppe 0 DOM-frei/ES5, 1/1b `latexZuText` inkl. 18 bösartiger Eingaben,
-2 Bestandslauf, 3–8 Schnittstelle und AP-1.3-Funktionen, 9 Befunde des
-Reviews Phase 1, 10 `flaecheUnter` nach Review Phase 2); Mutationsproben
-über `CBD_BLOCKTEXT_DATEI`.
+2 Bestandslauf, 3–8 Schnittstelle (seit Phase 2 des Vorhabens „Formatierter
+Text" genau acht Funktionen) und AP-1.3-Funktionen, 9 Befunde des Reviews
+Phase 1, 10 `flaecheUnter` nach Review Phase 2; Phase 2 des Vorhabens
+„Formatierter Text": 11 `umbrechenTeile`, 12 `verteile` mit Absatz-Objekten
+(12g: Verkettung === `text` über alle Blöcke und Rest-Objekte), 13
+`lesbareLauffarbe`, 14 Surrogatpaare); Mutationsproben über
+`CBD_BLOCKTEXT_DATEI` (22 von 22 Mutationen der Phase 2 erkannt).
 
-### Formatierter Text: das Feld `teile` (Plan `PLAN-Blocktext-Formatierung.md`, Phase 1, abgeschlossen 2026-10-29)
+### Formatierter Text: das Feld `teile` (Plan `PLAN-Blocktext-Formatierung.md`, Phasen 1 und 2, abgeschlossen 2026-10-29, Plugin 3.1.148)
 
 Das Vorhaben „Formatierter Text auf der Tafel und ‚Text bearbeiten'": Beim
 Übernehmen eines Blocktexts auf die Tafel bleiben **fett, kursiv und Farbe**
-erhalten (Phase 2), und ein einzelner Text lässt sich nachträglich bearbeiten
-(Phase 3). **Phase 1, hier beschrieben, legt nur das Fundament:** Datenformat,
-Prüfung in Browser und Server, Zeichnen und Messen, Darkmode. Die Bedienung
-ist unverändert; `teile` entstehen bis Phase 2 nur durch Konsoleneingaben und
-Tests. Stand: Phase 1 ist auf `main`, aber **nicht ausgeliefert** (kein ZIP,
-`CBD_VERSION` bleibt 3.1.147); sichtbar wird die Funktion erst mit dem ZIP
-der Phase 2 (geplant 3.1.148).
+erhalten (Phase 2, Plugin 3.1.148), und ein einzelner Text lässt sich
+nachträglich bearbeiten (Phase 3, noch offen). **Phase 1 legte das
+Fundament:** Datenformat, Prüfung in Browser und Server, Zeichnen und Messen,
+Darkmode – ohne ZIP, die Bedienung blieb unverändert. **Phase 2 machte die
+Funktion sichtbar:** „Text auf die Tafel" liest die Formatierung des Blocks,
+die Vorschau ist ein formatiert bearbeitbares Feld mit Formatleiste, der Rest
+auf einer neuen Seite behält die Formatierung. Die Abschnitte bis „Rückweg
+auf 3.1.147" beschreiben das Fundament (Phase 1); danach folgen die
+Unterabschnitte der Phase 2 und die gemeinsame Liste der bekannten
+Einschränkungen. **Stand:** Phase 1 und 2 sind auf `main`; das ZIP
+`dist/container-block-designer-3.1.148.zip` (gebaut mit `npm run build`)
+enthält beide. Den Live-Upload macht der Betreiber; die Abnahme am echten
+Gerät steht aus (Unterabschnitt „Betreiber-Abnahme").
 
 #### Das Format (Entscheidungen F1–F5)
 
@@ -4935,7 +5067,11 @@ zeigt Fett und Farbe weiter, bis in der älteren Version neu gespeichert wird;
 danach ist die Formatierung auch dort weg. Kein Datenbankschema ändert sich,
 es ist weder ein Rückbau noch eine SQL-Anweisung nötig (wie beim Rückweg von
 `winkel`). Wird danach 3.1.148 erneut eingespielt, ist die verlorene
-Formatierung nicht wiederherstellbar (der Text bleibt erhalten).
+Formatierung nicht wiederherstellbar (der Text bleibt erhalten). Phase 2 legt
+kein weiteres Feld, keine Einstellung und keinen Schalter an: Der Rückweg ist
+unverändert das ZIP der Vorversion (`container-block-designer-3.1.147.zip`);
+die Vorschau von „Text auf die Tafel" ist dort wieder ein einfaches
+Textfeld ohne Formatierung.
 
 #### Bekannte Einschränkungen (Review AP-1.rev, alle gering)
 
@@ -4948,14 +5084,19 @@ Formatierung nicht wiederherstellbar (der Text bleibt erhalten).
   offene Punkte", Punkt 1). Erreichbar nur über das Text-Werkzeug (hat kein
   `maxlength`) mit über 5000 Zeichen. Kandidat für ein späteres AP:
   Kürzung nach Codepunkten bzw. eine Obergrenze im Text-Werkzeug.
-- **B1 – Teilung mitten im Surrogatpaar (Vorgabe für Phase 2):** Teile, deren
-  Grenze ein Surrogatpaar zerschneidet (`[{t:'a\ud83d',f:1},{t:'\ude00b'}]`),
-  nimmt der Browser an; PHP-`json_decode` lehnt die einzelnen Hälften ab
-  (`JSON_ERROR_UTF16`) und `pruefe_elemente_json()` liefert `false` – die
-  **ganze Elementliste** der Klassen-Tafel entfällt, nur das PNG bleibt.
-  Heute erzeugt kein Code solche Teile; die Erzeuger der Phase 2
-  (`umbrechenTeile`, `umbrechen`, `teileNachZeichen`) müssen deshalb nur an
-  Codepunkt-Grenzen teilen (in AP-2.2 des Plans aufgenommen).
+- **B1 – Teilung mitten im Surrogatpaar (in Phase 2 umgesetzt, AP-2.2):**
+  Teile, deren Grenze ein Surrogatpaar zerschneidet
+  (`[{t:'a\ud83d',f:1},{t:'\ude00b'}]`), nimmt der Browser an; PHP-`json_decode`
+  lehnt die einzelnen Hälften ab (`JSON_ERROR_UTF16`) und
+  `pruefe_elemente_json()` liefert `false` – die **ganze Elementliste** der
+  Klassen-Tafel entfiele, nur das PNG bliebe. Die Prüfung selbst lässt das
+  weiter zu (reine Validierung, F4); die **Erzeuger** teilen deshalb nur an
+  Codepunkt-Grenzen: `umbrechen` und `umbrechenTeile` (je Codepunkt),
+  `teileNachZeichen` (rückt eine Grenze im Paar vor); die Prüfungen der
+  Gruppe 14 des Harnischs halten das fest. Das gilt seit 3.1.148 auch für das
+  bereits vorher vorhandene `umbrechen` (es zerschnitt Emoji im `text` schon
+  seit 3.1.146 – in 144 von 1000 Zufallsfällen mit Emoji, jetzt 0). Wer
+  einen weiteren Erzeuger schreibt, muss dieselbe Regel einhalten.
 - **B3 – Unicode-Leerraum in `rgb()`:** JavaScript-`\s` erkennt ihn, PCRE
   ohne Modifikator `u` nicht; vorbestehend gleich bei der Farbe des Elements.
   Real nicht erreichbar, weil `getComputedStyle` und die Stiftfarben
@@ -4965,14 +5106,19 @@ Formatierung nicht wiederherstellbar (der Text bleibt erhalten).
   JSON-Objekt mit den Schlüsseln `"0"`, `"1"` … (PHP dekodiert es als Array
   und nimmt es, der Browser verwirft es mit `Array.isArray`). Kein echter
   Client erzeugt das; keine Maßnahme.
-- **Erzeuger-Hinweis (B10, AP-2.1):** `getComputedStyle` kann für
-  `color-mix()` `color(srgb …)` oder `oklab(…)` liefern, das nicht aufs
-  Farbmuster passt; `teileZusammenlegen` lässt eine solche Farbe still
-  entfallen. Phase 2 normalisiert Farben deshalb auf `#rrggbb`.
+- **Erzeuger-Hinweis (B10, in Phase 2 umgesetzt, AP-2.1):** `getComputedStyle`
+  kann für `color-mix()` `color(srgb …)` oder `oklab(…)` liefern, das nicht
+  aufs Farbmuster passt; `teileZusammenlegen` lässt eine solche Farbe still
+  entfallen. Der Leser des Blockbereichs normalisiert berechnete Farben
+  deshalb mit `blocktextHexFarbe()` auf `#rrggbb` (Einzelheiten und die
+  Formen, die er nicht kann, im Unterabschnitt „Formatierung lesen").
 - **Darkmode:** Dunkle Teilfarben erscheinen im Darkmode bei weißer Tafel
   hell (Rot als Rosa, Blau als Hellblau), der Farbton bleibt (F13, Abschnitt
-  „Tafelmodus im Darkmode"). Die geplante `lesbareLauffarbe` rechnet gegen die
-  gespeicherte Farbe und braucht keine Darkmode-Sonderbehandlung.
+  „Tafelmodus im Darkmode"). `lesbareLauffarbe` rechnet gegen die
+  gespeicherte Farbe und braucht keine Darkmode-Sonderbehandlung. Gelesen
+  wird der Blockbereich im Darkmode mit den Stilen des Hellmodus
+  (`_imHellmodus`), damit die gespeicherten Farben nicht vom Modus der
+  Lehrperson abhängen.
 
 #### Prüfungen und Abnahme (Phase 1)
 
@@ -4995,6 +5141,373 @@ Formatierung nicht wiederherstellbar (der Text bleibt erhalten).
   wird fett/kursiv/farbig gezeichnet, Lasso wählt es, Ziehen, A+ und
   Duplizieren behalten `teile`; Darkmode nach F13 (Rot rötlich, Blau
   bläulich, Lasso-Rahmen orange). **Abnahme am Smartboard/iPad steht aus.**
+
+#### Formatierung lesen (Phase 2, Entscheidungen F6 und F10)
+
+`_blocktextLesen(wurzel, optionen)` in `board-mode.js` liefert je Absatz
+zusätzlich `teile` im Format des Elementmodells – **nur bei formatierten
+Absätzen, sonst fehlt der Schlüssel** (Reihenfolge `art, text, teile`). Der
+reine `text` ist exakt derselbe wie vor Phase 2: die acht Testmaterial-Paare
+(`tools/fixtures/blocktext/*.html` gegen `_blocktextAlsText()`) und 200 000
+Zufallszeichenfolgen gegen die frühere Regex-Kette ergaben 0 Abweichungen.
+
+- **Regel F6:** fett = berechnete `font-weight` ≥ 600 (zur Sicherheit auch
+  `bold`/`normal`); kursiv = berechneter `font-style` `italic` oder
+  `oblique …`; Farbe = berechnete Textfarbe, die von der **Grundfarbe**
+  abweicht. Das erfasst `<strong>`, `<em>`, Überschriften, Glossarbegriffe,
+  Links und Editor-Farben mit einer Regel, unabhängig vom Markup. Grundfarbe =
+  `optionen.grundfarbe`, sonst die berechnete Farbe des ersten
+  `.cbd-container-content` in der Wurzel, sonst die der Wurzel (ein
+  Block-Design mit eigener Textfarbe färbt also nicht jeden Teil). Ist die
+  Grundfarbe selbst nicht lesbar (z. B. `oklab` am Container), gilt jede
+  lesbare Farbe als abweichend – praktisch nicht erreichbar. Alpha 0 (durchsichtig)
+  zählt nicht als Farbe, jedes Alpha > 0 wird als deckende Farbe übernommen
+  (halb durchsichtiges Rot → Rot).
+- **Farben → `#rrggbb` (B10, `blocktextHexFarbe(wert)`):** `#rgb`,
+  `#rrggbb`, `rgb()`/`rgba()` (Komma- oder Leerzeichenform) und `color(srgb r
+  g b [/ a])` (Anteile 0 bis 1; Chrome liefert das für `color-mix()`)
+  werden zu `#rrggbb`; `oklab()`, `lab()`, `color(display-p3 …)`, Farbnamen
+  und Werte außerhalb des Bereichs ergeben **keine** Teilfarbe (siehe B4 in
+  den bekannten Einschränkungen).
+- **Stil je Zeichen:** Der Leser führt neben dem Text eine gleich lange Liste
+  der Stile (`{f, k, farbe}` je UTF-16-Einheit). Stil eines Textknotens =
+  berechneter Stil seines Elternelements, Formeltext = Stil des
+  Formel-Elements; Klartext sind Listenpräfix („• ", „n. "), „ | " zwischen
+  Tabellenzellen, Leerzeichen an Blockgrenzen in einer Tabellenzeile und das
+  `\n` aus `BR`. Ein `\n` aus `PRE` behält den Stil seines Textknotens. Die
+  Leerraum-Bereinigung läuft **zeichenweise** über Text und Stile zugleich
+  (`blocktextBereinigen`, bitte nicht auf die früheren regulären Ausdrücke
+  umstellen): Von mehreren Leerzeichen behält **das erste** seinen Stil
+  (`<p>a <strong> b </strong> c</p>` → `a ` normal, `b ` fett, `c` normal).
+  Danach legt `CBDBoardElemente.teileZusammenlegen` die Teile zusammen.
+- **Optionen** (dieselbe Funktion liest auch das Bearbeitungsfeld zurück,
+  F10 – eine Regel für Block und Feld):
+
+  | Option | Wirkung |
+  |---|---|
+  | `grundfarbe` | ersetzt die berechnete Grundfarbe (`#rrggbb` u. a., ungültig = nicht gesetzt); Teile in dieser Farbe tragen keine eigene |
+  | `nbsp` | `true`: geschütztes Leerzeichen (U+00A0) wie ein Leerzeichen (zusammengefasst, am Rand entfernt, auch in `PRE`); ohne Option bleibt es erhalten. **Gesetzt wird sie derzeit von niemandem** – das Feld liest seit AP-2.fix2 mit `nbsp: false` |
+  | `pre` | `true`: die Wurzel wird wie ein `PRE` gelesen, `\n` in Textknoten bleibt Zeilenwechsel. Nur `_textFeldLesen()` setzt sie: Im `pre-wrap`-Feld fügen Chrome/Safari einen Zeilenwechsel (Umschalt+Enter, `insertLineBreak`) als `\n`-**Zeichen** statt `<br>` ein; ohne die Option würde er beim Lesen zum Leerzeichen |
+
+- **`_blocktextAbsaetze()`** → `[{text, teile?}]` für `.cbd-board-content`
+  (ohne `art`, ohne offene Tafel `[]`); liest über `_imHellmodus` (eigener
+  Unterabschnitt unten). Die Vorschau nutzt sie, `_blocktextAlsText()` nur
+  noch die Prüfungen.
+- **Gemessen** (Seite 876, Testinstallation): Block mit 9 Absätzen, 4 mit
+  `teile`, im Hellmodus 0,5–1,2 ms; 60 formatierte Absätze 3,3–17,3 ms; Seite
+  325 (25 Absätze, alle mit `teile`) 7,1 ms.
+- **Testseiten:** 876 (Glossar, fett, kursiv) und 325 (Editor-Farbe
+  `#ac1313`). Auf 876 trägt der Blocktitel `f:1`, die Glossarbegriffe im
+  Fließtext nur `farbe:'#71230a'`.
+
+#### Das Bearbeitungsfeld: `_textFeldBauen`, `_textFeldLesen` (Phase 2, F8/F9)
+
+Die Vorschau von „Text auf die Tafel" ist ein `div.cbd-board-blocktext-feld`
+mit `contenteditable="true"` (`role="textbox"`, `aria-multiline`, `aria-label`,
+`spellcheck="false"`, `autocorrect="off"`, `autocapitalize="off"`) und einer
+Formatleiste. Beide baut `_textFeldBauen(absaetze, optionen)` → `{feld,
+leiste}` – **bewusst als eigene Methode, damit Phase 3 („Text bearbeiten")
+sie mit `modus: 'bearbeiten'` wiederverwendet.**
+
+- **`optionen`:** `modus` (`'vorschau'`, Standard: je Absatz ein `div`, Enter =
+  neuer Absatz; `'bearbeiten'`: alle Absätze in EINEM `div`, durch `<br>`
+  getrennt, Enter ohne Umschalt = Zeilenwechsel per `insertLineBreak`,
+  Umschalt+Enter bleibt dem Browser, der ebenfalls einen Zeilenwechsel
+  einfügt), `grundfarbe` (`#rrggbb`: Einfügefarbe bzw. Elementfarbe),
+  `hintergrund` (Tafelfarbe). Hintergrund und Grundschrift setzt der Code
+  inline – das Feld zeigt **bewusst die Tafelfarben**, auch im Darkmode; die
+  `data-grundfarbe` am Feld nutzt `_textFeldLesen()`.
+- **Inhalt nur über DOM-Methoden** (`createElement`, `createTextNode`,
+  `<br>`) – nie `innerHTML` mit Text aus dem Block oder der Zwischenablage
+  (XSS; `grep innerHTML` trifft im neuen Code nur einen Kommentar, eine
+  Prüfung belegt, dass `&lt;img onerror&gt;` im Block Text bleibt). Je
+  formatiertem Teil ein `span` (`font-weight: bold`, `font-style: italic`,
+  `color`), Klartext als Textknoten, `\n` → `br`. `teile` werden nur
+  übernommen, wenn sie ein Array gültiger Teile sind und ihre Verkettung den
+  Text ergibt – sonst steht der Absatz als Klartext da. (Review AP-2.rev B1:
+  die Schleifenbedingung muss `teile` **vor** `teile.length` prüfen, sonst
+  wirft ein ungültiger Teil einen TypeError; behoben in AP-2.fix2, Prüfung
+  „AP-2.fix2 (B1)".) **Teilfarben** gehen durch `lesbareLauffarbe(farbe,
+  hintergrund)` (F7), auch bei der Farbwahl in der Leiste.
+- **Formatleiste** `div.cbd-board-blocktext-format` (`role="toolbar"`): **F**
+  (Fett), **K** (Kursiv), sechs Farbknöpfe aus `this.presetColors` (Schwarz,
+  Weiß, Rot, Blau, Gelb, Grün, Namen in `FORMAT_FARBNAMEN`, Farbe als
+  Hintergrund) und **Standard** (setzt `foreColor` auf die Grundfarbe –
+  der Leser liest sie dann als „keine eigene Farbe"). Mindestens 36 × 36 px
+  (Touch; Layoutgröße, das Fenster blendet mit `scale(0.98)` ein). Die Leiste
+  ist **ein** Tab-Halt (Muster `role="toolbar"`, Pfeiltasten, Pos1/Ende).
+  `pointerdown` und `mousedown` der Leiste werden verhindert, damit Fokus und
+  Markierung im Feld bleiben.
+- **Formatieren über `document.execCommand`** (F9): `styleWithCSS` an, dann
+  `bold`, `italic` oder `foreColor` (mit der lesbaren Teilfarbe). Die einzige
+  browsereigene Möglichkeit ohne Bibliothek (Chrome, Safari/iPad, Firefox
+  haben sie, obwohl als veraltet markiert; eine Editor-Bibliothek verbietet
+  die DSGVO-Linie). **Markierungsregel:** Liegt die aktuelle Markierung im
+  Feld, gilt sie (nur eine Schreibmarke → nichts); liegt keine im Feld
+  (auf dem iPad kann sie beim Antippen verloren gehen), gilt die zuletzt dort
+  per `selectionchange` gemerkte (`this._textFeldLauscher`, abgemeldet über
+  `_textFeldLauscherEntfernen()` in `_blocktextFensterSchliessen`, also auch
+  bei `close()`, `destroy()` und `_openOverlay()`; es gibt höchstens einen).
+  Vor dem Befehl wird die Markierung wiederhergestellt und das Feld fokussiert.
+- **Ereignisse am Feld:** `paste` → Standard verhindert, **nur Klartext**
+  aus `clipboardData.getData('text/plain')` per `insertText` (Modus
+  `bearbeiten` zeilenweise mit `insertLineBreak`; im Modus `vorschau` wird
+  jede eingefügte Zeile ein eigener Absatz, so verhalten sich Chrome und
+  Safari bei `insertText`); `drop` und `dragover` gesperrt (fremdes Markup
+  käme sonst hinein); **Strg/Cmd+U** und `beforeinput` `formatUnderline`
+  (iPad-Menü „BIU") verhindert – Unterstrichenes käme nicht auf die Tafel
+  (Nicht-Ziel). Enter je Modus wie oben (im Modus `vorschau` vorher
+  `defaultParagraphSeparator` `div`).
+- **Tab-Reihenfolge und Anordnung:** Im DOM steht das Feld **vor** der
+  Leiste, `board-mode.css` stellt die Leiste per `order` darüber (die
+  Tab-Falle von `_blocktextFensterBauen` nimmt das erste Ziel im DOM als
+  Anfang; die Prüfung `g1Fokus` verlangt, dass Tab vom letzten Knopf ins Feld
+  führt). Nebenwirkung: Die Tabreihenfolge Feld → Leiste weicht von der
+  sichtbaren (Leiste über dem Feld) ab (B7).
+- **Fokus:** Beim Öffnen steht die Schreibmarke am Anfang des Felds
+  (eingeklappte Range auf `(feld, 0)`, `scrollTop = 0`); nach „Abbrechen"
+  und Escape kehrt der Fokus auf „Text auf die Tafel" zurück. Der
+  `selectionchange`-Lauscher wird nach Abbrechen, Einfügen und `destroy()`
+  entfernt.
+- **`_textFeldLesen(feld)`** → `[{text, teile?}]`, genau das, was
+  `blocktextEinfuegen()` annimmt (in Phase 3 `textErsetzen()`): ruft
+  `_blocktextLesen(feld, {grundfarbe: data-grundfarbe, nbsp: false, pre: true})`.
+  Das Feld muss im Dokument hängen (berechnete Stile). Zwei Regeln:
+  - **Geschütztes Leerzeichen (U+00A0) der Quelle bleibt erhalten**
+    (`nbsp: false`, AP-2.fix2, Review B2): „25 °C" bricht auf der Tafel nicht
+    zwischen Zahl und Einheit um, wie bis 3.1.147. Ein im Feld **getipptes**
+    Leerzeichen ist U+0020 (das Feld hat `white-space: pre-wrap`, dort fügt
+    Chrome kein `&nbsp;` ein – mit echtem Tippen auf Seite 876 belegt, Zeichencode
+    32); aufeinanderfolgende Leerzeichen fasst der Leser trotzdem zusammen.
+    (In AP-2.4 war es kurz `nbsp: true` – die damalige Beobachtung „25 °C kann
+    umbrechen" ist **überholt**.)
+  - **Einzelne Surrogate → U+FFFD** (AP-2.fix2, B5): ein High-Surrogat ohne
+    folgendes Low und ein Low ohne vorheriges High werden in `text` und in
+    allen `t` ersetzt (`blocktextEinzelneSurrogate`,
+    `blocktextAbsatzOhneEinzelneSurrogate`; jede Ersetzung ist 1 Zeichen → 1
+    Zeichen, die Länge ändert sich nie, gültige Paare auch über einer
+    Teilgrenze bleiben, die Verkettung der `t` bleibt `text`). Dieselbe
+    Ersetzung läuft im `paste`-Handler vor `insertText`. Sonst schlüge
+    `json_decode` im Server fehl und die Klassen-Tafel würde nur als Bild
+    gespeichert. Das Text-Werkzeug (`openTextInput`) und `_blocktextLesen`
+    selbst bleiben unverändert (außerhalb des Scopes; der HTML-Parser liefert
+    im Blockbereich ohnehin keine einzelnen Surrogate).
+- **CSS** (`board-mode.css`, Abschnitt „BLOCKTEXT AUF DIE TAFEL"): Feld 18 px /
+  1,4, `white-space: pre-wrap`, wächst bis rund 12 Zeilen (`max-height:
+  16.8em`), dann `overflow: auto`, schrumpft bei niedriger Höhe zuerst,
+  Absatz-`div`s mit 0,6 em Abstand; Darkmode-Regeln nur für die Leiste (`[data-theme="dark"]
+  .cbd-board-format-knopf` …), das Feld zeigt die Tafelfarben. Bei
+  `@media (max-height: 500px)` sind Fenster und Leiste kompakter (sonst lagen
+  bei 1141×253 „Abbrechen"/„Auf die Tafel" unterhalb des Fensters). Auf
+  375×812 ist die Leiste zweizeilig, alle Knöpfe 36 px, nichts wird
+  abgeschnitten.
+
+#### Blockbereich im Darkmode lesen: `_imHellmodus` (AP-2.fix1, AP-2.fix2)
+
+**Problem:** Trägt `<html>` `data-theme="dark"` (Darkmode des Themes, Hellmodus
+= Attribut fehlt), läse `_blocktextLesen` die Farben des **Darkmodes** –
+Glossarbegriffe als `#f0b090` statt `#71230a`, die Grundfarbe hell. Auf
+weißer Tafel würde daraus `#b4846c` gespeichert; dieselbe Seite ergäbe im
+Hellmodus `#71230a`. Die gespeicherte Formatierung darf nicht davon abhängen,
+in welchem Modus die Lehrperson die Seite gerade ansieht.
+
+**Lösung (Orchestrator-Entscheidung):** `_imHellmodus(lesen, bereich)` führt
+`lesen()` mit den berechneten Stilen des Hellmodus aus: `data-theme` wird für
+die Dauer des **synchronen** Lesens entfernt und danach mit demselben Wert
+wieder gesetzt (`try/finally`, die Rückgabe von `lesen()` wird
+durchgereicht). Dazwischen zeichnet der Browser kein Bild, es flackert nichts.
+Ohne `data-theme` läuft `lesen()` direkt, ohne jeden Eingriff. Nur
+`_blocktextAbsaetze()` schaltet um – **nicht** `_textFeldLesen()` (das Feld
+trägt eigene Inline-Farben) und nicht `_blocktextAlsText()` (nur Text).
+Ergebnis auf Seite 876 im Darkmode: JSON-gleich mit dem Hellmodus (19 × `#71230a`,
+sonst nichts), Laufzeit 49–63 ms (zwei erzwungene Stilberechnungen der ganzen
+Seite; im Hellmodus 0,5–1,2 ms), einmal je Klick auf „Text auf die Tafel".
+
+**Zwei Fallen – bitte nicht vereinfachen** (Kommentar am Helfer):
+
+1. **CSS-Übergänge.** Das Theme hat z. B. `.glossar-term { transition: all
+   0.2s }`. Ohne Sperre startet das Umschalten mit der nächsten
+   Stilberechnung einen Übergang, und `getComputedStyle()` liefert dessen
+   **Startwert** – also wieder die Darkmode-Farbe (Hinweg); auf dem Rückweg
+   liefe ein sichtbarer Übergang hell → dunkel. Deshalb sperrt ein Stil
+   `*, *::before, *::after { transition: none !important; }` alle Übergänge,
+   bis nach dem Zurücksetzen eine Stilberechnung erzwungen ist
+   (`getComputedStyle` an `<html>` und am gelesenen Bereich); **erst danach**
+   wird die Sperre entfernt. Wer sie vor der erzwungenen Berechnung entfernt,
+   startet den Übergang hell → dunkel auf der ganzen Seite (belegt durch
+   Mutationsprobe). Laufende Übergänge irgendwo auf der Seite (z. B. Hover
+   am Knopf) springen durch die Sperre an ihr Ende – nicht sichtbar.
+2. **Beobachter auf `<html>`.** Ein `MutationObserver` auf `data-theme`
+   bekäme zwei Einträge (entfernt, wieder gesetzt); sein Rückruf läuft als
+   Mikrotask nach dem synchronen Block und sieht das Attribut wieder im alten
+   Zustand. Gesucht und **keinen** gefunden in Theme (`darkmode-image-invert.js`
+   beobachtet nur `document.body`, die Bild-Invertierung ist reines CSS) und
+   beiden Plugins (alle `MutationObserver` an `body`, `board-mode.js` nur ein
+   `ResizeObserver` an der Zeichenfläche); im WordPress-Kern beobachten genau
+   zwei Dateien `<html>`-Attribute (Block „Playlist", `priority-queue.js`),
+   beide auf den Inhaltsseiten nicht geladen. Theme-Knopf und
+   `localStorage['fos-color-scheme']` bleiben unverändert (belegt). **Wer
+   einen Beobachter auf `<html>` einbaut, muss ihn gegen dieses kurze
+   Umschalten prüfen**; die Prüfung „genau zwei Änderungen an `data-theme`"
+   hält den Weg fest (ein anderer Weg, etwa Stile im unsichtbaren Klon,
+   müsste sie bewusst ändern).
+
+**Die Sperre unter einer strengen CSP (AP-2.fix2, Review B3):** Ein
+eingefügtes `<style>`-Element ist unter einer CSP **ohne** `'unsafe-inline'`
+in `style-src` wirkungslos – dann würde wieder der Startwert des Übergangs
+gelesen (und es gäbe einen CSP-Konsolenfehler je Lesen). Die Sperre ist
+deshalb bevorzugt ein **Constructable Stylesheet**: `new CSSStyleSheet()` +
+`replaceSync(…)`, angehängt mit `document.adoptedStyleSheets =
+alt.concat([blatt])`, im `finally` nach der erzwungenen Stilberechnung exakt
+die alte Liste (`alt` ist eine Kopie per `slice`, nicht die ObservableArray
+des Browsers). Bedingung: `typeof window.CSSStyleSheet === 'function'` und
+`document.adoptedStyleSheets` vorhanden, der ganze Aufbau in `try/catch`.
+Fehlen Constructable Stylesheets oder scheitert der Aufbau, gilt der
+**Rückfall**: ein `<style data-cbd-hellmodus-lesen>` im `<head>`, das im
+`finally` entfernt wird (setzt `'unsafe-inline'` voraus – das braucht das
+Theme ohnehin für sein Customizer-CSS). Constructable Stylesheets gibt es ab
+Chrome 73, Firefox 101, Safari 16.4; ältere Browser nutzen den Rückfall. Unter
+einer `<meta>`-CSP `style-src 'self'` gemessen: Ergebnis JSON-gleich mit dem
+Hellmodus, kein `<style>` übrig, `adoptedStyleSheets` danach unverändert,
+keine CSP-Verletzung durch das Lesen. Der Ablauf (Attribut entfernen, lesen,
+`finally`: wiederherstellen, Berechnung erzwingen, erst dann Sperre weg) ist
+in beiden Wegen derselbe.
+
+#### Bekannte Einschränkungen (Phase 2: Review AP-2.rev, AP-2.5, alle gering)
+
+- **B4 – moderne Farbräume:** `oklab()`, `lab()`, `color(display-p3 …)` und
+  `color-mix(in oklab …)` ergeben keine Teilfarbe (der Teil erscheint in der
+  Grundfarbe). Plangemäß (B10); Theme und Plugin nutzen nur `srgb`.
+- **B6 – mehr als 1000 Formatwechsel in einem Block:** Die Formatierung dieses
+  Blocks entfällt still, der Text bleibt vollständig (Absicherung in
+  `_blocktextMitTeilen`, siehe „Einfügen"). Praktisch nur bei absichtlich
+  pathologischer Formatierung.
+- **B7 – Bedienbarkeit:** Die Tab-Reihenfolge Feld → Leiste weicht von der
+  sichtbaren (Leiste über dem Feld) ab (Folge von `g1Fokus`, siehe oben); die
+  Knöpfe F und K haben **kein `aria-pressed`**. Barrierefreiheit, nicht
+  funktionsrelevant.
+- **B8 – iPad offen:** Die Markierungsregel (siehe oben) merkt auch eine
+  eingeklappte Markierung. Klappt iOS beim Antippen der Leiste die
+  Markierung im Feld zur Schreibmarke zusammen, wirkt der Knopf nicht. Eine
+  Änderung würde das gewollte „Fett an der Schreibmarke" brechen – daher erst
+  nach der Betreiber-Abnahme am iPad entscheiden.
+- **Glossar im Fließtext nicht fett (F6):** Die Seite zeigt Glossarbegriffe im
+  Fließtext mit Stärke 400 (`glossar-style.css`: nur Farbe und
+  Unterstreichung). Fett sind sie nur im Blocktitel (600) und in `<strong>`;
+  im Fließtext kommt nur die Farbe `#71230a` mit. Das ist die
+  Betreiberentscheidung zu F6, kein Fehler.
+- **Windows-Doppelklick nimmt das folgende Leerzeichen mit:** Doppelklick auf
+  ein Wort markiert Wort **und** nachfolgendes Leerzeichen; „F"/„K"/Farbe gilt
+  dann auch für dieses Leerzeichen (z. B. `{t: ' ', k: 1}`). Unsichtbar,
+  erhöht nur die Zahl der Teile.
+- **Kein Neu-Umbruch bei A−/A+ und beim Drehen:** unverändert (E8); „A+" auf
+  alle Texte lässt Texte einander überdecken. Auf 375×812 und 1141×253
+  passen nur 3 bzw. 2 Absätze auf ein Blatt, der Rest läuft über „Auf neuer
+  Seite einfügen" (Verhalten seit 3.1.146).
+- **Browser:** Geprüft nur in Chrome (Browser-Bereich der Testinstallation).
+  Safari/iPad und Firefox sind nicht geprüft (Feld, `execCommand`, adoptierte
+  Stilblätter, `getAnimations`).
+- **Text-Werkzeug:** Ein einzelnes Surrogat in der Zwischenablage kann dort
+  weiter in den Text gelangen (außerhalb des Scopes, siehe B5); `teile` gibt
+  es dort nicht.
+- **Tafel im Darkmode:** unverändert die „Bekannte, nicht behobene
+  Einschränkung" des Theme-Umschalters (Abschnitt „Tafelmodus im Darkmode");
+  das Feld der Vorschau zeigt im Darkmode bei weißer Tafel weiß/schwarz (die
+  gespeicherten Farben), die Tafel selbst erscheint invertiert (F13).
+
+#### Prüfungen und Abnahme (Phase 2)
+
+- **Prüfzahlen (Stand 3.1.148):** `node tools/test-board-blocktext-js.js` **346**
+  (Phase 1: 242), `node tools/test-board-elemente-js.js` **363**, `php
+  tools/test-board-elemente.php` **239** OK, `node tools/test-notizen-manager-js.js`
+  34, `node tools/test-klassenpuls-js.js` „ALLE TESTS BESTANDEN",
+  `node tools/test-datei-map-pipes.js` 13, `php tools/check-php74.php` OK
+  (574 Dateien), Prüfseite `tools/test-board-zeiger.html` **296 / 296**
+  (Phase 1: 232). Die 64 neuen Prüfseiten-Prüfungen stehen in
+  `tools/test-board-blocktext.js`: Formatierung lesen (AP-2.1, 19), formatiert
+  einfügen (AP-2.3, 13), Bearbeitungsfeld (AP-2.4, 17), Darkmode lesen
+  (AP-2.fix1, 7), Robustheit des Felds (AP-2.fix2, 8).
+- **TDD-Reihenfolge je AP belegt** (rot, dann grün; Commit-Hashes im Plan
+  `PLAN-Blocktext-Formatierung.md`). Bestehende Prüfungen wurden nur an zwei
+  Stellen geändert: Gruppe 3 des Harnischs (acht statt sechs Funktionen,
+  Orchestrator-Entscheidung zu F14) und die drei Vorschau-Prüfungen
+  (`vorschauKlick`, `gekuerztEinfuegen`, `klickNebenFenster`, Umstellung vom
+  `textarea` auf das Feld, F8).
+- **Mutationsproben:** AP-2.1 5 von 5 erkannt (zwei erst durch eine
+  Nachtrag-Prüfung), AP-2.2 22 von 22, AP-2.3 M1–M7 erkannt (M2 und M5 färben
+  dieselbe Prüfung rot), AP-2.4 5 von 5,
+  AP-2.fix1 M1–M4 und M6 erkannt (M5 in Chrome gleichwertig), AP-2.fix2 M1–M7
+  alle.
+- **Zeichenketten unverändert:** Vergleich altes ↔ neues Modul
+  (`umbrechen` 3000 Fälle, `verteile` 2000 Fälle mit Zeichenketten, jeweils
+  samt Reihenfolge und Parameterzahl aller Messaufrufe) byte-gleich; im Review
+  6000 Fälle.
+- **Erzeuger ↔ Prüfung (Review AP-2.rev):** Fuzz mit den echten Erzeugern aus
+  `board-mode.js` (Emoji auch mit Teilgrenze im Paar, NBSP, Tab, CRLF, `\n`,
+  über 5000 Zeichen, ungültige Farben, bis 1500 Teilgrenzen, Reste bis leer):
+  8976 Seiten, 14 697 Blöcke, 8171 Elemente mit `teile` – JS 0 Fehler; PHP
+  `pruefe_elemente_json()` 8976 von 8976 gleich, nie `false`. Für alle Daten,
+  die die Erzeuger liefern, entscheiden Browser und Server gleich.
+- **Review:** `AP-2.rev` (Opus, an keiner Implementierung beteiligt) fand 0
+  kritische, 0 mittlere und 9 geringe Befunde; B1, B2, B3, B5 behob
+  AP-2.fix2 vor dem Merge, B4, B6, B7 stehen oben, B8 ist Punkt der
+  Betreiber-Abnahme, B9 war die veraltete Dokumentation.
+- **Integrationstest auf der Testinstallation (AP-2.5)**, Seiten 876 und 325
+  mit echten Klicks, Doppelklicks, Tippen, Rücktaste und Ziehen: Text auf die
+  Tafel, Fett/Kursiv/Farbe/Standard, „Auf die Tafel", Rest auf neuer Seite,
+  A+, Duplizieren, Rückgängig, Drehen (11°), Schließen, Neuladen, Öffnen –
+  die Formatierung bleibt in jedem Schritt. Fenstergrößen 1366×768, 820×1180,
+  375×812, 1141×253 (Knöpfe 36 px, nichts abgeschnitten, kein waagerechtes
+  Scrollen), grüne Tafel (Teilfarben aufgehellt: `#71230a` → `#b18678`,
+  Rot → `#ff4040`), Darkmode (im Feld `#71230a`, auf der invertierten Tafel
+  Farbton erhalten).
+- **Klassen-Tafel-Rundlauf bis in die Datenbank (AP-2.5):** Mit einer
+  Testklasse (danach gelöscht) auf der Testinstallation: Seite 876 → `cbd_save_drawing`
+  mit `teile` (kein `elemente_verworfen`), `{prefix}cbd_drawings.elemente_data`:
+  Hülle `{png, modell}`, 9 Elemente, 4 mit `teile`, Verkettung der `t` = `text`;
+  nach Neuladen liefert `cbd_load_drawing` sie wieder, `pruefeModell`
+  ändert nichts. Seite 325 mit zwei Blättern (Rest auf neuer Seite): 16 von
+  16 und 9 von 9 Elementen mit `teile`, Editor-Farbe `#ac1313` darunter. Der
+  echte Knopf „Tafel-Modus" wurde dabei nicht geklickt (CSP der
+  Testinstallation sperrt die Inline-Skripte der Container; die Tafel wurde
+  aus der Konsole mit denselben Optionen geöffnet).
+- **Laufzeit (60 formatierte Absätze, je ~170 Zeichen, 1366×768):**
+  `blocktextEinfuegen` für Seite 1 80,6 ms, die Folgeblätter über
+  `blocktextAufNeueSeite` 36,9–145,5 ms – **unter 150 ms je Blatt** (Ziel
+  1,5 s); `zeichneModell()` je Blatt unter 1 ms; Feld bauen 2,2 ms,
+  zurücklesen 9,2 ms (Rücklesen identisch zur Eingabe); Lesen des Blocks
+  1,2–2,7 ms (Darkmode 49–63 ms, siehe `_imHellmodus`).
+- **Zwei seltene Ausreißer der Prüfseite** (Zeitüberschreitung im
+  ausgeblendeten Browser-Bereich) stehen in der Prüfharnisch-Tabelle bei
+  „Tafel-Elemente: Elementmodell v1": „AP-5.1: ESC …" und „AP-4.fix1: Server –
+  mehr als 100 000 Punkte …"; bei einem einzelnen Ausreißer neu laden.
+
+#### Betreiber-Abnahme (nach dem Live-Upload von 3.1.148)
+
+Mit synthetischen Ereignissen, der Maus und dem Browser-Bereich der
+Testinstallation nicht prüfbar – **steht aus**:
+
+1. **Echtes Einfügen aus der Zwischenablage** (Strg+V mit formatiertem Text
+   aus Word oder einer Webseite in das Feld): Im Browser-Bereich kommen
+   Strg+C/Strg+V nur als Tastendruck an, `copy`/`paste` treten nicht auf. Der
+   `paste`-Weg ist nur synthetisch (`ClipboardEvent` mit `DataTransfer`) und
+   per Mutationsprobe belegt. Erwartung: nur Klartext, keine fremde
+   Formatierung; mehrzeiliger Text wird im Modus `vorschau` je Zeile ein Absatz.
+2. **iPad/Smartboard:** ein Wort markieren und „F" antippen (bleibt die
+   Markierung im Feld? Befund B8); das Feld mit der Bildschirmtastatur
+   kürzen; Formatknopf nach dem Markieren per Finger; das BIU-Menü darf nichts
+   Unterstrichenes erzeugen; danach mit dem Stift weiterschreiben.
+3. **Safari und Firefox:** Feld, Formatleiste, `execCommand`, adoptierte
+   Stilblätter (Darkmode lesen).
+4. **Klassen-Tafel am echten Gerät:** formatierten Text einfügen, Tafel
+   schließen, Seite neu laden, wieder öffnen – die Formatierung ist da.
+5. **Darkmode mit dem echten Umschalter des Themes** (die CSP der
+   Testinstallation sperrt dessen Inline-Skript, dort wurde `data-theme` per
+   Konsole gesetzt).
+
+Vor dem Upload: das ZIP der laufenden Version (`container-block-designer-3.1.147.zip`)
+aufbewahren; es ändert sich weder das Datenbankschema noch eine Einstellung,
+ein Datenbank-Backup ist deshalb nicht eigens nötig.
 
 ### Raster: Kästchen und Zeilen (Rückmeldung 2026-10-27, Plugin 3.1.143)
 
