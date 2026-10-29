@@ -226,7 +226,10 @@
         if (t.length !== 2) return { ok: false, detail: t.length + ' Texte' };
         if (t[0].text !== 'Erster Absatz' || t[1].text !== 'Zweiter Absatz') f.push('Texte ' + JSON.stringify([t[0].text, t[1].text]));
         if (t[0].breite !== 2 || t[1].breite !== 2) f.push('breite ' + t[0].breite + '/' + t[1].breite);
-        if (t[0].x !== 20 || t[0].y !== 20) f.push('erstes bei ' + t[0].x + '/' + t[0].y);
+        // y: mindestens 20, genau so weit unten, dass die Auswahlleiste
+        // darüber passt (Folge-AP G9, eigene Prüfungen unten) - bis 3.1.146
+        // stand hier y === 20
+        if (t[0].x !== 20 || t[0].y < 20) f.push('erstes bei ' + t[0].x + '/' + t[0].y);
         var r0 = B._rahmen(t[0]);
         if (!(t[1].y >= r0.y + r0.h) || t[1].x !== 20) f.push('zweites bei ' + t[1].x + '/' + t[1].y + ', erstes endet ' + (r0.y + r0.h));
         if (B.undoStapel.length !== undo + 1) f.push('Undo ' + undo + ' -> ' + B.undoStapel.length);
@@ -310,7 +313,8 @@
         texte().forEach(function(t) {
             if (!innerhalb(B._rahmen(t), s)) f.push(t.id + ' außerhalb ' + rahmenText(B._rahmen(t)) + ' von ' + rahmenText(s));
         });
-        if (texte().length && (texte()[0].x !== s.x + 20 || texte()[0].y !== s.y + 20)) {
+        // y mindestens s.y + 20 (Folge-AP G9: Platz für die Auswahlleiste)
+        if (texte().length && (texte()[0].x !== s.x + 20 || texte()[0].y < s.y + 20)) {
             f.push('erstes bei ' + texte()[0].x + '/' + texte()[0].y);
         }
         return ergebnis(f);
@@ -765,6 +769,88 @@
     }
 
     // ------------------------------------------------------------------
+    // Folge-AP G9 (Review AP-2.rev): Die Auswahlleiste verdeckt nach dem
+    // Einfügen nicht die ersten Zeilen - auch nicht nach A+
+    // ------------------------------------------------------------------
+
+    // Gezeichneter Auswahlrahmen (auswahlRahmen()) in Bildschirmkoordinaten
+    function auswahlAmSchirm() {
+        var r = B.auswahlRahmen();
+        var cv = B.drawingCanvas.getBoundingClientRect();
+        var fx = cv.width / B.cssWidth, fy = cv.height / B.cssHeight;
+        return { oben: cv.top + r.y * fy, unten: cv.top + (r.y + r.h) * fy, links: cv.left + r.x * fx };
+    }
+
+    // Leiste sichtbar, innerhalb der Zeichenfläche und nicht über dem Rahmen
+    function leisteFrei(f, wann) {
+        var l = B.overlay.querySelector('.cbd-board-auswahl-leiste');
+        if (!l || l.style.display === 'none') {
+            f.push(wann + ': Leiste nicht sichtbar');
+            return;
+        }
+        var lr = l.getBoundingClientRect(), a = auswahlAmSchirm();
+        var ba = B.overlay.querySelector('.cbd-board-canvas-area').getBoundingClientRect();
+        if (lr.bottom > a.oben + 1 && lr.top < a.unten - 1) {
+            f.push(wann + ': Leiste ' + Math.round(lr.top) + '-' + Math.round(lr.bottom) +
+                ' liegt auf dem Rahmen ' + Math.round(a.oben) + '-' + Math.round(a.unten));
+        }
+        if (lr.top < ba.top - 0.5 || lr.bottom > ba.bottom + 0.5) f.push(wann + ': Leiste außerhalb der Zeichenfläche');
+    }
+
+    function g9LangerText() {
+        ctx.oeffnen();
+        var f = [];
+        var erg = B.blocktextEinfuegen(absaetze(60));
+        if (!erg || !erg.rest.length) f.push('kein Rest - Seite nicht gefüllt');
+        leisteFrei(f, 'nach dem Einfügen');
+        return ergebnis(f);
+    }
+
+    function g9NachAPlus() {
+        ctx.oeffnen();
+        var f = [];
+        B.blocktextEinfuegen(absaetze(60));
+        if (!B.auswahlTextGroesse(1)) f.push('A+ ohne Wirkung');
+        leisteFrei(f, 'nach A+');
+        B.auswahlTextGroesse(1);
+        leisteFrei(f, 'nach zweimal A+');
+        return ergebnis(f);
+    }
+
+    function g9Zoom() {
+        ctx.oeffnen();
+        var f = [];
+        B.zoom = 2;
+        B.panX = -300;
+        B.panY = -200;
+        B.updateCanvasTransform();
+        var erg = B.blocktextEinfuegen(absaetze(60));
+        if (!erg || !erg.eingefuegt) f.push('nichts eingefügt');
+        var s = B._sichtbarerBereich();
+        texte().forEach(function(t) {
+            if (!innerhalb(B._rahmen(t), s)) f.push(t.id + ' außerhalb ' + rahmenText(B._rahmen(t)));
+        });
+        leisteFrei(f, 'Zoom 2');
+        return ergebnis(f);
+    }
+
+    function g9KeinPlatzFuerLeiste() {
+        // Sehr niedriger Ausschnitt: Mit Platz für die Leiste passte nichts
+        // mehr hin - dann wie bisher ohne ihn, statt "kein Platz"
+        ctx.oeffnen();
+        var echt = B._sichtbarerBereich;
+        B._sichtbarerBereich = function() { return { x: 0, y: 0, b: 600, h: 70 }; };
+        var erg;
+        try {
+            erg = B.blocktextEinfuegen('Eine Zeile');
+        } finally {
+            B._sichtbarerBereich = echt;
+        }
+        if (!erg || erg.keinPlatz || erg.eingefuegt !== 1) return { ok: false, detail: 'Ergebnis ' + JSON.stringify(erg) };
+        return texte()[0].y === 20 ? true : { ok: false, detail: 'y ' + texte()[0].y };
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     window.__zusatzTests = function(c) {
@@ -806,7 +892,7 @@
 
         // AP-2.2
         ctx = c;
-        p('Blocktext einfügen: zwei Absätze auf leerer Tafel (24 px, 20/20, 1 Undo, Lasso, Auswahl)', zweiAbsaetzeLeer);
+        p('Blocktext einfügen: zwei Absätze auf leerer Tafel (24 px, x 20, 1 Undo, Lasso, Auswahl)', zweiAbsaetzeLeer);
         p('Blocktext einfügen: unter vorhandenem Strich (+20 px)', unterStrich);
         p('Blocktext einfügen: langer Text - 18 px, Rest, alles innerhalb der Fläche, ≤ 5000 Zeichen', langerText);
         p('Blocktext einfügen: Rest auf neuer Seite (Seite 2, eigener Undo-Schritt)', restAufNeueSeite);
@@ -836,6 +922,12 @@
         p('AP-2.fix1 (G1): Tab kreist im Fenster, Fokus danach zurück auf den Knopf', g1Fokus);
         p('AP-2.fix1 (G6): geschlossenes <details> nur mit Überschrift', g6Details);
         p('AP-2.fix1 (M1): gehaltenes Enter in der Rückfrage wirkt nicht', gehalteneTaste);
+
+        // Folge-AP G9
+        p('G9: Auswahlleiste verdeckt den eingefügten langen Text nicht', g9LangerText);
+        p('G9: auch nach A+ liegt die Leiste nicht auf dem Text', g9NachAPlus);
+        p('G9: Zoom 2 und Verschiebung - Leiste frei, Text im Ausschnitt', g9Zoom);
+        p('G9: kein Platz für die Leiste -> trotzdem eingefügt, wie bisher bei y 20', g9KeinPlatzFuerLeiste);
     };
 
     window.__zusatzTestsAsync = function(c) {
