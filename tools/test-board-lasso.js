@@ -468,7 +468,11 @@
         ctx.oeffnen();
         var f = [];
         regelZeichnung();
-        var png0 = B.drawingCanvas.toDataURL('image/png');
+        // #7248: gespeichert wird das VOLLSTÄNDIGE Tafelbild (_tafelPng) -
+        // ragt D über eine schmale Prüffläche hinaus, ist es größer als die
+        // sichtbare Zeichenebene; ohne Überstand ist es genau diese
+        var png0 = B._tafelPng();
+        var sicht0 = B.drawingCanvas.toDataURL('image/png');
         lasso(LASSO_REGEL);
         if (!(B.auswahl && B.auswahl.length === 3)) f.push('Vorbedingung: Auswahl ' + sortiert(B.auswahl));
         if (ebeneLeer(B.auswahlCanvas)) f.push('Vorbedingung: Rahmen sichtbar');
@@ -479,7 +483,7 @@
         else if (gespeichert !== png0) f.push('gespeichertes PNG weicht ab (Lasso/Rahmen im Bild?)');
         // mitten im Lasso speichern (Seitenwechsel/Schließen während des Ziehens)
         lasso(LASSO_REGEL, { ohneAbheben: true });
-        if (B.drawingCanvas.toDataURL('image/png') !== png0) f.push('PNG während des Lasso-Ziehens weicht ab');
+        if (B.drawingCanvas.toDataURL('image/png') !== sicht0) f.push('PNG während des Lasso-Ziehens weicht ab');
         z('pointerup', 7, 'pen', 20, 62);
         return ergebnis(f);
     }

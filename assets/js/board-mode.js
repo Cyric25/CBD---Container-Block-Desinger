@@ -16,6 +16,11 @@
     // Abhaengigkeit 'cbd-board-elemente' VOR dieser Datei geladen).
     var UNDO_MAX = 50; // Architektur E12: hoechstens 50 Rueckgaengig-Schritte
 
+    // #7248: Grenzen des vollstaendigen Tafelbilds (_tafelLeinwand) - Kante in
+    // CSS-Pixeln, Flaeche in Geraetepixeln (iOS lehnt Canvas ueber 16,7 MP ab)
+    var EXPORT_MAX_KANTE = 6000;
+    var EXPORT_MAX_PIXEL = 16000000;
+
     function elementeModul() {
         return window.CBDBoardElemente;
     }
@@ -2669,13 +2674,19 @@
          */
         eraseStrokeAtPoint: function(x, y) {
             if (!this.modell) return false;
-            var eraserRadius = this.lineWidth * 2; // Größerer Radius für einfacheres Treffen
+            var eraserRadius = this._radierRadius(2); // Größerer Radius für einfacheres Treffen
             var elemente = this.modell.elemente;
             var treffer = -1;
+            var besterUeberstand = Infinity;
 
-            // Durch alle Elemente iterieren (rückwärts: oberstes zuerst)
-            for (var i = elemente.length - 1; i >= 0 && treffer < 0; i--) {
+            // #7247: Unter allen getroffenen Elementen gewinnt das, dessen
+            // Rand dem Radierpunkt am nächsten liegt (bei Gleichstand das
+            // oberste). Bis 3.1.149 gewann das oberste Element im
+            // Trefferradius - nahe beieinander stehende Striche löschten
+            // dann oft den jüngeren Nachbarn statt des berührten.
+            for (var i = elemente.length - 1; i >= 0; i--) {
                 var el = elemente[i];
+                var ueberstand;
 
                 if (el.typ === 'bild') continue; // E10: Strich-Radierer ignoriert Bilder
 
@@ -2687,21 +2698,25 @@
                 // Ausdehnung des gerenderten Texts (rahmen() mit Messfunktion).
                 if (el.typ === 'text') {
                     var r = this._rahmen(el);
-                    if (x >= r.x - eraserRadius && x <= r.x + r.b + eraserRadius &&
-                        y >= r.y - eraserRadius && y <= r.y + r.h + eraserRadius) {
-                        treffer = i;
-                    }
-                    continue;
+                    var dx = Math.max(r.x - x, 0, x - (r.x + r.b));
+                    var dy = Math.max(r.y - y, 0, y - (r.y + r.h));
+                    if (dx > eraserRadius || dy > eraserRadius) continue;
+                    ueberstand = Math.sqrt(dx * dx + dy * dy);
+                } else {
+                    // Prüfe ob Radierer den Linienzug des Strichs berührt.
+                    // Abstand zum SEGMENT, nicht nur zu den Stützpunkten (bis
+                    // 3.1.138): schnell gezogene Linien und die Teilstücke des
+                    // Punkt-Radierers haben lange Segmente ohne Zwischenpunkte,
+                    // die sonst in der Mitte nicht zu treffen wären. Schwelle
+                    // wie bisher: Radierradius + Strichbreite.
+                    var abstand = this._abstandZumLinienzug(x, y, el.punkte);
+                    if (!(abstand < eraserRadius + el.breite)) continue;
+                    ueberstand = Math.max(0, abstand - el.breite / 2); // Abstand zum Strichrand
                 }
 
-                // Prüfe ob Radierer den Linienzug des Strichs berührt. Abstand
-                // zum SEGMENT, nicht nur zu den Stützpunkten (bis 3.1.138):
-                // schnell gezogene Linien und die Teilstücke des Punkt-
-                // Radierers haben lange Segmente ohne Zwischenpunkte, die
-                // sonst in der Mitte nicht zu treffen wären. Schwelle wie
-                // bisher: Radierradius + Strichbreite.
-                if (this._abstandZumLinienzug(x, y, el.punkte) < eraserRadius + el.breite) {
-                    treffer = i; // Strich getroffen
+                if (ueberstand < besterUeberstand) {
+                    besterUeberstand = ueberstand;
+                    treffer = i;
                 }
             }
 
@@ -2722,6 +2737,17 @@
          * erst beim ersten tatsächlichen Treffer angelegt (_merkeEinmal) -
          * eine Geste ins Leere hinterlässt keinen leeren Schritt.
          */
+        /**
+         * Radierradius in Canvas-Koordinaten (#7247): lineWidth * faktor ist
+         * die gewählte Größe AUF DEM BILDSCHIRM, deshalb durch den Zoom
+         * geteilt. Bis 3.1.149 wuchs der Radierer beim Hineinzoomen mit
+         * (bei 250 % auf das 2,5-Fache) und erfasste Nachbarstriche - genau
+         * dann, wenn man zum genauen Radieren hineingezoomt hatte.
+         */
+        _radierRadius: function(faktor) {
+            return this.lineWidth * faktor / (this.zoom || 1);
+        },
+
         _radierGesteBeginnen: function(x, y) {
             this._gesteGemerkt = false;
             this._radierBilder = {};
@@ -2737,7 +2763,7 @@
          * halben Breite r*0,87, bei r/2 sind es r*0,97.
          */
         _radierZwischenpunkte: function(punkte) {
-            var r = this.lineWidth * 3;
+            var r = this._radierRadius(3);
             var schritt = Math.max(1, r / 2);
             var liste = [];
             var von = this._radierLetzter || punkte[0];
@@ -2775,7 +2801,7 @@
             if (!this.modell || !punkte.length) return;
             var E = elementeModul();
             var self = this;
-            var r = this.lineWidth * 3;
+            var r = this._radierRadius(3);
             var neueId = function() { return self.neueId(); };
             var alt = this.modell.elemente;
             var neu = [];
@@ -3078,11 +3104,79 @@
          */
         _istLeer: function() {
             if (!this.modell || this.modell.elemente.length === 0) return true;
-            var pixels = this.drawingCtx.getImageData(0, 0, this.drawingCanvas.width, this.drawingCanvas.height).data;
+            // #7248: auch Inhalt außerhalb der sichtbaren Fläche zählt
+            var leinwand = this._tafelLeinwand();
+            var pixels = leinwand.getContext('2d').getImageData(0, 0, leinwand.width, leinwand.height).data;
             for (var i = 3; i < pixels.length; i += 4) {
                 if (pixels[i] > 0) return false;
             }
             return true;
+        },
+
+        /**
+         * Fläche (CSS-Pixel), die das gespeicherte Tafelbild abdeckt (#7248):
+         * die sichtbare Zeichenfläche, erweitert um alles, was rechts oder
+         * unten darüber hinausragt. Ohne Überstand genau cssWidth × cssHeight
+         * wie bisher (E13: gespeichert wird die aktuelle Fläche).
+         *
+         * Hintergrund: Die Koordinaten bleiben bei einer Größenänderung 1:1
+         * (resizeAllCanvases). Schrumpft die Fläche - am iPad schon durch die
+         * eingeblendete Tastatur beim Text-Werkzeug, durch Drehen oder ein
+         * kleineres Fenster -, lag der Inhalt unten/rechts außerhalb des
+         * Canvas. Das PNG (drawingCanvas.toDataURL) war dann beschnitten, und
+         * genau dieses PNG landet im PDF ("Tafelbilder werden nicht
+         * vollständig übernommen"). Inhalt links/oben von 0 bleibt
+         * abgeschnitten wie bisher (ein Verschieben änderte alle Koordinaten).
+         */
+        _exportFlaeche: function() {
+            var b = this.cssWidth || 0;
+            var h = this.cssHeight || 0;
+            var elemente = this.modell ? this.modell.elemente : [];
+            for (var i = 0; i < elemente.length; i++) {
+                var r = this._rahmen(elemente[i]);
+                if (r.x + r.b > b) b = Math.ceil(r.x + r.b);
+                if (r.y + r.h > h) h = Math.ceil(r.y + r.h);
+            }
+            return { b: Math.min(b, EXPORT_MAX_KANTE), h: Math.min(h, EXPORT_MAX_KANTE) };
+        },
+
+        /**
+         * Canvas mit dem vollständigen Tafelbild (#7248). Deckt die
+         * sichtbare Zeichenebene schon alles ab, ist sie es selbst (bisheriges,
+         * pixelgleiches Verhalten); sonst wird das Modell auf einer eigenen,
+         * größeren Leinwand neu gezeichnet - mit derselben zeichneModell()
+         * wie auf dem Bildschirm, dafür werden Zeichenebene und Kontext kurz
+         * vertauscht. Auflösung höchstens DPR, gedeckelt auf EXPORT_MAX_PIXEL
+         * (iOS verweigert größere Canvas).
+         */
+        _tafelLeinwand: function() {
+            var f = this._exportFlaeche();
+            if (f.b <= (this.cssWidth || 0) && f.h <= (this.cssHeight || 0)) {
+                return this.drawingCanvas;
+            }
+            var s = Math.min(this.dpr || 1, Math.sqrt(EXPORT_MAX_PIXEL / (f.b * f.h)));
+            var c = document.createElement('canvas');
+            c.width = Math.max(1, Math.round(f.b * s));
+            c.height = Math.max(1, Math.round(f.h * s));
+            var ctx = c.getContext('2d');
+            if (!ctx) return this.drawingCanvas;
+            ctx.scale(s, s);
+            var sichtCanvas = this.drawingCanvas;
+            var sichtCtx = this.drawingCtx;
+            this.drawingCanvas = c;
+            this.drawingCtx = ctx;
+            try {
+                this.zeichneModell();
+            } finally {
+                this.drawingCanvas = sichtCanvas;
+                this.drawingCtx = sichtCtx;
+            }
+            return c;
+        },
+
+        /** PNG des vollständigen Tafelbilds (Server, Cache, Seiten, PDF). */
+        _tafelPng: function() {
+            return this._tafelLeinwand().toDataURL('image/png');
         },
 
         /**
@@ -4668,7 +4762,7 @@
             // Leeren Canvas erkennen: keine Elemente oder alle Pixel transparent
             // -> keine Zeichnung vorhanden (AP-4.3, _istLeer)
             var isBlank = this._istLeer();
-            var dataUrl = isBlank ? '' : this.drawingCanvas.toDataURL('image/png');
+            var dataUrl = isBlank ? '' : this._tafelPng();
 
             // Hintergrundfarbe lokal speichern (browser-spezifische Präferenz)
             try {
@@ -4804,7 +4898,7 @@
                     localStorage.removeItem(key + '-elemente');
                 } else {
                     // Reihenfolge: erst das PNG (maßgeblich, E7), dann die Elemente
-                    var png = this.drawingCanvas.toDataURL('image/png');
+                    var png = this._tafelPng();
                     if (!this._pngLokalSchreiben(key, png)) {
                         // Endgültig kein Platz (AP-4.fix3): sichtbar melden,
                         // der bisherige Stand unter `key` bleibt unverändert.
@@ -4902,10 +4996,12 @@
         },
 
         /**
-         * Elementmodell mit den AKTUELLEN CSS-Maßen der Zeichenfläche als
-         * JSON (AP-4.4). Das Modell behält die Maße vom Öffnen (Koordinaten
-         * bleiben bei einer Größenänderung 1:1), gespeichert wird aber, wie
-         * groß die Fläche jetzt ist - daran streckt das nächste Laden (E13).
+         * Elementmodell als JSON (AP-4.4). Das Modell behält die Maße vom
+         * Öffnen (Koordinaten bleiben bei einer Größenänderung 1:1), gespeichert
+         * wird aber, wie groß die Fläche jetzt ist - daran streckt das nächste
+         * Laden (E13). Bewusst NICHT die erweiterte PNG-Fläche (#7248,
+         * _exportFlaeche): über den Rand geschobene Elemente behalten beim
+         * Wiederöffnen ihre Lage, statt die ganze Tafel zu stauchen.
          * Leeres Modell oder Fehler -> '' (dann gilt nur das PNG).
          */
         _elementeSerialisiert: function() {
@@ -5126,7 +5222,7 @@
          */
         _seitenPng: function() {
             if (!this.modell || this.modell.elemente.length === 0) return '';
-            return this.drawingCanvas.toDataURL('image/png');
+            return this._tafelPng();
         },
 
         /**

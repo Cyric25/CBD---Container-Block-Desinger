@@ -908,6 +908,109 @@
     }
 
     // ------------------------------------------------------------------
+    // #7248: Tafelbild vollständig, auch wenn die Fläche geschrumpft ist
+    // (iPad-Tastatur beim Text-Werkzeug, Drehen, kleineres Fenster)
+    // ------------------------------------------------------------------
+    function flaecheSchrumpfen(hoehe) {
+        var c = B.backgroundCanvas.parentElement;
+        var alt = { flex: c.style.flex, height: c.style.height };
+        c.style.flex = 'none';
+        c.style.height = hoehe + 'px';
+        B.resizeAllCanvases();
+        return function() {
+            c.style.flex = alt.flex;
+            c.style.height = alt.height;
+            if (B.overlay) B.resizeAllCanvases();
+        };
+    }
+
+    function tafelbildVollstaendig() {
+        ctx.oeffnen();
+        var f = [];
+        B.setTool('pen');
+        B.setColor('#000000');
+        var y = Math.min(B.cssHeight - 20, 300);
+        if (y < 120) return { ok: false, detail: 'Vorbedingung: Fläche nur ' + B.cssHeight + ' px hoch' };
+        strich(40, y, 200, y);
+        var zurueck = flaecheSchrumpfen(80);
+        try {
+            if (B.cssHeight >= y) f.push('Vorbedingung: Fläche nicht geschrumpft (' + B.cssHeight + ')');
+            if (istDunkel(pixel(120, Math.min(y, B.cssHeight - 1)))) f.push('Vorbedingung: Strich noch sichtbar');
+            var fl = B._exportFlaeche();
+            if (fl.h < y) f.push('Exportfläche ' + fl.b + 'x' + fl.h + ' reicht nicht bis y=' + y);
+            var lw = B._tafelLeinwand();
+            if (lw === B.drawingCanvas) f.push('keine eigene Leinwand trotz Überstand');
+            var s = lw.width / fl.b;
+            var px = lw.getContext('2d').getImageData(Math.round(120 * s), Math.round(y * s), 1, 1).data;
+            if (!istDunkel(px)) f.push('Strich fehlt im vollständigen Tafelbild');
+            if (B._istLeer()) f.push('Tafel gilt als leer, obwohl der Strich nur außerhalb liegt');
+            B.saveDrawing();
+            var png = lies(SCHLUESSEL);
+            if (!png) f.push('nichts gespeichert');
+            else if (png === B.drawingCanvas.toDataURL('image/png')) f.push('gespeichert wurde nur der sichtbare Ausschnitt');
+            var m = E.deserialisiere(lokalesModell(lies(SCHLUESSEL + '-elemente'), png));
+            if (!m) f.push('Elementliste fehlt');
+            else if (Math.abs(m.modell.breite - B.cssWidth) > 0.01 || Math.abs(m.modell.hoehe - B.cssHeight) > 0.01) {
+                f.push('Liste mit ' + m.modell.breite + 'x' + m.modell.hoehe + ' statt der aktuellen Fläche gespeichert');
+            }
+        } finally {
+            zurueck();
+        }
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    function tafelbildOhneUeberstandUnveraendert() {
+        ctx.oeffnen();
+        B.setTool('pen');
+        strich(40, 100, 200, 100);
+        if (B._tafelLeinwand() !== B.drawingCanvas) return { ok: false, detail: 'eigene Leinwand ohne Überstand' };
+        B.saveDrawing();
+        return lies(SCHLUESSEL) === B.drawingCanvas.toDataURL('image/png') ? true :
+            { ok: false, detail: 'PNG weicht vom bisherigen (sichtbare Zeichenebene) ab' };
+    }
+
+    // ------------------------------------------------------------------
+    // #7247: Strich-Radierer - nächster Strich, Radius in Bildschirmgröße
+    // ------------------------------------------------------------------
+    function radiererNimmtNaechsten() {
+        ctx.oeffnen();
+        B.setTool('pen');
+        strich(40, 100, 300, 100); // A (älter)
+        strich(40, 125, 300, 125); // B (jünger, oben)
+        var ids = el().map(function(e) { return e.id; });
+        B.setTool('eraser-stroke');
+        tippen(150, 110); // 10 px von A, 15 px von B - beide im Radius
+        var rest = el().map(function(e) { return e.id; });
+        if (rest.length !== 1) return { ok: false, detail: rest.length + ' Elemente übrig' };
+        return rest[0] === ids[1] ? true : { ok: false, detail: 'gelöscht wurde der weiter entfernte jüngere Strich' };
+    }
+
+    function radiererBeiZoomBildschirmgross() {
+        ctx.oeffnen();
+        B.setTool('pen');
+        var stiftBreite = B.lineWidth;
+        strich(40, 100, 300, 100);
+        B.setTool('eraser-stroke');
+        var r = B.lineWidth * 2; // Radius bei 100 %
+        var abstand = r / 2 + stiftBreite + 2; // bei 200 % außerhalb, bei 100 % innerhalb
+        var f = [];
+        B.zoom = 2;
+        B.panX = 0;
+        B.panY = 0;
+        B.updateCanvasTransform();
+        try {
+            // zeiger() rechnet relativ zur (gezoomten) Canvas-Box: Bildschirm = Canvas * Zoom
+            tippen(150 * 2, (100 + abstand) * 2);
+            if (el().length !== 1) f.push('bei 200 % gelöscht, obwohl ' + abstand.toFixed(1) + ' px (Canvas) entfernt');
+            tippen(150 * 2, 102 * 2);
+            if (el().length !== 0) f.push('bei 200 % direkt auf dem Strich nicht gelöscht');
+        } finally {
+            B.resetZoom();
+        }
+        return f.length ? { ok: false, detail: f.join('; ') } : true;
+    }
+
+    // ------------------------------------------------------------------
     // Einhängen (nach den vorhandenen Haken)
     // ------------------------------------------------------------------
     window.__zusatzTests = function(c) {
@@ -932,6 +1035,10 @@
         p('AP-4.4: Seitenwechsel - IDs nach Rückkehr eindeutig', seitenwechselNeueIdsEindeutig);
         p('AP-4.4: Zeichnung löschen entfernt auch -elemente', loeschenEntferntElemente);
         p('AP-4.4: Alle Notizen löschen - zählt ohne Begleitschlüssel, löscht -elemente', loeschenAlleZaehlt);
+        p('#7248: geschrumpfte Fläche - PNG enthält auch den Inhalt außerhalb, Liste mit aktueller Fläche', tafelbildVollstaendig);
+        p('#7248: ohne Überstand ist das PNG die sichtbare Zeichenebene (unverändert)', tafelbildOhneUeberstandUnveraendert);
+        p('#7247: Strich-Radierer löscht den nächsten, nicht den jüngsten Strich im Radius', radiererNimmtNaechsten);
+        p('#7247: Strich-Radierer bei 200 % mit Bildschirm-Radius', radiererBeiZoomBildschirmgross);
     };
 
     window.__zusatzTestsAsync = function(c) {
